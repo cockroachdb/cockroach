@@ -3,11 +3,14 @@
 
 package hlc
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -18,7 +21,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // Timestamp represents a state of the hybrid logical clock.
 type Timestamp struct {
@@ -66,21 +69,21 @@ type Timestamp struct {
 func (m *Timestamp) Reset()      { *m = Timestamp{} }
 func (*Timestamp) ProtoMessage() {}
 func (*Timestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_timestamp_e3db50d085ffaa11, []int{0}
+	return fileDescriptor_7f15827ff64414ad, []int{0}
 }
 func (m *Timestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Timestamp) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Timestamp) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Timestamp.Merge(dst, src)
+func (m *Timestamp) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Timestamp.Merge(m, src)
 }
 func (m *Timestamp) XXX_Size() int {
 	return m.Size()
@@ -94,6 +97,27 @@ var xxx_messageInfo_Timestamp proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*Timestamp)(nil), "cockroach.util.hlc.Timestamp")
 }
+
+func init() { proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_7f15827ff64414ad) }
+
+var fileDescriptor_7f15827ff64414ad = []byte{
+	// 213 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
+	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,
+	0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4a, 0xce, 0x4f, 0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0,
+	0x03, 0xa9, 0xd1, 0xcb, 0xc8, 0x49, 0x96, 0x12, 0x49, 0xcf, 0x4f, 0xcf, 0x07, 0x4b, 0xeb, 0x83,
+	0x58, 0x10, 0x95, 0x4a, 0x79, 0x5c, 0x9c, 0x21, 0x30, 0xcd, 0x42, 0xd2, 0x5c, 0x9c, 0xe5, 0x89,
+	0x39, 0x39, 0xf1, 0x20, 0xe3, 0x24, 0x18, 0x15, 0x18, 0x35, 0x98, 0x83, 0x38, 0x40, 0x02, 0x20,
+	0x15, 0x42, 0x12, 0x5c, 0xec, 0x39, 0xf9, 0xe9, 0x99, 0xc9, 0x89, 0x39, 0x12, 0x4c, 0x0a, 0x8c,
+	0x1a, 0xac, 0x41, 0x30, 0xae, 0x90, 0x0c, 0x17, 0x67, 0x71, 0x65, 0x5e, 0x49, 0x46, 0x6a, 0x49,
+	0x66, 0xb2, 0x04, 0xb3, 0x02, 0xa3, 0x06, 0x47, 0x10, 0x42, 0xc0, 0x8a, 0x67, 0xc6, 0x02, 0x79,
+	0x86, 0x1d, 0x0b, 0xe4, 0x19, 0x5f, 0x2c, 0x90, 0x67, 0x74, 0x52, 0x3d, 0xf1, 0x50, 0x8e, 0xe1,
+	0xc4, 0x23, 0x39, 0xc6, 0x0b, 0x8f, 0xe4, 0x18, 0x6f, 0x3c, 0x92, 0x63, 0x7c, 0xf0, 0x48, 0x8e,
+	0x71, 0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5, 0x18, 0x6e, 0x3c, 0x96, 0x63, 0x88, 0x62, 0xce,
+	0xc8, 0x49, 0x4e, 0x62, 0x03, 0xbb, 0xce, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0xa2, 0x14, 0x0e,
+	0x21, 0xe3, 0x00, 0x00, 0x00,
+}
+
 func (this *Timestamp) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -127,7 +151,7 @@ func (this *Timestamp) Equal(that interface{}) bool {
 func (m *Timestamp) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -135,41 +159,48 @@ func (m *Timestamp) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Timestamp) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Timestamp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.WallTime != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintTimestamp(dAtA, i, uint64(m.WallTime))
-	}
-	if m.Logical != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintTimestamp(dAtA, i, uint64(m.Logical))
-	}
 	if m.Synthetic {
-		dAtA[i] = 0x18
-		i++
+		i--
 		if m.Synthetic {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x18
 	}
-	return i, nil
+	if m.Logical != 0 {
+		i = encodeVarintTimestamp(dAtA, i, uint64(m.Logical))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.WallTime != 0 {
+		i = encodeVarintTimestamp(dAtA, i, uint64(m.WallTime))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintTimestamp(dAtA []byte, offset int, v uint64) int {
+	offset -= sovTimestamp(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func NewPopulatedTimestamp(r randyTimestamp, easy bool) *Timestamp {
 	this := &Timestamp{}
@@ -278,14 +309,7 @@ func (m *Timestamp) Size() (n int) {
 }
 
 func sovTimestamp(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozTimestamp(x uint64) (n int) {
 	return sovTimestamp(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -305,7 +329,7 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -333,7 +357,7 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.WallTime |= (int64(b) & 0x7F) << shift
+				m.WallTime |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -352,7 +376,7 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Logical |= (int32(b) & 0x7F) << shift
+				m.Logical |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -371,7 +395,7 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -401,6 +425,7 @@ func (m *Timestamp) Unmarshal(dAtA []byte) error {
 func skipTimestamp(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -432,10 +457,8 @@ func skipTimestamp(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -452,75 +475,34 @@ func skipTimestamp(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthTimestamp
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowTimestamp
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipTimestamp(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupTimestamp
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthTimestamp
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthTimestamp = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowTimestamp   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthTimestamp        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowTimestamp          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupTimestamp = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("util/hlc/timestamp.proto", fileDescriptor_timestamp_e3db50d085ffaa11)
-}
-
-var fileDescriptor_timestamp_e3db50d085ffaa11 = []byte{
-	// 213 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x2d, 0xc9, 0xcc,
-	0xd1, 0xcf, 0xc8, 0x49, 0xd6, 0x2f, 0xc9, 0xcc, 0x4d, 0x2d, 0x2e, 0x49, 0xcc, 0x2d, 0xd0, 0x2b,
-	0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4a, 0xce, 0x4f, 0xce, 0x2e, 0xca, 0x4f, 0x4c, 0xce, 0xd0,
-	0x03, 0xa9, 0xd1, 0xcb, 0xc8, 0x49, 0x96, 0x12, 0x49, 0xcf, 0x4f, 0xcf, 0x07, 0x4b, 0xeb, 0x83,
-	0x58, 0x10, 0x95, 0x4a, 0x79, 0x5c, 0x9c, 0x21, 0x30, 0xcd, 0x42, 0xd2, 0x5c, 0x9c, 0xe5, 0x89,
-	0x39, 0x39, 0xf1, 0x20, 0xe3, 0x24, 0x18, 0x15, 0x18, 0x35, 0x98, 0x83, 0x38, 0x40, 0x02, 0x20,
-	0x15, 0x42, 0x12, 0x5c, 0xec, 0x39, 0xf9, 0xe9, 0x99, 0xc9, 0x89, 0x39, 0x12, 0x4c, 0x0a, 0x8c,
-	0x1a, 0xac, 0x41, 0x30, 0xae, 0x90, 0x0c, 0x17, 0x67, 0x71, 0x65, 0x5e, 0x49, 0x46, 0x6a, 0x49,
-	0x66, 0xb2, 0x04, 0xb3, 0x02, 0xa3, 0x06, 0x47, 0x10, 0x42, 0xc0, 0x8a, 0x67, 0xc6, 0x02, 0x79,
-	0x86, 0x1d, 0x0b, 0xe4, 0x19, 0x5f, 0x2c, 0x90, 0x67, 0x74, 0x52, 0x3d, 0xf1, 0x50, 0x8e, 0xe1,
-	0xc4, 0x23, 0x39, 0xc6, 0x0b, 0x8f, 0xe4, 0x18, 0x6f, 0x3c, 0x92, 0x63, 0x7c, 0xf0, 0x48, 0x8e,
-	0x71, 0xc2, 0x63, 0x39, 0x86, 0x0b, 0x8f, 0xe5, 0x18, 0x6e, 0x3c, 0x96, 0x63, 0x88, 0x62, 0xce,
-	0xc8, 0x49, 0x4e, 0x62, 0x03, 0xbb, 0xce, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0xa2, 0x14, 0x0e,
-	0x21, 0xe3, 0x00, 0x00, 0x00,
-}

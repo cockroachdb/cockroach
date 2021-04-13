@@ -3,13 +3,15 @@
 
 package geoindex
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import encoding_binary "encoding/binary"
-
-import io "io"
+import (
+	encoding_binary "encoding/binary"
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -20,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // Config is the information used to tune one instance of a geospatial index.
 // Each SQL index will have its own config.
@@ -35,21 +37,21 @@ func (m *Config) Reset()         { *m = Config{} }
 func (m *Config) String() string { return proto.CompactTextString(m) }
 func (*Config) ProtoMessage()    {}
 func (*Config) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_91e5b6ac35c7431c, []int{0}
+	return fileDescriptor_452e0798e684322d, []int{0}
 }
 func (m *Config) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Config) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Config) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Config.Merge(dst, src)
+func (m *Config) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Config.Merge(m, src)
 }
 func (m *Config) XXX_Size() int {
 	return m.Size()
@@ -85,21 +87,21 @@ func (m *S2Config) Reset()         { *m = S2Config{} }
 func (m *S2Config) String() string { return proto.CompactTextString(m) }
 func (*S2Config) ProtoMessage()    {}
 func (*S2Config) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_91e5b6ac35c7431c, []int{1}
+	return fileDescriptor_452e0798e684322d, []int{1}
 }
 func (m *S2Config) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *S2Config) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *S2Config) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_S2Config.Merge(dst, src)
+func (m *S2Config) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_S2Config.Merge(m, src)
 }
 func (m *S2Config) XXX_Size() int {
 	return m.Size()
@@ -118,21 +120,21 @@ func (m *S2GeographyConfig) Reset()         { *m = S2GeographyConfig{} }
 func (m *S2GeographyConfig) String() string { return proto.CompactTextString(m) }
 func (*S2GeographyConfig) ProtoMessage()    {}
 func (*S2GeographyConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_91e5b6ac35c7431c, []int{2}
+	return fileDescriptor_452e0798e684322d, []int{2}
 }
 func (m *S2GeographyConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *S2GeographyConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *S2GeographyConfig) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_S2GeographyConfig.Merge(dst, src)
+func (m *S2GeographyConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_S2GeographyConfig.Merge(m, src)
 }
 func (m *S2GeographyConfig) XXX_Size() int {
 	return m.Size()
@@ -157,21 +159,21 @@ func (m *S2GeometryConfig) Reset()         { *m = S2GeometryConfig{} }
 func (m *S2GeometryConfig) String() string { return proto.CompactTextString(m) }
 func (*S2GeometryConfig) ProtoMessage()    {}
 func (*S2GeometryConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_config_91e5b6ac35c7431c, []int{3}
+	return fileDescriptor_452e0798e684322d, []int{3}
 }
 func (m *S2GeometryConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *S2GeometryConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *S2GeometryConfig) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_S2GeometryConfig.Merge(dst, src)
+func (m *S2GeometryConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_S2GeometryConfig.Merge(m, src)
 }
 func (m *S2GeometryConfig) XXX_Size() int {
 	return m.Size()
@@ -188,6 +190,37 @@ func init() {
 	proto.RegisterType((*S2GeographyConfig)(nil), "cockroach.geo.geoindex.S2GeographyConfig")
 	proto.RegisterType((*S2GeometryConfig)(nil), "cockroach.geo.geoindex.S2GeometryConfig")
 }
+
+func init() { proto.RegisterFile("geo/geoindex/config.proto", fileDescriptor_452e0798e684322d) }
+
+var fileDescriptor_452e0798e684322d = []byte{
+	// 376 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x92, 0xbf, 0x6e, 0xea, 0x30,
+	0x18, 0xc5, 0x63, 0x2e, 0xa0, 0x60, 0xee, 0x70, 0x6f, 0xee, 0x55, 0x95, 0xb6, 0x92, 0x41, 0x4c,
+	0xb4, 0x43, 0x90, 0xd2, 0x0d, 0xa9, 0x4b, 0x19, 0xaa, 0x4a, 0x74, 0x81, 0x05, 0xba, 0x44, 0x69,
+	0x70, 0x4d, 0xd4, 0x24, 0x46, 0x09, 0xaa, 0x9c, 0xbd, 0x0f, 0xd0, 0x47, 0x60, 0xe7, 0x45, 0x18,
+	0x19, 0x19, 0xdb, 0xb0, 0xf4, 0x31, 0xaa, 0x7c, 0x76, 0xa8, 0xfa, 0x77, 0xe8, 0x66, 0x7f, 0xe7,
+	0x7c, 0x3f, 0x9d, 0xe3, 0x04, 0xef, 0x33, 0xca, 0x3b, 0x8c, 0x72, 0x3f, 0x9a, 0x50, 0xd1, 0xf1,
+	0x78, 0x74, 0xe3, 0x33, 0x6b, 0x16, 0xf3, 0x39, 0x37, 0xf6, 0x3c, 0xee, 0xdd, 0xc6, 0xdc, 0xf5,
+	0xa6, 0x16, 0xa3, 0xdc, 0x2a, 0x4c, 0x07, 0xff, 0x19, 0x67, 0x1c, 0x2c, 0x9d, 0xfc, 0x24, 0xdd,
+	0xad, 0x25, 0xc2, 0xd5, 0x1e, 0xac, 0x1b, 0x7d, 0xfc, 0x3b, 0xb1, 0x1d, 0x46, 0x39, 0x8b, 0xdd,
+	0xd9, 0x34, 0x35, 0x51, 0x13, 0xb5, 0xeb, 0xf6, 0x91, 0xf5, 0x39, 0xcf, 0x1a, 0xda, 0xe7, 0x85,
+	0x55, 0x02, 0x06, 0xf5, 0xe4, 0x75, 0x64, 0x5c, 0xe0, 0xba, 0xa4, 0x85, 0x74, 0x1e, 0xa7, 0x66,
+	0x09, 0x60, 0xed, 0x6f, 0x61, 0xe0, 0x54, 0x2c, 0x9c, 0xec, 0x26, 0x5d, 0x7d, 0xb5, 0x68, 0xa0,
+	0xe7, 0x45, 0x03, 0xb5, 0xee, 0x11, 0xd6, 0x87, 0xb6, 0xca, 0x7b, 0x88, 0x6b, 0xa1, 0x1f, 0x39,
+	0x01, 0xbd, 0xa3, 0x01, 0x84, 0xad, 0x0c, 0xf4, 0xd0, 0x8f, 0xfa, 0xf9, 0x1d, 0x44, 0x57, 0x28,
+	0xb1, 0xa4, 0x44, 0x57, 0xec, 0x44, 0x10, 0x9c, 0x90, 0x4f, 0xcc, 0x5f, 0x52, 0x84, 0xc1, 0x25,
+	0x9f, 0x14, 0x9b, 0x1e, 0x0d, 0x82, 0xc4, 0x2c, 0xef, 0x36, 0x7b, 0xf9, 0xbd, 0x5b, 0x86, 0x18,
+	0x23, 0xfc, 0xf7, 0x43, 0x7b, 0xe3, 0x14, 0xd7, 0x12, 0xdb, 0x91, 0x9f, 0x42, 0xbd, 0x5d, 0xf3,
+	0xeb, 0xba, 0xaa, 0xa6, 0x9e, 0xa8, 0x93, 0x22, 0x2f, 0x11, 0xfe, 0xf3, 0xfe, 0x2d, 0x8c, 0x7f,
+	0xb8, 0x92, 0x17, 0x15, 0x40, 0x45, 0x83, 0x72, 0xe8, 0x47, 0x23, 0x18, 0xba, 0xc2, 0x11, 0x50,
+	0x2e, 0x1f, 0xba, 0x62, 0x54, 0x38, 0x53, 0x28, 0x25, 0x9d, 0xe3, 0xc2, 0x99, 0x42, 0x19, 0xe9,
+	0x1c, 0xbf, 0x4d, 0x5b, 0xf9, 0x59, 0xda, 0xb3, 0xe3, 0xd5, 0x13, 0xd1, 0x56, 0x19, 0x41, 0xeb,
+	0x8c, 0xa0, 0x4d, 0x46, 0xd0, 0x63, 0x46, 0xd0, 0xc3, 0x96, 0x68, 0xeb, 0x2d, 0xd1, 0x36, 0x5b,
+	0xa2, 0x5d, 0xe9, 0x05, 0xe4, 0xba, 0x0a, 0xff, 0xdb, 0xc9, 0x4b, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0xb1, 0xfa, 0x92, 0x6c, 0xba, 0x02, 0x00, 0x00,
+}
+
 func (this *Config) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -311,7 +344,7 @@ func (this *S2GeometryConfig) Equal(that interface{}) bool {
 func (m *Config) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -319,37 +352,46 @@ func (m *Config) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Config) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Config) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.S2Geography != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.S2Geography.Size()))
-		n1, err := m.S2Geography.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
 	if m.S2Geometry != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.S2Geometry.Size()))
-		n2, err := m.S2Geometry.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.S2Geometry.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintConfig(dAtA, i, uint64(size))
 		}
-		i += n2
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if m.S2Geography != nil {
+		{
+			size, err := m.S2Geography.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintConfig(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *S2Config) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -357,37 +399,42 @@ func (m *S2Config) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *S2Config) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *S2Config) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MinLevel != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.MinLevel))
-	}
-	if m.MaxLevel != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.MaxLevel))
+	if m.MaxCells != 0 {
+		i = encodeVarintConfig(dAtA, i, uint64(m.MaxCells))
+		i--
+		dAtA[i] = 0x20
 	}
 	if m.LevelMod != 0 {
-		dAtA[i] = 0x18
-		i++
 		i = encodeVarintConfig(dAtA, i, uint64(m.LevelMod))
+		i--
+		dAtA[i] = 0x18
 	}
-	if m.MaxCells != 0 {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.MaxCells))
+	if m.MaxLevel != 0 {
+		i = encodeVarintConfig(dAtA, i, uint64(m.MaxLevel))
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if m.MinLevel != 0 {
+		i = encodeVarintConfig(dAtA, i, uint64(m.MinLevel))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *S2GeographyConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -395,27 +442,34 @@ func (m *S2GeographyConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *S2GeographyConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *S2GeographyConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.S2Config != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.S2Config.Size()))
-		n3, err := m.S2Config.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.S2Config.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintConfig(dAtA, i, uint64(size))
 		}
-		i += n3
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *S2GeometryConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -423,55 +477,64 @@ func (m *S2GeometryConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *S2GeometryConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *S2GeometryConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MinX != 0 {
-		dAtA[i] = 0x9
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MinX))))
-		i += 8
-	}
-	if m.MaxX != 0 {
-		dAtA[i] = 0x11
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MaxX))))
-		i += 8
-	}
-	if m.MinY != 0 {
-		dAtA[i] = 0x19
-		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MinY))))
-		i += 8
+	if m.S2Config != nil {
+		{
+			size, err := m.S2Config.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintConfig(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
 	}
 	if m.MaxY != 0 {
-		dAtA[i] = 0x21
-		i++
+		i -= 8
 		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MaxY))))
-		i += 8
+		i--
+		dAtA[i] = 0x21
 	}
-	if m.S2Config != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintConfig(dAtA, i, uint64(m.S2Config.Size()))
-		n4, err := m.S2Config.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
+	if m.MinY != 0 {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MinY))))
+		i--
+		dAtA[i] = 0x19
 	}
-	return i, nil
+	if m.MaxX != 0 {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MaxX))))
+		i--
+		dAtA[i] = 0x11
+	}
+	if m.MinX != 0 {
+		i -= 8
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.MinX))))
+		i--
+		dAtA[i] = 0x9
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintConfig(dAtA []byte, offset int, v uint64) int {
+	offset -= sovConfig(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *Config) Size() (n int) {
 	if m == nil {
@@ -550,14 +613,7 @@ func (m *S2GeometryConfig) Size() (n int) {
 }
 
 func sovConfig(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozConfig(x uint64) (n int) {
 	return sovConfig(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -598,7 +654,7 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -626,7 +682,7 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -635,6 +691,9 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthConfig
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthConfig
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -659,7 +718,7 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -668,6 +727,9 @@ func (m *Config) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthConfig
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthConfig
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -714,7 +776,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -742,7 +804,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MinLevel |= (int32(b) & 0x7F) << shift
+				m.MinLevel |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -761,7 +823,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxLevel |= (int32(b) & 0x7F) << shift
+				m.MaxLevel |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -780,7 +842,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LevelMod |= (int32(b) & 0x7F) << shift
+				m.LevelMod |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -799,7 +861,7 @@ func (m *S2Config) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxCells |= (int32(b) & 0x7F) << shift
+				m.MaxCells |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -840,7 +902,7 @@ func (m *S2GeographyConfig) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -868,7 +930,7 @@ func (m *S2GeographyConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -877,6 +939,9 @@ func (m *S2GeographyConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthConfig
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthConfig
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -923,7 +988,7 @@ func (m *S2GeometryConfig) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -995,7 +1060,7 @@ func (m *S2GeometryConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1004,6 +1069,9 @@ func (m *S2GeometryConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthConfig
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthConfig
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1038,6 +1106,7 @@ func (m *S2GeometryConfig) Unmarshal(dAtA []byte) error {
 func skipConfig(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -1069,10 +1138,8 @@ func skipConfig(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1089,83 +1156,34 @@ func skipConfig(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthConfig
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowConfig
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipConfig(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupConfig
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthConfig
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthConfig = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowConfig   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthConfig        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowConfig          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupConfig = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("geo/geoindex/config.proto", fileDescriptor_config_91e5b6ac35c7431c) }
-
-var fileDescriptor_config_91e5b6ac35c7431c = []byte{
-	// 376 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x92, 0xbf, 0x6e, 0xea, 0x30,
-	0x18, 0xc5, 0x63, 0x2e, 0xa0, 0x60, 0xee, 0x70, 0x6f, 0xee, 0x55, 0x95, 0xb6, 0x92, 0x41, 0x4c,
-	0xb4, 0x43, 0x90, 0xd2, 0x0d, 0xa9, 0x4b, 0x19, 0xaa, 0x4a, 0x74, 0x81, 0x05, 0xba, 0x44, 0x69,
-	0x70, 0x4d, 0xd4, 0x24, 0x46, 0x09, 0xaa, 0x9c, 0xbd, 0x0f, 0xd0, 0x47, 0x60, 0xe7, 0x45, 0x18,
-	0x19, 0x19, 0xdb, 0xb0, 0xf4, 0x31, 0xaa, 0x7c, 0x76, 0xa8, 0xfa, 0x77, 0xe8, 0x66, 0x7f, 0xe7,
-	0x7c, 0x3f, 0x9d, 0xe3, 0x04, 0xef, 0x33, 0xca, 0x3b, 0x8c, 0x72, 0x3f, 0x9a, 0x50, 0xd1, 0xf1,
-	0x78, 0x74, 0xe3, 0x33, 0x6b, 0x16, 0xf3, 0x39, 0x37, 0xf6, 0x3c, 0xee, 0xdd, 0xc6, 0xdc, 0xf5,
-	0xa6, 0x16, 0xa3, 0xdc, 0x2a, 0x4c, 0x07, 0xff, 0x19, 0x67, 0x1c, 0x2c, 0x9d, 0xfc, 0x24, 0xdd,
-	0xad, 0x25, 0xc2, 0xd5, 0x1e, 0xac, 0x1b, 0x7d, 0xfc, 0x3b, 0xb1, 0x1d, 0x46, 0x39, 0x8b, 0xdd,
-	0xd9, 0x34, 0x35, 0x51, 0x13, 0xb5, 0xeb, 0xf6, 0x91, 0xf5, 0x39, 0xcf, 0x1a, 0xda, 0xe7, 0x85,
-	0x55, 0x02, 0x06, 0xf5, 0xe4, 0x75, 0x64, 0x5c, 0xe0, 0xba, 0xa4, 0x85, 0x74, 0x1e, 0xa7, 0x66,
-	0x09, 0x60, 0xed, 0x6f, 0x61, 0xe0, 0x54, 0x2c, 0x9c, 0xec, 0x26, 0x5d, 0x7d, 0xb5, 0x68, 0xa0,
-	0xe7, 0x45, 0x03, 0xb5, 0xee, 0x11, 0xd6, 0x87, 0xb6, 0xca, 0x7b, 0x88, 0x6b, 0xa1, 0x1f, 0x39,
-	0x01, 0xbd, 0xa3, 0x01, 0x84, 0xad, 0x0c, 0xf4, 0xd0, 0x8f, 0xfa, 0xf9, 0x1d, 0x44, 0x57, 0x28,
-	0xb1, 0xa4, 0x44, 0x57, 0xec, 0x44, 0x10, 0x9c, 0x90, 0x4f, 0xcc, 0x5f, 0x52, 0x84, 0xc1, 0x25,
-	0x9f, 0x14, 0x9b, 0x1e, 0x0d, 0x82, 0xc4, 0x2c, 0xef, 0x36, 0x7b, 0xf9, 0xbd, 0x5b, 0x86, 0x18,
-	0x23, 0xfc, 0xf7, 0x43, 0x7b, 0xe3, 0x14, 0xd7, 0x12, 0xdb, 0x91, 0x9f, 0x42, 0xbd, 0x5d, 0xf3,
-	0xeb, 0xba, 0xaa, 0xa6, 0x9e, 0xa8, 0x93, 0x22, 0x2f, 0x11, 0xfe, 0xf3, 0xfe, 0x2d, 0x8c, 0x7f,
-	0xb8, 0x92, 0x17, 0x15, 0x40, 0x45, 0x83, 0x72, 0xe8, 0x47, 0x23, 0x18, 0xba, 0xc2, 0x11, 0x50,
-	0x2e, 0x1f, 0xba, 0x62, 0x54, 0x38, 0x53, 0x28, 0x25, 0x9d, 0xe3, 0xc2, 0x99, 0x42, 0x19, 0xe9,
-	0x1c, 0xbf, 0x4d, 0x5b, 0xf9, 0x59, 0xda, 0xb3, 0xe3, 0xd5, 0x13, 0xd1, 0x56, 0x19, 0x41, 0xeb,
-	0x8c, 0xa0, 0x4d, 0x46, 0xd0, 0x63, 0x46, 0xd0, 0xc3, 0x96, 0x68, 0xeb, 0x2d, 0xd1, 0x36, 0x5b,
-	0xa2, 0x5d, 0xe9, 0x05, 0xe4, 0xba, 0x0a, 0xff, 0xdb, 0xc9, 0x4b, 0x00, 0x00, 0x00, 0xff, 0xff,
-	0xb1, 0xfa, 0x92, 0x6c, 0xba, 0x02, 0x00, 0x00,
-}

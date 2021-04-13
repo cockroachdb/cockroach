@@ -3,11 +3,14 @@
 
 package eventpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -18,7 +21,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // CommonSQLPrivilegeEventDetails contains the fields copmmon to all
 // grant/revoke events.
@@ -35,21 +38,21 @@ func (m *CommonSQLPrivilegeEventDetails) Reset()         { *m = CommonSQLPrivile
 func (m *CommonSQLPrivilegeEventDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSQLPrivilegeEventDetails) ProtoMessage()    {}
 func (*CommonSQLPrivilegeEventDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{0}
+	return fileDescriptor_01c4057e16a82528, []int{0}
 }
 func (m *CommonSQLPrivilegeEventDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *CommonSQLPrivilegeEventDetails) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *CommonSQLPrivilegeEventDetails) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CommonSQLPrivilegeEventDetails.Merge(dst, src)
+func (m *CommonSQLPrivilegeEventDetails) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CommonSQLPrivilegeEventDetails.Merge(m, src)
 }
 func (m *CommonSQLPrivilegeEventDetails) XXX_Size() int {
 	return m.Size()
@@ -74,21 +77,21 @@ func (m *ChangeDatabasePrivilege) Reset()         { *m = ChangeDatabasePrivilege
 func (m *ChangeDatabasePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeDatabasePrivilege) ProtoMessage()    {}
 func (*ChangeDatabasePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{1}
+	return fileDescriptor_01c4057e16a82528, []int{1}
 }
 func (m *ChangeDatabasePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ChangeDatabasePrivilege) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ChangeDatabasePrivilege) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChangeDatabasePrivilege.Merge(dst, src)
+func (m *ChangeDatabasePrivilege) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeDatabasePrivilege.Merge(m, src)
 }
 func (m *ChangeDatabasePrivilege) XXX_Size() int {
 	return m.Size()
@@ -113,21 +116,21 @@ func (m *ChangeTablePrivilege) Reset()         { *m = ChangeTablePrivilege{} }
 func (m *ChangeTablePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeTablePrivilege) ProtoMessage()    {}
 func (*ChangeTablePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{2}
+	return fileDescriptor_01c4057e16a82528, []int{2}
 }
 func (m *ChangeTablePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ChangeTablePrivilege) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ChangeTablePrivilege) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChangeTablePrivilege.Merge(dst, src)
+func (m *ChangeTablePrivilege) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeTablePrivilege.Merge(m, src)
 }
 func (m *ChangeTablePrivilege) XXX_Size() int {
 	return m.Size()
@@ -152,21 +155,21 @@ func (m *ChangeSchemaPrivilege) Reset()         { *m = ChangeSchemaPrivilege{} }
 func (m *ChangeSchemaPrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeSchemaPrivilege) ProtoMessage()    {}
 func (*ChangeSchemaPrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{3}
+	return fileDescriptor_01c4057e16a82528, []int{3}
 }
 func (m *ChangeSchemaPrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ChangeSchemaPrivilege) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ChangeSchemaPrivilege) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChangeSchemaPrivilege.Merge(dst, src)
+func (m *ChangeSchemaPrivilege) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeSchemaPrivilege.Merge(m, src)
 }
 func (m *ChangeSchemaPrivilege) XXX_Size() int {
 	return m.Size()
@@ -191,21 +194,21 @@ func (m *ChangeTypePrivilege) Reset()         { *m = ChangeTypePrivilege{} }
 func (m *ChangeTypePrivilege) String() string { return proto.CompactTextString(m) }
 func (*ChangeTypePrivilege) ProtoMessage()    {}
 func (*ChangeTypePrivilege) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{4}
+	return fileDescriptor_01c4057e16a82528, []int{4}
 }
 func (m *ChangeTypePrivilege) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ChangeTypePrivilege) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ChangeTypePrivilege) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ChangeTypePrivilege.Merge(dst, src)
+func (m *ChangeTypePrivilege) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChangeTypePrivilege.Merge(m, src)
 }
 func (m *ChangeTypePrivilege) XXX_Size() int {
 	return m.Size()
@@ -230,21 +233,21 @@ func (m *AlterDatabaseOwner) Reset()         { *m = AlterDatabaseOwner{} }
 func (m *AlterDatabaseOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterDatabaseOwner) ProtoMessage()    {}
 func (*AlterDatabaseOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{5}
+	return fileDescriptor_01c4057e16a82528, []int{5}
 }
 func (m *AlterDatabaseOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *AlterDatabaseOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *AlterDatabaseOwner) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AlterDatabaseOwner.Merge(dst, src)
+func (m *AlterDatabaseOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterDatabaseOwner.Merge(m, src)
 }
 func (m *AlterDatabaseOwner) XXX_Size() int {
 	return m.Size()
@@ -269,21 +272,21 @@ func (m *AlterSchemaOwner) Reset()         { *m = AlterSchemaOwner{} }
 func (m *AlterSchemaOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterSchemaOwner) ProtoMessage()    {}
 func (*AlterSchemaOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{6}
+	return fileDescriptor_01c4057e16a82528, []int{6}
 }
 func (m *AlterSchemaOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *AlterSchemaOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *AlterSchemaOwner) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AlterSchemaOwner.Merge(dst, src)
+func (m *AlterSchemaOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterSchemaOwner.Merge(m, src)
 }
 func (m *AlterSchemaOwner) XXX_Size() int {
 	return m.Size()
@@ -308,21 +311,21 @@ func (m *AlterTypeOwner) Reset()         { *m = AlterTypeOwner{} }
 func (m *AlterTypeOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterTypeOwner) ProtoMessage()    {}
 func (*AlterTypeOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{7}
+	return fileDescriptor_01c4057e16a82528, []int{7}
 }
 func (m *AlterTypeOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *AlterTypeOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *AlterTypeOwner) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AlterTypeOwner.Merge(dst, src)
+func (m *AlterTypeOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterTypeOwner.Merge(m, src)
 }
 func (m *AlterTypeOwner) XXX_Size() int {
 	return m.Size()
@@ -347,21 +350,21 @@ func (m *AlterTableOwner) Reset()         { *m = AlterTableOwner{} }
 func (m *AlterTableOwner) String() string { return proto.CompactTextString(m) }
 func (*AlterTableOwner) ProtoMessage()    {}
 func (*AlterTableOwner) Descriptor() ([]byte, []int) {
-	return fileDescriptor_privilege_events_d93131cacd196a45, []int{8}
+	return fileDescriptor_01c4057e16a82528, []int{8}
 }
 func (m *AlterTableOwner) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *AlterTableOwner) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *AlterTableOwner) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AlterTableOwner.Merge(dst, src)
+func (m *AlterTableOwner) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AlterTableOwner.Merge(m, src)
 }
 func (m *AlterTableOwner) XXX_Size() int {
 	return m.Size()
@@ -383,10 +386,56 @@ func init() {
 	proto.RegisterType((*AlterTypeOwner)(nil), "cockroach.util.log.eventpb.AlterTypeOwner")
 	proto.RegisterType((*AlterTableOwner)(nil), "cockroach.util.log.eventpb.AlterTableOwner")
 }
+
+func init() {
+	proto.RegisterFile("util/log/eventpb/privilege_events.proto", fileDescriptor_01c4057e16a82528)
+}
+
+var fileDescriptor_01c4057e16a82528 = []byte{
+	// 583 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x96, 0x41, 0x6f, 0x12, 0x4f,
+	0x14, 0xc0, 0x77, 0x67, 0xff, 0x6d, 0xff, 0xbc, 0xd6, 0xaa, 0x63, 0x1b, 0x09, 0x89, 0x4b, 0xb3,
+	0x31, 0x29, 0x46, 0x5d, 0xa2, 0xbd, 0xf5, 0x26, 0xad, 0xb7, 0x46, 0x05, 0x1a, 0x0f, 0x1e, 0x24,
+	0xc3, 0x32, 0x59, 0x36, 0xdd, 0xdd, 0x59, 0x77, 0x47, 0x0c, 0xdf, 0xc1, 0x44, 0xe3, 0xc9, 0x8f,
+	0x44, 0x62, 0x62, 0xf0, 0x64, 0x4f, 0x44, 0xe1, 0xd6, 0xa3, 0x47, 0x4f, 0x66, 0x66, 0x16, 0x2c,
+	0xa5, 0x05, 0x3c, 0x92, 0x70, 0x9b, 0x30, 0xef, 0xfd, 0x98, 0xf9, 0xf1, 0xde, 0x1b, 0x60, 0xf7,
+	0x2d, 0xf7, 0xfc, 0xa2, 0xcf, 0xdc, 0x22, 0x6d, 0xd1, 0x90, 0x47, 0xf5, 0x62, 0x14, 0x7b, 0x2d,
+	0xcf, 0xa7, 0x2e, 0xad, 0xc9, 0x4f, 0x12, 0x3b, 0x8a, 0x19, 0x67, 0x38, 0xe7, 0x30, 0xe7, 0x24,
+	0x66, 0xc4, 0x69, 0xda, 0x22, 0xc5, 0xf6, 0x99, 0x6b, 0xa7, 0x29, 0xb9, 0x2d, 0x97, 0xb9, 0x4c,
+	0x86, 0x15, 0xc5, 0x4a, 0x65, 0xe4, 0xee, 0x4c, 0xa0, 0xcf, 0x03, 0xad, 0xdf, 0x3a, 0x98, 0x07,
+	0x2c, 0x08, 0x58, 0x58, 0x2d, 0x1f, 0xbd, 0x18, 0x7e, 0xe9, 0x53, 0x11, 0x72, 0x48, 0x39, 0xf1,
+	0xfc, 0x04, 0x17, 0x60, 0xcd, 0x8d, 0x49, 0xc8, 0x29, 0xcd, 0xea, 0x3b, 0x7a, 0x21, 0x53, 0xda,
+	0x3c, 0xeb, 0xe5, 0xe1, 0x01, 0x0b, 0x3c, 0x4e, 0x83, 0x88, 0xb7, 0x2b, 0xc3, 0x6d, 0xfc, 0x12,
+	0xb0, 0x5a, 0x36, 0x6a, 0xa3, 0xf3, 0x27, 0x59, 0xb4, 0x63, 0x14, 0x32, 0xa5, 0xdd, 0xf1, 0xa4,
+	0x5f, 0xbd, 0xfc, 0x76, 0x4c, 0x1b, 0xc4, 0xe1, 0xfb, 0x56, 0xc8, 0xc2, 0x84, 0x86, 0x89, 0xc7,
+	0xbd, 0x16, 0xb5, 0x2a, 0x37, 0x53, 0xc4, 0xe8, 0x30, 0x89, 0xe0, 0xc6, 0xb4, 0xc5, 0x4e, 0xc6,
+	0xb9, 0xc6, 0x3f, 0x72, 0x53, 0xc4, 0x5f, 0xae, 0xf5, 0x1d, 0xc1, 0xed, 0x83, 0x26, 0x09, 0x5d,
+	0x7a, 0x48, 0x38, 0xa9, 0x93, 0x84, 0x8e, 0x36, 0xf1, 0x31, 0xac, 0x3a, 0xd2, 0x8b, 0xbc, 0xf4,
+	0xfa, 0x63, 0xdb, 0xbe, 0x5a, 0xbd, 0xad, 0x0c, 0x9e, 0xb7, 0x56, 0xda, 0xe8, 0xf4, 0xf2, 0x5a,
+	0xb7, 0x97, 0xd7, 0xcf, 0x7a, 0x79, 0xad, 0x92, 0xb2, 0x70, 0x19, 0x8c, 0xe4, 0x8d, 0x9f, 0x45,
+	0x12, 0xf9, 0x68, 0x36, 0xb2, 0x5a, 0x3e, 0x9a, 0x42, 0x15, 0x2c, 0xfc, 0x1a, 0x56, 0x84, 0x14,
+	0xe1, 0x43, 0x40, 0xf7, 0xe7, 0x82, 0x5e, 0xfa, 0x4b, 0x5f, 0xa0, 0x2b, 0x2c, 0xde, 0x83, 0x6b,
+	0x8d, 0xd4, 0x4e, 0x2d, 0x24, 0x01, 0xcd, 0xfe, 0x77, 0x69, 0x11, 0x6c, 0x0c, 0x83, 0x9e, 0x91,
+	0x80, 0x5a, 0x5f, 0x11, 0x6c, 0x29, 0xb3, 0xc7, 0xa4, 0xee, 0x2f, 0xb5, 0x4e, 0x6a, 0x7d, 0x08,
+	0xc0, 0x85, 0x9a, 0x69, 0x4e, 0x33, 0x32, 0x42, 0x0a, 0xfd, 0x86, 0x60, 0x5b, 0x09, 0xad, 0x3a,
+	0x4d, 0x1a, 0x90, 0xa5, 0xd1, 0x09, 0xa3, 0x45, 0x58, 0x4f, 0xa4, 0x9b, 0x69, 0x4a, 0x41, 0x85,
+	0x48, 0xa7, 0x5f, 0x10, 0xdc, 0x4a, 0x8b, 0xb4, 0x1d, 0x2d, 0x6b, 0x74, 0xd2, 0xe8, 0x7d, 0xc8,
+	0xf0, 0x76, 0x34, 0xb5, 0x44, 0xff, 0x17, 0x01, 0xd2, 0xe6, 0x67, 0x04, 0xf8, 0x89, 0xcf, 0x69,
+	0x3c, 0x9c, 0xa5, 0xcf, 0xdf, 0x85, 0x34, 0x5e, 0x1c, 0x99, 0x13, 0x73, 0xce, 0x98, 0x3d, 0xe7,
+	0xf0, 0x5d, 0x58, 0x61, 0xe2, 0x9a, 0x57, 0xd8, 0x51, 0x9b, 0xd6, 0x27, 0x04, 0x37, 0xa4, 0x1a,
+	0xd5, 0xbb, 0x0b, 0x26, 0xe6, 0x42, 0x5f, 0x19, 0xb3, 0xfa, 0x6a, 0x4e, 0x29, 0xef, 0x11, 0x6c,
+	0x4a, 0x29, 0xa2, 0xf9, 0x16, 0x4c, 0xc9, 0x58, 0x63, 0x18, 0xd3, 0x1b, 0x63, 0x4e, 0x1d, 0x1f,
+	0x10, 0x5c, 0x57, 0x3a, 0xc4, 0xcc, 0x5f, 0x30, 0x1f, 0xe3, 0x8f, 0x99, 0x31, 0xe3, 0x31, 0x9b,
+	0xcf, 0x48, 0xe9, 0x5e, 0xe7, 0xa7, 0xa9, 0x75, 0xfa, 0xa6, 0xde, 0xed, 0x9b, 0xfa, 0x69, 0xdf,
+	0xd4, 0x7f, 0xf4, 0x4d, 0xfd, 0xe3, 0xc0, 0xd4, 0xba, 0x03, 0x53, 0x3b, 0x1d, 0x98, 0xda, 0xab,
+	0xb5, 0xf4, 0xa0, 0xf5, 0x55, 0xf9, 0x67, 0x76, 0xef, 0x4f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe0,
+	0x08, 0x6f, 0xa8, 0x48, 0x0b, 0x00, 0x00,
+}
+
 func (m *CommonSQLPrivilegeEventDetails) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -394,53 +443,47 @@ func (m *CommonSQLPrivilegeEventDetails) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *CommonSQLPrivilegeEventDetails) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *CommonSQLPrivilegeEventDetails) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Grantee) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Grantee)))
-		i += copy(dAtA[i:], m.Grantee)
+	if len(m.RevokedPrivileges) > 0 {
+		for iNdEx := len(m.RevokedPrivileges) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.RevokedPrivileges[iNdEx])
+			copy(dAtA[i:], m.RevokedPrivileges[iNdEx])
+			i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.RevokedPrivileges[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
 	}
 	if len(m.GrantedPrivileges) > 0 {
-		for _, s := range m.GrantedPrivileges {
+		for iNdEx := len(m.GrantedPrivileges) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.GrantedPrivileges[iNdEx])
+			copy(dAtA[i:], m.GrantedPrivileges[iNdEx])
+			i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.GrantedPrivileges[iNdEx])))
+			i--
 			dAtA[i] = 0x12
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
 		}
 	}
-	if len(m.RevokedPrivileges) > 0 {
-		for _, s := range m.RevokedPrivileges {
-			dAtA[i] = 0x1a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
+	if len(m.Grantee) > 0 {
+		i -= len(m.Grantee)
+		copy(dAtA[i:], m.Grantee)
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Grantee)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ChangeDatabasePrivilege) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -448,47 +491,59 @@ func (m *ChangeDatabasePrivilege) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ChangeDatabasePrivilege) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ChangeDatabasePrivilege) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n1, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n2, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLPrivilegeEventDetails.Size()))
-	n3, err := m.CommonSQLPrivilegeEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n3
 	if len(m.DatabaseName) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.DatabaseName)
+		copy(dAtA[i:], m.DatabaseName)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.DatabaseName)))
-		i += copy(dAtA[i:], m.DatabaseName)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	{
+		size, err := m.CommonSQLPrivilegeEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *ChangeTablePrivilege) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -496,47 +551,59 @@ func (m *ChangeTablePrivilege) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ChangeTablePrivilege) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ChangeTablePrivilege) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n4, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n4
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n5, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n5
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLPrivilegeEventDetails.Size()))
-	n6, err := m.CommonSQLPrivilegeEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n6
 	if len(m.TableName) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.TableName)
+		copy(dAtA[i:], m.TableName)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TableName)))
-		i += copy(dAtA[i:], m.TableName)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	{
+		size, err := m.CommonSQLPrivilegeEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *ChangeSchemaPrivilege) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -544,47 +611,59 @@ func (m *ChangeSchemaPrivilege) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ChangeSchemaPrivilege) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ChangeSchemaPrivilege) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n7, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n7
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n8, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n8
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLPrivilegeEventDetails.Size()))
-	n9, err := m.CommonSQLPrivilegeEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n9
 	if len(m.SchemaName) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.SchemaName)
+		copy(dAtA[i:], m.SchemaName)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.SchemaName)))
-		i += copy(dAtA[i:], m.SchemaName)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	{
+		size, err := m.CommonSQLPrivilegeEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *ChangeTypePrivilege) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -592,47 +671,59 @@ func (m *ChangeTypePrivilege) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ChangeTypePrivilege) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ChangeTypePrivilege) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n10, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n10
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n11, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n11
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLPrivilegeEventDetails.Size()))
-	n12, err := m.CommonSQLPrivilegeEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n12
 	if len(m.TypeName) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.TypeName)
+		copy(dAtA[i:], m.TypeName)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TypeName)))
-		i += copy(dAtA[i:], m.TypeName)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	{
+		size, err := m.CommonSQLPrivilegeEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *AlterDatabaseOwner) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -640,45 +731,56 @@ func (m *AlterDatabaseOwner) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AlterDatabaseOwner) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AlterDatabaseOwner) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n13, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n13
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n14, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n14
-	if len(m.DatabaseName) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.DatabaseName)))
-		i += copy(dAtA[i:], m.DatabaseName)
-	}
 	if len(m.Owner) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
-		i += copy(dAtA[i:], m.Owner)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.DatabaseName) > 0 {
+		i -= len(m.DatabaseName)
+		copy(dAtA[i:], m.DatabaseName)
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.DatabaseName)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *AlterSchemaOwner) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -686,45 +788,56 @@ func (m *AlterSchemaOwner) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AlterSchemaOwner) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AlterSchemaOwner) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n15, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n15
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n16, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n16
-	if len(m.SchemaName) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.SchemaName)))
-		i += copy(dAtA[i:], m.SchemaName)
-	}
 	if len(m.Owner) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
-		i += copy(dAtA[i:], m.Owner)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.SchemaName) > 0 {
+		i -= len(m.SchemaName)
+		copy(dAtA[i:], m.SchemaName)
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.SchemaName)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *AlterTypeOwner) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -732,45 +845,56 @@ func (m *AlterTypeOwner) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AlterTypeOwner) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AlterTypeOwner) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n17, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n17
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n18, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n18
-	if len(m.TypeName) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TypeName)))
-		i += copy(dAtA[i:], m.TypeName)
-	}
 	if len(m.Owner) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
-		i += copy(dAtA[i:], m.Owner)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.TypeName) > 0 {
+		i -= len(m.TypeName)
+		copy(dAtA[i:], m.TypeName)
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TypeName)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func (m *AlterTableOwner) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -778,49 +902,62 @@ func (m *AlterTableOwner) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AlterTableOwner) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AlterTableOwner) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonEventDetails.Size()))
-	n19, err := m.CommonEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n19
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintPrivilegeEvents(dAtA, i, uint64(m.CommonSQLEventDetails.Size()))
-	n20, err := m.CommonSQLEventDetails.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n20
-	if len(m.TableName) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TableName)))
-		i += copy(dAtA[i:], m.TableName)
-	}
 	if len(m.Owner) > 0 {
-		dAtA[i] = 0x22
-		i++
+		i -= len(m.Owner)
+		copy(dAtA[i:], m.Owner)
 		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.Owner)))
-		i += copy(dAtA[i:], m.Owner)
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if len(m.TableName) > 0 {
+		i -= len(m.TableName)
+		copy(dAtA[i:], m.TableName)
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(len(m.TableName)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	{
+		size, err := m.CommonSQLEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintPrivilegeEvents(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintPrivilegeEvents(dAtA []byte, offset int, v uint64) int {
+	offset -= sovPrivilegeEvents(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *CommonSQLPrivilegeEventDetails) Size() (n int) {
 	if m == nil {
@@ -1008,14 +1145,7 @@ func (m *AlterTableOwner) Size() (n int) {
 }
 
 func sovPrivilegeEvents(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozPrivilegeEvents(x uint64) (n int) {
 	return sovPrivilegeEvents(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1035,7 +1165,7 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1063,7 +1193,7 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1073,6 +1203,9 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1092,7 +1225,7 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1102,6 +1235,9 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1121,7 +1257,7 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1131,6 +1267,9 @@ func (m *CommonSQLPrivilegeEventDetails) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1172,7 +1311,7 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1200,7 +1339,7 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1209,6 +1348,9 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1230,7 +1372,7 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1239,6 +1381,9 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1260,7 +1405,7 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1269,6 +1414,9 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1290,7 +1438,7 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1300,6 +1448,9 @@ func (m *ChangeDatabasePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1341,7 +1492,7 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1369,7 +1520,7 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1378,6 +1529,9 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1399,7 +1553,7 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1408,6 +1562,9 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1429,7 +1586,7 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1438,6 +1595,9 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1459,7 +1619,7 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1469,6 +1629,9 @@ func (m *ChangeTablePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1510,7 +1673,7 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1538,7 +1701,7 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1547,6 +1710,9 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1568,7 +1734,7 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1577,6 +1743,9 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1598,7 +1767,7 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1607,6 +1776,9 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1628,7 +1800,7 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1638,6 +1810,9 @@ func (m *ChangeSchemaPrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1679,7 +1854,7 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1707,7 +1882,7 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1716,6 +1891,9 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1737,7 +1915,7 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1746,6 +1924,9 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1767,7 +1948,7 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1776,6 +1957,9 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1797,7 +1981,7 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1807,6 +1991,9 @@ func (m *ChangeTypePrivilege) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1848,7 +2035,7 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1876,7 +2063,7 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1885,6 +2072,9 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1906,7 +2096,7 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1915,6 +2105,9 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1936,7 +2129,7 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1946,6 +2139,9 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1965,7 +2161,7 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1975,6 +2171,9 @@ func (m *AlterDatabaseOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2016,7 +2215,7 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2044,7 +2243,7 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2053,6 +2252,9 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2074,7 +2276,7 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2083,6 +2285,9 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2104,7 +2309,7 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2114,6 +2319,9 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2133,7 +2341,7 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2143,6 +2351,9 @@ func (m *AlterSchemaOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2184,7 +2395,7 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2212,7 +2423,7 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2221,6 +2432,9 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2242,7 +2456,7 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2251,6 +2465,9 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2272,7 +2489,7 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2282,6 +2499,9 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2301,7 +2521,7 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2311,6 +2531,9 @@ func (m *AlterTypeOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2352,7 +2575,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2380,7 +2603,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2389,6 +2612,9 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2410,7 +2636,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2419,6 +2645,9 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2440,7 +2669,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2450,6 +2679,9 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2469,7 +2701,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2479,6 +2711,9 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPrivilegeEvents
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPrivilegeEvents
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2508,6 +2743,7 @@ func (m *AlterTableOwner) Unmarshal(dAtA []byte) error {
 func skipPrivilegeEvents(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -2539,10 +2775,8 @@ func skipPrivilegeEvents(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -2559,98 +2793,34 @@ func skipPrivilegeEvents(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthPrivilegeEvents
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowPrivilegeEvents
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipPrivilegeEvents(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupPrivilegeEvents
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthPrivilegeEvents
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthPrivilegeEvents = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowPrivilegeEvents   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthPrivilegeEvents        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowPrivilegeEvents          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupPrivilegeEvents = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("util/log/eventpb/privilege_events.proto", fileDescriptor_privilege_events_d93131cacd196a45)
-}
-
-var fileDescriptor_privilege_events_d93131cacd196a45 = []byte{
-	// 583 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x96, 0x41, 0x6f, 0x12, 0x4f,
-	0x14, 0xc0, 0x77, 0x67, 0xff, 0x6d, 0xff, 0xbc, 0xd6, 0xaa, 0x63, 0x1b, 0x09, 0x89, 0x4b, 0xb3,
-	0x31, 0x29, 0x46, 0x5d, 0xa2, 0xbd, 0xf5, 0x26, 0xad, 0xb7, 0x46, 0x05, 0x1a, 0x0f, 0x1e, 0x24,
-	0xc3, 0x32, 0x59, 0x36, 0xdd, 0xdd, 0x59, 0x77, 0x47, 0x0c, 0xdf, 0xc1, 0x44, 0xe3, 0xc9, 0x8f,
-	0x44, 0x62, 0x62, 0xf0, 0x64, 0x4f, 0x44, 0xe1, 0xd6, 0xa3, 0x47, 0x4f, 0x66, 0x66, 0x16, 0x2c,
-	0xa5, 0x05, 0x3c, 0x92, 0x70, 0x9b, 0x30, 0xef, 0xfd, 0x98, 0xf9, 0xf1, 0xde, 0x1b, 0x60, 0xf7,
-	0x2d, 0xf7, 0xfc, 0xa2, 0xcf, 0xdc, 0x22, 0x6d, 0xd1, 0x90, 0x47, 0xf5, 0x62, 0x14, 0x7b, 0x2d,
-	0xcf, 0xa7, 0x2e, 0xad, 0xc9, 0x4f, 0x12, 0x3b, 0x8a, 0x19, 0x67, 0x38, 0xe7, 0x30, 0xe7, 0x24,
-	0x66, 0xc4, 0x69, 0xda, 0x22, 0xc5, 0xf6, 0x99, 0x6b, 0xa7, 0x29, 0xb9, 0x2d, 0x97, 0xb9, 0x4c,
-	0x86, 0x15, 0xc5, 0x4a, 0x65, 0xe4, 0xee, 0x4c, 0xa0, 0xcf, 0x03, 0xad, 0xdf, 0x3a, 0x98, 0x07,
-	0x2c, 0x08, 0x58, 0x58, 0x2d, 0x1f, 0xbd, 0x18, 0x7e, 0xe9, 0x53, 0x11, 0x72, 0x48, 0x39, 0xf1,
-	0xfc, 0x04, 0x17, 0x60, 0xcd, 0x8d, 0x49, 0xc8, 0x29, 0xcd, 0xea, 0x3b, 0x7a, 0x21, 0x53, 0xda,
-	0x3c, 0xeb, 0xe5, 0xe1, 0x01, 0x0b, 0x3c, 0x4e, 0x83, 0x88, 0xb7, 0x2b, 0xc3, 0x6d, 0xfc, 0x12,
-	0xb0, 0x5a, 0x36, 0x6a, 0xa3, 0xf3, 0x27, 0x59, 0xb4, 0x63, 0x14, 0x32, 0xa5, 0xdd, 0xf1, 0xa4,
-	0x5f, 0xbd, 0xfc, 0x76, 0x4c, 0x1b, 0xc4, 0xe1, 0xfb, 0x56, 0xc8, 0xc2, 0x84, 0x86, 0x89, 0xc7,
-	0xbd, 0x16, 0xb5, 0x2a, 0x37, 0x53, 0xc4, 0xe8, 0x30, 0x89, 0xe0, 0xc6, 0xb4, 0xc5, 0x4e, 0xc6,
-	0xb9, 0xc6, 0x3f, 0x72, 0x53, 0xc4, 0x5f, 0xae, 0xf5, 0x1d, 0xc1, 0xed, 0x83, 0x26, 0x09, 0x5d,
-	0x7a, 0x48, 0x38, 0xa9, 0x93, 0x84, 0x8e, 0x36, 0xf1, 0x31, 0xac, 0x3a, 0xd2, 0x8b, 0xbc, 0xf4,
-	0xfa, 0x63, 0xdb, 0xbe, 0x5a, 0xbd, 0xad, 0x0c, 0x9e, 0xb7, 0x56, 0xda, 0xe8, 0xf4, 0xf2, 0x5a,
-	0xb7, 0x97, 0xd7, 0xcf, 0x7a, 0x79, 0xad, 0x92, 0xb2, 0x70, 0x19, 0x8c, 0xe4, 0x8d, 0x9f, 0x45,
-	0x12, 0xf9, 0x68, 0x36, 0xb2, 0x5a, 0x3e, 0x9a, 0x42, 0x15, 0x2c, 0xfc, 0x1a, 0x56, 0x84, 0x14,
-	0xe1, 0x43, 0x40, 0xf7, 0xe7, 0x82, 0x5e, 0xfa, 0x4b, 0x5f, 0xa0, 0x2b, 0x2c, 0xde, 0x83, 0x6b,
-	0x8d, 0xd4, 0x4e, 0x2d, 0x24, 0x01, 0xcd, 0xfe, 0x77, 0x69, 0x11, 0x6c, 0x0c, 0x83, 0x9e, 0x91,
-	0x80, 0x5a, 0x5f, 0x11, 0x6c, 0x29, 0xb3, 0xc7, 0xa4, 0xee, 0x2f, 0xb5, 0x4e, 0x6a, 0x7d, 0x08,
-	0xc0, 0x85, 0x9a, 0x69, 0x4e, 0x33, 0x32, 0x42, 0x0a, 0xfd, 0x86, 0x60, 0x5b, 0x09, 0xad, 0x3a,
-	0x4d, 0x1a, 0x90, 0xa5, 0xd1, 0x09, 0xa3, 0x45, 0x58, 0x4f, 0xa4, 0x9b, 0x69, 0x4a, 0x41, 0x85,
-	0x48, 0xa7, 0x5f, 0x10, 0xdc, 0x4a, 0x8b, 0xb4, 0x1d, 0x2d, 0x6b, 0x74, 0xd2, 0xe8, 0x7d, 0xc8,
-	0xf0, 0x76, 0x34, 0xb5, 0x44, 0xff, 0x17, 0x01, 0xd2, 0xe6, 0x67, 0x04, 0xf8, 0x89, 0xcf, 0x69,
-	0x3c, 0x9c, 0xa5, 0xcf, 0xdf, 0x85, 0x34, 0x5e, 0x1c, 0x99, 0x13, 0x73, 0xce, 0x98, 0x3d, 0xe7,
-	0xf0, 0x5d, 0x58, 0x61, 0xe2, 0x9a, 0x57, 0xd8, 0x51, 0x9b, 0xd6, 0x27, 0x04, 0x37, 0xa4, 0x1a,
-	0xd5, 0xbb, 0x0b, 0x26, 0xe6, 0x42, 0x5f, 0x19, 0xb3, 0xfa, 0x6a, 0x4e, 0x29, 0xef, 0x11, 0x6c,
-	0x4a, 0x29, 0xa2, 0xf9, 0x16, 0x4c, 0xc9, 0x58, 0x63, 0x18, 0xd3, 0x1b, 0x63, 0x4e, 0x1d, 0x1f,
-	0x10, 0x5c, 0x57, 0x3a, 0xc4, 0xcc, 0x5f, 0x30, 0x1f, 0xe3, 0x8f, 0x99, 0x31, 0xe3, 0x31, 0x9b,
-	0xcf, 0x48, 0xe9, 0x5e, 0xe7, 0xa7, 0xa9, 0x75, 0xfa, 0xa6, 0xde, 0xed, 0x9b, 0xfa, 0x69, 0xdf,
-	0xd4, 0x7f, 0xf4, 0x4d, 0xfd, 0xe3, 0xc0, 0xd4, 0xba, 0x03, 0x53, 0x3b, 0x1d, 0x98, 0xda, 0xab,
-	0xb5, 0xf4, 0xa0, 0xf5, 0x55, 0xf9, 0x67, 0x76, 0xef, 0x4f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe0,
-	0x08, 0x6f, 0xa8, 0x48, 0x0b, 0x00, 0x00,
-}

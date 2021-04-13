@@ -3,18 +3,19 @@
 
 package serverpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import clusterversion "github.com/cockroachdb/cockroach/pkg/clusterversion"
-import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-
 import (
 	context "context"
+	fmt "fmt"
+	clusterversion "github.com/cockroachdb/cockroach/pkg/clusterversion"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -25,7 +26,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // ValidateTargetClusterVersion is used to verify that the target node is
 // running a binary that's able to support the specified cluster version.
@@ -37,21 +38,21 @@ func (m *ValidateTargetClusterVersionRequest) Reset()         { *m = ValidateTar
 func (m *ValidateTargetClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionRequest) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{0}
+	return fileDescriptor_031978814d391068, []int{0}
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ValidateTargetClusterVersionRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ValidateTargetClusterVersionRequest.Merge(dst, src)
+func (m *ValidateTargetClusterVersionRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ValidateTargetClusterVersionRequest.Merge(m, src)
 }
 func (m *ValidateTargetClusterVersionRequest) XXX_Size() int {
 	return m.Size()
@@ -71,21 +72,21 @@ func (m *ValidateTargetClusterVersionResponse) Reset()         { *m = ValidateTa
 func (m *ValidateTargetClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*ValidateTargetClusterVersionResponse) ProtoMessage()    {}
 func (*ValidateTargetClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{1}
+	return fileDescriptor_031978814d391068, []int{1}
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ValidateTargetClusterVersionResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ValidateTargetClusterVersionResponse.Merge(dst, src)
+func (m *ValidateTargetClusterVersionResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ValidateTargetClusterVersionResponse.Merge(m, src)
 }
 func (m *ValidateTargetClusterVersionResponse) XXX_Size() int {
 	return m.Size()
@@ -106,21 +107,21 @@ func (m *BumpClusterVersionRequest) Reset()         { *m = BumpClusterVersionReq
 func (m *BumpClusterVersionRequest) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionRequest) ProtoMessage()    {}
 func (*BumpClusterVersionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{2}
+	return fileDescriptor_031978814d391068, []int{2}
 }
 func (m *BumpClusterVersionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *BumpClusterVersionRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *BumpClusterVersionRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BumpClusterVersionRequest.Merge(dst, src)
+func (m *BumpClusterVersionRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BumpClusterVersionRequest.Merge(m, src)
 }
 func (m *BumpClusterVersionRequest) XXX_Size() int {
 	return m.Size()
@@ -139,21 +140,21 @@ func (m *BumpClusterVersionResponse) Reset()         { *m = BumpClusterVersionRe
 func (m *BumpClusterVersionResponse) String() string { return proto.CompactTextString(m) }
 func (*BumpClusterVersionResponse) ProtoMessage()    {}
 func (*BumpClusterVersionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{3}
+	return fileDescriptor_031978814d391068, []int{3}
 }
 func (m *BumpClusterVersionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *BumpClusterVersionResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *BumpClusterVersionResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BumpClusterVersionResponse.Merge(dst, src)
+func (m *BumpClusterVersionResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BumpClusterVersionResponse.Merge(m, src)
 }
 func (m *BumpClusterVersionResponse) XXX_Size() int {
 	return m.Size()
@@ -174,21 +175,21 @@ func (m *PurgeOutdatedReplicasRequest) Reset()         { *m = PurgeOutdatedRepli
 func (m *PurgeOutdatedReplicasRequest) String() string { return proto.CompactTextString(m) }
 func (*PurgeOutdatedReplicasRequest) ProtoMessage()    {}
 func (*PurgeOutdatedReplicasRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{4}
+	return fileDescriptor_031978814d391068, []int{4}
 }
 func (m *PurgeOutdatedReplicasRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PurgeOutdatedReplicasRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PurgeOutdatedReplicasRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PurgeOutdatedReplicasRequest.Merge(dst, src)
+func (m *PurgeOutdatedReplicasRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PurgeOutdatedReplicasRequest.Merge(m, src)
 }
 func (m *PurgeOutdatedReplicasRequest) XXX_Size() int {
 	return m.Size()
@@ -208,21 +209,21 @@ func (m *PurgeOutdatedReplicasResponse) Reset()         { *m = PurgeOutdatedRepl
 func (m *PurgeOutdatedReplicasResponse) String() string { return proto.CompactTextString(m) }
 func (*PurgeOutdatedReplicasResponse) ProtoMessage()    {}
 func (*PurgeOutdatedReplicasResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{5}
+	return fileDescriptor_031978814d391068, []int{5}
 }
 func (m *PurgeOutdatedReplicasResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PurgeOutdatedReplicasResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PurgeOutdatedReplicasResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PurgeOutdatedReplicasResponse.Merge(dst, src)
+func (m *PurgeOutdatedReplicasResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PurgeOutdatedReplicasResponse.Merge(m, src)
 }
 func (m *PurgeOutdatedReplicasResponse) XXX_Size() int {
 	return m.Size()
@@ -242,21 +243,21 @@ func (m *SyncAllEnginesRequest) Reset()         { *m = SyncAllEnginesRequest{} }
 func (m *SyncAllEnginesRequest) String() string { return proto.CompactTextString(m) }
 func (*SyncAllEnginesRequest) ProtoMessage()    {}
 func (*SyncAllEnginesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{6}
+	return fileDescriptor_031978814d391068, []int{6}
 }
 func (m *SyncAllEnginesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SyncAllEnginesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SyncAllEnginesRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SyncAllEnginesRequest.Merge(dst, src)
+func (m *SyncAllEnginesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncAllEnginesRequest.Merge(m, src)
 }
 func (m *SyncAllEnginesRequest) XXX_Size() int {
 	return m.Size()
@@ -275,21 +276,21 @@ func (m *SyncAllEnginesResponse) Reset()         { *m = SyncAllEnginesResponse{}
 func (m *SyncAllEnginesResponse) String() string { return proto.CompactTextString(m) }
 func (*SyncAllEnginesResponse) ProtoMessage()    {}
 func (*SyncAllEnginesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_migration_e2a428f370588fbd, []int{7}
+	return fileDescriptor_031978814d391068, []int{7}
 }
 func (m *SyncAllEnginesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SyncAllEnginesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SyncAllEnginesResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SyncAllEnginesResponse.Merge(dst, src)
+func (m *SyncAllEnginesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncAllEnginesResponse.Merge(m, src)
 }
 func (m *SyncAllEnginesResponse) XXX_Size() int {
 	return m.Size()
@@ -309,6 +310,38 @@ func init() {
 	proto.RegisterType((*PurgeOutdatedReplicasResponse)(nil), "cockroach.server.serverpb.PurgeOutdatedReplicasResponse")
 	proto.RegisterType((*SyncAllEnginesRequest)(nil), "cockroach.server.serverpb.SyncAllEnginesRequest")
 	proto.RegisterType((*SyncAllEnginesResponse)(nil), "cockroach.server.serverpb.SyncAllEnginesResponse")
+}
+
+func init() { proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_031978814d391068) }
+
+var fileDescriptor_031978814d391068 = []byte{
+	// 409 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x4e, 0x2d, 0x2a,
+	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0xb9, 0x99, 0xe9, 0x45, 0x89, 0x25, 0x99, 0xf9,
+	0x79, 0x7a, 0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0x92, 0xc9, 0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89,
+	0xc9, 0x19, 0x7a, 0x10, 0x35, 0x7a, 0x30, 0xa5, 0x52, 0x2a, 0xc9, 0x39, 0xa5, 0xc5, 0x25, 0x60,
+	0x5e, 0x71, 0x66, 0x7e, 0x9e, 0x3e, 0x94, 0x1b, 0x0f, 0xe5, 0x43, 0x0c, 0x90, 0x12, 0x03, 0x6b,
+	0x06, 0x99, 0x9c, 0x5a, 0x92, 0x98, 0x92, 0x58, 0x92, 0x08, 0x11, 0x57, 0xaa, 0xe0, 0x52, 0x0e,
+	0x4b, 0xcc, 0xc9, 0x4c, 0x49, 0x2c, 0x49, 0x0d, 0x49, 0x2c, 0x4a, 0x4f, 0x2d, 0x71, 0x86, 0x68,
+	0x0f, 0x83, 0xe8, 0x0e, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x0a, 0xe4, 0xe2, 0x47, 0x33,
+	0x57, 0x82, 0x51, 0x81, 0x51, 0x83, 0xdb, 0x48, 0x43, 0x0f, 0xe1, 0x32, 0x54, 0x87, 0xe8, 0xa1,
+	0x99, 0xc4, 0x97, 0x8c, 0xc2, 0x57, 0x52, 0xe3, 0x52, 0xc1, 0x6f, 0x73, 0x71, 0x41, 0x7e, 0x5e,
+	0x71, 0xaa, 0x52, 0x1e, 0x97, 0xa4, 0x53, 0x69, 0x6e, 0x01, 0xdd, 0xdc, 0x25, 0xc3, 0x25, 0x85,
+	0xcd, 0x3e, 0xa8, 0x6b, 0x42, 0xb8, 0x64, 0x02, 0x4a, 0x8b, 0xd2, 0x53, 0xfd, 0x4b, 0x4b, 0x40,
+	0x2e, 0x4f, 0x09, 0x4a, 0x2d, 0xc8, 0xc9, 0x4c, 0x4e, 0x2c, 0x86, 0x39, 0xc8, 0x84, 0x8b, 0x1d,
+	0xd5, 0x21, 0x52, 0x48, 0x0e, 0x81, 0xc6, 0x81, 0x1e, 0xcc, 0x50, 0x98, 0x52, 0x25, 0x79, 0x2e,
+	0x59, 0x1c, 0xa6, 0x42, 0xad, 0x15, 0xe7, 0x12, 0x0d, 0xae, 0xcc, 0x4b, 0x76, 0xcc, 0xc9, 0x71,
+	0xcd, 0x4b, 0xcf, 0xcc, 0x4b, 0x85, 0xd9, 0xa7, 0x24, 0xc1, 0x25, 0x86, 0x2e, 0x01, 0xd1, 0x62,
+	0xb4, 0x97, 0x85, 0x8b, 0xd3, 0x17, 0x96, 0x8c, 0x84, 0x16, 0x32, 0x72, 0xc9, 0xe0, 0x0b, 0x6e,
+	0x21, 0x3b, 0x3d, 0x9c, 0x49, 0x4c, 0x8f, 0x88, 0x14, 0x22, 0x65, 0x4f, 0xb6, 0x7e, 0xa8, 0x17,
+	0x19, 0x84, 0x9a, 0x19, 0xb9, 0x84, 0x30, 0x83, 0x5e, 0xc8, 0x04, 0x8f, 0xc9, 0x38, 0x53, 0x86,
+	0x94, 0x29, 0x89, 0xba, 0xe0, 0xae, 0x28, 0xe7, 0xe2, 0x43, 0x0d, 0x51, 0x21, 0x03, 0x3c, 0x46,
+	0x61, 0x8d, 0x15, 0x29, 0x43, 0x12, 0x74, 0xc0, 0x2d, 0xee, 0x61, 0xe4, 0x12, 0xc5, 0x9a, 0x0a,
+	0x84, 0xcc, 0xf1, 0x18, 0x87, 0x2f, 0x35, 0x4a, 0x59, 0x90, 0xae, 0x11, 0xe6, 0x1c, 0x27, 0xad,
+	0x13, 0x0f, 0xe5, 0x18, 0x4e, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e, 0xf1, 0xc6, 0x23, 0x39,
+	0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8, 0xf0, 0x58, 0x8e, 0xe1, 0xc6, 0x63,
+	0x39, 0x86, 0x28, 0x0e, 0x98, 0x59, 0x49, 0x6c, 0xe0, 0xc2, 0xc4, 0x18, 0x10, 0x00, 0x00, 0xff,
+	0xff, 0x92, 0x08, 0x96, 0x7d, 0xc8, 0x04, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -411,6 +444,23 @@ type MigrationServer interface {
 	// PurgeOutdatedReplicas is used to instruct the target node to purge all
 	// replicas with a version less than the one provided.
 	PurgeOutdatedReplicas(context.Context, *PurgeOutdatedReplicasRequest) (*PurgeOutdatedReplicasResponse, error)
+}
+
+// UnimplementedMigrationServer can be embedded to have forward compatible implementations.
+type UnimplementedMigrationServer struct {
+}
+
+func (*UnimplementedMigrationServer) ValidateTargetClusterVersion(ctx context.Context, req *ValidateTargetClusterVersionRequest) (*ValidateTargetClusterVersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateTargetClusterVersion not implemented")
+}
+func (*UnimplementedMigrationServer) BumpClusterVersion(ctx context.Context, req *BumpClusterVersionRequest) (*BumpClusterVersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BumpClusterVersion not implemented")
+}
+func (*UnimplementedMigrationServer) SyncAllEngines(ctx context.Context, req *SyncAllEnginesRequest) (*SyncAllEnginesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncAllEngines not implemented")
+}
+func (*UnimplementedMigrationServer) PurgeOutdatedReplicas(ctx context.Context, req *PurgeOutdatedReplicasRequest) (*PurgeOutdatedReplicasResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeOutdatedReplicas not implemented")
 }
 
 func RegisterMigrationServer(s *grpc.Server, srv MigrationServer) {
@@ -517,7 +567,7 @@ var _Migration_serviceDesc = grpc.ServiceDesc{
 func (m *ValidateTargetClusterVersionRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -525,27 +575,34 @@ func (m *ValidateTargetClusterVersionRequest) Marshal() (dAtA []byte, err error)
 }
 
 func (m *ValidateTargetClusterVersionRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ValidateTargetClusterVersionRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.ClusterVersion != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintMigration(dAtA, i, uint64(m.ClusterVersion.Size()))
-		n1, err := m.ClusterVersion.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.ClusterVersion.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMigration(dAtA, i, uint64(size))
 		}
-		i += n1
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ValidateTargetClusterVersionResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -553,17 +610,22 @@ func (m *ValidateTargetClusterVersionResponse) Marshal() (dAtA []byte, err error
 }
 
 func (m *ValidateTargetClusterVersionResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ValidateTargetClusterVersionResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *BumpClusterVersionRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -571,27 +633,34 @@ func (m *BumpClusterVersionRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *BumpClusterVersionRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BumpClusterVersionRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.ClusterVersion != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintMigration(dAtA, i, uint64(m.ClusterVersion.Size()))
-		n2, err := m.ClusterVersion.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.ClusterVersion.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMigration(dAtA, i, uint64(size))
 		}
-		i += n2
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *BumpClusterVersionResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -599,17 +668,22 @@ func (m *BumpClusterVersionResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *BumpClusterVersionResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BumpClusterVersionResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *PurgeOutdatedReplicasRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -617,27 +691,34 @@ func (m *PurgeOutdatedReplicasRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PurgeOutdatedReplicasRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PurgeOutdatedReplicasRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.Version != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintMigration(dAtA, i, uint64(m.Version.Size()))
-		n3, err := m.Version.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Version.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMigration(dAtA, i, uint64(size))
 		}
-		i += n3
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *PurgeOutdatedReplicasResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -645,17 +726,22 @@ func (m *PurgeOutdatedReplicasResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PurgeOutdatedReplicasResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PurgeOutdatedReplicasResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *SyncAllEnginesRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -663,17 +749,22 @@ func (m *SyncAllEnginesRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SyncAllEnginesRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncAllEnginesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *SyncAllEnginesResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -681,21 +772,28 @@ func (m *SyncAllEnginesResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SyncAllEnginesResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncAllEnginesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintMigration(dAtA []byte, offset int, v uint64) int {
+	offset -= sovMigration(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *ValidateTargetClusterVersionRequest) Size() (n int) {
 	if m == nil {
@@ -782,14 +880,7 @@ func (m *SyncAllEnginesResponse) Size() (n int) {
 }
 
 func sovMigration(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozMigration(x uint64) (n int) {
 	return sovMigration(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -809,7 +900,7 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -837,7 +928,7 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -846,6 +937,9 @@ func (m *ValidateTargetClusterVersionRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthMigration
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMigration
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -892,7 +986,7 @@ func (m *ValidateTargetClusterVersionResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -942,7 +1036,7 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -970,7 +1064,7 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -979,6 +1073,9 @@ func (m *BumpClusterVersionRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthMigration
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMigration
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1025,7 +1122,7 @@ func (m *BumpClusterVersionResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1075,7 +1172,7 @@ func (m *PurgeOutdatedReplicasRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1103,7 +1200,7 @@ func (m *PurgeOutdatedReplicasRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1112,6 +1209,9 @@ func (m *PurgeOutdatedReplicasRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthMigration
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMigration
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1158,7 +1258,7 @@ func (m *PurgeOutdatedReplicasResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1208,7 +1308,7 @@ func (m *SyncAllEnginesRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1258,7 +1358,7 @@ func (m *SyncAllEnginesResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1296,6 +1396,7 @@ func (m *SyncAllEnginesResponse) Unmarshal(dAtA []byte) error {
 func skipMigration(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -1327,10 +1428,8 @@ func skipMigration(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1347,87 +1446,34 @@ func skipMigration(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthMigration
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowMigration
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipMigration(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupMigration
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthMigration
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthMigration = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowMigration   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthMigration        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowMigration          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupMigration = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("server/serverpb/migration.proto", fileDescriptor_migration_e2a428f370588fbd)
-}
-
-var fileDescriptor_migration_e2a428f370588fbd = []byte{
-	// 409 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2f, 0x4e, 0x2d, 0x2a,
-	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0xb9, 0x99, 0xe9, 0x45, 0x89, 0x25, 0x99, 0xf9,
-	0x79, 0x7a, 0x05, 0x45, 0xf9, 0x25, 0xf9, 0x42, 0x92, 0xc9, 0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89,
-	0xc9, 0x19, 0x7a, 0x10, 0x35, 0x7a, 0x30, 0xa5, 0x52, 0x2a, 0xc9, 0x39, 0xa5, 0xc5, 0x25, 0x60,
-	0x5e, 0x71, 0x66, 0x7e, 0x9e, 0x3e, 0x94, 0x1b, 0x0f, 0xe5, 0x43, 0x0c, 0x90, 0x12, 0x03, 0x6b,
-	0x06, 0x99, 0x9c, 0x5a, 0x92, 0x98, 0x92, 0x58, 0x92, 0x08, 0x11, 0x57, 0xaa, 0xe0, 0x52, 0x0e,
-	0x4b, 0xcc, 0xc9, 0x4c, 0x49, 0x2c, 0x49, 0x0d, 0x49, 0x2c, 0x4a, 0x4f, 0x2d, 0x71, 0x86, 0x68,
-	0x0f, 0x83, 0xe8, 0x0e, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x0a, 0xe4, 0xe2, 0x47, 0x33,
-	0x57, 0x82, 0x51, 0x81, 0x51, 0x83, 0xdb, 0x48, 0x43, 0x0f, 0xe1, 0x32, 0x54, 0x87, 0xe8, 0xa1,
-	0x99, 0xc4, 0x97, 0x8c, 0xc2, 0x57, 0x52, 0xe3, 0x52, 0xc1, 0x6f, 0x73, 0x71, 0x41, 0x7e, 0x5e,
-	0x71, 0xaa, 0x52, 0x1e, 0x97, 0xa4, 0x53, 0x69, 0x6e, 0x01, 0xdd, 0xdc, 0x25, 0xc3, 0x25, 0x85,
-	0xcd, 0x3e, 0xa8, 0x6b, 0x42, 0xb8, 0x64, 0x02, 0x4a, 0x8b, 0xd2, 0x53, 0xfd, 0x4b, 0x4b, 0x40,
-	0x2e, 0x4f, 0x09, 0x4a, 0x2d, 0xc8, 0xc9, 0x4c, 0x4e, 0x2c, 0x86, 0x39, 0xc8, 0x84, 0x8b, 0x1d,
-	0xd5, 0x21, 0x52, 0x48, 0x0e, 0x81, 0xc6, 0x81, 0x1e, 0xcc, 0x50, 0x98, 0x52, 0x25, 0x79, 0x2e,
-	0x59, 0x1c, 0xa6, 0x42, 0xad, 0x15, 0xe7, 0x12, 0x0d, 0xae, 0xcc, 0x4b, 0x76, 0xcc, 0xc9, 0x71,
-	0xcd, 0x4b, 0xcf, 0xcc, 0x4b, 0x85, 0xd9, 0xa7, 0x24, 0xc1, 0x25, 0x86, 0x2e, 0x01, 0xd1, 0x62,
-	0xb4, 0x97, 0x85, 0x8b, 0xd3, 0x17, 0x96, 0x8c, 0x84, 0x16, 0x32, 0x72, 0xc9, 0xe0, 0x0b, 0x6e,
-	0x21, 0x3b, 0x3d, 0x9c, 0x49, 0x4c, 0x8f, 0x88, 0x14, 0x22, 0x65, 0x4f, 0xb6, 0x7e, 0xa8, 0x17,
-	0x19, 0x84, 0x9a, 0x19, 0xb9, 0x84, 0x30, 0x83, 0x5e, 0xc8, 0x04, 0x8f, 0xc9, 0x38, 0x53, 0x86,
-	0x94, 0x29, 0x89, 0xba, 0xe0, 0xae, 0x28, 0xe7, 0xe2, 0x43, 0x0d, 0x51, 0x21, 0x03, 0x3c, 0x46,
-	0x61, 0x8d, 0x15, 0x29, 0x43, 0x12, 0x74, 0xc0, 0x2d, 0xee, 0x61, 0xe4, 0x12, 0xc5, 0x9a, 0x0a,
-	0x84, 0xcc, 0xf1, 0x18, 0x87, 0x2f, 0x35, 0x4a, 0x59, 0x90, 0xae, 0x11, 0xe6, 0x1c, 0x27, 0xad,
-	0x13, 0x0f, 0xe5, 0x18, 0x4e, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e, 0xf1, 0xc6, 0x23, 0x39,
-	0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8, 0xf0, 0x58, 0x8e, 0xe1, 0xc6, 0x63,
-	0x39, 0x86, 0x28, 0x0e, 0x98, 0x59, 0x49, 0x6c, 0xe0, 0xc2, 0xc4, 0x18, 0x10, 0x00, 0x00, 0xff,
-	0xff, 0x92, 0x08, 0x96, 0x7d, 0xc8, 0x04, 0x00, 0x00,
-}
