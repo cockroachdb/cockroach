@@ -23,6 +23,7 @@ ALL_TESTS = [
     "//pkg/ccl/oidcccl:oidcccl_test",
     "//pkg/ccl/partitionccl:partitionccl_test",
     "//pkg/ccl/serverccl:serverccl_test",
+    "//pkg/ccl/sqlproxyccl/security:security_test",
     "//pkg/ccl/sqlproxyccl:sqlproxyccl_test",
     "//pkg/ccl/storageccl/engineccl:engineccl_test",
     "//pkg/ccl/storageccl:storageccl_test",
