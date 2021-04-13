@@ -448,7 +448,7 @@ func registerTPCC(r *testRegistry) {
 		LoadConfig: singlePartitionedLoadgen,
 
 		LoadWarehouses: 2000,
-		EstimatedMax:   900,
+		EstimatedMax:   1150,
 
 		MinVersion: "v20.1.0",
 	})
@@ -798,7 +798,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
 	}
 	defer func() { _ = os.RemoveAll(resultsDir) }()
-	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
+	s := search.NewLineSearcher(1, 1150, b.EstimatedMax, initStepSize, precision)
 	iteration := 0
 	if res, err := s.Search(func(warehouses int) (bool, error) {
 		iteration++

@@ -15,7 +15,10 @@ package log
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"runtime/debug"
+	runtimepprof "runtime/pprof"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,7 +29,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/petermattis/goid"
 )
+
+// CrashWithCore .
+func CrashWithCore(ctx context.Context, err error) {
+	err = errors.Wrapf(err, "TBG CRASH DETECTED GOID=%d", goid.Get())
+	// Try hard to get the message logged.
+	// See https://github.com/cockroachdb/cockroach/pull/62763.
+	fmt.Fprintln(os.Stderr, err)
+	fmt.Fprintln(os.Stdout, err)
+	os.Stderr.Sync()
+	os.Stdout.Sync()
+	// Make it easier to find the caller goroutine in Goland
+	// when inspecting the core dump.
+	runtimepprof.SetGoroutineLabels(
+		runtimepprof.WithLabels(ctx, runtimepprof.Labels("TBG", "TBG")),
+	)
+	go func() {
+		panic(err)
+	}()
+	time.Sleep(time.Hour)
+}
 
 // logging is the global state of the logging setup.
 var logging loggingT
@@ -299,7 +323,10 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 		//
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
-		exitFunc := func(x exit.Code, _ error) { exit.WithCode(x) }
+		exitFunc := func(x exit.Code, _ error) {
+			CrashWithCore(context.Background(), errors.Errorf("boom"))
+			os.Exit(123) // unreachable
+		}
 		logging.mu.Lock()
 		if logging.mu.exitOverride.f != nil {
 			if logging.mu.exitOverride.hideStack {
