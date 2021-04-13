@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -370,7 +371,7 @@ func ConvertBackfillError(ctx context.Context, tableDesc *tabledesc.Immutable, b
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
+	desc, err := tableDesc.MakeFirstMutationPublic(catalog.IncludeConstraints)
 	if err != nil {
 		return err
 	}

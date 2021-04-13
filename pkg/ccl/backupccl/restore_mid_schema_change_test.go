@@ -92,7 +92,7 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 							for _, backupDir := range backupDirs {
 								fullBackupDir, err := filepath.Abs(filepath.Join(fullClusterVersionDir, backupDir.Name()))
 								require.NoError(t, err)
-								t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(), isClusterRestore))
+								t.Run(backupDir.Name(), restoreMidSchemaChange(fullBackupDir, backupDir.Name(), isClusterRestore, blockLocation == "after"))
 							}
 						})
 					}
@@ -103,8 +103,8 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 }
 
 // expectedSCJobCount returns the expected number of schema change jobs
-// we expect to fin.d
-func expectedSCJobCount(scName string, isClusterRestore bool) int {
+// we expect to find.
+func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 	// The number of schema change under test. These will be the ones that are
 	// synthesized in database restore.
 	var expNumSCJobs int
@@ -124,6 +124,9 @@ func expectedSCJobCount(scName string, isClusterRestore bool) int {
 		numBackgroundSCJobs = 2
 		// PK change + PK cleanup
 		expNumSCJobs = 2
+		if isClusterRestore && after {
+			expNumSCJobs = 1
+		}
 	case "midprimarykeyswapcleanup":
 		// This test performs an ALTER COLUMN, and the original ALTER PRIMARY
 		// KEY that is being cleaned up.
@@ -159,6 +162,7 @@ func validateTable(
 
 	var rowCount int
 	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.%s`, dbName, tableName)).Scan(&rowCount)
+	require.Greater(t, rowCount, 0, "expected table to have some rows")
 	// The number of entries in all indexes should be the same.
 	for _, index := range append(desc.GetPublicNonPrimaryIndexes(), *desc.GetPrimaryIndex()) {
 		var indexCount int
@@ -181,12 +185,12 @@ func getTablesInTest(scName string) (tableNames []string) {
 }
 
 func verifyMidSchemaChange(
-	t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, isClusterRestore bool,
+	t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, isClusterRestore, after bool,
 ) {
 	tables := getTablesInTest(scName)
 
 	// Check that we are left with the expected number of schema change jobs.
-	expNumSchemaChangeJobs := expectedSCJobCount(scName, isClusterRestore)
+	expNumSchemaChangeJobs := expectedSCJobCount(scName, isClusterRestore, after)
 	schemaChangeJobs := sqlDB.QueryStr(t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'")
 	require.Equal(t, expNumSchemaChangeJobs, len(schemaChangeJobs),
 		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, schemaChangeJobs)
@@ -217,7 +221,7 @@ func verifyMidSchemaChange(
 }
 
 func restoreMidSchemaChange(
-	backupDir, schemaChangeName string, isClusterRestore bool,
+	backupDir, schemaChangeName string, isClusterRestore bool, after bool,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
@@ -249,6 +253,6 @@ func restoreMidSchemaChange(
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.
 		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
-		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isClusterRestore)
+		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isClusterRestore, after)
 	}
 }

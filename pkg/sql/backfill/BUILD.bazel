@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "backfill",
+    srcs = ["backfill.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/backfill",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/row",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/transform",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

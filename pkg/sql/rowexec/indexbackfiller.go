@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -134,7 +135,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
+	desc, err := ib.desc.MakeFirstMutationPublic(catalog.IncludeConstraints)
 	immutable := tabledesc.NewImmutable(*desc.TableDesc())
 	if err != nil {
 		return err
