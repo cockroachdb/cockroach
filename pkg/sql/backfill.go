@@ -82,6 +82,12 @@ var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
 	50000,
 )
 
+var indexPreScanWithSQL = settings.RegisterBoolSetting(
+	"schemachanger.bulk_index_backfill.pre_scan_via_sql.enabled",
+	"when pre-scanning a target index span, use SQL instead of KV",
+	false,
+)
+
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
@@ -163,6 +169,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []descpb.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
+	var addedIndexIDs []descpb.IndexID
 
 	var constraintsToDrop []descpb.ConstraintToUpdate
 	var constraintsToAddBeforeValidation []descpb.ConstraintToUpdate
@@ -213,7 +220,11 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 					needColumnBackfill = true
 				}
 			case *descpb.DescriptorMutation_Index:
-				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, t.Index.ID))
+				if indexPreScanWithSQL.Get(&sc.settings.SV) && t.Index.Type == descpb.IndexDescriptor_FORWARD {
+					addedIndexIDs = append(addedIndexIDs, t.Index.ID)
+				} else {
+					addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, t.Index.ID))
+				}
 			case *descpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case descpb.ConstraintToUpdate_CHECK:
@@ -295,9 +306,9 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 
 	// Add new indexes.
-	if len(addedIndexSpans) > 0 {
+	if len(addedIndexSpans) > 0 || len(addedIndexIDs) > 0 {
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
-		if err := sc.backfillIndexes(ctx, version, addedIndexSpans); err != nil {
+		if err := sc.backfillIndexes(ctx, version, addedIndexSpans, addedIndexIDs); err != nil {
 			return err
 		}
 	}
@@ -907,6 +918,7 @@ func (sc *SchemaChanger) distBackfill(
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
 	targetSpans []roachpb.Span,
+	targetForwardIndexIDs []descpb.IndexID,
 ) error {
 	inMemoryStatusEnabled := sc.execCfg.Settings.Version.IsActive(
 		ctx, clusterversion.VersionAtomicChangeReplicasTrigger)
@@ -928,20 +940,52 @@ func (sc *SchemaChanger) distBackfill(
 	// spans should be essentially empty, so this should be a pretty quick and
 	// cheap scan.
 	if backfillType == indexBackfill {
-		const pageSize = 10000
-		noop := func(_ []kv.KeyValue) error { return nil }
-		if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+		if len(targetSpans) > 0 {
+			const pageSize = 10000
+			noop := func(_ []kv.KeyValue) error { return nil }
 			for _, span := range targetSpans {
-				// TODO(dt): a Count() request would be nice here if the target isn't
-				// empty, since we don't need to drag all the results back just to
-				// then ignore them -- we just need the iteration on the far end.
-				if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
+				if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+					// TODO(dt): a Count() request would be nice here if the target isn't
+					// empty, since we don't need to drag all the results back just to
+					// then ignore them -- we just need the iteration on the far end.
+					if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
+						return err
+					}
+					return nil
+				}); err != nil {
 					return err
 				}
 			}
-			return nil
-		}); err != nil {
-			return err
+		}
+		if len(targetForwardIndexIDs) > 0 {
+			for _, idxID := range targetForwardIndexIDs {
+				if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+					tc := descs.NewCollection(ctx, sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+					defer tc.ReleaseAll(ctx)
+					tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
+					if err != nil {
+						return err
+					}
+					desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+					if err != nil {
+						return err
+					}
+					// pretend that the schema has been modified.
+					if err := tc.AddUncommittedDescriptor(desc); err != nil {
+						return err
+					}
+					ie := sc.ieFactory(ctx, newFakeSessionData()).(*InternalExecutor)
+					ie.tcModifier = tc
+					defer func() {
+						ie.tcModifier = nil
+					}()
+					query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idxID)
+					_, err = ie.Exec(ctx, "verify-idx-count", txn, query)
+					return err
+				}); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -1493,7 +1537,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 func (sc *SchemaChanger) backfillIndexes(
-	ctx context.Context, version descpb.DescriptorVersion, addingSpans []roachpb.Span,
+	ctx context.Context,
+	version descpb.DescriptorVersion,
+	addingSpans []roachpb.Span,
+	addingForwardIDs []descpb.IndexID,
 ) error {
 	log.Infof(ctx, "backfilling %d indexes", len(addingSpans))
 
@@ -1516,7 +1563,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	chunkSize := indexBulkBackfillChunkSize.Get(&sc.settings.SV)
 	if err := sc.distBackfill(
 		ctx, version, indexBackfill, chunkSize,
-		backfill.IndexMutationFilter, addingSpans); err != nil {
+		backfill.IndexMutationFilter, addingSpans, addingForwardIDs); err != nil {
 		return err
 	}
 
@@ -1536,7 +1583,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 
 	if err := sc.distBackfill(
 		ctx, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		backfill.ColumnMutationFilter, nil); err != nil {
+		backfill.ColumnMutationFilter, nil, nil); err != nil {
 		return err
 	}
 	log.Info(ctx, "finished clearing and backfilling columns")
