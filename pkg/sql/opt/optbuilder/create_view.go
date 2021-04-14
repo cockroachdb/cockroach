@@ -56,6 +56,24 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		}
 	}
 
+	// If the type of any column that this view references is user
+	// defined, add a type dependency between this view and the UDT.
+	if b.trackViewDeps {
+		for _, d := range b.viewDeps {
+			if !d.ColumnOrdinals.Empty() {
+				d.ColumnOrdinals.ForEach(func(ord int) {
+					ids, err := d.DataSource.CollectTypes(ord)
+					if err != nil {
+						panic(err)
+					}
+					for _, id := range ids {
+						b.viewTypeDeps.Add(int(id))
+					}
+				})
+			}
+		}
+	}
+
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
