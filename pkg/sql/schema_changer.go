@@ -157,6 +157,11 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 
+	// Clock sync problems should not lead to permanently failed schema changes.
+	if hlc.IsUntrustworthyRemoteWallTimeError(err) {
+		return false
+	}
+
 	if pgerror.IsSQLRetryableError(err) {
 		return false
 	}
