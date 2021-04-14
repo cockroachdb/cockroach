@@ -118,8 +118,13 @@
         ) &
         (HasStrictKey $input)
     $filters:* &
-        (Let ($leftFilter $rightFilter $itemToReplace $ok):
-            (SplitDisjunction $scanPrivate $filters)
+        (Let
+            (
+                $leftFilter
+                $rightFilter
+                $itemToReplace
+                $ok
+            ):(SplitDisjunction $scanPrivate $filters)
             $ok
         )
 )
@@ -197,8 +202,13 @@
         ) &
         ^(HasStrictKey $input)
     $filters:* &
-        (Let ($leftFilter $rightFilter $itemToReplace $ok):
-            (SplitDisjunction $scanPrivate $filters)
+        (Let
+            (
+                $leftFilter
+                $rightFilter
+                $itemToReplace
+                $ok
+            ):(SplitDisjunction $scanPrivate $filters)
             $ok
         )
 )
