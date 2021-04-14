@@ -2507,19 +2507,21 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 			if err != nil {
 				return err
 			}
-			return ApplyZoneConfigForMultiRegionTable(
+			if err := ApplyZoneConfigForMultiRegionTable(
 				ctx,
 				txn,
 				sc.execCfg,
 				regionConfig,
 				tableDesc,
 				opts...,
-			)
+			); err != nil {
+				return err
+			}
 		}
 
-		// For the plain ALTER PRIMARY KEY case, copy the zone configs over
-		// for any new indexes.
-		// Note this is done even for isDone = true, though not strictly necessary.
+		// In all cases, we now copy the zone configs over for any new indexes.
+		// Note this is done even for isDone = true, though not strictly
+		// necessary.
 		return maybeUpdateZoneConfigsForPKChange(
 			ctx, txn, sc.execCfg, tableDesc, pkSwap,
 		)
