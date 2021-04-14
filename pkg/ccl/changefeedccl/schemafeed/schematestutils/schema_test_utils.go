@@ -23,7 +23,11 @@ import (
 
 // MakeTableDesc makes a generic table descriptor with the provided properties.
 func MakeTableDesc(
-	tableID descpb.ID, version descpb.DescriptorVersion, modTime hlc.Timestamp, cols int,
+	tableID descpb.ID,
+	version descpb.DescriptorVersion,
+	modTime hlc.Timestamp,
+	cols int,
+	primaryKeyIndex int,
 ) catalog.TableDescriptor {
 	td := descpb.TableDescriptor{
 		Name:             "foo",
@@ -31,6 +35,9 @@ func MakeTableDesc(
 		Version:          version,
 		ModificationTime: modTime,
 		NextColumnID:     1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID: descpb.IndexID(primaryKeyIndex),
+		},
 	}
 	for i := 0; i < cols; i++ {
 		td.Columns = append(td.Columns, *MakeColumnDesc(td.NextColumnID))
@@ -80,6 +87,39 @@ func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDes
 		Direction:   descpb.DescriptorMutation_ADD,
 		MutationID:  0,
 		Rollback:    false,
+	})
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// AddPrimaryKeySwapMutation adds a mutation to desc to do a primary key swap.
+// Yes, this does modify an immutable.
+func AddPrimaryKeySwapMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_ADD,
+		Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: &descpb.PrimaryKeySwap{}},
+	})
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// AddNewIndexMutation adds a mutation to desc to add an index.
+// Yes, this does modify an immutable.
+func AddNewIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_ADD,
+		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
+	})
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// AddDropIndexMutation adds a mutation to desc to drop an index.
+// Yes, this does modify an immutable.
+func AddDropIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_DROP,
+		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
 	})
 	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
 }

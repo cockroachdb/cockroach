@@ -5,20 +5,13 @@
 
 set -euo pipefail
 
-if [[ "$GOOGLE_EPHEMERAL_CREDENTIALS" ]]; then
-  echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
-  gcloud auth activate-service-account --key-file=creds.json
-  export ROACHPROD_USER=teamcity
-else
-  echo 'warning: GOOGLE_EPHEMERAL_CREDENTIALS not set' >&2
-  echo "Assuming that you've run \`gcloud auth login\` from inside the builder." >&2
-fi
+google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
+source "$(dirname "${0}")/teamcity-support.sh"
+log_into_gcloud
 
 set -x
 
-if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
-  ssh-keygen -q -N "" -f ~/.ssh/id_rsa
-fi
+generate_ssh_key
 
 export PATH=$PATH:$(go env GOPATH)/bin
 
