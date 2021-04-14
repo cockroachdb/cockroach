@@ -89,6 +89,7 @@ module.exports = (env, argv) => {
           test: /\.module\.styl$/,
           use: [
             "cache-loader",
+            "thread-loader",
             "style-loader",
             {
               loader: "css-loader",
@@ -111,6 +112,7 @@ module.exports = (env, argv) => {
           test: /(?<!\.module)\.styl$/,
           use: [
             "cache-loader",
+            "thread-loader",
             "style-loader",
             "css-loader",
             {
@@ -132,7 +134,7 @@ module.exports = (env, argv) => {
         {
           test: /\.js$/,
           include: localRoots,
-          use: ["cache-loader", "babel-loader"],
+          use: ["cache-loader", "thread-loader", "babel-loader"],
         },
         {
           test: /\.(ts|tsx)?$/,
@@ -162,10 +164,6 @@ module.exports = (env, argv) => {
       new webpack.DllReferencePlugin({
         context: path.resolve(__dirname, `dist${env.dist}`),
         manifest: require(`./protos.${env.dist}.manifest.json`),
-      }),
-      new webpack.DllReferencePlugin({
-        context: path.resolve(__dirname, `dist${env.dist}`),
-        manifest: require("./vendor.oss.manifest.json"),
       }),
       new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
       new DashboardPlugin(),

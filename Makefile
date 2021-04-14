@@ -1366,8 +1366,8 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_CCL_DLLS := pkg/ui/dist/protos.ccl.dll.js pkg/ui/dist/vendor.oss.dll.js
-UI_CCL_MANIFESTS := pkg/ui/protos.ccl.manifest.json pkg/ui/vendor.oss.manifest.json
+UI_CCL_DLLS := pkg/ui/dist/protos.ccl.dll.js 
+UI_CCL_MANIFESTS := pkg/ui/protos.ccl.manifest.json 
 UI_OSS_DLLS := $(subst .ccl,.oss,$(UI_CCL_DLLS))
 UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 
@@ -1414,9 +1414,6 @@ pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/st
 	done
 	$(NODE_RUN) -C pkg/ui $(WEBPACK) --config webpack.app.js --env.dist=$*
 	go-bindata -pkg dist$* -o $@ -prefix pkg/ui/dist$* pkg/ui/dist$*/...
-	echo 'func init() { ui.Asset = Asset; ui.AssetDir = AssetDir; ui.AssetInfo = AssetInfo }' >> $@
-	gofmt -s -w $@
-	goimports -w $@
 
 pkg/ui/yarn.opt.installed:
 	$(NODE_RUN) -C pkg/ui/opt yarn install
