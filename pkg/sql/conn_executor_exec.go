@@ -251,6 +251,13 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var stmt Statement
 	queryID := ex.generateID()
+	// Update the deadline on the transaction based on the collections.
+	if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline && ex.state.mu.txn != nil {
+		err := ex.state.mu.txn.UpdateDeadline(ctx, deadline)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	if prepared != nil {
 		stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {

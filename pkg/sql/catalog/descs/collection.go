@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -58,21 +59,27 @@ type uncommittedDescriptor struct {
 // leasedDescriptors holds references to all the descriptors leased in the
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
-	descs []catalog.Descriptor
+	descs []lease.LeasedDescriptor
 }
 
-func (ld *leasedDescriptors) add(desc catalog.Descriptor) {
+func (ld *leasedDescriptors) add(desc lease.LeasedDescriptor) {
 	ld.descs = append(ld.descs, desc)
 }
 
-func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []catalog.Descriptor) {
+func (ld *leasedDescriptors) releaseAll() (toRelease []lease.LeasedDescriptor) {
+	toRelease = append(toRelease, ld.descs...)
+	ld.descs = ld.descs[:0]
+	return toRelease
+}
+
+func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []lease.LeasedDescriptor) {
 	// Sort the descriptors and leases to make it easy to find the leases to release.
 	leasedDescs := ld.descs
 	sort.Slice(ids, func(i, j int) bool {
 		return ids[i] < ids[j]
 	})
 	sort.Slice(leasedDescs, func(i, j int) bool {
-		return leasedDescs[i].GetID() < leasedDescs[j].GetID()
+		return leasedDescs[i].Desc().GetID() < leasedDescs[j].Desc().GetID()
 	})
 
 	filteredLeases := leasedDescs[:0] // will store the remaining leases
@@ -84,7 +91,7 @@ func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []catalog.Descr
 		return len(idsToConsider) > 0 && idsToConsider[0] == id
 	}
 	for _, l := range leasedDescs {
-		if !shouldRelease(l.GetID()) {
+		if !shouldRelease(l.Desc().GetID()) {
 			filteredLeases = append(filteredLeases, l)
 		} else {
 			toRelease = append(toRelease, l)
@@ -97,8 +104,8 @@ func (ld *leasedDescriptors) release(ids []descpb.ID) (toRelease []catalog.Descr
 func (ld *leasedDescriptors) getByID(id descpb.ID) catalog.Descriptor {
 	for i := range ld.descs {
 		desc := ld.descs[i]
-		if desc.GetID() == id {
-			return desc
+		if desc.Desc().GetID() == id {
+			return desc.Desc()
 		}
 	}
 	return nil
@@ -109,8 +116,8 @@ func (ld *leasedDescriptors) getByName(
 ) catalog.Descriptor {
 	for i := range ld.descs {
 		desc := ld.descs[i]
-		if lease.NameMatchesDescriptor(desc, dbID, schemaID, name) {
-			return desc
+		if lease.NameMatchesDescriptor(desc.Desc(), dbID, schemaID, name) {
+			return desc.Desc()
 		}
 	}
 	return nil
@@ -276,7 +283,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 	}
 
 	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
+	ldesc, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	if err != nil {
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
@@ -290,21 +297,40 @@ func (tc *Collection) getLeasedDescriptorByName(
 		return nil, false, err
 	}
 
+	expiration := ldesc.Expiration()
 	if expiration.LessEq(readTimestamp) {
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
-	tc.leasedDescriptors.add(desc)
+	tc.leasedDescriptors.add(ldesc)
 	if log.V(2) {
-		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, desc)
+		log.Eventf(ctx, "added descriptor '%s' to collection: %+v", name, ldesc.Desc())
 	}
 
 	// If the descriptor we just acquired expires before the txn's deadline,
 	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
 	// timestamp, so we need to set a deadline on the transaction to prevent it
 	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
-	return desc, false, nil
+	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
+		err := txn.UpdateDeadline(ctx, deadline)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	return ldesc.Desc(), false, nil
+}
+
+// Deadline returns the latest expiration from our leased
+// descriptors which should b e the transactions deadline.
+func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
+	for _, l := range tc.leasedDescriptors.descs {
+		expiration := l.Expiration()
+		if !haveDeadline || expiration.Less(deadline) {
+			haveDeadline = true
+			deadline = expiration
+		}
+	}
+	return deadline, haveDeadline
 }
 
 // getLeasedDescriptorByID return a leased descriptor valid for the transaction,
@@ -321,26 +347,27 @@ func (tc *Collection) getLeasedDescriptorByID(
 	}
 
 	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
+	desc, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
 	if err != nil {
 		return nil, err
 	}
-
+	expiration := desc.Expiration()
 	if expiration.LessEq(readTimestamp) {
 		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
 	}
 
 	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
+	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.Desc().GetName())
 
 	if setTxnDeadline {
-		// If the descriptor we just acquired expires before the txn's deadline,
-		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-		// timestamp, so we need to set a deadline on the transaction to prevent it
-		// from committing beyond the version's expiration time.
-		txn.UpdateDeadlineMaybe(ctx, expiration)
+		if deadline, haveDeadline := tc.Deadline(); haveDeadline {
+			err := txn.UpdateDeadline(ctx, deadline)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	return desc, nil
+	return desc.Desc(), nil
 }
 
 // getDescriptorFromStore gets a descriptor from its namespace entry. It does
@@ -632,6 +659,7 @@ func (tc *Collection) getTableByName(
 	if err != nil {
 		return false, nil, err
 	}
+
 	return true, hydrated, nil
 }
 
@@ -1322,21 +1350,16 @@ func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.
 	}
 	toRelease := tc.leasedDescriptors.release(ids)
 	for _, desc := range toRelease {
-		if err := tc.leaseMgr.Release(desc); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
+		desc.Release(ctx)
 	}
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	log.VEventf(ctx, 2, "releasing %d descriptors", tc.leasedDescriptors.numDescriptors())
-	for _, desc := range tc.leasedDescriptors.descs {
-		if err := tc.leaseMgr.Release(desc); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
+	for _, desc := range tc.leasedDescriptors.releaseAll() {
+		desc.Release(ctx)
 	}
-	tc.leasedDescriptors.descs = tc.leasedDescriptors.descs[:0]
 }
 
 // ReleaseAll releases all state currently held by the Collection.
