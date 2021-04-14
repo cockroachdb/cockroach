@@ -652,16 +652,11 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
 	// Project partial index PUT boolean columns.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	mb.projectPartialIndexPutCols()
 
 	mb.buildUniqueChecksForInsert()
 
@@ -869,11 +864,6 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
@@ -890,9 +880,9 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// mb.fetchScope will be nil. Therefore, we only project partial index
 	// PUT columns.
 	if mb.needExistingRows() {
-		mb.projectPartialIndexPutAndDelCols(preCheckScope, mb.fetchScope)
+		mb.projectPartialIndexPutAndDelCols()
 	} else {
-		mb.projectPartialIndexPutCols(preCheckScope)
+		mb.projectPartialIndexPutCols()
 	}
 
 	mb.buildUniqueChecksForUpsert()

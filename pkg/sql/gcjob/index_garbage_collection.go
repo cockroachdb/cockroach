@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -116,17 +117,16 @@ func clearIndex(
 	}
 
 	sp := tableDesc.IndexSpan(execCfg.Codec, index.ID)
-
-	// ClearRange cannot be run in a transaction, so create a
-	// non-transactional batch to send the request.
-	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    sp.Key,
-			EndKey: sp.EndKey,
-		},
-	})
-	return execCfg.DB.Run(ctx, b)
+	start, err := keys.Addr(sp.Key)
+	if err != nil {
+		return errors.Errorf("failed to addr index start: %v", err)
+	}
+	end, err := keys.Addr(sp.EndKey)
+	if err != nil {
+		return errors.Errorf("failed to addr index end: %v", err)
+	}
+	rSpan := roachpb.RSpan{Key: start, EndKey: end}
+	return clearSpanData(ctx, execCfg.DB, execCfg.DistSender, rSpan)
 }
 
 // completeDroppedIndexes updates the mutations of the table descriptor to

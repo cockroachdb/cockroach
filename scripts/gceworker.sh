@@ -7,7 +7,8 @@ source build/shlib.sh
 
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
-NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
+INSTANCE=${GCEWORKER_NAME-gceworker-$(id -un)}
+SSH_USER=${GCEWORKER_USER:-""}
 
 cmd=${1-}
 if [[ "${cmd}" ]]; then
@@ -27,7 +28,7 @@ case "${cmd}" in
     fi
 
     gcloud compute instances \
-           create "${NAME}" \
+           create "${INSTANCE}" \
            --machine-type "custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
@@ -35,32 +36,32 @@ case "${cmd}" in
            --image-family "ubuntu-1804-lts" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
-           --boot-disk-device-name "${NAME}" \
+           --boot-disk-device-name "${INSTANCE}" \
            --scopes "cloud-platform"
-    gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
+    gcloud compute firewall-rules create "${INSTANCE}-mosh" --allow udp:60000-61000
 
     # Retry while vm and sshd start up.
-    retry gcloud compute ssh "${NAME}" --command=true
+    retry gcloud compute ssh "${SSH_USER}@${INSTANCE}" --command=true
 
-    gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
+    gcloud compute scp --recurse "build/bootstrap" "${INSTANCE}:bootstrap"
+    gcloud compute ssh "${SSH_USER}@${INSTANCE}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
     if [[ "$COCKROACH_DEV_LICENSE" ]]; then
-      gcloud compute ssh "${NAME}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"
+      gcloud compute ssh "${SSH_USER}@${INSTANCE}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"
     fi
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
-    gcloud compute ssh "${NAME}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
+    gcloud compute ssh "${SSH_USER}@${INSTANCE}" --command="sudo cp bootstrap/autoshutdown.cron.sh /root/; echo '* * * * * /root/autoshutdown.cron.sh 10' | sudo crontab -i -"
 
     ;;
     start)
-    gcloud compute instances start "${NAME}"
+    gcloud compute instances start "${INSTANCE}"
     echo "waiting for node to finish starting..."
     # Wait for vm and sshd to start up.
-    retry gcloud compute ssh "${NAME}" --command=true || true
+    retry gcloud compute ssh "${SSH_USER}@${INSTANCE}" --command=true || true
     # SSH into the node, since that's probably why we started it.
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    gcloud compute ssh "${SSH_USER}@${INSTANCE}" --ssh-flag="-A" "$@"
     ;;
     stop)
     read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -70,7 +71,7 @@ case "${cmd}" in
       echo Aborting
       exit 1
     fi
-    gcloud compute instances stop "${NAME}"
+    gcloud compute instances stop "${INSTANCE}"
     ;;
     delete|destroy)
     read -r -p "This will delete the VM! Are you sure? [yes] " response
@@ -81,18 +82,18 @@ case "${cmd}" in
       exit 1
     fi
     status=0
-    gcloud compute firewall-rules delete "${NAME}-mosh" --quiet || status=$((status+1))
-    gcloud compute instances delete "${NAME}" --quiet || status=$((status+1))
+    gcloud compute firewall-rules delete "${INSTANCE}-mosh" --quiet || status=$((status+1))
+    gcloud compute instances delete "${INSTANCE}" --quiet || status=$((status+1))
     exit ${status}
     ;;
     ssh)
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    gcloud compute ssh "${SSH_USER}@${INSTANCE}" --ssh-flag="-A" "$@"
     ;;
     mosh)
     # An alternative solution would be to run gcloud compute config-ssh after
     # starting or creating the vm, which adds stanzas to ~/.ssh/config that
     # make `ssh $HOST` (and by extension, hopefully, mosh).
-    read -r -a arr <<< "$(gcloud compute ssh "${NAME}" --dry-run)"
+    read -r -a arr <<< "$(gcloud compute ssh "${SSH_USER}@${INSTANCE}" --dry-run)"
     host="${arr[-1]}"
     unset 'arr[${#arr[@]}-1]'
     mosh --ssh=$(printf '%q' "${arr}") $host
@@ -102,7 +103,7 @@ case "${cmd}" in
     retry gcloud compute scp "$@"
     ;;
     ip)
-    gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
+    gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${INSTANCE}"
     ;;
     sync)
     if ! hash unison 2>/dev/null; then
@@ -130,7 +131,7 @@ case "${cmd}" in
     tmpfile=$(mktemp)
     trap 'rm -f ${tmpfile}' EXIT
     gcloud compute config-ssh --ssh-config-file "$tmpfile" > /dev/null
-    unison "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
+    unison "$host" "ssh://${SSH_USER}@${INSTANCE}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
       -sshargs "-F ${tmpfile}" -auto -prefer "$host" -repeat watch \
       -ignore 'Path .git' \
       -ignore 'Path bin*' \

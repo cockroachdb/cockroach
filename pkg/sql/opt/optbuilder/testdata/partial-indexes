@@ -37,8 +37,11 @@ exec-ddl
 CREATE TABLE ambig (
     partial_index_put1 INT,
     partial_index_del1 INT,
+    check1 INT,
+    CHECK (partial_index_put1 > 10),
     UNIQUE INDEX (partial_index_put1) WHERE partial_index_put1 > 0,
-    UNIQUE INDEX (partial_index_del1) WHERE partial_index_del1 > 0
+    UNIQUE INDEX (partial_index_del1) WHERE partial_index_del1 > 0,
+    INDEX (partial_index_put1) WHERE check1 > 0
 )
 ----
 
@@ -112,28 +115,34 @@ insert partial_indexes
 # Do not error with "column reference is ambiguous" when table column names
 # match synthesized column names.
 build
-INSERT INTO ambig (partial_index_put1) VALUES (1)
+INSERT INTO ambig (partial_index_put1, partial_index_del1, check1) VALUES (1, 2, 3)
 ----
 insert ambig
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => ambig.partial_index_put1:1
- │    ├── column6:6 => partial_index_del1:2
- │    └── column7:7 => rowid:3
- ├── partial index put columns: partial_index_put1:8 partial_index_put2:9
+ │    ├── column1:6 => ambig.partial_index_put1:1
+ │    ├── column2:7 => partial_index_del1:2
+ │    ├── column3:8 => ambig.check1:3
+ │    └── column9:9 => rowid:4
+ ├── check columns: check1:10
+ ├── partial index put columns: partial_index_put1:11 partial_index_put2:12 partial_index_put3:13
  └── project
-      ├── columns: partial_index_put1:8!null partial_index_put2:9 column1:5!null column6:6 column7:7
+      ├── columns: partial_index_put1:11!null partial_index_put2:12!null partial_index_put3:13!null column1:6!null column2:7!null column3:8!null column9:9 check1:10!null
       ├── project
-      │    ├── columns: column6:6 column7:7 column1:5!null
-      │    ├── values
-      │    │    ├── columns: column1:5!null
-      │    │    └── (1,)
+      │    ├── columns: check1:10!null column1:6!null column2:7!null column3:8!null column9:9
+      │    ├── project
+      │    │    ├── columns: column9:9 column1:6!null column2:7!null column3:8!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
+      │    │    │    └── (1, 2, 3)
+      │    │    └── projections
+      │    │         └── unique_rowid() [as=column9:9]
       │    └── projections
-      │         ├── NULL::INT8 [as=column6:6]
-      │         └── unique_rowid() [as=column7:7]
+      │         └── column1:6 > 10 [as=check1:10]
       └── projections
-           ├── column1:5 > 0 [as=partial_index_put1:8]
-           └── column6:6 > 0 [as=partial_index_put2:9]
+           ├── column1:6 > 0 [as=partial_index_put1:11]
+           ├── column2:7 > 0 [as=partial_index_put2:12]
+           └── column3:8 > 0 [as=partial_index_put3:13]
 
 build
 INSERT INTO comp (a, b, c) VALUES (2, 1, 'Foo')
@@ -221,24 +230,27 @@ DELETE FROM ambig WHERE partial_index_del1 = 5
 ----
 delete ambig
  ├── columns: <none>
- ├── fetch columns: partial_index_put1:5 ambig.partial_index_del1:6 rowid:7
- ├── partial index del columns: partial_index_del1:9 partial_index_del2:10
+ ├── fetch columns: partial_index_put1:6 ambig.partial_index_del1:7 check1:8 rowid:9
+ ├── partial index del columns: partial_index_del1:11 partial_index_del2:12 partial_index_del3:13
  └── project
-      ├── columns: partial_index_del1:9 partial_index_del2:10!null partial_index_put1:5 ambig.partial_index_del1:6!null rowid:7!null crdb_internal_mvcc_timestamp:8
+      ├── columns: partial_index_del1:11 partial_index_del2:12!null partial_index_del3:13 partial_index_put1:6 ambig.partial_index_del1:7!null check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10
       ├── select
-      │    ├── columns: partial_index_put1:5 ambig.partial_index_del1:6!null rowid:7!null crdb_internal_mvcc_timestamp:8
+      │    ├── columns: partial_index_put1:6 ambig.partial_index_del1:7!null check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10
       │    ├── scan ambig
-      │    │    ├── columns: partial_index_put1:5 ambig.partial_index_del1:6 rowid:7!null crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: partial_index_put1:6 ambig.partial_index_del1:7 check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10
       │    │    └── partial index predicates
       │    │         ├── secondary: filters
-      │    │         │    └── partial_index_put1:5 > 0
+      │    │         │    └── partial_index_put1:6 > 0
+      │    │         ├── secondary: filters
+      │    │         │    └── ambig.partial_index_del1:7 > 0
       │    │         └── secondary: filters
-      │    │              └── ambig.partial_index_del1:6 > 0
+      │    │              └── check1:8 > 0
       │    └── filters
-      │         └── ambig.partial_index_del1:6 = 5
+      │         └── ambig.partial_index_del1:7 = 5
       └── projections
-           ├── partial_index_put1:5 > 0 [as=partial_index_del1:9]
-           └── ambig.partial_index_del1:6 > 0 [as=partial_index_del2:10]
+           ├── partial_index_put1:6 > 0 [as=partial_index_del1:11]
+           ├── ambig.partial_index_del1:7 > 0 [as=partial_index_del2:12]
+           └── check1:8 > 0 [as=partial_index_del3:13]
 
 build
 DELETE FROM comp
@@ -399,35 +411,43 @@ UPDATE ambig SET partial_index_put1 = 1, partial_index_del1 = 2 WHERE partial_in
 ----
 update ambig
  ├── columns: <none>
- ├── fetch columns: ambig.partial_index_put1:5 ambig.partial_index_del1:6 rowid:7
+ ├── fetch columns: ambig.partial_index_put1:6 ambig.partial_index_del1:7 ambig.check1:8 rowid:9
  ├── update-mapping:
- │    ├── partial_index_put1_new:9 => ambig.partial_index_put1:1
- │    └── partial_index_del1_new:10 => ambig.partial_index_del1:2
- ├── partial index put columns: partial_index_put1:11 partial_index_put2:13
- ├── partial index del columns: partial_index_del1:12 partial_index_del2:14
+ │    ├── partial_index_put1_new:11 => ambig.partial_index_put1:1
+ │    └── partial_index_del1_new:12 => ambig.partial_index_del1:2
+ ├── check columns: check1:13
+ ├── partial index put columns: partial_index_put1:14 partial_index_put2:16 partial_index_put3:18
+ ├── partial index del columns: partial_index_del1:15 partial_index_del2:17 partial_index_put3:18
  └── project
-      ├── columns: partial_index_put1:11!null partial_index_del1:12!null partial_index_put2:13!null partial_index_del2:14!null ambig.partial_index_put1:5!null ambig.partial_index_del1:6!null rowid:7!null crdb_internal_mvcc_timestamp:8 partial_index_put1_new:9!null partial_index_del1_new:10!null
+      ├── columns: partial_index_put1:14!null partial_index_del1:15!null partial_index_put2:16!null partial_index_del2:17!null partial_index_put3:18 ambig.partial_index_put1:6!null ambig.partial_index_del1:7!null ambig.check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10 partial_index_put1_new:11!null partial_index_del1_new:12!null check1:13!null
       ├── project
-      │    ├── columns: partial_index_put1_new:9!null partial_index_del1_new:10!null ambig.partial_index_put1:5!null ambig.partial_index_del1:6!null rowid:7!null crdb_internal_mvcc_timestamp:8
-      │    ├── select
-      │    │    ├── columns: ambig.partial_index_put1:5!null ambig.partial_index_del1:6!null rowid:7!null crdb_internal_mvcc_timestamp:8
-      │    │    ├── scan ambig
-      │    │    │    ├── columns: ambig.partial_index_put1:5 ambig.partial_index_del1:6 rowid:7!null crdb_internal_mvcc_timestamp:8
-      │    │    │    └── partial index predicates
-      │    │    │         ├── secondary: filters
-      │    │    │         │    └── ambig.partial_index_put1:5 > 0
-      │    │    │         └── secondary: filters
-      │    │    │              └── ambig.partial_index_del1:6 > 0
-      │    │    └── filters
-      │    │         └── (ambig.partial_index_put1:5 = 10) AND (ambig.partial_index_del1:6 = 20)
+      │    ├── columns: check1:13!null ambig.partial_index_put1:6!null ambig.partial_index_del1:7!null ambig.check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10 partial_index_put1_new:11!null partial_index_del1_new:12!null
+      │    ├── project
+      │    │    ├── columns: partial_index_put1_new:11!null partial_index_del1_new:12!null ambig.partial_index_put1:6!null ambig.partial_index_del1:7!null ambig.check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+      │    │    ├── select
+      │    │    │    ├── columns: ambig.partial_index_put1:6!null ambig.partial_index_del1:7!null ambig.check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+      │    │    │    ├── scan ambig
+      │    │    │    │    ├── columns: ambig.partial_index_put1:6 ambig.partial_index_del1:7 ambig.check1:8 rowid:9!null crdb_internal_mvcc_timestamp:10
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         ├── secondary: filters
+      │    │    │    │         │    └── ambig.partial_index_put1:6 > 0
+      │    │    │    │         ├── secondary: filters
+      │    │    │    │         │    └── ambig.partial_index_del1:7 > 0
+      │    │    │    │         └── secondary: filters
+      │    │    │    │              └── ambig.check1:8 > 0
+      │    │    │    └── filters
+      │    │    │         └── (ambig.partial_index_put1:6 = 10) AND (ambig.partial_index_del1:7 = 20)
+      │    │    └── projections
+      │    │         ├── 1 [as=partial_index_put1_new:11]
+      │    │         └── 2 [as=partial_index_del1_new:12]
       │    └── projections
-      │         ├── 1 [as=partial_index_put1_new:9]
-      │         └── 2 [as=partial_index_del1_new:10]
+      │         └── partial_index_put1_new:11 > 10 [as=check1:13]
       └── projections
-           ├── partial_index_put1_new:9 > 0 [as=partial_index_put1:11]
-           ├── ambig.partial_index_put1:5 > 0 [as=partial_index_del1:12]
-           ├── partial_index_del1_new:10 > 0 [as=partial_index_put2:13]
-           └── ambig.partial_index_del1:6 > 0 [as=partial_index_del2:14]
+           ├── partial_index_put1_new:11 > 0 [as=partial_index_put1:14]
+           ├── ambig.partial_index_put1:6 > 0 [as=partial_index_del1:15]
+           ├── partial_index_del1_new:12 > 0 [as=partial_index_put2:16]
+           ├── ambig.partial_index_del1:7 > 0 [as=partial_index_del2:17]
+           └── ambig.check1:8 > 0 [as=partial_index_put3:18]
 
 build
 UPDATE comp SET b = 1
@@ -1320,72 +1340,86 @@ DO UPDATE SET partial_index_put1 = 10, partial_index_del1 = 20
 upsert ambig
  ├── columns: <none>
  ├── arbiter indexes: secondary
- ├── canary column: rowid:11
- ├── fetch columns: ambig.partial_index_put1:9 ambig.partial_index_del1:10 rowid:11
+ ├── canary column: rowid:14
+ ├── fetch columns: ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14
  ├── insert-mapping:
- │    ├── column1:5 => ambig.partial_index_put1:1
- │    ├── column2:6 => ambig.partial_index_del1:2
- │    └── column7:7 => rowid:3
+ │    ├── column1:6 => ambig.partial_index_put1:1
+ │    ├── column2:7 => ambig.partial_index_del1:2
+ │    ├── column8:8 => ambig.check1:3
+ │    └── column9:9 => rowid:4
  ├── update-mapping:
- │    ├── upsert_partial_index_put1:15 => ambig.partial_index_put1:1
- │    └── upsert_partial_index_del1:16 => ambig.partial_index_del1:2
- ├── partial index put columns: partial_index_put1:18 partial_index_put2:20
- ├── partial index del columns: partial_index_del1:19 partial_index_del2:21
+ │    ├── upsert_partial_index_put1:18 => ambig.partial_index_put1:1
+ │    └── upsert_partial_index_del1:19 => ambig.partial_index_del1:2
+ ├── check columns: check1:22
+ ├── partial index put columns: partial_index_put1:23 partial_index_put2:25 partial_index_put3:27
+ ├── partial index del columns: partial_index_del1:24 partial_index_del2:26 partial_index_del3:28
  └── project
-      ├── columns: partial_index_put1:18!null partial_index_del1:19 partial_index_put2:20!null partial_index_del2:21 column1:5!null column2:6!null column7:7 ambig.partial_index_put1:9 ambig.partial_index_del1:10 rowid:11 crdb_internal_mvcc_timestamp:12 partial_index_put1_new:13!null partial_index_del1_new:14!null upsert_partial_index_put1:15!null upsert_partial_index_del1:16!null upsert_rowid:17
+      ├── columns: partial_index_put1:23!null partial_index_del1:24 partial_index_put2:25!null partial_index_del2:26 partial_index_put3:27 partial_index_del3:28 column1:6!null column2:7!null column8:8 column9:9 ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14 crdb_internal_mvcc_timestamp:15 partial_index_put1_new:16!null partial_index_del1_new:17!null upsert_partial_index_put1:18!null upsert_partial_index_del1:19!null upsert_check1:20 upsert_rowid:21 check1:22!null
       ├── project
-      │    ├── columns: upsert_partial_index_put1:15!null upsert_partial_index_del1:16!null upsert_rowid:17 column1:5!null column2:6!null column7:7 ambig.partial_index_put1:9 ambig.partial_index_del1:10 rowid:11 crdb_internal_mvcc_timestamp:12 partial_index_put1_new:13!null partial_index_del1_new:14!null
+      │    ├── columns: check1:22!null column1:6!null column2:7!null column8:8 column9:9 ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14 crdb_internal_mvcc_timestamp:15 partial_index_put1_new:16!null partial_index_del1_new:17!null upsert_partial_index_put1:18!null upsert_partial_index_del1:19!null upsert_check1:20 upsert_rowid:21
       │    ├── project
-      │    │    ├── columns: partial_index_put1_new:13!null partial_index_del1_new:14!null column1:5!null column2:6!null column7:7 ambig.partial_index_put1:9 ambig.partial_index_del1:10 rowid:11 crdb_internal_mvcc_timestamp:12
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:5!null column2:6!null column7:7 ambig.partial_index_put1:9 ambig.partial_index_del1:10 rowid:11 crdb_internal_mvcc_timestamp:12
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7
-      │    │    │    │    └── ensure-upsert-distinct-on
-      │    │    │    │         ├── columns: column1:5!null column2:6!null column7:7 arbiter_secondary_distinct:8
-      │    │    │    │         ├── grouping columns: column1:5!null arbiter_secondary_distinct:8
-      │    │    │    │         ├── project
-      │    │    │    │         │    ├── columns: arbiter_secondary_distinct:8 column1:5!null column2:6!null column7:7
-      │    │    │    │         │    ├── project
-      │    │    │    │         │    │    ├── columns: column7:7 column1:5!null column2:6!null
-      │    │    │    │         │    │    ├── values
-      │    │    │    │         │    │    │    ├── columns: column1:5!null column2:6!null
-      │    │    │    │         │    │    │    └── (1, 2)
-      │    │    │    │         │    │    └── projections
-      │    │    │    │         │    │         └── unique_rowid() [as=column7:7]
-      │    │    │    │         │    └── projections
-      │    │    │    │         │         └── (column1:5 > 0) OR NULL::BOOL [as=arbiter_secondary_distinct:8]
-      │    │    │    │         └── aggregations
-      │    │    │    │              ├── first-agg [as=column2:6]
-      │    │    │    │              │    └── column2:6
-      │    │    │    │              └── first-agg [as=column7:7]
-      │    │    │    │                   └── column7:7
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: ambig.partial_index_put1:9!null ambig.partial_index_del1:10 rowid:11!null crdb_internal_mvcc_timestamp:12
-      │    │    │    │    ├── scan ambig
-      │    │    │    │    │    ├── columns: ambig.partial_index_put1:9 ambig.partial_index_del1:10 rowid:11!null crdb_internal_mvcc_timestamp:12
-      │    │    │    │    │    └── partial index predicates
-      │    │    │    │    │         ├── secondary: filters
-      │    │    │    │    │         │    └── ambig.partial_index_put1:9 > 0
-      │    │    │    │    │         └── secondary: filters
-      │    │    │    │    │              └── ambig.partial_index_del1:10 > 0
+      │    │    ├── columns: upsert_partial_index_put1:18!null upsert_partial_index_del1:19!null upsert_check1:20 upsert_rowid:21 column1:6!null column2:7!null column8:8 column9:9 ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14 crdb_internal_mvcc_timestamp:15 partial_index_put1_new:16!null partial_index_del1_new:17!null
+      │    │    ├── project
+      │    │    │    ├── columns: partial_index_put1_new:16!null partial_index_del1_new:17!null column1:6!null column2:7!null column8:8 column9:9 ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14 crdb_internal_mvcc_timestamp:15
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14 crdb_internal_mvcc_timestamp:15
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
+      │    │    │    │    │    └── ensure-upsert-distinct-on
+      │    │    │    │    │         ├── columns: column1:6!null column2:7!null column8:8 column9:9 arbiter_secondary_distinct:10
+      │    │    │    │    │         ├── grouping columns: column1:6!null arbiter_secondary_distinct:10
+      │    │    │    │    │         ├── project
+      │    │    │    │    │         │    ├── columns: arbiter_secondary_distinct:10 column1:6!null column2:7!null column8:8 column9:9
+      │    │    │    │    │         │    ├── project
+      │    │    │    │    │         │    │    ├── columns: column8:8 column9:9 column1:6!null column2:7!null
+      │    │    │    │    │         │    │    ├── values
+      │    │    │    │    │         │    │    │    ├── columns: column1:6!null column2:7!null
+      │    │    │    │    │         │    │    │    └── (1, 2)
+      │    │    │    │    │         │    │    └── projections
+      │    │    │    │    │         │    │         ├── NULL::INT8 [as=column8:8]
+      │    │    │    │    │         │    │         └── unique_rowid() [as=column9:9]
+      │    │    │    │    │         │    └── projections
+      │    │    │    │    │         │         └── (column1:6 > 0) OR NULL::BOOL [as=arbiter_secondary_distinct:10]
+      │    │    │    │    │         └── aggregations
+      │    │    │    │    │              ├── first-agg [as=column2:7]
+      │    │    │    │    │              │    └── column2:7
+      │    │    │    │    │              ├── first-agg [as=column8:8]
+      │    │    │    │    │              │    └── column8:8
+      │    │    │    │    │              └── first-agg [as=column9:9]
+      │    │    │    │    │                   └── column9:9
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: ambig.partial_index_put1:11!null ambig.partial_index_del1:12 ambig.check1:13 rowid:14!null crdb_internal_mvcc_timestamp:15
+      │    │    │    │    │    ├── scan ambig
+      │    │    │    │    │    │    ├── columns: ambig.partial_index_put1:11 ambig.partial_index_del1:12 ambig.check1:13 rowid:14!null crdb_internal_mvcc_timestamp:15
+      │    │    │    │    │    │    └── partial index predicates
+      │    │    │    │    │    │         ├── secondary: filters
+      │    │    │    │    │    │         │    └── ambig.partial_index_put1:11 > 0
+      │    │    │    │    │    │         ├── secondary: filters
+      │    │    │    │    │    │         │    └── ambig.partial_index_del1:12 > 0
+      │    │    │    │    │    │         └── secondary: filters
+      │    │    │    │    │    │              └── ambig.check1:13 > 0
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── ambig.partial_index_put1:11 > 0
       │    │    │    │    └── filters
-      │    │    │    │         └── ambig.partial_index_put1:9 > 0
-      │    │    │    └── filters
-      │    │    │         ├── column1:5 = ambig.partial_index_put1:9
-      │    │    │         └── column1:5 > 0
+      │    │    │    │         ├── column1:6 = ambig.partial_index_put1:11
+      │    │    │    │         └── column1:6 > 0
+      │    │    │    └── projections
+      │    │    │         ├── 10 [as=partial_index_put1_new:16]
+      │    │    │         └── 20 [as=partial_index_del1_new:17]
       │    │    └── projections
-      │    │         ├── 10 [as=partial_index_put1_new:13]
-      │    │         └── 20 [as=partial_index_del1_new:14]
+      │    │         ├── CASE WHEN rowid:14 IS NULL THEN column1:6 ELSE partial_index_put1_new:16 END [as=upsert_partial_index_put1:18]
+      │    │         ├── CASE WHEN rowid:14 IS NULL THEN column2:7 ELSE partial_index_del1_new:17 END [as=upsert_partial_index_del1:19]
+      │    │         ├── CASE WHEN rowid:14 IS NULL THEN column8:8 ELSE ambig.check1:13 END [as=upsert_check1:20]
+      │    │         └── CASE WHEN rowid:14 IS NULL THEN column9:9 ELSE rowid:14 END [as=upsert_rowid:21]
       │    └── projections
-      │         ├── CASE WHEN rowid:11 IS NULL THEN column1:5 ELSE partial_index_put1_new:13 END [as=upsert_partial_index_put1:15]
-      │         ├── CASE WHEN rowid:11 IS NULL THEN column2:6 ELSE partial_index_del1_new:14 END [as=upsert_partial_index_del1:16]
-      │         └── CASE WHEN rowid:11 IS NULL THEN column7:7 ELSE rowid:11 END [as=upsert_rowid:17]
+      │         └── upsert_partial_index_put1:18 > 10 [as=check1:22]
       └── projections
-           ├── upsert_partial_index_put1:15 > 0 [as=partial_index_put1:18]
-           ├── ambig.partial_index_put1:9 > 0 [as=partial_index_del1:19]
-           ├── upsert_partial_index_del1:16 > 0 [as=partial_index_put2:20]
-           └── ambig.partial_index_del1:10 > 0 [as=partial_index_del2:21]
+           ├── upsert_partial_index_put1:18 > 0 [as=partial_index_put1:23]
+           ├── ambig.partial_index_put1:11 > 0 [as=partial_index_del1:24]
+           ├── upsert_partial_index_del1:19 > 0 [as=partial_index_put2:25]
+           ├── ambig.partial_index_del1:12 > 0 [as=partial_index_del2:26]
+           ├── upsert_check1:20 > 0 [as=partial_index_put3:27]
+           └── ambig.check1:13 > 0 [as=partial_index_del3:28]
 
 exec-ddl
 CREATE UNIQUE INDEX u1 ON comp (b) WHERE d = 'foo'
