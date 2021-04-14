@@ -546,3 +546,9 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		}
 	}
 }
+
+// AcquireLease is redirectOnOrAcquireLease exposed for tests.
+func (r *Replica) AcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
+	l, pErr := r.redirectOnOrAcquireLease(ctx)
+	return l, pErr.GoError()
+}
