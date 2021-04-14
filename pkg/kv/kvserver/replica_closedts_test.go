@@ -13,6 +13,7 @@ package kvserver_test
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -33,9 +34,9 @@ import (
 )
 
 // TestBumpSideTransportClosed tests the various states that a replica can find
-// itself in when its TestBumpSideTransportClosed is called. It verifies that
-// the method only returns successfully if it can bump its closed timestamp to
-// the target.
+// itself in when its BumpSideTransportClosed is called. It verifies that the
+// method only returns successfully if it can bump its closed timestamp to the
+// target.
 func TestBumpSideTransportClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -411,6 +412,240 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test that a lease proposal that gets rejected doesn't erroneously dictate the
+// closed timestamp of further requests. If it would, then writes could violate
+// that closed timestamp. The tricky scenario tested is the following:
+//
+// 1. A lease held by rep1 is getting close to its expiration.
+// 2. Rep1 begins the process of transferring its lease to rep2 with a start
+//    time of 100.
+// 3. The transfer goes slowly. From the perspective of rep2, the original lease
+//    expires, so it begins acquiring a new lease with a start time of 200. The
+//    lease acquisition is slow to propose.
+// 4. The lease transfer finally applies. Rep2 is the new leaseholder and bumps
+//    its tscache to 100.
+// 5. Two writes start evaluating on rep2 under the new lease. They bump their
+//    write timestamp to 100,1.
+// 6. Rep2's lease acquisition from step 3 is proposed. Here's where the
+//    regression that this test is protecting against comes in: if rep2 was to
+//    mechanically bump its assignedClosedTimestamp to 200, that'd be incorrect
+//    because there are in-flight writes at 100. If those writes get proposed
+//    after the lease acquisition request, the second of them to get proposed
+//    would violate the closed time carried by the first (see below).
+// 7. The lease acquisition gets rejected below Raft because the previous lease
+//    it asserts doesn't correspond to the lease that it applies under.
+// 8. The two writes from step 5 are proposed. The closed timestamp that they
+//    each carry has a lower bound of rep2.assignedClosedTimestmap. If this was
+//    200, then the second one would violate the closed timestamp carried by the
+//    first one - the first one says that 200 is closed, but then the second
+//    tries to write at 100. Note that the first write is OK writing at 100 even
+//    though it carries a closed timestamp of 200 - the closed timestamp carried
+//    by a command only binds future commands.
+//
+// The test simulates the scenario and verifies that we don't crash with a
+// closed timestamp violation assertion. We avoid the violation because, in step
+// 6, the lease proposal doesn't bump the assignedClosedTimestamp.
+func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// We're going to orchestrate the scenario by controlling the timing of the
+	// lease transfer, the lease acquisition and the writes. Note that we'll block
+	// the lease acquisition and the writes after they evaluate but before they
+	// get proposed, but we'll block the lease transfer when it's just about to be
+	// proposed, after it gets assigned the closed timestamp that it will carry.
+	// We want it to carry a relatively low closed timestamp, so we want its
+	// closed timestamp to be assigned before we bump the clock to expire the
+	// original lease.
+
+	// leaseTransferCh is used to block the lease transfer.
+	leaseTransferCh := make(chan struct{})
+	// leaseAcqCh is used to block the lease acquisition.
+	leaseAcqCh := make(chan struct{})
+	// writeCh is used to wait for the two writes to block.
+	writeCh := make(chan struct{})
+	// unblockWritesCh is used to unblock the two writes.
+	unblockWritesCh := make(chan struct{})
+	var writeKey1, writeKey2 atomic.Value
+	// Initialize the atomics so they get bound to a specific type.
+	writeKey1.Store(roachpb.Key{})
+	writeKey2.Store(roachpb.Key{})
+	var blockedRangeID int64
+	var trappedLeaseAcquisition int64
+	var trapLeaseAcquisitionOnce sync.Once
+
+	blockLeaseAcquisition := func(args kvserverbase.FilterArgs) {
+		blockedRID := roachpb.RangeID(atomic.LoadInt64(&blockedRangeID))
+		if _, ok := args.Req.(*roachpb.RequestLeaseRequest); !ok || args.Hdr.RangeID != blockedRID {
+			return
+		}
+		trapLeaseAcquisitionOnce.Do(func() {
+			atomic.StoreInt64(&trappedLeaseAcquisition, 1)
+			leaseAcqCh <- struct{}{}
+			<-leaseAcqCh
+		})
+	}
+
+	blockWrites := func(args kvserverbase.FilterArgs) {
+		wk1 := writeKey1.Load().(roachpb.Key)
+		wk2 := writeKey2.Load().(roachpb.Key)
+		if put, ok := args.Req.(*roachpb.PutRequest); ok && (put.Key.Equal(wk1) || put.Key.Equal(wk2)) {
+			writeCh <- struct{}{}
+			<-unblockWritesCh
+		}
+	}
+
+	blockTransfer := func(p *kvserver.ProposalData) {
+		blockedRID := roachpb.RangeID(atomic.LoadInt64(&blockedRangeID))
+		ba := p.Request
+		if ba.RangeID != blockedRID {
+			return
+		}
+		_, ok := p.Request.GetArg(roachpb.TransferLease)
+		if !ok {
+			return
+		}
+		leaseTransferCh <- struct{}{}
+		<-leaseTransferCh
+	}
+
+	manual := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource: manual.UnixNano,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					DisableConsistencyQueue: true,
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingPostEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
+							blockWrites(args)
+							blockLeaseAcquisition(args)
+							return nil
+						},
+					},
+					TestingProposalSubmitFilter: func(p *kvserver.ProposalData) (drop bool, _ error) {
+						blockTransfer(p)
+						return false, nil
+					},
+				},
+			},
+		}})
+	defer tc.Stopper().Stop(ctx)
+
+	// Upreplicate a range.
+	n1, n2 := tc.Servers[0], tc.Servers[1]
+	key := tc.ScratchRangeWithExpirationLease(t)
+	s1 := tc.GetFirstStoreFromServer(t, 0)
+	t1, t2 := tc.Target(0), tc.Target(1)
+	repl0 := s1.LookupReplica(keys.MustAddr(key))
+	desc := *repl0.Desc()
+	require.NotNil(t, repl0)
+	tc.AddVotersOrFatal(t, key, t2)
+	// Make sure the lease starts off on n1.
+	lease, _ /* now */, err := tc.FindRangeLease(desc, &t1 /* hint */)
+	require.NoError(t, err)
+	require.Equal(t, n1.NodeID(), lease.Replica.NodeID)
+
+	// Advance the time a bit. We'll then initiate a transfer, and we want the
+	// transferred lease to be valid for a while after the original lease expires.
+	manual.Pause()
+	remainingNanos := lease.GetExpiration().WallTime - manual.UnixNano()
+	// NOTE: We don't advance the clock past the mid-point of the lease, otherwise
+	// it gets extended.
+	pause1 := remainingNanos / 3
+	manual.Increment(pause1)
+
+	// Start a lease transfer from n1 to n2. We'll block the proposal of the transfer for a while.
+	atomic.StoreInt64(&blockedRangeID, int64(desc.RangeID))
+	transferErrCh := make(chan error)
+	go func() {
+		transferErrCh <- tc.TransferRangeLease(desc, t2)
+	}()
+	defer func() {
+		require.NoError(t, <-transferErrCh)
+	}()
+	// Wait for the lease transfer to evaluate and then block.
+	<-leaseTransferCh
+	// With the lease transfer still blocked, we now advance the clock beyond the
+	// original lease's expiration and we make n2 try to acquire a lease. This
+	// lease acquisition request will also be blocked.
+	manual.Increment(remainingNanos - pause1 + 1)
+	leaseAcqErrCh := make(chan error)
+	go func() {
+		r, _, err := n2.Stores().GetReplicaForRangeID(ctx, desc.RangeID)
+		if err != nil {
+			leaseAcqErrCh <- err
+			return
+		}
+		_, err = r.AcquireLease(ctx)
+		leaseAcqErrCh <- err
+	}()
+	// Wait for the lease acquisition to be blocked.
+	select {
+	case <-leaseAcqCh:
+	case err := <-leaseAcqErrCh:
+		t.Fatalf("lease request unexpectedly finished. err: %v", err)
+	}
+	// Let the previously blocked transfer succeed. n2's lease acquisition remains
+	// blocked.
+	close(leaseTransferCh)
+	// Wait until n2 has applied the lease transfer.
+	desc = *repl0.Desc()
+	testutils.SucceedsSoon(t, func() error {
+		li, _ /* now */, err := tc.FindRangeLeaseEx(ctx, desc, &t2 /* hint */)
+		if err != nil {
+			return err
+		}
+		lease = li.Current()
+		if !lease.OwnedBy(n2.GetFirstStoreID()) {
+			return errors.Errorf("n2 still unaware of its lease: %s", li.Current())
+		}
+		return nil
+	})
+
+	// Now we send two writes. We'll block them after evaluation. Then we'll
+	// unblock the lease acquisition, let the respective command fail to apply,
+	// and then we'll unblock the writes.
+	err1 := make(chan error)
+	err2 := make(chan error)
+	go func() {
+		writeKey1.Store(key)
+		sender := n2.DB().NonTransactionalSender()
+		pArgs := putArgs(key, []byte("test val"))
+		_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{Timestamp: lease.Start.ToTimestamp()}, pArgs)
+		err1 <- pErr.GoError()
+	}()
+	go func() {
+		k := key.Next()
+		writeKey2.Store(k)
+		sender := n2.DB().NonTransactionalSender()
+		pArgs := putArgs(k, []byte("test val2"))
+		_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{Timestamp: lease.Start.ToTimestamp()}, pArgs)
+		err2 <- pErr.GoError()
+	}()
+	// Wait for the writes to evaluate and block before proposal.
+	<-writeCh
+	<-writeCh
+
+	// Unblock the lease acquisition.
+	close(leaseAcqCh)
+	if err := <-leaseAcqErrCh; err != nil {
+		close(unblockWritesCh)
+		t.Fatal(err)
+	}
+
+	// Now unblock the writes.
+	close(unblockWritesCh)
+	require.NoError(t, <-err1)
+	require.NoError(t, <-err2)
+	// Not crashing with a closed timestamp violation assertion marks the success
+	// of this test.
 }
 
 // BenchmarkBumpSideTransportClosed measures the latency of a single call to
