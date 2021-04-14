@@ -1578,13 +1578,13 @@ with &1
  │         ├── insert-mapping:
  │         │    ├── column1:9 => uv.u:5
  │         │    ├── column2:10 => uv.v:6
- │         │    └── column11:11 => rowid:7
+ │         │    └── rowid_default:11 => rowid:7
  │         ├── cardinality: [1 - 1]
  │         ├── volatile, mutations
  │         ├── key: ()
  │         ├── fd: ()-->(5-7)
  │         └── values
- │              ├── columns: column1:9(int!null) column2:10(int!null) column11:11(int)
+ │              ├── columns: column1:9(int!null) column2:10(int!null) rowid_default:11(int)
  │              ├── cardinality: [1 - 1]
  │              ├── volatile
  │              ├── key: ()
