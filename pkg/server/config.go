@@ -307,9 +307,6 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
-	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
-	LeaseManagerConfig *base.LeaseManagerConfig
-
 	// SocketFile, if non-empty, sets up a TLS-free local listener using
 	// a unix datagram socket at the specified path.
 	SocketFile string
@@ -347,7 +344,6 @@ func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig
 		TableStatCacheSize: defaultSQLTableStatCacheSize,
 		QueryCacheSize:     defaultSQLQueryCacheSize,
 		TempStorageConfig:  tempStorageCfg,
-		LeaseManagerConfig: base.NewLeaseManagerConfig(),
 	}
 	return sqlCfg
 }
