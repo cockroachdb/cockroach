@@ -1045,6 +1045,11 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	return c
 }
 
+// Locality returns the Locality used by the TestServer.
+func (ts *TestServer) Locality() *roachpb.Locality {
+	return &ts.cfg.Locality
+}
+
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {
 	return ts.sqlServer.leaseMgr
