@@ -37,6 +37,8 @@ var knownHostsOnce sync.Once
 // InsecureIgnoreHostKey TODO(peter): document
 var InsecureIgnoreHostKey bool
 
+const timeout = 5 * time.Second
+
 func getKnownHosts() ssh.HostKeyCallback {
 	knownHostsOnce.Do(func() {
 		var err error
@@ -116,7 +118,7 @@ func newSSHClient(user, host string) (*ssh.Client, net.Conn, error) {
 	config.SetDefaults()
 
 	addr := fmt.Sprintf("%s:22", host)
-	conn, err := net.DialTimeout("tcp", addr, 30*time.Second)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return nil, nil, err
 	}
