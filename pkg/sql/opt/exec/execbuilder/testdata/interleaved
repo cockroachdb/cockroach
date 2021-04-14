@@ -77,7 +77,7 @@ SELECT info FROM [
   EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
 ] WHERE info LIKE '%spans%'
 ----
-  spans: /2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
+  spans: /2/#/54/1/#/55/1/20/200/#/56/1/0
 
 # ------------------------------------------------------------------------------
 # Trace of interleaved fetches from interesting interleaved hierarchy.

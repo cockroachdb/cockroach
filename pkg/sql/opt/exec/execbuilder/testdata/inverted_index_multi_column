@@ -39,7 +39,7 @@ query T kvtrace
 SELECT * FROM t WHERE i = 333 AND j @> '{"a": "b"}'
 ----
 Scan /Table/53/2/333/"a"/"b"{-/PrefixEnd}
-Scan /Table/53/1/1{-/#}
+Scan /Table/53/1/1/0
 
 # Don't insert duplicate values.
 query T kvtrace
@@ -64,7 +64,7 @@ InitPut /Table/53/3/333/"foo"/Arr/"a"/"b"/3/0 -> /BYTES/
 query T kvtrace
 DELETE FROM t WHERE k = 2
 ----
-Scan /Table/53/1/2{-/#}
+Scan /Table/53/1/2/0
 Del /Table/53/2/333/Arr/0/2/0
 Del /Table/53/2/333/Arr/7/2/0
 Del /Table/53/3/333/"foo"/Arr/0/2/0
@@ -74,7 +74,7 @@ Del /Table/53/1/2/0
 query T kvtrace
 DELETE FROM t WHERE k = 3
 ----
-Scan /Table/53/1/3{-/#}
+Scan /Table/53/1/3/0
 Del /Table/53/2/333/Arr/3/3/0
 Del /Table/53/2/333/Arr/"a"/"b"/3/0
 Del /Table/53/3/333/"foo"/Arr/3/3/0
@@ -91,7 +91,7 @@ CPut /Table/53/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo
 query T kvtrace
 UPDATE t SET j = '[1]' WHERE k = 4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Put /Table/53/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
 InitPut /Table/53/2/333/Arr/1/4/0 -> /BYTES/
 InitPut /Table/53/3/333/"foo"/Arr/1/4/0 -> /BYTES/
@@ -100,7 +100,7 @@ InitPut /Table/53/3/333/"foo"/Arr/1/4/0 -> /BYTES/
 query T kvtrace
 UPDATE t SET j = NULL WHERE k = 4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Put /Table/53/1/4/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo
 Del /Table/53/2/333/Arr/1/4/0
 Del /Table/53/3/333/"foo"/Arr/1/4/0
@@ -109,7 +109,7 @@ Del /Table/53/3/333/"foo"/Arr/1/4/0
 query T kvtrace
 DELETE FROM t WHERE k = 4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Del /Table/53/1/4/0
 
 # Insert NULL non-inverted value.
@@ -124,7 +124,7 @@ InitPut /Table/53/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
 query T kvtrace
 UPDATE t SET i = 333 WHERE k = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/2:2:Int/333/1:3:Bytes/foo/
 Del /Table/53/2/NULL/"a"/"b"/5/0
 InitPut /Table/53/2/333/"a"/"b"/5/0 -> /BYTES/
@@ -135,7 +135,7 @@ InitPut /Table/53/3/333/"foo"/"a"/"b"/5/0 -> /BYTES/
 query T kvtrace
 UPDATE t SET i = NULL WHERE k = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Put /Table/53/1/5/0 -> /TUPLE/3:3:Bytes/foo/
 Del /Table/53/2/333/"a"/"b"/5/0
 InitPut /Table/53/2/NULL/"a"/"b"/5/0 -> /BYTES/
@@ -146,7 +146,7 @@ InitPut /Table/53/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
 query T kvtrace
 DELETE FROM t WHERE k = 5
 ----
-Scan /Table/53/1/5{-/#}
+Scan /Table/53/1/5/0
 Del /Table/53/2/NULL/"a"/"b"/5/0
 Del /Table/53/3/NULL/"foo"/"a"/"b"/5/0
 Del /Table/53/1/5/0

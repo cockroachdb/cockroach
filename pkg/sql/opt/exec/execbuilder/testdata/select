@@ -357,7 +357,7 @@ vectorized: true
   columns: (x, y)
   estimated row count: 1 (missing stats)
   table: a@primary
-  spans: /2-/2/#
+  spans: /2/0
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
@@ -862,7 +862,7 @@ DROP TABLE dt
 # Ensure that decimal values result in correct scan spans.
 # ------------------------------------------------------------------------------
 statement ok
-CREATE TABLE dec (d decimal, v decimal(3, 1), primary key (d, v))
+CREATE TABLE dec (d decimal, v decimal(3, 1), primary key (d, v), family(d, v))
 
 query T
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d IS NaN and v IS NaN
@@ -874,6 +874,23 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: dec@primary
+  spans: /NaN/NaN/0
+
+# Test again with separate column families.
+
+statement ok
+CREATE TABLE decfam (d decimal, v decimal(3, 1), primary key (d, v), family(d), family(v))
+
+query T
+EXPLAIN (TYPES) SELECT * FROM decfam WHERE d IS NaN and v IS NaN
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (d decimal, v decimal)
+  estimated row count: 1 (missing stats)
+  table: decfam@primary
   spans: /NaN/NaN-/NaN/NaN/#
 
 # The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
@@ -887,7 +904,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: dec@primary
-  spans: /Infinity/Infinity-/Infinity/Infinity/#
+  spans: /Infinity/Infinity/0
 
 query T
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d = '-Infinity' and v = '-Infinity'
@@ -899,7 +916,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: dec@primary
-  spans: /-Infinity/-Infinity-/-Infinity/-Infinity/#
+  spans: /-Infinity/-Infinity/0
 
 statement ok
 DROP TABLE dec
@@ -1751,14 +1768,11 @@ SET tracing = on; SELECT * FROM a WHERE a = 0 OR a = 10; SET tracing = off
 # See #30943 for more details.
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
-WHERE message IN
-    ('querying next range at /Table/73/1/0',
-     'querying next range at /Table/73/1/10',
-     '=== SPAN START: kv.DistSender: sending partial batch ==='
-    )
+WHERE message LIKE 'querying next range at /Table/74/1%' OR
+      message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
-querying next range at /Table/73/1/0
-querying next range at /Table/73/1/10
+querying next range at /Table/74/1/0/0
+querying next range at /Table/74/1/10/0
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.
 statement ok
