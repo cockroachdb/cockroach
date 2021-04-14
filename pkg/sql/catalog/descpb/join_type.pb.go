@@ -3,9 +3,11 @@
 
 package descpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	proto "github.com/gogo/protobuf/proto"
+	math "math"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -16,7 +18,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // JoinType is the particular type of a join (or join-like) operation. Not all
 // values are used in all contexts.
@@ -102,6 +104,7 @@ var JoinType_name = map[int32]string{
 	8: "RIGHT_SEMI",
 	9: "RIGHT_ANTI",
 }
+
 var JoinType_value = map[string]int32{
 	"INNER":         0,
 	"LEFT_OUTER":    1,
@@ -120,9 +123,11 @@ func (x JoinType) Enum() *JoinType {
 	*p = x
 	return p
 }
+
 func (x JoinType) String() string {
 	return proto.EnumName(JoinType_name, int32(x))
 }
+
 func (x *JoinType) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(JoinType_value, data, "JoinType")
 	if err != nil {
@@ -131,8 +136,9 @@ func (x *JoinType) UnmarshalJSON(data []byte) error {
 	*x = JoinType(value)
 	return nil
 }
+
 func (JoinType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_join_type_2563bd08acd844ac, []int{0}
+	return fileDescriptor_b2d4fea02b318140, []int{0}
 }
 
 func init() {
@@ -140,10 +146,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/join_type.proto", fileDescriptor_join_type_2563bd08acd844ac)
+	proto.RegisterFile("sql/catalog/descpb/join_type.proto", fileDescriptor_b2d4fea02b318140)
 }
 
-var fileDescriptor_join_type_2563bd08acd844ac = []byte{
+var fileDescriptor_b2d4fea02b318140 = []byte{
 	// 241 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2a, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0xcf,
