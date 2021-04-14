@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -562,4 +563,126 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// This test replicates the behavior observed in
+// https://github.com/cockroachdb/cockroach/issues/62485. We verify that
+// when a dc with the leaseholder is lost, a node in a dc that does not have the
+// lease preference can steal the lease, upreplicate the range and then give up the
+// lease in a single cycle of the replicate_queue.
+func TestLeasePreferencesDuringOutage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stickyRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	// Place all the leases in the us
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us"},
+			},
+		},
+	}
+	numNodes := 6
+	serverArgs := make(map[int]base.TestServerArgs)
+	locality := func(region string, dc string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+				{Key: "dc", Value: dc},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("eu", "tr"),
+		locality("eu", "tr"),
+		locality("us", "sf"),
+		locality("us", "sf"),
+		locality("us", "mi"),
+		locality("us", "mi"),
+	}
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource:               manualClock.UnixNano,
+					DefaultZoneConfigOverride: &zcfg,
+					StickyEngineRegistry:      stickyRegistry,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	key := keys.UserTableDataMin
+	tc.SplitRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Targets(2, 4)...)
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(2, 4)...))
+	tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(2))
+
+	// Shutdown the sf datacenter, which is going to kill the node with the lease.
+	tc.StopServer(2)
+	tc.StopServer(3)
+
+	// We need to wait until 2 and 3 are considered to be dead
+	timeUntilStoreDead := kvserver.TimeUntilStoreDead.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	manualClock.Increment(timeUntilStoreDead.Nanoseconds())
+
+	// Gossip and heartbeat all the live stores, we do this manually otherwise the
+	// allocator on server 0 may see everyone as temporarily dead due to the
+	// clock move above.
+	for _, i := range []int{0, 1, 4, 5} {
+		require.NoError(t, tc.Servers[i].HeartbeatNodeLiveness())
+		require.NoError(t, tc.GetFirstStoreFromServer(t, i).GossipStore(ctx, true))
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		sl, _, _ := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().StorePool.GetStoreList()
+		if len(sl.Stores()) != 4 {
+			return errors.Errorf("Expected all 4 remaining stores to be live, but only got %v", sl.Stores())
+		}
+		return nil
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		_, processError, enqueueError := tc.GetFirstStoreFromServer(t, 0).
+			ManuallyEnqueue(ctx, "replicate", repl, true)
+		if processError != nil {
+			return processError
+		}
+		if enqueueError != nil {
+			return enqueueError
+		}
+		return nil
+	})
+
+	hint := tc.Target(0)
+	newLeaseHolder, err := tc.FindRangeLeaseHolder(*repl.Desc(), &hint)
+	require.NoError(t, err)
+	srv, _, err := tc.FromTarget(newLeaseHolder)
+	require.NoError(t, err)
+	region, ok := srv.Locality().Find("region")
+	require.True(t, ok)
+	require.Equal(t, "us", region)
+	require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
+	history := repl.GetLeaseHistory()
+	// make sure we see the eu node as a lease holder in the second to last position.
+	require.Equal(t, tc.Target(0).NodeID, history[len(history)-2].Replica.NodeID)
 }

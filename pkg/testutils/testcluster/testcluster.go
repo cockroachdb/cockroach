@@ -579,6 +579,19 @@ func (tc *TestCluster) Target(serverIdx int) roachpb.ReplicationTarget {
 	}
 }
 
+// FromTarget returns a Store from a ReplicationTarget.
+func (tc *TestCluster) FromTarget(
+	target roachpb.ReplicationTarget,
+) (*server.TestServer, *kvserver.Store, error) {
+	for _, s := range tc.Servers {
+		if s.NodeID() == target.NodeID {
+			store, err := s.Stores().GetStore(target.StoreID)
+			return s, store, err
+		}
+	}
+	return nil, nil, errors.Errorf("Store not found for target=%s", target)
+}
+
 // Targets creates a slice of ReplicationTarget where each entry corresponds to
 // a call to tc.Target() for serverIdx in serverIdxs.
 func (tc *TestCluster) Targets(serverIdxs ...int) []roachpb.ReplicationTarget {
