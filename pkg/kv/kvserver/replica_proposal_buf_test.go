@@ -196,6 +196,10 @@ func (t *testProposer) rejectProposalWithRedirectLocked(
 	t.onRejectProposalWithRedirectLocked(prop, redirectTo)
 }
 
+func (t *testProposer) testingFlushFilter() ProposalFlushFilter {
+	return nil
+}
+
 // proposalCreator holds on to a lease and creates proposals using it.
 type proposalCreator struct {
 	lease kvserverpb.LeaseStatus
@@ -761,6 +765,8 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		lease roachpb.Lease
 
 		expClosed hlc.Timestamp
+		// If not nil, b.assignedClosedTimestamp is checked against this.
+		expAssignedClosed *hlc.Timestamp
 	}{
 		{
 			name:                "basic",
@@ -806,6 +812,11 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			leaseExp:    expiredLeaseTimestamp,
 			rangePolicy: roachpb.LAG_BY_CLUSTER_SETTING,
 			expClosed:   now.ToTimestamp(),
+			// Check that the lease proposal does not bump b.assignedClosedTimestamp.
+			// The proposer cannot make promises about the write timestamps of further
+			// requests based on the start time of a proposed lease. See comments in
+			// propBuf.assignClosedTimestampToProposalLocked().
+			expAssignedClosed: &hlc.Timestamp{},
 		},
 		{
 			name:    "lease extension",
@@ -897,6 +908,9 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
 			checkClosedTS(t, r, tc.expClosed)
+			if tc.expAssignedClosed != nil {
+				require.Equal(t, *tc.expAssignedClosed, b.assignedClosedTimestamp)
+			}
 		})
 	}
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -1266,6 +1267,26 @@ func (ts *TestServer) GetRangeLease(
 	}
 	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().NowAsClockTimestamp(), nil
 
+}
+
+// AcquireRangeLease checks whether this node has the lease for a given range at
+// the current timestamp. If it does, returns the lease and its status. If
+// another replica currently holds the lease, redirects by returning
+// NotLeaseHolderError and an empty lease status.
+//
+// If there's no valid lease, the node attempts to take one.
+func (ts *TestServer) AcquireRangeLease(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (kvserverpb.LeaseStatus, error) {
+	store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if err != nil {
+		return kvserverpb.LeaseStatus{}, err
+	}
+	r := store.GetReplicaIfExists(rangeID)
+	if r == nil {
+		return kvserverpb.LeaseStatus{}, errors.Errorf("node doesn't have replica for r%d", rangeID)
+	}
+	return r.TestingAcquireLease(ctx)
 }
 
 // ExecutorConfig is part of the TestServerInterface.

@@ -237,6 +237,9 @@ type proposer interface {
 		prop *ProposalData,
 		redirectTo roachpb.ReplicaID,
 	)
+	// testingFlushFilter returns a callback installed by tests to trap commands
+	// being flushed. Returns nil if no callback has been installed.
+	testingFlushFilter() ProposalFlushFilter
 }
 
 // proposerRaft abstracts the propBuf's dependency on *raft.RawNode, to help
@@ -627,6 +630,9 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 		}
+		if fn := b.p.testingFlushFilter(); fn != nil {
+			fn(ctx, p)
+		}
 
 		// Coordinate proposing the command to etcd/raft.
 		if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
@@ -726,6 +732,31 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		// For brand new leases, we close the lease start time. Since this proposing
 		// replica is not the leaseholder, the previous target is meaningless.
 		closedTSTarget = newLease.Start.ToTimestamp()
+		// We forward closedTSTarget to b.assignedClosedTimestamp. We surprisingly
+		// might have previously closed a timestamp above the lease start time -
+		// when we close timestamps in the future, then attempt to transfer our
+		// lease away (and thus proscribe it) but the transfer fails and we're now
+		// acquiring a new lease to replace the proscribed one.
+		//
+		// TODO(andrei,nvanbenschoten) test:
+		// - Acquire lease @ 1
+		// - Close future timestamp @ 3
+		// - Attempt to transfer lease @ 2
+		// - Reject
+		// - Reacquire lease @ 2
+		closedTSTarget.Forward(b.assignedClosedTimestamp)
+
+		// Note that we're not bumping b.assignedClosedTimestamp here (we're not
+		// calling forwardClosedTimestampLocked). Bumping it to the lease start time
+		// would (surprisingly?) be illegal: just because we're proposing a lease
+		// starting at timestamp 100, doesn't mean we're sure to not evaluate
+		// requests writing below 100. This can happen if a lease transfer has
+		// already applied while we were evaluating this lease request, and if we've
+		// already started evaluating writes under the transferred lease. Such a
+		// transfer can give us the lease starting at timestamp 50. If such a
+		// transfer applied, then our lease request that we're proposing now is sure
+		// to not apply. But if we were to bump b.assignedClosedTimestamp, the
+		// damage would be done. See TestRejectedLeaseDoesntDictateClosedTimestamp.
 	} else {
 		// Sanity check that this command is not violating the closed timestamp. It
 		// must be writing at a timestamp above assignedClosedTimestamp
@@ -751,15 +782,18 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		}
 		// We can't close timestamps above the current lease's expiration.
 		closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound())
+
+		// We're about to close closedTSTarget. The propBuf needs to remember that
+		// in order for incoming requests to be bumped above it (through
+		// TrackEvaluatingRequest).
+		if !b.forwardClosedTimestampLocked(closedTSTarget) {
+			closedTSTarget = b.assignedClosedTimestamp
+		}
 	}
 
-	// We're about to close closedTSTarget. The propBuf needs to remember that in
-	// order for incoming requests to be bumped above it (through
-	// TrackEvaluatingRequest).
-	b.forwardClosedTimestampLocked(closedTSTarget)
 	// Fill in the closed ts in the proposal.
 	f := &b.tmpClosedTimestampFooter
-	f.ClosedTimestamp = b.assignedClosedTimestamp
+	f.ClosedTimestamp = closedTSTarget
 	footerLen := f.Size()
 	if log.ExpensiveLogEnabled(ctx, 4) {
 		log.VEventf(ctx, 4, "attaching closed timestamp %s to proposal %x", b.assignedClosedTimestamp, p.idKey)
@@ -1053,6 +1087,10 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	// decide if/when to re-propose it.
 	p.proposedAtTicks = rp.mu.ticks
 	rp.mu.proposals[p.idKey] = p
+}
+
+func (rp *replicaProposer) testingFlushFilter() ProposalFlushFilter {
+	return rp.store.TestingKnobs().TestingFlushFilter
 }
 
 func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo {

@@ -45,6 +45,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1052,6 +1053,12 @@ func (r *Replica) redirectOnOrAcquireLease(
 	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{})
 }
 
+// TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
+func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
+	l, pErr := r.redirectOnOrAcquireLease(ctx)
+	return l, pErr.GoError()
+}
+
 // redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
@@ -1271,6 +1278,7 @@ func (r *Replica) maybeExtendLeaseAsync(ctx context.Context, st kvserverpb.Lease
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Infof(ctx, "extending lease %s at %s", st.Lease, st.Now)
+		debug.PrintStack()
 	}
 	// We explicitly ignore the returned handle as we won't block on it.
 	_ = r.requestLeaseLocked(ctx, st)

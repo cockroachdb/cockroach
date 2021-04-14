@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -21,6 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
+
+// ProposalFLushFilter is the type of the TestingFlushFilter callback.
+type ProposalFlushFilter func(ctx context.Context, data *ProposalData)
 
 // StoreTestingKnobs is a part of the context used to control parts of
 // the system. The Testing*Filter functions are called at various
@@ -47,6 +51,9 @@ type StoreTestingKnobs struct {
 
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter kvserverbase.ReplicaProposalFilter
+	// TestingFlushFilter is called by the propBuf, when a request is about to be
+	// proposed.
+	TestingFlushFilter ProposalFlushFilter
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
