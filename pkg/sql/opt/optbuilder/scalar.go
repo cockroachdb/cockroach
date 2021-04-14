@@ -83,7 +83,7 @@ func (b *Builder) buildScalar(
 			// grouping on the entire PK of that table.
 			g := inScope.groupby
 			if !inScope.isOuterColumn(t.id) && !b.allowImplicitGroupingColumn(t.id, g) {
-				panic(newGroupingError(&t.name))
+				panic(newGroupingError(t.name.ReferenceName()))
 			}
 
 			// We add a new grouping column; these show up both in aggInScope and
@@ -92,7 +92,7 @@ func (b *Builder) buildScalar(
 			// Note that normalization rules will trim down the list of grouping
 			// columns based on FDs, so this is only for the purposes of building a
 			// valid operator.
-			aggInCol := g.aggInScope.addColumn("" /* alias */, t)
+			aggInCol := g.aggInScope.addColumn(anonymousScopeColName(), t)
 			b.finishBuildScalarRef(t, inScope, g.aggInScope, aggInCol, nil)
 			g.groupStrs[symbolicExprStr(t)] = aggInCol
 
@@ -383,7 +383,7 @@ func (b *Builder) buildScalar(
 				// Non-grouping column was referenced. Note that a column that is part
 				// of a larger grouping expression would have been detected by the
 				// groupStrs checking code above.
-				panic(newGroupingError(&t.cols[0].name))
+				panic(newGroupingError(t.cols[0].name.ReferenceName()))
 			}
 			return b.finishBuildScalarRef(&t.cols[0], inScope, outScope, outCol, colRefs)
 		}
@@ -637,10 +637,11 @@ func (b *Builder) checkSubqueryOuterCols(
 			subqueryOuterCols.DifferenceWith(inScope.groupby.aggOutScope.colSet())
 			colID, _ := subqueryOuterCols.Next(0)
 			col := inScope.getColumn(colID)
+			name := col.name.ReferenceName()
 			panic(pgerror.Newf(
 				pgcode.Grouping,
 				"subquery uses ungrouped column \"%s\" from outer query",
-				tree.ErrString(&col.name)))
+				tree.ErrString(&name)))
 		}
 	}
 }
@@ -810,7 +811,7 @@ func NewScalar(
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
 		colMeta := md.ColumnMeta(colID)
 		sb.scope.cols = append(sb.scope.cols, scopeColumn{
-			name: tree.Name(colMeta.Alias),
+			name: scopeColName(colMeta.Alias),
 			typ:  colMeta.Type,
 			id:   colID,
 		})

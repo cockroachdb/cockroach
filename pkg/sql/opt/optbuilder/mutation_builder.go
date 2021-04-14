@@ -610,7 +610,7 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 
 		// Add synthesized column. It is important to use the real column name, as
 		// this column may later be referred to by a computed column.
-		newCol, _ := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
+		newCol, _ := pb.Add(scopeColName(string(tabCol.ColName())), expr, tabCol.DatumType())
 
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
@@ -662,7 +662,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 
 		// Add synthesized column.
-		newCol, scalar := pb.Add(tabCol.ColName(), expr, tabCol.DatumType())
+		newCol, scalar := pb.Add(scopeColName(string(tabCol.ColName())), expr, tabCol.DatumType())
 
 		if restrict && kind != cat.WriteOnly {
 			// Check if any of the columns referred to in the computed column
@@ -794,7 +794,7 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.OptionalColList, roundC
 		// addUpdateColumns would not include columns in the FROM clause. Those
 		// columns are only in-scope in the RETURNING clause via
 		// mb.extraAccessibleCols.
-		scopeCol.name = mb.tab.Column(i).ColName()
+		scopeCol.name.SetReferenceName(mb.tab.Column(i).ColName())
 	}
 
 	if projectionsScope != nil {
@@ -851,17 +851,17 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 				panic(err)
 			}
 
-			alias := fmt.Sprintf("check%d", i+1)
 			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-			scopeCol := projectionsScope.addColumn(alias, texpr)
+
+			// Use an anonymous name because the column cannot be referenced
+			// in other expressions.
+			colName := anonymousScopeColNameWithMetadataName(fmt.Sprintf("check%d", i+1))
+			scopeCol := projectionsScope.addColumn(colName, texpr)
 
 			// TODO(ridwanmsharif): Maybe we can avoid building constraints here
 			// and instead use the constraints stored in the table metadata.
 			referencedCols := &opt.ColSet{}
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
-
-			// Clear the column name so that it cannot be referenced.
-			scopeCol.clearName()
 
 			// Synthesized check columns are only necessary if the columns
 			// referenced in the check expression are being mutated. If they are
@@ -941,27 +941,27 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 			// Build synthesized PUT columns.
 			if putScope != nil {
 				texpr := putScope.resolveAndRequireType(expr, types.Bool)
-				alias := fmt.Sprintf("partial_index_put%d", ord+1)
-				scopeCol := projectionScope.addColumn(alias, texpr)
+
+				// Use an anonymous name because the column cannot be referenced
+				// in other expressions.
+				colName := anonymousScopeColNameWithMetadataName(fmt.Sprintf("partial_index_put%d", ord+1))
+				scopeCol := projectionScope.addColumn(colName, texpr)
 
 				mb.b.buildScalar(texpr, putScope, projectionScope, scopeCol, nil)
 				mb.partialIndexPutColIDs[ord] = scopeCol.id
-
-				// Clear the column name so that it cannot be referenced.
-				scopeCol.clearName()
 			}
 
 			// Build synthesized DEL columns.
 			if delScope != nil {
 				texpr := delScope.resolveAndRequireType(expr, types.Bool)
-				alias := fmt.Sprintf("partial_index_del%d", ord+1)
-				scopeCol := projectionScope.addColumn(alias, texpr)
+
+				// Use an anonymous name because the column cannot be referenced
+				// in other expressions.
+				colName := anonymousScopeColNameWithMetadataName(fmt.Sprintf("partial_index_del%d", ord+1))
+				scopeCol := projectionScope.addColumn(colName, texpr)
 
 				mb.b.buildScalar(texpr, delScope, projectionScope, scopeCol, nil)
 				mb.partialIndexDelColIDs[ord] = scopeCol.id
-
-				// Clear the column name so that it cannot be referenced.
-				scopeCol.clearName()
 			}
 
 			ord++
@@ -1372,7 +1372,7 @@ func (mb *mutationBuilder) buildCheckInputScan(
 		outCol := mb.md.AddColumn(string(tableCol.ColName()), tableCol.DatumType())
 		withScanScope.cols[i] = scopeColumn{
 			id:   outCol,
-			name: tableCol.ColName(),
+			name: scopeColName(string(tableCol.ColName())),
 			typ:  tableCol.DatumType(),
 		}
 

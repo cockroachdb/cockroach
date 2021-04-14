@@ -586,14 +586,14 @@ func (b *Builder) buildGrouping(
 			// We must prefer a match against a FROM-clause column (but ignore upper
 			// scopes); in this case we let the general case below handle the reference.
 			for i := range fromScope.cols {
-				if string(fromScope.cols[i].name) == targetName {
+				if fromScope.cols[i].name.MatchesReferenceString(targetName) {
 					return
 				}
 			}
 			// See if it matches exactly one of the target lists.
 			var match *scopeColumn
 			for i := range projectionsScope.cols {
-				if col := &projectionsScope.cols[i]; string(col.name) == targetName {
+				if col := &projectionsScope.cols[i]; col.name.MatchesReferenceString(targetName) {
 					if match != nil {
 						// Multiple matches are only allowed if they refer to identical
 						// expressions.
@@ -634,7 +634,7 @@ func (b *Builder) buildGrouping(
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
 		//   SELECT x+y FROM t GROUP BY x+y
-		col := aggInScope.addColumn(alias, e)
+		col := aggInScope.addColumn(scopeColName(alias), e)
 		b.buildScalar(e, fromScope, aggInScope, col, nil)
 		fromScope.groupby.groupStrs[exprStr] = col
 	}
@@ -648,7 +648,7 @@ func (b *Builder) buildAggArg(
 ) opt.ScalarExpr {
 	// This synthesizes a new tempScope column, unless the argument is a
 	// simple VariableOp.
-	col := tempScope.addColumn("" /* alias */, e)
+	col := tempScope.addColumn(anonymousScopeColName(), e)
 	b.buildScalar(e, fromScope, tempScope, col, &info.colRefs)
 	if col.scalar != nil {
 		return col.scalar
@@ -735,7 +735,7 @@ func (b *Builder) buildAggregateFunction(
 
 		// Use 0 as the group for now; it will be filled in later by the
 		// buildAggregation method.
-		info.col = b.synthesizeColumn(g.aggOutScope, funcName, f.ResolvedType(), f, nil /* scalar */)
+		info.col = b.synthesizeColumn(g.aggOutScope, scopeColName(funcName), f.ResolvedType(), f, nil /* scalar */)
 
 		// Move the columns for the aggregate input expressions to the correct scope.
 		if g.aggInScope != tempScope {
@@ -891,10 +891,10 @@ func isSQLFn(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.SQLClass
 }
 
-func newGroupingError(name *tree.Name) error {
+func newGroupingError(name tree.Name) error {
 	return pgerror.Newf(pgcode.Grouping,
 		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
-		tree.ErrString(name),
+		tree.ErrString(&name),
 	)
 }
 

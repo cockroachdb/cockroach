@@ -1848,13 +1848,13 @@ upsert decimals
  │    └── upsert_b:23 => decimals.b:2
  ├── check columns: check1:26 check2:27
  └── project
-      ├── columns: check1:26 check2:27 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b:20 column21:21 upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25
+      ├── columns: check1:26 check2:27 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b_new:20 column21:21 upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25
       ├── project
-      │    ├── columns: upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b:20 column21:21
+      │    ├── columns: upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b_new:20 column21:21
       │    ├── project
-      │    │    ├── columns: column21:21 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b:20
+      │    │    ├── columns: column21:21 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b_new:20
       │    │    ├── project
-      │    │    │    ├── columns: b:20 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    ├── columns: b_new:20 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    ├── project
       │    │    │    │    ├── columns: b_new:19!null a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    ├── left-join (hash)
@@ -1900,12 +1900,12 @@ upsert decimals
       │    │    │    │    └── projections
       │    │    │    │         └── ARRAY[0.99] [as=b_new:19]
       │    │    │    └── projections
-      │    │    │         └── crdb_internal.round_decimal_values(b_new:19, 1) [as=b:20]
+      │    │    │         └── crdb_internal.round_decimal_values(b_new:19, 1) [as=b_new:20]
       │    │    └── projections
       │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column21:21]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:22]
-      │         ├── CASE WHEN decimals.a:14 IS NULL THEN b:10 ELSE b:20 END [as=upsert_b:23]
+      │         ├── CASE WHEN decimals.a:14 IS NULL THEN b:10 ELSE b_new:20 END [as=upsert_b:23]
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN c:11 ELSE decimals.c:16 END [as=upsert_c:24]
       │         └── CASE WHEN decimals.a:14 IS NULL THEN d:13 ELSE decimals.d:17 END [as=upsert_d:25]
       └── projections

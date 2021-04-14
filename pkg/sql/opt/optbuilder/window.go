@@ -347,9 +347,14 @@ func (b *Builder) buildWindowArgs(
 	for j, a := range argExprs {
 		col := outScope.findExistingCol(a, false /* allowSideEffects */)
 		if col == nil {
+			// Use an anonymous name because the column cannot be referenced
+			// in other expressions.
+			colName := anonymousScopeColNameWithMetadataName(
+				fmt.Sprintf("%s_%d_arg%d", funcName, windowIndex+1, j+1),
+			)
 			col = b.synthesizeColumn(
 				outScope,
-				fmt.Sprintf("%s_%d_arg%d", funcName, windowIndex+1, j+1),
+				colName,
 				a.ResolvedType(),
 				a,
 				b.buildScalar(a, inScope, nil, nil, nil),
@@ -375,9 +380,14 @@ func (b *Builder) buildWindowPartition(
 	for j, e := range cols {
 		col := outScope.findExistingCol(e, false /* allowSideEffects */)
 		if col == nil {
+			// Use an anonymous name because the column cannot be referenced
+			// in other expressions.
+			colName := anonymousScopeColNameWithMetadataName(
+				fmt.Sprintf("%s_%d_partition_%d", funcName, windowIndex+1, j+1),
+			)
 			col = b.synthesizeColumn(
 				outScope,
-				fmt.Sprintf("%s_%d_partition_%d", funcName, windowIndex+1, j+1),
+				colName,
 				e.ResolvedType(),
 				e,
 				b.buildScalar(e, inScope, nil, nil, nil),
@@ -401,9 +411,14 @@ func (b *Builder) buildWindowOrdering(
 		for _, e := range cols {
 			col := outScope.findExistingCol(e, false /* allowSideEffects */)
 			if col == nil {
+				// Use an anonymous name because the column cannot be referenced
+				// in other expressions.
+				colName := anonymousScopeColNameWithMetadataName(
+					fmt.Sprintf("%s_%d_orderby_%d", funcName, windowIndex+1, j+1),
+				)
 				col = b.synthesizeColumn(
 					outScope,
-					fmt.Sprintf("%s_%d_orderby_%d", funcName, windowIndex+1, j+1),
+					colName,
 					te.ResolvedType(),
 					te,
 					b.buildScalar(e, inScope, nil, nil, nil),
@@ -426,9 +441,14 @@ func (b *Builder) buildFilterCol(
 
 	col := outScope.findExistingCol(te, false /* allowSideEffects */)
 	if col == nil {
+		// Use an anonymous name because the column cannot be referenced
+		// in other expressions.
+		colName := anonymousScopeColNameWithMetadataName(
+			fmt.Sprintf("%s_%d_filter", funcName, windowIndex+1),
+		)
 		col = b.synthesizeColumn(
 			outScope,
-			fmt.Sprintf("%s_%d_filter", funcName, windowIndex+1),
+			colName,
 			te.ResolvedType(),
 			te,
 			b.buildScalar(te, inScope, nil, nil, nil),
@@ -562,7 +582,7 @@ func (b *Builder) constructScalarWindowGroup(
 		defaultNullVal, requiresProjection := b.overrideDefaultNullValue(aggInfos[i])
 		aggregateCol := aggInfos[i].col
 		if requiresProjection {
-			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name.String(), aggregateCol.typ, aggregateCol.expr, varExpr)
+			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name, aggregateCol.typ, aggregateCol.expr, varExpr)
 		}
 
 		aggs = append(aggs, b.factory.ConstructAggregationsItem(varExpr, aggregateCol.id))

@@ -1611,37 +1611,37 @@ UPDATE decimals SET a=1.1, b=ARRAY[0.95, NULL, 15]
 ----
 update decimals
  ├── columns: <none>
- ├── fetch columns: decimals.a:6 decimals.b:7 c:8 decimals.d:9
+ ├── fetch columns: a:6 b:7 c:8 decimals.d:9
  ├── update-mapping:
- │    ├── a:13 => decimals.a:1
- │    ├── b:14 => decimals.b:2
+ │    ├── a_new:13 => a:1
+ │    ├── b_new:14 => b:2
  │    └── d:16 => decimals.d:4
  ├── check columns: check1:17 check2:18
  └── project
-      ├── columns: check1:17 check2:18 decimals.a:6!null decimals.b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a:13 b:14 d:16
+      ├── columns: check1:17 check2:18 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14 d:16
       ├── project
-      │    ├── columns: d:16 decimals.a:6!null decimals.b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a:13 b:14
+      │    ├── columns: d:16 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14
       │    ├── project
-      │    │    ├── columns: column15:15 decimals.a:6!null decimals.b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a:13 b:14
+      │    │    ├── columns: column15:15 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14
       │    │    ├── project
-      │    │    │    ├── columns: a:13 b:14 decimals.a:6!null decimals.b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    ├── columns: a_new:13 b_new:14 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
       │    │    │    ├── project
-      │    │    │    │    ├── columns: a_new:11!null b_new:12 decimals.a:6!null decimals.b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    │    ├── columns: a_new:11!null b_new:12 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
       │    │    │    │    ├── scan decimals
-      │    │    │    │    │    ├── columns: decimals.a:6!null decimals.b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    │    │    ├── columns: a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
       │    │    │    │    │    └── computed column expressions
       │    │    │    │    │         └── decimals.d:9
-      │    │    │    │    │              └── decimals.a:6::DECIMAL + c:8::DECIMAL
+      │    │    │    │    │              └── a:6::DECIMAL + c:8::DECIMAL
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:11]
       │    │    │    │         └── ARRAY[0.95,NULL,15] [as=b_new:12]
       │    │    │    └── projections
-      │    │    │         ├── crdb_internal.round_decimal_values(a_new:11, 0) [as=a:13]
-      │    │    │         └── crdb_internal.round_decimal_values(b_new:12, 1) [as=b:14]
+      │    │    │         ├── crdb_internal.round_decimal_values(a_new:11, 0) [as=a_new:13]
+      │    │    │         └── crdb_internal.round_decimal_values(b_new:12, 1) [as=b_new:14]
       │    │    └── projections
-      │    │         └── a:13 + c:8::DECIMAL [as=column15:15]
+      │    │         └── a_new:13 + c:8::DECIMAL [as=column15:15]
       │    └── projections
       │         └── crdb_internal.round_decimal_values(column15:15, 1) [as=d:16]
       └── projections
-           ├── round(a:13) = a:13 [as=check1:17]
-           └── b:14[0] > 1 [as=check2:18]
+           ├── round(a_new:13) = a_new:13 [as=check1:17]
+           └── b_new:14[0] > 1 [as=check2:18]

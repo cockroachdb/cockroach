@@ -383,13 +383,13 @@ func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
 			for j := 0; j < i; j++ {
 				col := &jb.leftScope.cols[j]
 				if col.id == leftCol.id && col.name == leftCol.name {
-					jb.raiseDuplicateColError(leftCol.name, "left table")
+					jb.raiseDuplicateColError(leftCol.name.ReferenceName(), "left table")
 				}
 			}
 		}
 		seenCols.Add(leftCol.id)
 
-		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name, "right table")
+		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name.ReferenceName(), "right table")
 		if rightCol != nil {
 			jb.b.trackReferencedColumnForViews(leftCol)
 			jb.b.trackReferencedColumnForViews(rightCol)
@@ -461,7 +461,7 @@ func (jb *usingJoinBuilder) findUsingColumn(
 	var foundCol *scopeColumn
 	for i := range cols {
 		col := &cols[i]
-		if col.visibility == cat.Visible && col.name == name {
+		if col.visibility == cat.Visible && col.name.MatchesReferenceName(name) {
 			if foundCol != nil {
 				jb.raiseDuplicateColError(name, context)
 			}
@@ -480,9 +480,10 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	// First, check if the comparison would even be valid.
 	if !leftCol.typ.Equivalent(rightCol.typ) {
 		if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
+			name := leftCol.name.ReferenceName()
 			panic(pgerror.Newf(pgcode.DatatypeMismatch,
 				"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
-				leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name)))
+				leftCol.typ, rightCol.typ, tree.ErrString(&name)))
 		}
 	}
 
@@ -516,7 +517,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		}
 		texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
 		merged := jb.b.factory.ConstructCoalesce(memo.ScalarListExpr{leftVar, rightVar})
-		col := jb.b.synthesizeColumn(jb.outScope, string(leftCol.name), typ, texpr, merged)
+		col := jb.b.synthesizeColumn(jb.outScope, leftCol.name, typ, texpr, merged)
 		jb.ifNullCols.Add(col.id)
 		jb.hideCols[leftCol] = struct{}{}
 		jb.hideCols[rightCol] = struct{}{}

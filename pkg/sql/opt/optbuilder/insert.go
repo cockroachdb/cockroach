@@ -615,7 +615,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
 		// Assign name of input column.
-		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
+		inCol.name = scopeColName(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
 
 		// Record the ID of the column that contains the value to be inserted
 		// into the corresponding target table column.
@@ -960,12 +960,12 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 			mb.b.factory.ConstructVariable(updateColID),
 		)
 
-		alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+		name := scopeColNameWithMetadataName(
+			string(col.ColName()),
+			fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName()),
+		)
 		typ := mb.md.ColumnMeta(insertColID).Type
-		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
-
-		// Assign name to synthesized column.
-		scopeCol.name = col.ColName()
+		scopeCol := mb.b.synthesizeColumn(projectionsScope, name, typ, nil /* expr */, caseExpr)
 
 		// Update the scope ordinals for the update columns that are involved in
 		// the Upsert. The new columns will be used by the Upsert operator in place

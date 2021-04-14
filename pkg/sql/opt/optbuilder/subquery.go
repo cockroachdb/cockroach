@@ -165,7 +165,7 @@ func (s *subquery) TypeCheck(
 		labels := make([]string, len(s.cols))
 		for i := range s.cols {
 			contents[i] = s.cols[i].typ
-			labels[i] = string(s.cols[i].name)
+			labels[i] = s.cols[i].name.ReferenceString()
 		}
 		s.typ = types.MakeLabeledTuple(contents, labels)
 	}
@@ -287,7 +287,7 @@ func (b *Builder) buildSubqueryProjection(
 
 		texpr := tree.NewTypedTuple(typ, cols)
 		tup := b.factory.ConstructTuple(els, typ)
-		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
+		col := b.synthesizeColumn(outScope, anonymousScopeColName(), texpr.ResolvedType(), texpr, tup)
 		out = b.constructProject(out, []scopeColumn{*col})
 	}
 

@@ -197,9 +197,6 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
-
-		// Rename the column to match the target column being updated.
-		sourceCol.name = mb.tab.Column(ord).ColName()
 	}
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
@@ -227,7 +224,11 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		targetColMeta := mb.md.ColumnMeta(targetColID)
 		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)
-		scopeCol := projectionsScope.addColumn(targetColMeta.Alias+"_new", texpr)
+		colName := scopeColNameWithMetadataName(
+			targetColMeta.Alias,
+			targetColMeta.Alias+"_new",
+		)
+		scopeCol := projectionsScope.addColumn(colName, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
 		checkCol(scopeCol, targetColID)
@@ -246,6 +247,8 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 				// Type check and rename columns.
 				for i := range subqueryScope.cols {
 					checkCol(&subqueryScope.cols[i], mb.targetColList[n])
+					ord := mb.tabID.ColumnOrdinal(mb.targetColList[n])
+					subqueryScope.cols[i].name.SetReferenceName(mb.tab.Column(ord).ColName())
 					n++
 				}
 

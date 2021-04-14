@@ -30,7 +30,7 @@ func (s *scope) GetColumnItemResolver() tree.ColumnItemResolver {
 // AddTable is part of the sqlutils.ColumnItemResolverTester interface.
 func (s *scope) AddTable(tabName tree.TableName, colNames []tree.Name) {
 	for _, col := range colNames {
-		s.cols = append(s.cols, scopeColumn{name: col, table: tabName})
+		s.cols = append(s.cols, scopeColumn{name: scopeColName(string(col)), table: tabName})
 	}
 }
 
@@ -47,7 +47,7 @@ func (s *scope) ResolveQualifiedStarTestResults(
 	for i := range s.cols {
 		col := s.cols[i]
 		if col.table == *srcName && col.visibility == cat.Visible {
-			nl = append(nl, col.name)
+			nl = append(nl, col.name.ReferenceName())
 		}
 	}
 	return srcName.String(), nl.String(), nil
@@ -60,7 +60,7 @@ func (s *scope) ResolveColumnItemTestResults(colRes tree.ColumnResolutionResult)
 	if !ok {
 		return "", fmt.Errorf("resolver did not return *scopeColumn, found %T instead", colRes)
 	}
-	return fmt.Sprintf("%s.%s", col.table.String(), col.name), nil
+	return fmt.Sprintf("%s.%s", col.table.String(), col.name.ReferenceString()), nil
 }
 
 func TestResolveQualifiedStar(t *testing.T) {

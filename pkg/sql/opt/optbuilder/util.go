@@ -121,7 +121,7 @@ func (b *Builder) expandStar(
 			col := &refScope.cols[i]
 			if col.table == *src && col.visibility == cat.Visible {
 				exprs = append(exprs, col)
-				aliases = append(aliases, string(col.name))
+				aliases = append(aliases, col.name.ReferenceString())
 			}
 		}
 
@@ -136,7 +136,7 @@ func (b *Builder) expandStar(
 			col := &inScope.cols[i]
 			if col.visibility == cat.Visible {
 				exprs = append(exprs, col)
-				aliases = append(aliases, string(col.name))
+				aliases = append(aliases, col.name.ReferenceString())
 			}
 		}
 
@@ -180,7 +180,7 @@ func (b *Builder) expandStarAndResolveType(
 //
 // scope  The scope is passed in so it can can be updated with the newly bound
 //        variable.
-// alias  This is an optional alias for the new column (e.g., if specified with
+// name   This is the name for the new column (e.g., if specified with
 //        the AS keyword).
 // typ    The type of the column.
 // expr   The expression this column refers to (if any).
@@ -188,10 +188,9 @@ func (b *Builder) expandStarAndResolveType(
 //
 // The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, alias string, typ *types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
+	scope *scope, name scopeColumnName, typ *types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
 ) *scopeColumn {
-	name := tree.Name(alias)
-	colID := b.factory.Metadata().AddColumn(alias, typ)
+	colID := b.factory.Metadata().AddColumn(name.MetadataName(), typ)
 	scope.cols = append(scope.cols, scopeColumn{
 		name:   name,
 		typ:    typ,
@@ -205,7 +204,7 @@ func (b *Builder) synthesizeColumn(
 // populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
 // the given existing column rather than allocating a new one.
 func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarExpr) {
-	colID := b.factory.Metadata().AddColumn(string(col.name), col.typ)
+	colID := b.factory.Metadata().AddColumn(col.name.MetadataName(), col.typ)
 	col.id = colID
 	col.scalar = scalar
 }
@@ -223,7 +222,7 @@ func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarE
 // - expr, exprStr and typ in dst already correspond to the expression and type
 //   of the src column.
 func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
-	if dst.name == "" {
+	if dst.name.IsAnonymous() {
 		dst.name = src.name
 	}
 	dst.id = src.id
@@ -246,7 +245,7 @@ func (b *Builder) shouldCreateDefaultColumn(texpr tree.TypedExpr) bool {
 
 func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColumns) {
 	for i := range cols {
-		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
+		c := b.synthesizeColumn(scope, scopeColName(cols[i].Name), cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {
 			c.visibility = cat.Hidden
 		}
@@ -323,12 +322,12 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 			target := c.ColumnName
 			for j := range scope.cols {
 				col := &scope.cols[j]
-				if col.name != target {
+				if !col.name.MatchesReferenceName(target) {
 					continue
 				}
 
 				if col.mutation {
-					panic(makeBackfillError(col.name))
+					panic(makeBackfillError(col.name.ReferenceName()))
 				}
 
 				if index != -1 {
