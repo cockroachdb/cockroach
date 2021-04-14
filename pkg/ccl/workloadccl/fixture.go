@@ -449,6 +449,9 @@ func importFixtureTable(
 	}
 	defer res.Close()
 	if !res.Next() {
+		if err := res.Err(); err != nil {
+			return 0, errors.Wrap(err, "unexpected error during import")
+		}
 		return 0, gosql.ErrNoRows
 	}
 	resCols, err := res.Columns()
@@ -579,16 +582,19 @@ func RestoreFixture(
 		table := table
 		g.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			importStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
+			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM $1 WITH into_db=$2`, genName, table.TableName)
 			log.Infof(ctx, "Restoring from %s", table.BackupURI)
 			var rows, index, tableBytes int64
 			var discard interface{}
-			res, err := sqlDB.Query(importStmt, table.BackupURI, database)
+			res, err := sqlDB.Query(restoreStmt, table.BackupURI, database)
 			if err != nil {
-				return errors.Wrapf(err, "backup: %s", table.BackupURI)
+				return errors.Wrapf(err, "restore: %s", table.BackupURI)
 			}
 			defer res.Close()
 			if !res.Next() {
+				if err := res.Err(); err != nil {
+					return errors.Wrap(err, "unexpected error during restore")
+				}
 				return gosql.ErrNoRows
 			}
 			resCols, err := res.Columns()

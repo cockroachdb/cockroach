@@ -183,7 +183,11 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 			var id string
 			if !rows.Next() {
-				t.Fatal("no sessions on node 1")
+				if err := rows.Err(); err != nil {
+					t.Fatalf("unexpected error querying sessions: %s", err.Error())
+				} else {
+					t.Fatal("no sessions on node 1")
+				}
 			}
 			if err := rows.Scan(&id); err != nil {
 				t.Fatal(err)

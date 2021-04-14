@@ -144,6 +144,9 @@ func verifyBackupRestoreStatementResult(
 	var unused int64
 
 	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
 		return errors.New("zero rows in result")
 	}
 	if err := rows.Scan(

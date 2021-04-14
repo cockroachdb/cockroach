@@ -102,6 +102,7 @@ func (m *mockFlow) ConcurrentTxnUse() bool {
 
 func TestFlowScheduler(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var (
 		ctx      = context.Background()

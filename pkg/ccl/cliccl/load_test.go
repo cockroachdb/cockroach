@@ -98,7 +98,10 @@ func TestLoadShowSummary(t *testing.T) {
 		var sstFile string
 		rows := sqlDB.Query(t, `select path from [show backup files $1]`, backupPath)
 		defer rows.Close()
-		rows.Next()
+		if !rows.Next() {
+			require.NoError(t, rows.Err())
+			t.Fatal("expected at least 1 row")
+		}
 		err = rows.Scan(&sstFile)
 		require.NoError(t, err)
 

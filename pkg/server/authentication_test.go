@@ -762,11 +762,11 @@ func TestGRPCAuthentication(t *testing.T) {
 			return err
 		}},
 		{"distSQL", func(ctx context.Context, conn *grpc.ClientConn) error {
-			stream, err := execinfrapb.NewDistSQLClient(conn).RunSyncFlow(ctx)
+			stream, err := execinfrapb.NewDistSQLClient(conn).FlowStream(ctx)
 			if err != nil {
 				return err
 			}
-			_ = stream.Send(&execinfrapb.ConsumerSignal{})
+			_ = stream.Send(&execinfrapb.ProducerMessage{})
 			_, err = stream.Recv()
 			return err
 		}},
