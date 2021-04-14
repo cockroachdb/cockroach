@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -575,7 +576,13 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	} {
 		t.Run(tc.locality, func(t *testing.T) {
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-				t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+				t, 3 /* numServers */, base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// Disable the merge queue because it makes this test flakey
+						// under stress.
+						DisableMergeQueue: true,
+					},
+				}, nil, /* baseDir */
 			)
 			defer cleanup()
 
