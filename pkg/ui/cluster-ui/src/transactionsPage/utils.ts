@@ -53,7 +53,8 @@ export const aggregateStatements = (
 ): AggregateStatistics[] =>
   statements.map((s: Statement) => ({
     label: s.key.key_data.query,
-    implicitTxn: false,
+    implicitTxn: s.key.key_data.implicit_txn,
+    database: s.key.key_data.database,
     fullScan: s.key.key_data.full_scan,
     stats: s.stats,
   }));

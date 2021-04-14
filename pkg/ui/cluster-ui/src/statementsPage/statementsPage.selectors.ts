@@ -17,6 +17,7 @@ import {
   flattenStatementStats,
   formatDate,
   getMatchParamByName,
+  statementKey,
   StatementStatistics,
   TimestampToMoment,
 } from "src/util";
@@ -33,11 +34,8 @@ export interface StatementsSummaryData {
   statement: string;
   implicitTxn: boolean;
   fullScan: boolean;
+  database: string;
   stats: StatementStatistics[];
-}
-
-function keyByStatementAndImplicitTxn(stmt: ExecutionStatistics): string {
-  return stmt.statement + stmt.implicit_txn;
 }
 
 export const adminUISelector = createSelector(
@@ -48,6 +46,11 @@ export const adminUISelector = createSelector(
 export const statementsSelector = createSelector(
   adminUISelector,
   adminUiState => adminUiState.statements,
+);
+
+export const localStorageSelector = createSelector(
+  adminUISelector,
+  adminUiState => adminUiState.localStorage,
 );
 
 // selectApps returns the array of all apps with statement statistics present
@@ -82,6 +85,23 @@ export const selectApps = createSelector(
       .concat(sawInternal ? ["(internal)"] : [])
       .concat(sawBlank ? ["(unset)"] : [])
       .concat(Object.keys(apps));
+  },
+);
+
+// selectDatabases returns the array of all databases with statement statistics present
+// in the data.
+export const selectDatabases = createSelector(
+  statementsSelector,
+  statementsState => {
+    if (!statementsState.data) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        statementsState.data.statements.map(s => s.key.key_data.database),
+      ),
+    ).filter((dbName: string) => dbName !== null && dbName.length > 0);
   },
 );
 
@@ -140,28 +160,30 @@ export const selectStatements = createSelector(
       );
     }
 
-    const statsByStatementAndImplicitTxn: {
+    const statsByStatementKey: {
       [statement: string]: StatementsSummaryData;
     } = {};
     statements.forEach(stmt => {
-      const key = keyByStatementAndImplicitTxn(stmt);
-      if (!(key in statsByStatementAndImplicitTxn)) {
-        statsByStatementAndImplicitTxn[key] = {
+      const key = statementKey(stmt);
+      if (!(key in statsByStatementKey)) {
+        statsByStatementKey[key] = {
           statement: stmt.statement,
           implicitTxn: stmt.implicit_txn,
           fullScan: stmt.full_scan,
+          database: stmt.database,
           stats: [],
         };
       }
-      statsByStatementAndImplicitTxn[key].stats.push(stmt.stats);
+      statsByStatementKey[key].stats.push(stmt.stats);
     });
 
-    return Object.keys(statsByStatementAndImplicitTxn).map(key => {
-      const stmt = statsByStatementAndImplicitTxn[key];
+    return Object.keys(statsByStatementKey).map(key => {
+      const stmt = statsByStatementKey[key];
       return {
         label: stmt.statement,
         implicitTxn: stmt.implicitTxn,
         fullScan: stmt.fullScan,
+        database: stmt.database,
         stats: combineStatementStats(stmt.stats),
         diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
       };
@@ -172,4 +194,13 @@ export const selectStatements = createSelector(
 export const selectStatementsLastError = createSelector(
   statementsSelector,
   state => state.lastError,
+);
+
+export const selectColumns = createSelector(
+  localStorageSelector,
+  // return array of columns if user have customized it or `null` otherwise
+  localStorage =>
+    localStorage["showColumns/StatementsPage"]
+      ? localStorage["showColumns/StatementsPage"].split(",")
+      : null,
 );
