@@ -972,6 +972,11 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 				row = append(row, rowenc.RandDatum(s.rnd, tree.MustBeStaticallyKnownType(c.Type), !notNull))
 			}
 		}
+
+		if len(names) == 0 {
+			return nil, nil, false
+		}
+
 		insert.Columns = names
 		insert.Rows = &tree.Select{
 			Select: &tree.ValuesClause{
