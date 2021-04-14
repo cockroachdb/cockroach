@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -533,6 +534,11 @@ func (r *Replica) leasePostApplyLocked(
 	}
 }
 
+var addSSTPreApplyWarn = struct {
+	threshold time.Duration
+	log.EveryN
+}{30 * time.Second, log.Every(5 * time.Second)}
+
 func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -557,7 +563,19 @@ func addSSTablePreApply(
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
 
+	tBegin := timeutil.Now()
+	var tEndDelayed time.Time
+	defer func() {
+		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+			log.Infof(ctx,
+				"ingesting SST of size %s at index %d took %.2fs (%.2fs on which in PreIngestDelay)",
+				humanizeutil.IBytes(int64(len(sst.Data))), index, dur.Seconds(), tEndDelayed.Sub(tBegin).Seconds(),
+			)
+		}
+	}()
+
 	eng.PreIngestDelay(ctx)
+	tEndDelayed = timeutil.Now()
 
 	copied := false
 	if eng.InMem() {
