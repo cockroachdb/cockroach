@@ -277,9 +277,15 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 			t.Errorf("%d: keys size expected %d; got %d", i, e, a)
 		}
 	}
+
+	metrics := txn.Sender().(*TxnCoordSender).Metrics()
+	require.Equal(t, int64(1), metrics.TxnsWithCondensedIntents.Count())
+	require.Equal(t, int64(1), metrics.TxnsWithCondensedIntentsGauge.Value())
+
 	if err := txn.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
+	require.Zero(t, metrics.TxnsWithCondensedIntentsGauge.Value())
 }
 
 // Test that the theartbeat loop detects aborted transactions and stops.
