@@ -667,10 +667,10 @@ with &1 (t)
            ├── columns: x.a:5 b:6 rowid:7!null
            ├── insert-mapping:
            │    ├── "?column?":10 => x.a:5
-           │    ├── column11:11 => b:6
-           │    └── column12:12 => rowid:7
+           │    ├── b_default:11 => b:6
+           │    └── rowid_default:12 => rowid:7
            └── project
-                ├── columns: column11:11 column12:12 "?column?":10
+                ├── columns: b_default:11 rowid_default:12 "?column?":10
                 ├── project
                 │    ├── columns: "?column?":10
                 │    ├── with-scan &1 (t)
@@ -680,8 +680,8 @@ with &1 (t)
                 │    └── projections
                 │         └── a:9 + 20 [as="?column?":10]
                 └── projections
-                     ├── NULL::INT8 [as=column11:11]
-                     └── unique_rowid() [as=column12:12]
+                     ├── NULL::INT8 [as=b_default:11]
+                     └── unique_rowid() [as=rowid_default:12]
 
 build
 WITH t AS (SELECT a FROM x) UPDATE x SET a = (SELECT * FROM t) RETURNING *
@@ -1426,15 +1426,15 @@ with &2
  │         ├── insert-mapping:
  │         │    ├── column1:11 => x.a:7
  │         │    ├── column2:12 => x.b:8
- │         │    └── column13:13 => rowid:9
+ │         │    └── rowid_default:13 => rowid:9
  │         └── project
- │              ├── columns: column13:13 column1:11!null column2:12!null
+ │              ├── columns: rowid_default:13 column1:11!null column2:12!null
  │              ├── values
  │              │    ├── columns: column1:11!null column2:12!null
  │              │    ├── (1, 1)
  │              │    └── (2, 2)
  │              └── projections
- │                   └── unique_rowid() [as=column13:13]
+ │                   └── unique_rowid() [as=rowid_default:13]
  └── with &3 (cte)
       ├── columns: x:18 y:19
       ├── recursive-c-t-e
@@ -1651,14 +1651,14 @@ explain
       │         ├── columns: y.a:1!null rowid:2!null
       │         ├── insert-mapping:
       │         │    ├── column1:4 => y.a:1
-      │         │    └── column5:5 => rowid:2
+      │         │    └── rowid_default:5 => rowid:2
       │         └── project
-      │              ├── columns: column5:5 column1:4!null
+      │              ├── columns: rowid_default:5 column1:4!null
       │              ├── values
       │              │    ├── columns: column1:4!null
       │              │    └── (1,)
       │              └── projections
-      │                   └── unique_rowid() [as=column5:5]
+      │                   └── unique_rowid() [as=rowid_default:5]
       └── with-scan &1 (foo)
            ├── columns: a:6!null
            └── mapping:
@@ -1682,9 +1682,9 @@ with &1 (b)
       ├── columns: <none>
       ├── insert-mapping:
       │    ├── w:6 => x:1
-      │    └── column7:7 => rowid:2
+      │    └── rowid_default:7 => rowid:2
       └── project
-           ├── columns: column7:7 w:6!null
+           ├── columns: rowid_default:7 w:6!null
            ├── project
            │    ├── columns: w:6!null
            │    ├── with-scan &1 (b)
@@ -1694,7 +1694,7 @@ with &1 (b)
            │    └── projections
            │         └── z:5 + 1 [as=w:6]
            └── projections
-                └── unique_rowid() [as=column7:7]
+                └── unique_rowid() [as=rowid_default:7]
 
 build
 SELECT

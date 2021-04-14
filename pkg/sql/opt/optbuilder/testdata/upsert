@@ -92,40 +92,40 @@ upsert abc
  ├── insert-mapping:
  │    ├── x:6 => a:1
  │    ├── y:7 => b:2
- │    ├── column11:11 => c:3
- │    └── column10:10 => rowid:4
+ │    ├── c_comp:11 => c:3
+ │    └── rowid_default:10 => rowid:4
  ├── update-mapping:
  │    └── upsert_a:19 => a:1
  └── project
-      ├── columns: upsert_a:19!null upsert_b:20 upsert_c:21 upsert_rowid:22 x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 a_new:17!null column18:18
+      ├── columns: upsert_a:19!null upsert_b:20 upsert_c:21 upsert_rowid:22 x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 a_new:17!null c_comp:18
       ├── project
-      │    ├── columns: column18:18 x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 a_new:17!null
+      │    ├── columns: c_comp:18 x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 a_new:17!null
       │    ├── project
-      │    │    ├── columns: a_new:17!null x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
+      │    │    ├── columns: a_new:17!null x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
+      │    │    │    ├── columns: x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: x:6!null y:7 column10:10 column11:11
+      │    │    │    │    ├── columns: x:6!null y:7 rowid_default:10 c_comp:11
       │    │    │    │    ├── grouping columns: x:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column11:11 x:6!null y:7 column10:10
+      │    │    │    │    │    ├── columns: c_comp:11 x:6!null y:7 rowid_default:10
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column10:10 x:6!null y:7
+      │    │    │    │    │    │    ├── columns: rowid_default:10 x:6!null y:7
       │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: x:6!null y:7
       │    │    │    │    │    │    │    └── scan xyz
       │    │    │    │    │    │    │         └── columns: x:6!null y:7 z:8 xyz.crdb_internal_mvcc_timestamp:9
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── unique_rowid() [as=column10:10]
+      │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:10]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── y:7 + 1 [as=column11:11]
+      │    │    │    │    │         └── y:7 + 1 [as=c_comp:11]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=y:7]
       │    │    │    │         │    └── y:7
-      │    │    │    │         ├── first-agg [as=column10:10]
-      │    │    │    │         │    └── column10:10
-      │    │    │    │         └── first-agg [as=column11:11]
-      │    │    │    │              └── column11:11
+      │    │    │    │         ├── first-agg [as=rowid_default:10]
+      │    │    │    │         │    └── rowid_default:10
+      │    │    │    │         └── first-agg [as=c_comp:11]
+      │    │    │    │              └── c_comp:11
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:12!null b:13 c:14 rowid:15!null abc.crdb_internal_mvcc_timestamp:16
       │    │    │    │    └── computed column expressions
@@ -136,12 +136,12 @@ upsert abc
       │    │    └── projections
       │    │         └── 5 [as=a_new:17]
       │    └── projections
-      │         └── b:13 + 1 [as=column18:18]
+      │         └── b:13 + 1 [as=c_comp:18]
       └── projections
            ├── CASE WHEN a:12 IS NULL THEN x:6 ELSE a_new:17 END [as=upsert_a:19]
            ├── CASE WHEN a:12 IS NULL THEN y:7 ELSE b:13 END [as=upsert_b:20]
-           ├── CASE WHEN a:12 IS NULL THEN column11:11 ELSE c:14 END [as=upsert_c:21]
-           └── CASE WHEN a:12 IS NULL THEN column10:10 ELSE rowid:15 END [as=upsert_rowid:22]
+           ├── CASE WHEN a:12 IS NULL THEN c_comp:11 ELSE c:14 END [as=upsert_c:21]
+           └── CASE WHEN a:12 IS NULL THEN rowid_default:10 ELSE rowid:15 END [as=upsert_rowid:22]
 
 # Set all columns, multi-column conflict.
 build
@@ -161,7 +161,7 @@ project
       ├── insert-mapping:
       │    ├── x:6 => a:1
       │    ├── y:7 => b:2
-      │    ├── column10:10 => c:3
+      │    ├── c_comp:10 => c:3
       │    └── z:8 => rowid:4
       ├── update-mapping:
       │    ├── upsert_a:20 => a:1
@@ -174,24 +174,24 @@ project
       │    ├── upsert_c:22 => c:3
       │    └── upsert_rowid:23 => rowid:4
       └── project
-           ├── columns: upsert_a:20!null upsert_b:21 upsert_c:22 upsert_rowid:23 x:6!null y:7 z:8 column10:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15 a_new:16!null b_new:17!null rowid_new:18!null column19:19!null
+           ├── columns: upsert_a:20!null upsert_b:21 upsert_c:22 upsert_rowid:23 x:6!null y:7 z:8 c_comp:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15 a_new:16!null b_new:17!null rowid_new:18!null c_comp:19!null
            ├── project
-           │    ├── columns: column19:19!null x:6!null y:7 z:8 column10:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15 a_new:16!null b_new:17!null rowid_new:18!null
+           │    ├── columns: c_comp:19!null x:6!null y:7 z:8 c_comp:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15 a_new:16!null b_new:17!null rowid_new:18!null
            │    ├── project
-           │    │    ├── columns: a_new:16!null b_new:17!null rowid_new:18!null x:6!null y:7 z:8 column10:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15
+           │    │    ├── columns: a_new:16!null b_new:17!null rowid_new:18!null x:6!null y:7 z:8 c_comp:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15
            │    │    ├── left-join (hash)
-           │    │    │    ├── columns: x:6!null y:7 z:8 column10:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15
+           │    │    │    ├── columns: x:6!null y:7 z:8 c_comp:10 a:11 b:12 c:13 rowid:14 abc.crdb_internal_mvcc_timestamp:15
            │    │    │    ├── ensure-upsert-distinct-on
-           │    │    │    │    ├── columns: x:6!null y:7 z:8 column10:10
-           │    │    │    │    ├── grouping columns: y:7 column10:10
+           │    │    │    │    ├── columns: x:6!null y:7 z:8 c_comp:10
+           │    │    │    │    ├── grouping columns: y:7 c_comp:10
            │    │    │    │    ├── project
-           │    │    │    │    │    ├── columns: column10:10 x:6!null y:7 z:8
+           │    │    │    │    │    ├── columns: c_comp:10 x:6!null y:7 z:8
            │    │    │    │    │    ├── project
            │    │    │    │    │    │    ├── columns: x:6!null y:7 z:8
            │    │    │    │    │    │    └── scan xyz
            │    │    │    │    │    │         └── columns: x:6!null y:7 z:8 xyz.crdb_internal_mvcc_timestamp:9
            │    │    │    │    │    └── projections
-           │    │    │    │    │         └── y:7 + 1 [as=column10:10]
+           │    │    │    │    │         └── y:7 + 1 [as=c_comp:10]
            │    │    │    │    └── aggregations
            │    │    │    │         ├── first-agg [as=x:6]
            │    │    │    │         │    └── x:6
@@ -204,17 +204,17 @@ project
            │    │    │    │              └── b:12 + 1
            │    │    │    └── filters
            │    │    │         ├── y:7 = b:12
-           │    │    │         └── column10:10 = c:13
+           │    │    │         └── c_comp:10 = c:13
            │    │    └── projections
            │    │         ├── 1 [as=a_new:16]
            │    │         ├── 2 [as=b_new:17]
            │    │         └── 3 [as=rowid_new:18]
            │    └── projections
-           │         └── b_new:17 + 1 [as=column19:19]
+           │         └── b_new:17 + 1 [as=c_comp:19]
            └── projections
                 ├── CASE WHEN rowid:14 IS NULL THEN x:6 ELSE a_new:16 END [as=upsert_a:20]
                 ├── CASE WHEN rowid:14 IS NULL THEN y:7 ELSE b_new:17 END [as=upsert_b:21]
-                ├── CASE WHEN rowid:14 IS NULL THEN column10:10 ELSE column19:19 END [as=upsert_c:22]
+                ├── CASE WHEN rowid:14 IS NULL THEN c_comp:10 ELSE c_comp:19 END [as=upsert_c:22]
                 └── CASE WHEN rowid:14 IS NULL THEN z:8 ELSE rowid_new:18 END [as=upsert_rowid:23]
 
 # UPDATE + WHERE clause.
@@ -233,43 +233,43 @@ upsert abc
  ├── insert-mapping:
  │    ├── x:6 => a:1
  │    ├── y:7 => b:2
- │    ├── column11:11 => c:3
- │    └── column10:10 => rowid:4
+ │    ├── c_comp:11 => c:3
+ │    └── rowid_default:10 => rowid:4
  ├── update-mapping:
  │    ├── upsert_b:20 => b:2
  │    └── upsert_c:21 => c:3
  └── project
-      ├── columns: upsert_a:19 upsert_b:20 upsert_c:21 upsert_rowid:22 x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 b_new:17!null column18:18!null
+      ├── columns: upsert_a:19 upsert_b:20 upsert_c:21 upsert_rowid:22 x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 b_new:17!null c_comp:18!null
       ├── project
-      │    ├── columns: column18:18!null x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 b_new:17!null
+      │    ├── columns: c_comp:18!null x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16 b_new:17!null
       │    ├── project
-      │    │    ├── columns: b_new:17!null x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
+      │    │    ├── columns: b_new:17!null x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
       │    │    ├── select
-      │    │    │    ├── columns: x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
+      │    │    │    ├── columns: x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
       │    │    │    ├── left-join (hash)
-      │    │    │    │    ├── columns: x:6!null y:7 column10:10 column11:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
+      │    │    │    │    ├── columns: x:6!null y:7 rowid_default:10 c_comp:11 a:12 b:13 c:14 rowid:15 abc.crdb_internal_mvcc_timestamp:16
       │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    ├── columns: x:6!null y:7 column10:10 column11:11
+      │    │    │    │    │    ├── columns: x:6!null y:7 rowid_default:10 c_comp:11
       │    │    │    │    │    ├── grouping columns: x:6!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column11:11 x:6!null y:7 column10:10
+      │    │    │    │    │    │    ├── columns: c_comp:11 x:6!null y:7 rowid_default:10
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: column10:10 x:6!null y:7
+      │    │    │    │    │    │    │    ├── columns: rowid_default:10 x:6!null y:7
       │    │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    │    ├── columns: x:6!null y:7
       │    │    │    │    │    │    │    │    └── scan xyz
       │    │    │    │    │    │    │    │         └── columns: x:6!null y:7 z:8 xyz.crdb_internal_mvcc_timestamp:9
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── unique_rowid() [as=column10:10]
+      │    │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:10]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── y:7 + 1 [as=column11:11]
+      │    │    │    │    │    │         └── y:7 + 1 [as=c_comp:11]
       │    │    │    │    │    └── aggregations
       │    │    │    │    │         ├── first-agg [as=y:7]
       │    │    │    │    │         │    └── y:7
-      │    │    │    │    │         ├── first-agg [as=column10:10]
-      │    │    │    │    │         │    └── column10:10
-      │    │    │    │    │         └── first-agg [as=column11:11]
-      │    │    │    │    │              └── column11:11
+      │    │    │    │    │         ├── first-agg [as=rowid_default:10]
+      │    │    │    │    │         │    └── rowid_default:10
+      │    │    │    │    │         └── first-agg [as=c_comp:11]
+      │    │    │    │    │              └── c_comp:11
       │    │    │    │    ├── scan abc
       │    │    │    │    │    ├── columns: a:12!null b:13 c:14 rowid:15!null abc.crdb_internal_mvcc_timestamp:16
       │    │    │    │    │    └── computed column expressions
@@ -282,12 +282,12 @@ upsert abc
       │    │    └── projections
       │    │         └── 10 [as=b_new:17]
       │    └── projections
-      │         └── b_new:17 + 1 [as=column18:18]
+      │         └── b_new:17 + 1 [as=c_comp:18]
       └── projections
            ├── CASE WHEN a:12 IS NULL THEN x:6 ELSE a:12 END [as=upsert_a:19]
            ├── CASE WHEN a:12 IS NULL THEN y:7 ELSE b_new:17 END [as=upsert_b:20]
-           ├── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column18:18 END [as=upsert_c:21]
-           └── CASE WHEN a:12 IS NULL THEN column10:10 ELSE rowid:15 END [as=upsert_rowid:22]
+           ├── CASE WHEN a:12 IS NULL THEN c_comp:11 ELSE c_comp:18 END [as=upsert_c:21]
+           └── CASE WHEN a:12 IS NULL THEN rowid_default:10 ELSE rowid:15 END [as=upsert_rowid:22]
 
 # Use RETURNING INSERT..ON CONFLICT as a FROM clause.
 build
@@ -310,8 +310,8 @@ sort
       │         ├── insert-mapping:
       │         │    ├── column1:6 => abc.a:1
       │         │    ├── column2:7 => abc.b:2
-      │         │    ├── column9:9 => abc.c:3
-      │         │    └── column8:8 => rowid:4
+      │         │    ├── c_comp:9 => abc.c:3
+      │         │    └── rowid_default:8 => rowid:4
       │         ├── update-mapping:
       │         │    ├── upsert_b:18 => abc.b:2
       │         │    └── upsert_c:19 => abc.c:3
@@ -321,35 +321,35 @@ sort
       │         │    ├── upsert_c:19 => abc.c:3
       │         │    └── upsert_rowid:20 => rowid:4
       │         └── project
-      │              ├── columns: upsert_a:17 upsert_b:18!null upsert_c:19!null upsert_rowid:20 column1:6!null column2:7!null column8:8 column9:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14 b_new:15!null column16:16!null
+      │              ├── columns: upsert_a:17 upsert_b:18!null upsert_c:19!null upsert_rowid:20 column1:6!null column2:7!null rowid_default:8 c_comp:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_comp:16!null
       │              ├── project
-      │              │    ├── columns: column16:16!null column1:6!null column2:7!null column8:8 column9:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14 b_new:15!null
+      │              │    ├── columns: c_comp:16!null column1:6!null column2:7!null rowid_default:8 c_comp:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14 b_new:15!null
       │              │    ├── project
-      │              │    │    ├── columns: b_new:15!null column1:6!null column2:7!null column8:8 column9:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │              │    │    ├── columns: b_new:15!null column1:6!null column2:7!null rowid_default:8 c_comp:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │              │    │    ├── left-join (hash)
-      │              │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │              │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │              │    │    │    ├── ensure-upsert-distinct-on
-      │              │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null
+      │              │    │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null
       │              │    │    │    │    ├── grouping columns: column1:6!null
       │              │    │    │    │    ├── project
-      │              │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8
+      │              │    │    │    │    │    ├── columns: c_comp:9!null column1:6!null column2:7!null rowid_default:8
       │              │    │    │    │    │    ├── project
-      │              │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │              │    │    │    │    │    │    ├── columns: rowid_default:8 column1:6!null column2:7!null
       │              │    │    │    │    │    │    ├── values
       │              │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │              │    │    │    │    │    │    │    ├── (1, 2)
       │              │    │    │    │    │    │    │    └── (3, 4)
       │              │    │    │    │    │    │    └── projections
-      │              │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
+      │              │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:8]
       │              │    │    │    │    │    └── projections
-      │              │    │    │    │    │         └── column2:7 + 1 [as=column9:9]
+      │              │    │    │    │    │         └── column2:7 + 1 [as=c_comp:9]
       │              │    │    │    │    └── aggregations
       │              │    │    │    │         ├── first-agg [as=column2:7]
       │              │    │    │    │         │    └── column2:7
-      │              │    │    │    │         ├── first-agg [as=column8:8]
-      │              │    │    │    │         │    └── column8:8
-      │              │    │    │    │         └── first-agg [as=column9:9]
-      │              │    │    │    │              └── column9:9
+      │              │    │    │    │         ├── first-agg [as=rowid_default:8]
+      │              │    │    │    │         │    └── rowid_default:8
+      │              │    │    │    │         └── first-agg [as=c_comp:9]
+      │              │    │    │    │              └── c_comp:9
       │              │    │    │    ├── scan abc
       │              │    │    │    │    ├── columns: abc.a:10!null abc.b:11 abc.c:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │              │    │    │    │    └── computed column expressions
@@ -360,12 +360,12 @@ sort
       │              │    │    └── projections
       │              │    │         └── 1 [as=b_new:15]
       │              │    └── projections
-      │              │         └── b_new:15 + 1 [as=column16:16]
+      │              │         └── b_new:15 + 1 [as=c_comp:16]
       │              └── projections
       │                   ├── CASE WHEN abc.a:10 IS NULL THEN column1:6 ELSE abc.a:10 END [as=upsert_a:17]
       │                   ├── CASE WHEN abc.a:10 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:18]
-      │                   ├── CASE WHEN abc.a:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_c:19]
-      │                   └── CASE WHEN abc.a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
+      │                   ├── CASE WHEN abc.a:10 IS NULL THEN c_comp:9 ELSE c_comp:16 END [as=upsert_c:19]
+      │                   └── CASE WHEN abc.a:10 IS NULL THEN rowid_default:8 ELSE rowid:13 END [as=upsert_rowid:20]
       └── with-scan &1
            ├── columns: a:21!null b:22!null c:23!null
            └── mapping:
@@ -388,39 +388,39 @@ upsert abc [as=tab]
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column9:9 => c:3
- │    └── column8:8 => rowid:4
+ │    ├── c_comp:9 => c:3
+ │    └── rowid_default:8 => rowid:4
  ├── update-mapping:
  │    └── upsert_a:17 => a:1
  └── project
-      ├── columns: upsert_a:17 upsert_b:18 upsert_c:19 upsert_rowid:20 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15 column16:16
+      ├── columns: upsert_a:17 upsert_b:18 upsert_c:19 upsert_rowid:20 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15 c_comp:16
       ├── project
-      │    ├── columns: column16:16 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15
+      │    ├── columns: c_comp:16 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15
       │    ├── project
-      │    │    ├── columns: a_new:15 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │    │    ├── columns: a_new:15 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null
       │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8
+      │    │    │    │    │    ├── columns: c_comp:9!null column1:6!null column2:7!null rowid_default:8
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── columns: rowid_default:8 column1:6!null column2:7!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
+      │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column2:7 + 1 [as=column9:9]
+      │    │    │    │    │         └── column2:7 + 1 [as=c_comp:9]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column2:7]
       │    │    │    │         │    └── column2:7
-      │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │         │    └── column8:8
-      │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │              └── column9:9
+      │    │    │    │         ├── first-agg [as=rowid_default:8]
+      │    │    │    │         │    └── rowid_default:8
+      │    │    │    │         └── first-agg [as=c_comp:9]
+      │    │    │    │              └── c_comp:9
       │    │    │    ├── scan abc [as=tab]
       │    │    │    │    ├── columns: a:10!null b:11 c:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    │    │    │    └── computed column expressions
@@ -431,12 +431,12 @@ upsert abc [as=tab]
       │    │    └── projections
       │    │         └── a:10 * column1:6 [as=a_new:15]
       │    └── projections
-      │         └── b:11 + 1 [as=column16:16]
+      │         └── b:11 + 1 [as=c_comp:16]
       └── projections
            ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:17]
            ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b:11 END [as=upsert_b:18]
-           ├── CASE WHEN a:10 IS NULL THEN column9:9 ELSE c:12 END [as=upsert_c:19]
-           └── CASE WHEN a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
+           ├── CASE WHEN a:10 IS NULL THEN c_comp:9 ELSE c:12 END [as=upsert_c:19]
+           └── CASE WHEN a:10 IS NULL THEN rowid_default:8 ELSE rowid:13 END [as=upsert_rowid:20]
 
 # Conflict columns are in different order than index key columns.
 build
@@ -453,37 +453,37 @@ upsert abc
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column9:9 => c:3
- │    └── column8:8 => rowid:4
+ │    ├── c_comp:9 => c:3
+ │    └── rowid_default:8 => rowid:4
  ├── update-mapping:
  │    └── upsert_a:17 => a:1
  └── project
-      ├── columns: upsert_a:17!null upsert_b:18 upsert_c:19 upsert_rowid:20 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15!null column16:16
+      ├── columns: upsert_a:17!null upsert_b:18 upsert_c:19 upsert_rowid:20 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15!null c_comp:16
       ├── project
-      │    ├── columns: column16:16 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15!null
+      │    ├── columns: c_comp:16 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15!null
       │    ├── project
-      │    │    ├── columns: a_new:15!null column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │    │    ├── columns: a_new:15!null column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null
-      │    │    │    │    ├── grouping columns: column2:7!null column9:9!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null
+      │    │    │    │    ├── grouping columns: column2:7!null c_comp:9!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8
+      │    │    │    │    │    ├── columns: c_comp:9!null column1:6!null column2:7!null rowid_default:8
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── columns: rowid_default:8 column1:6!null column2:7!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
+      │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column2:7 + 1 [as=column9:9]
+      │    │    │    │    │         └── column2:7 + 1 [as=c_comp:9]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column1:6]
       │    │    │    │         │    └── column1:6
-      │    │    │    │         └── first-agg [as=column8:8]
-      │    │    │    │              └── column8:8
+      │    │    │    │         └── first-agg [as=rowid_default:8]
+      │    │    │    │              └── rowid_default:8
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:10!null b:11 c:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    │    │    │    └── computed column expressions
@@ -491,16 +491,16 @@ upsert abc
       │    │    │    │              └── b:11 + 1
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:11
-      │    │    │         └── column9:9 = c:12
+      │    │    │         └── c_comp:9 = c:12
       │    │    └── projections
       │    │         └── 5 [as=a_new:15]
       │    └── projections
-      │         └── b:11 + 1 [as=column16:16]
+      │         └── b:11 + 1 [as=c_comp:16]
       └── projections
            ├── CASE WHEN rowid:13 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:17]
            ├── CASE WHEN rowid:13 IS NULL THEN column2:7 ELSE b:11 END [as=upsert_b:18]
-           ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE c:12 END [as=upsert_c:19]
-           └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
+           ├── CASE WHEN rowid:13 IS NULL THEN c_comp:9 ELSE c:12 END [as=upsert_c:19]
+           └── CASE WHEN rowid:13 IS NULL THEN rowid_default:8 ELSE rowid:13 END [as=upsert_rowid:20]
 
 # Conflict columns don't match unique index (too few columns).
 build
@@ -787,41 +787,41 @@ upsert abc
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column9:9 => c:3
- │    └── column8:8 => rowid:4
+ │    ├── c_comp:9 => c:3
+ │    └── rowid_default:8 => rowid:4
  ├── update-mapping:
  │    ├── upsert_a:21 => a:1
  │    ├── upsert_b:22 => b:2
  │    └── upsert_c:23 => c:3
  └── project
-      ├── columns: upsert_a:21 upsert_b:22 upsert_c:23 upsert_rowid:24 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14 x:15 "?column?":19 column20:20
+      ├── columns: upsert_a:21 upsert_b:22 upsert_c:23 upsert_rowid:24 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14 x:15 "?column?":19 c_comp:20
       ├── project
-      │    ├── columns: column20:20 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14 x:15 "?column?":19
+      │    ├── columns: c_comp:20 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14 x:15 "?column?":19
       │    ├── left-join-apply
-      │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14 x:15 "?column?":19
+      │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14 x:15 "?column?":19
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 abc.crdb_internal_mvcc_timestamp:14
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null
       │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8
+      │    │    │    │    │    ├── columns: c_comp:9!null column1:6!null column2:7!null rowid_default:8
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── columns: rowid_default:8 column1:6!null column2:7!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
+      │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column2:7 + 1 [as=column9:9]
+      │    │    │    │    │         └── column2:7 + 1 [as=c_comp:9]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column2:7]
       │    │    │    │         │    └── column2:7
-      │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │         │    └── column8:8
-      │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │              └── column9:9
+      │    │    │    │         ├── first-agg [as=rowid_default:8]
+      │    │    │    │         │    └── rowid_default:8
+      │    │    │    │         └── first-agg [as=c_comp:9]
+      │    │    │    │              └── c_comp:9
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:10!null b:11 c:12 rowid:13!null abc.crdb_internal_mvcc_timestamp:14
       │    │    │    │    └── computed column expressions
@@ -843,12 +843,12 @@ upsert abc
       │    │    │              └── y:16 + column2:7 [as="?column?":19]
       │    │    └── filters (true)
       │    └── projections
-      │         └── x:15 + 1 [as=column20:20]
+      │         └── x:15 + 1 [as=c_comp:20]
       └── projections
            ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE "?column?":19 END [as=upsert_a:21]
            ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE x:15 END [as=upsert_b:22]
-           ├── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column20:20 END [as=upsert_c:23]
-           └── CASE WHEN a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:24]
+           ├── CASE WHEN a:10 IS NULL THEN c_comp:9 ELSE c_comp:20 END [as=upsert_c:23]
+           └── CASE WHEN a:10 IS NULL THEN rowid_default:8 ELSE rowid:13 END [as=upsert_rowid:24]
 
 # Default expressions.
 build
@@ -865,41 +865,41 @@ upsert abc
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column9:9 => c:3
- │    └── column8:8 => rowid:4
+ │    ├── c_comp:9 => c:3
+ │    └── rowid_default:8 => rowid:4
  ├── update-mapping:
  │    ├── upsert_a:18 => a:1
  │    ├── upsert_b:19 => b:2
  │    └── upsert_c:20 => c:3
  └── project
-      ├── columns: upsert_a:18 upsert_b:19!null upsert_c:20!null upsert_rowid:21 column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15 b_new:16!null column17:17!null
+      ├── columns: upsert_a:18 upsert_b:19!null upsert_c:20!null upsert_rowid:21 column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15 b_new:16!null c_comp:17!null
       ├── project
-      │    ├── columns: column17:17!null column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15 b_new:16!null
+      │    ├── columns: c_comp:17!null column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14 a_new:15 b_new:16!null
       │    ├── project
-      │    │    ├── columns: a_new:15 b_new:16!null column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │    │    ├── columns: a_new:15 b_new:16!null column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null a:10 b:11 c:12 rowid:13 crdb_internal_mvcc_timestamp:14
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null
+      │    │    │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null
       │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8
+      │    │    │    │    │    ├── columns: c_comp:9!null column1:6!null column2:7!null rowid_default:8
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── columns: rowid_default:8 column1:6!null column2:7!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── unique_rowid() [as=column8:8]
+      │    │    │    │    │    │         └── unique_rowid() [as=rowid_default:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column2:7 + 1 [as=column9:9]
+      │    │    │    │    │         └── column2:7 + 1 [as=c_comp:9]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column2:7]
       │    │    │    │         │    └── column2:7
-      │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │         │    └── column8:8
-      │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │              └── column9:9
+      │    │    │    │         ├── first-agg [as=rowid_default:8]
+      │    │    │    │         │    └── rowid_default:8
+      │    │    │    │         └── first-agg [as=c_comp:9]
+      │    │    │    │              └── c_comp:9
       │    │    │    ├── scan abc
       │    │    │    │    ├── columns: a:10!null b:11 c:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    │    │    │    └── computed column expressions
@@ -911,12 +911,12 @@ upsert abc
       │    │         ├── NULL::INT8 [as=a_new:15]
       │    │         └── 10 [as=b_new:16]
       │    └── projections
-      │         └── b_new:16 + 1 [as=column17:17]
+      │         └── b_new:16 + 1 [as=c_comp:17]
       └── projections
            ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:18]
            ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b_new:16 END [as=upsert_b:19]
-           ├── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column17:17 END [as=upsert_c:20]
-           └── CASE WHEN a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:21]
+           ├── CASE WHEN a:10 IS NULL THEN c_comp:9 ELSE c_comp:17 END [as=upsert_c:20]
+           └── CASE WHEN a:10 IS NULL THEN rowid_default:8 ELSE rowid:13 END [as=upsert_rowid:21]
 
 # ------------------------------------------------------------------------------
 # Test mutation columns.
@@ -936,44 +936,44 @@ upsert mutation
  ├── insert-mapping:
  │    ├── column1:7 => m:1
  │    ├── column2:8 => n:2
- │    ├── column9:9 => o:3
- │    └── column10:10 => p:4
+ │    ├── o_default:9 => o:3
+ │    └── p_comp:10 => p:4
  ├── update-mapping:
  │    ├── upsert_m:19 => m:1
- │    ├── column9:9 => o:3
+ │    ├── o_default:9 => o:3
  │    └── upsert_p:21 => p:4
  ├── check columns: check1:22
  └── project
-      ├── columns: check1:22 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 m_new:17 column18:18 upsert_m:19 upsert_n:20 upsert_p:21
+      ├── columns: check1:22 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 m_new:17 p_comp:18 upsert_m:19 upsert_n:20 upsert_p:21
       ├── project
-      │    ├── columns: upsert_m:19 upsert_n:20 upsert_p:21 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 m_new:17 column18:18
+      │    ├── columns: upsert_m:19 upsert_n:20 upsert_p:21 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 m_new:17 p_comp:18
       │    ├── project
-      │    │    ├── columns: column18:18 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 m_new:17
+      │    │    ├── columns: p_comp:18 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 m_new:17
       │    │    ├── project
-      │    │    │    ├── columns: m_new:17 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
+      │    │    │    ├── columns: m_new:17 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    │    ├── left-join (hash)
-      │    │    │    │    ├── columns: column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
+      │    │    │    │    ├── columns: column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    ├── columns: column1:7!null column2:8!null column9:9!null column10:10!null
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null o_default:9!null p_comp:10!null
       │    │    │    │    │    ├── grouping columns: column1:7!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column10:10!null column1:7!null column2:8!null column9:9!null
+      │    │    │    │    │    │    ├── columns: p_comp:10!null column1:7!null column2:8!null o_default:9!null
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: column9:9!null column1:7!null column2:8!null
+      │    │    │    │    │    │    │    ├── columns: o_default:9!null column1:7!null column2:8!null
       │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
       │    │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── 10 [as=column9:9]
+      │    │    │    │    │    │    │         └── 10 [as=o_default:9]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── column9:9 + column2:8 [as=column10:10]
+      │    │    │    │    │    │         └── o_default:9 + column2:8 [as=p_comp:10]
       │    │    │    │    │    └── aggregations
       │    │    │    │    │         ├── first-agg [as=column2:8]
       │    │    │    │    │         │    └── column2:8
-      │    │    │    │    │         ├── first-agg [as=column9:9]
-      │    │    │    │    │         │    └── column9:9
-      │    │    │    │    │         └── first-agg [as=column10:10]
-      │    │    │    │    │              └── column10:10
+      │    │    │    │    │         ├── first-agg [as=o_default:9]
+      │    │    │    │    │         │    └── o_default:9
+      │    │    │    │    │         └── first-agg [as=p_comp:10]
+      │    │    │    │    │              └── p_comp:10
       │    │    │    │    ├── scan mutation
       │    │    │    │    │    ├── columns: m:11!null n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    │    │    │    └── check constraint expressions
@@ -983,11 +983,11 @@ upsert mutation
       │    │    │    └── projections
       │    │    │         └── m:11 + 1 [as=m_new:17]
       │    │    └── projections
-      │    │         └── column9:9 + n:12 [as=column18:18]
+      │    │         └── o_default:9 + n:12 [as=p_comp:18]
       │    └── projections
       │         ├── CASE WHEN m:11 IS NULL THEN column1:7 ELSE m_new:17 END [as=upsert_m:19]
       │         ├── CASE WHEN m:11 IS NULL THEN column2:8 ELSE n:12 END [as=upsert_n:20]
-      │         └── CASE WHEN m:11 IS NULL THEN column10:10 ELSE column18:18 END [as=upsert_p:21]
+      │         └── CASE WHEN m:11 IS NULL THEN p_comp:10 ELSE p_comp:18 END [as=upsert_p:21]
       └── projections
            └── upsert_m:19 > 0 [as=check1:22]
 
@@ -1006,28 +1006,28 @@ upsert xyz
  ├── fetch columns: x:7 y:8 z:9
  ├── insert-mapping:
  │    ├── column1:5 => x:1
- │    ├── column6:6 => y:2
- │    └── column6:6 => z:3
+ │    ├── y_default:6 => y:2
+ │    └── y_default:6 => z:3
  ├── update-mapping:
- │    ├── column6:6 => y:2
- │    └── column6:6 => z:3
+ │    ├── y_default:6 => y:2
+ │    └── y_default:6 => z:3
  └── project
-      ├── columns: upsert_x:11 column1:5!null column6:6 x:7 y:8 z:9 crdb_internal_mvcc_timestamp:10
+      ├── columns: upsert_x:11 column1:5!null y_default:6 x:7 y:8 z:9 crdb_internal_mvcc_timestamp:10
       ├── left-join (hash)
-      │    ├── columns: column1:5!null column6:6 x:7 y:8 z:9 crdb_internal_mvcc_timestamp:10
+      │    ├── columns: column1:5!null y_default:6 x:7 y:8 z:9 crdb_internal_mvcc_timestamp:10
       │    ├── ensure-upsert-distinct-on
-      │    │    ├── columns: column1:5!null column6:6
+      │    │    ├── columns: column1:5!null y_default:6
       │    │    ├── grouping columns: column1:5!null
       │    │    ├── project
-      │    │    │    ├── columns: column6:6 column1:5!null
+      │    │    │    ├── columns: y_default:6 column1:5!null
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:5!null
       │    │    │    │    └── (1,)
       │    │    │    └── projections
-      │    │    │         └── NULL::INT8 [as=column6:6]
+      │    │    │         └── NULL::INT8 [as=y_default:6]
       │    │    └── aggregations
-      │    │         └── first-agg [as=column6:6]
-      │    │              └── column6:6
+      │    │         └── first-agg [as=y_default:6]
+      │    │              └── y_default:6
       │    ├── scan xyz
       │    │    └── columns: x:7!null y:8 z:9 crdb_internal_mvcc_timestamp:10
       │    └── filters
@@ -1064,51 +1064,51 @@ with &1
  │         ├── insert-mapping:
  │         │    ├── column1:6 => abc.a:1
  │         │    ├── column2:7 => abc.b:2
- │         │    ├── column9:9 => abc.c:3
- │         │    └── column8:8 => rowid:4
+ │         │    ├── c_comp:9 => abc.c:3
+ │         │    └── rowid_default:8 => rowid:4
  │         ├── update-mapping:
  │         │    ├── column1:6 => abc.a:1
  │         │    ├── column2:7 => abc.b:2
- │         │    └── column9:9 => abc.c:3
+ │         │    └── c_comp:9 => abc.c:3
  │         ├── return-mapping:
  │         │    ├── column1:6 => abc.a:1
  │         │    ├── column2:7 => abc.b:2
- │         │    ├── column9:9 => abc.c:3
+ │         │    ├── c_comp:9 => abc.c:3
  │         │    └── upsert_rowid:15 => rowid:4
  │         └── project
- │              ├── columns: upsert_rowid:15 column1:6!null column2:7!null column8:8 column9:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+ │              ├── columns: upsert_rowid:15 column1:6!null column2:7!null rowid_default:8 c_comp:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
  │              ├── left-join (hash)
- │              │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
+ │              │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null abc.a:10 abc.b:11 abc.c:12 rowid:13 crdb_internal_mvcc_timestamp:14
  │              │    ├── ensure-upsert-distinct-on
- │              │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9!null
- │              │    │    ├── grouping columns: column8:8
+ │              │    │    ├── columns: column1:6!null column2:7!null rowid_default:8 c_comp:9!null
+ │              │    │    ├── grouping columns: rowid_default:8
  │              │    │    ├── project
- │              │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column8:8
+ │              │    │    │    ├── columns: c_comp:9!null column1:6!null column2:7!null rowid_default:8
  │              │    │    │    ├── project
- │              │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+ │              │    │    │    │    ├── columns: rowid_default:8 column1:6!null column2:7!null
  │              │    │    │    │    ├── values
  │              │    │    │    │    │    ├── columns: column1:6!null column2:7!null
  │              │    │    │    │    │    └── (1, 2)
  │              │    │    │    │    └── projections
- │              │    │    │    │         └── unique_rowid() [as=column8:8]
+ │              │    │    │    │         └── unique_rowid() [as=rowid_default:8]
  │              │    │    │    └── projections
- │              │    │    │         └── column2:7 + 1 [as=column9:9]
+ │              │    │    │         └── column2:7 + 1 [as=c_comp:9]
  │              │    │    └── aggregations
  │              │    │         ├── first-agg [as=column1:6]
  │              │    │         │    └── column1:6
  │              │    │         ├── first-agg [as=column2:7]
  │              │    │         │    └── column2:7
- │              │    │         └── first-agg [as=column9:9]
- │              │    │              └── column9:9
+ │              │    │         └── first-agg [as=c_comp:9]
+ │              │    │              └── c_comp:9
  │              │    ├── scan abc
  │              │    │    ├── columns: abc.a:10!null abc.b:11 abc.c:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              │    │    └── computed column expressions
  │              │    │         └── abc.c:12
  │              │    │              └── abc.b:11 + 1
  │              │    └── filters
- │              │         └── column8:8 = rowid:13
+ │              │         └── rowid_default:8 = rowid:13
  │              └── projections
- │                   └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:15]
+ │                   └── CASE WHEN rowid:13 IS NULL THEN rowid_default:8 ELSE rowid:13 END [as=upsert_rowid:15]
  └── with-scan &1
       ├── columns: a:16!null b:17!null c:18!null
       └── mapping:
@@ -1185,35 +1185,35 @@ upsert checks
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
  │    ├── column3:8 => c:3
- │    └── column9:9 => d:4
+ │    └── d_comp:9 => d:4
  ├── update-mapping:
  │    ├── column2:7 => b:2
  │    ├── column3:8 => c:3
- │    └── column9:9 => d:4
+ │    └── d_comp:9 => d:4
  ├── check columns: check1:16 check2:17
  └── project
-      ├── columns: check1:16!null check2:17 column1:6!null column2:7!null column3:8!null column9:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 upsert_a:15
+      ├── columns: check1:16!null check2:17 column1:6!null column2:7!null column3:8!null d_comp:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 upsert_a:15
       ├── project
-      │    ├── columns: upsert_a:15 column1:6!null column2:7!null column3:8!null column9:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    ├── columns: upsert_a:15 column1:6!null column2:7!null column3:8!null d_comp:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    ├── left-join (hash)
-      │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    ├── columns: column1:6!null column2:7!null column3:8!null d_comp:9!null a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    ├── ensure-upsert-distinct-on
-      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column9:9!null
+      │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null d_comp:9!null
       │    │    │    ├── grouping columns: column1:6!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column9:9!null column1:6!null column2:7!null column3:8!null
+      │    │    │    │    ├── columns: d_comp:9!null column1:6!null column2:7!null column3:8!null
       │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │    │    │    │    │    └── (1, 2, 3)
       │    │    │    │    └── projections
-      │    │    │    │         └── column3:8 + 1 [as=column9:9]
+      │    │    │    │         └── column3:8 + 1 [as=d_comp:9]
       │    │    │    └── aggregations
       │    │    │         ├── first-agg [as=column2:7]
       │    │    │         │    └── column2:7
       │    │    │         ├── first-agg [as=column3:8]
       │    │    │         │    └── column3:8
-      │    │    │         └── first-agg [as=column9:9]
-      │    │    │              └── column9:9
+      │    │    │         └── first-agg [as=d_comp:9]
+      │    │    │              └── d_comp:9
       │    │    ├── scan checks
       │    │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    │    ├── check constraint expressions
@@ -1226,7 +1226,7 @@ upsert checks
       │    └── projections
       │         └── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:15]
       └── projections
-           ├── column2:7 < column9:9 [as=check1:16]
+           ├── column2:7 < d_comp:9 [as=check1:16]
            └── upsert_a:15 > 0 [as=check2:17]
 
 # Ensure that mutation columns are set by the insert and update. Use explicit
@@ -1242,40 +1242,40 @@ upsert mutation
  ├── insert-mapping:
  │    ├── column1:7 => m:1
  │    ├── column2:8 => n:2
- │    ├── column9:9 => o:3
- │    └── column10:10 => p:4
+ │    ├── o_default:9 => o:3
+ │    └── p_comp:10 => p:4
  ├── update-mapping:
  │    ├── column2:8 => n:2
- │    ├── column9:9 => o:3
- │    └── column10:10 => p:4
+ │    ├── o_default:9 => o:3
+ │    └── p_comp:10 => p:4
  ├── check columns: check1:18
  └── project
-      ├── columns: check1:18 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 upsert_m:17
+      ├── columns: check1:18 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 upsert_m:17
       ├── project
-      │    ├── columns: upsert_m:17 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
+      │    ├── columns: upsert_m:17 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    ├── left-join (hash)
-      │    │    ├── columns: column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
+      │    │    ├── columns: column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    ├── ensure-upsert-distinct-on
-      │    │    │    ├── columns: column1:7!null column2:8!null column9:9!null column10:10!null
+      │    │    │    ├── columns: column1:7!null column2:8!null o_default:9!null p_comp:10!null
       │    │    │    ├── grouping columns: column1:7!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column10:10!null column1:7!null column2:8!null column9:9!null
+      │    │    │    │    ├── columns: p_comp:10!null column1:7!null column2:8!null o_default:9!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:7!null column2:8!null
+      │    │    │    │    │    ├── columns: o_default:9!null column1:7!null column2:8!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
       │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── 10 [as=column9:9]
+      │    │    │    │    │         └── 10 [as=o_default:9]
       │    │    │    │    └── projections
-      │    │    │    │         └── column9:9 + column2:8 [as=column10:10]
+      │    │    │    │         └── o_default:9 + column2:8 [as=p_comp:10]
       │    │    │    └── aggregations
       │    │    │         ├── first-agg [as=column2:8]
       │    │    │         │    └── column2:8
-      │    │    │         ├── first-agg [as=column9:9]
-      │    │    │         │    └── column9:9
-      │    │    │         └── first-agg [as=column10:10]
-      │    │    │              └── column10:10
+      │    │    │         ├── first-agg [as=o_default:9]
+      │    │    │         │    └── o_default:9
+      │    │    │         └── first-agg [as=p_comp:10]
+      │    │    │              └── p_comp:10
       │    │    ├── scan mutation
       │    │    │    ├── columns: m:11!null n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    │    └── check constraint expressions
@@ -1300,40 +1300,40 @@ upsert mutation
  ├── insert-mapping:
  │    ├── column1:7 => m:1
  │    ├── column2:8 => n:2
- │    ├── column9:9 => o:3
- │    └── column10:10 => p:4
+ │    ├── o_default:9 => o:3
+ │    └── p_comp:10 => p:4
  ├── update-mapping:
  │    ├── column2:8 => n:2
- │    ├── column9:9 => o:3
- │    └── column10:10 => p:4
+ │    ├── o_default:9 => o:3
+ │    └── p_comp:10 => p:4
  ├── check columns: check1:18
  └── project
-      ├── columns: check1:18 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 upsert_m:17
+      ├── columns: check1:18 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16 upsert_m:17
       ├── project
-      │    ├── columns: upsert_m:17 column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
+      │    ├── columns: upsert_m:17 column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    ├── left-join (hash)
-      │    │    ├── columns: column1:7!null column2:8!null column9:9!null column10:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
+      │    │    ├── columns: column1:7!null column2:8!null o_default:9!null p_comp:10!null m:11 n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    ├── ensure-upsert-distinct-on
-      │    │    │    ├── columns: column1:7!null column2:8!null column9:9!null column10:10!null
+      │    │    │    ├── columns: column1:7!null column2:8!null o_default:9!null p_comp:10!null
       │    │    │    ├── grouping columns: column1:7!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column10:10!null column1:7!null column2:8!null column9:9!null
+      │    │    │    │    ├── columns: p_comp:10!null column1:7!null column2:8!null o_default:9!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9!null column1:7!null column2:8!null
+      │    │    │    │    │    ├── columns: o_default:9!null column1:7!null column2:8!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
       │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── 10 [as=column9:9]
+      │    │    │    │    │         └── 10 [as=o_default:9]
       │    │    │    │    └── projections
-      │    │    │    │         └── column9:9 + column2:8 [as=column10:10]
+      │    │    │    │         └── o_default:9 + column2:8 [as=p_comp:10]
       │    │    │    └── aggregations
       │    │    │         ├── first-agg [as=column2:8]
       │    │    │         │    └── column2:8
-      │    │    │         ├── first-agg [as=column9:9]
-      │    │    │         │    └── column9:9
-      │    │    │         └── first-agg [as=column10:10]
-      │    │    │              └── column10:10
+      │    │    │         ├── first-agg [as=o_default:9]
+      │    │    │         │    └── o_default:9
+      │    │    │         └── first-agg [as=p_comp:10]
+      │    │    │              └── p_comp:10
       │    │    ├── scan mutation
       │    │    │    ├── columns: m:11!null n:12 o:13 p:14 q:15 crdb_internal_mvcc_timestamp:16
       │    │    │    └── check constraint expressions
@@ -1367,44 +1367,44 @@ upsert checks
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column8:8 => c:3
- │    └── column9:9 => d:4
+ │    ├── c_default:8 => c:3
+ │    └── d_comp:9 => d:4
  ├── update-mapping:
  │    ├── upsert_b:19 => b:2
  │    ├── upsert_c:20 => c:3
  │    └── upsert_d:21 => d:4
  ├── check columns: check1:22 check2:23
  └── project
-      ├── columns: check1:22 check2:23 column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_new:16!null column17:17!null upsert_a:18 upsert_b:19!null upsert_c:20 upsert_d:21
+      ├── columns: check1:22 check2:23 column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_new:16!null d_comp:17!null upsert_a:18 upsert_b:19!null upsert_c:20 upsert_d:21
       ├── project
-      │    ├── columns: upsert_a:18 upsert_b:19!null upsert_c:20 upsert_d:21 column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_new:16!null column17:17!null
+      │    ├── columns: upsert_a:18 upsert_b:19!null upsert_c:20 upsert_d:21 column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_new:16!null d_comp:17!null
       │    ├── project
-      │    │    ├── columns: column17:17!null column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_new:16!null
+      │    │    ├── columns: d_comp:17!null column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null c_new:16!null
       │    │    ├── project
-      │    │    │    ├── columns: b_new:15!null c_new:16!null column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── columns: b_new:15!null c_new:16!null column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    │    ├── left-join (hash)
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    │    ├── columns: column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
+      │    │    │    │    │    ├── columns: column1:6!null column2:7!null c_default:8 d_comp:9
       │    │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column9:9 column1:6!null column2:7!null column8:8
+      │    │    │    │    │    │    ├── columns: d_comp:9 column1:6!null column2:7!null c_default:8
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    │    │    ├── columns: c_default:8 column1:6!null column2:7!null
       │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── NULL::INT8 [as=column8:8]
+      │    │    │    │    │    │    │         └── NULL::INT8 [as=c_default:8]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── column8:8 + 1 [as=column9:9]
+      │    │    │    │    │    │         └── c_default:8 + 1 [as=d_comp:9]
       │    │    │    │    │    └── aggregations
       │    │    │    │    │         ├── first-agg [as=column2:7]
       │    │    │    │    │         │    └── column2:7
-      │    │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │    │         │    └── column8:8
-      │    │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │    │              └── column9:9
+      │    │    │    │    │         ├── first-agg [as=c_default:8]
+      │    │    │    │    │         │    └── c_default:8
+      │    │    │    │    │         └── first-agg [as=d_comp:9]
+      │    │    │    │    │              └── d_comp:9
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    │    │    │    ├── check constraint expressions
@@ -1418,12 +1418,12 @@ upsert checks
       │    │    │         ├── 3 [as=b_new:15]
       │    │    │         └── 4 [as=c_new:16]
       │    │    └── projections
-      │    │         └── c_new:16 + 1 [as=column17:17]
+      │    │         └── c_new:16 + 1 [as=d_comp:17]
       │    └── projections
       │         ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:18]
       │         ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:19]
-      │         ├── CASE WHEN a:10 IS NULL THEN column8:8 ELSE c_new:16 END [as=upsert_c:20]
-      │         └── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column17:17 END [as=upsert_d:21]
+      │         ├── CASE WHEN a:10 IS NULL THEN c_default:8 ELSE c_new:16 END [as=upsert_c:20]
+      │         └── CASE WHEN a:10 IS NULL THEN d_comp:9 ELSE d_comp:17 END [as=upsert_d:21]
       └── projections
            ├── upsert_b:19 < upsert_d:21 [as=check1:22]
            └── upsert_a:18 > 0 [as=check2:23]
@@ -1438,27 +1438,27 @@ insert checks
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column8:8 => c:3
- │    └── column9:9 => d:4
+ │    ├── c_default:8 => c:3
+ │    └── d_comp:9 => d:4
  ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:15 check2:16!null column1:6!null column2:7!null column8:8 column9:9
+      ├── columns: check1:15 check2:16!null column1:6!null column2:7!null c_default:8 d_comp:9
       ├── upsert-distinct-on
-      │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
+      │    ├── columns: column1:6!null column2:7!null c_default:8 d_comp:9
       │    ├── grouping columns: column1:6!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
+      │    │    ├── columns: column1:6!null column2:7!null c_default:8 d_comp:9
       │    │    ├── project
-      │    │    │    ├── columns: column9:9 column1:6!null column2:7!null column8:8
+      │    │    │    ├── columns: d_comp:9 column1:6!null column2:7!null c_default:8
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    ├── columns: c_default:8 column1:6!null column2:7!null
       │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    └── (1, 2)
       │    │    │    │    └── projections
-      │    │    │    │         └── NULL::INT8 [as=column8:8]
+      │    │    │    │         └── NULL::INT8 [as=c_default:8]
       │    │    │    └── projections
-      │    │    │         └── column8:8 + 1 [as=column9:9]
+      │    │    │         └── c_default:8 + 1 [as=d_comp:9]
       │    │    ├── scan checks
       │    │    │    ├── columns: a:10!null b:11 c:12 d:13
       │    │    │    ├── check constraint expressions
@@ -1471,12 +1471,12 @@ insert checks
       │    └── aggregations
       │         ├── first-agg [as=column2:7]
       │         │    └── column2:7
-      │         ├── first-agg [as=column8:8]
-      │         │    └── column8:8
-      │         └── first-agg [as=column9:9]
-      │              └── column9:9
+      │         ├── first-agg [as=c_default:8]
+      │         │    └── c_default:8
+      │         └── first-agg [as=d_comp:9]
+      │              └── d_comp:9
       └── projections
-           ├── column2:7 < column9:9 [as=check1:15]
+           ├── column2:7 < d_comp:9 [as=check1:15]
            └── column1:6 > 0 [as=check2:16]
 
 # UPSERT
@@ -1491,40 +1491,40 @@ upsert checks
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column8:8 => c:3
- │    └── column9:9 => d:4
+ │    ├── c_default:8 => c:3
+ │    └── d_comp:9 => d:4
  ├── update-mapping:
  │    └── column2:7 => b:2
  ├── check columns: check1:19 check2:20
  └── project
-      ├── columns: check1:19 check2:20 column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 column15:15 upsert_a:16 upsert_c:17 upsert_d:18
+      ├── columns: check1:19 check2:20 column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 d_comp:15 upsert_a:16 upsert_c:17 upsert_d:18
       ├── project
-      │    ├── columns: upsert_a:16 upsert_c:17 upsert_d:18 column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 column15:15
+      │    ├── columns: upsert_a:16 upsert_c:17 upsert_d:18 column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 d_comp:15
       │    ├── project
-      │    │    ├── columns: column15:15 column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    ├── columns: d_comp:15 column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │    │    ├── columns: column1:6!null column2:7!null c_default:8 d_comp:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
+      │    │    │    │    ├── columns: column1:6!null column2:7!null c_default:8 d_comp:9
       │    │    │    │    ├── grouping columns: column1:6!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column9:9 column1:6!null column2:7!null column8:8
+      │    │    │    │    │    ├── columns: d_comp:9 column1:6!null column2:7!null c_default:8
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column8:8 column1:6!null column2:7!null
+      │    │    │    │    │    │    ├── columns: c_default:8 column1:6!null column2:7!null
       │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7!null
       │    │    │    │    │    │    │    └── (1, 2)
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── NULL::INT8 [as=column8:8]
+      │    │    │    │    │    │         └── NULL::INT8 [as=c_default:8]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column8:8 + 1 [as=column9:9]
+      │    │    │    │    │         └── c_default:8 + 1 [as=d_comp:9]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column2:7]
       │    │    │    │         │    └── column2:7
-      │    │    │    │         ├── first-agg [as=column8:8]
-      │    │    │    │         │    └── column8:8
-      │    │    │    │         └── first-agg [as=column9:9]
-      │    │    │    │              └── column9:9
+      │    │    │    │         ├── first-agg [as=c_default:8]
+      │    │    │    │         │    └── c_default:8
+      │    │    │    │         └── first-agg [as=d_comp:9]
+      │    │    │    │              └── d_comp:9
       │    │    │    ├── scan checks
       │    │    │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
       │    │    │    │    ├── check constraint expressions
@@ -1535,11 +1535,11 @@ upsert checks
       │    │    │    └── filters
       │    │    │         └── column1:6 = a:10
       │    │    └── projections
-      │    │         └── c:12 + 1 [as=column15:15]
+      │    │         └── c:12 + 1 [as=d_comp:15]
       │    └── projections
       │         ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a:10 END [as=upsert_a:16]
-      │         ├── CASE WHEN a:10 IS NULL THEN column8:8 ELSE c:12 END [as=upsert_c:17]
-      │         └── CASE WHEN a:10 IS NULL THEN column9:9 ELSE d:13 END [as=upsert_d:18]
+      │         ├── CASE WHEN a:10 IS NULL THEN c_default:8 ELSE c:12 END [as=upsert_c:17]
+      │         └── CASE WHEN a:10 IS NULL THEN d_comp:9 ELSE d:13 END [as=upsert_d:18]
       └── projections
            ├── column2:7 < upsert_d:18 [as=check1:19]
            └── upsert_a:16 > 0 [as=check2:20]
@@ -1558,29 +1558,29 @@ upsert checks
  ├── insert-mapping:
  │    ├── abc.a:6 => checks.a:1
  │    ├── abc.b:7 => checks.b:2
- │    ├── column11:11 => checks.c:3
- │    └── column12:12 => d:4
+ │    ├── c_default:11 => checks.c:3
+ │    └── d_comp:12 => d:4
  ├── update-mapping:
  │    ├── abc.a:6 => checks.a:1
  │    └── upsert_b:24 => checks.b:2
  ├── check columns: check1:27 check2:28
  └── project
-      ├── columns: check1:27 check2:28!null abc.a:6!null abc.b:7 column11:11 column12:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17 b_new:22 column23:23 upsert_b:24 upsert_c:25 upsert_d:26
+      ├── columns: check1:27 check2:28!null abc.a:6!null abc.b:7 c_default:11 d_comp:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17 b_new:22 d_comp:23 upsert_b:24 upsert_c:25 upsert_d:26
       ├── project
-      │    ├── columns: upsert_b:24 upsert_c:25 upsert_d:26 abc.a:6!null abc.b:7 column11:11 column12:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17 b_new:22 column23:23
+      │    ├── columns: upsert_b:24 upsert_c:25 upsert_d:26 abc.a:6!null abc.b:7 c_default:11 d_comp:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17 b_new:22 d_comp:23
       │    ├── project
-      │    │    ├── columns: column23:23 abc.a:6!null abc.b:7 column11:11 column12:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17 b_new:22
+      │    │    ├── columns: d_comp:23 abc.a:6!null abc.b:7 c_default:11 d_comp:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17 b_new:22
       │    │    ├── project
-      │    │    │    ├── columns: b_new:22 abc.a:6!null abc.b:7 column11:11 column12:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17
+      │    │    │    ├── columns: b_new:22 abc.a:6!null abc.b:7 c_default:11 d_comp:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17
       │    │    │    ├── left-join (hash)
-      │    │    │    │    ├── columns: abc.a:6!null abc.b:7 column11:11 column12:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17
+      │    │    │    │    ├── columns: abc.a:6!null abc.b:7 c_default:11 d_comp:12 checks.a:13 checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17
       │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    ├── columns: abc.a:6!null abc.b:7 column11:11 column12:12
+      │    │    │    │    │    ├── columns: abc.a:6!null abc.b:7 c_default:11 d_comp:12
       │    │    │    │    │    ├── grouping columns: abc.a:6!null
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column12:12 abc.a:6!null abc.b:7 column11:11
+      │    │    │    │    │    │    ├── columns: d_comp:12 abc.a:6!null abc.b:7 c_default:11
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: column11:11 abc.a:6!null abc.b:7
+      │    │    │    │    │    │    │    ├── columns: c_default:11 abc.a:6!null abc.b:7
       │    │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    │    ├── columns: abc.a:6!null abc.b:7
       │    │    │    │    │    │    │    │    └── scan abc
@@ -1589,16 +1589,16 @@ upsert checks
       │    │    │    │    │    │    │    │              └── abc.c:8
       │    │    │    │    │    │    │    │                   └── abc.b:7 + 1
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── NULL::INT8 [as=column11:11]
+      │    │    │    │    │    │    │         └── NULL::INT8 [as=c_default:11]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── column11:11 + 1 [as=column12:12]
+      │    │    │    │    │    │         └── c_default:11 + 1 [as=d_comp:12]
       │    │    │    │    │    └── aggregations
       │    │    │    │    │         ├── first-agg [as=abc.b:7]
       │    │    │    │    │         │    └── abc.b:7
-      │    │    │    │    │         ├── first-agg [as=column11:11]
-      │    │    │    │    │         │    └── column11:11
-      │    │    │    │    │         └── first-agg [as=column12:12]
-      │    │    │    │    │              └── column12:12
+      │    │    │    │    │         ├── first-agg [as=c_default:11]
+      │    │    │    │    │         │    └── c_default:11
+      │    │    │    │    │         └── first-agg [as=d_comp:12]
+      │    │    │    │    │              └── d_comp:12
       │    │    │    │    ├── scan checks
       │    │    │    │    │    ├── columns: checks.a:13!null checks.b:14 checks.c:15 d:16 checks.crdb_internal_mvcc_timestamp:17
       │    │    │    │    │    ├── check constraint expressions
@@ -1621,11 +1621,11 @@ upsert checks
       │    │    │                             └── filters
       │    │    │                                  └── x:18 = checks.a:13
       │    │    └── projections
-      │    │         └── checks.c:15 + 1 [as=column23:23]
+      │    │         └── checks.c:15 + 1 [as=d_comp:23]
       │    └── projections
       │         ├── CASE WHEN checks.a:13 IS NULL THEN abc.b:7 ELSE b_new:22 END [as=upsert_b:24]
-      │         ├── CASE WHEN checks.a:13 IS NULL THEN column11:11 ELSE checks.c:15 END [as=upsert_c:25]
-      │         └── CASE WHEN checks.a:13 IS NULL THEN column12:12 ELSE d:16 END [as=upsert_d:26]
+      │         ├── CASE WHEN checks.a:13 IS NULL THEN c_default:11 ELSE checks.c:15 END [as=upsert_c:25]
+      │         └── CASE WHEN checks.a:13 IS NULL THEN d_comp:12 ELSE d:16 END [as=upsert_d:26]
       └── projections
            ├── upsert_b:24 < upsert_d:26 [as=check1:27]
            └── abc.a:6 > 0 [as=check2:28]
@@ -1690,67 +1690,67 @@ upsert decimals
  ├── columns: <none>
  ├── arbiter indexes: primary
  ├── canary column: decimals.a:14
- ├── fetch columns: decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17
+ ├── fetch columns: decimals.a:14 decimals.b:15 c:16 d:17
  ├── insert-mapping:
  │    ├── a:9 => decimals.a:1
  │    ├── b:10 => decimals.b:2
- │    ├── c:11 => decimals.c:3
- │    └── d:13 => decimals.d:4
+ │    ├── c_default:11 => c:3
+ │    └── d_comp:13 => d:4
  ├── update-mapping:
  │    └── b:10 => decimals.b:2
  ├── check columns: check1:23 check2:24
  └── project
-      ├── columns: check1:23 check2:24 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 column19:19 upsert_a:20 upsert_c:21 upsert_d:22
+      ├── columns: check1:23 check2:24 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 d_comp:19 upsert_a:20 upsert_c:21 upsert_d:22
       ├── project
-      │    ├── columns: upsert_a:20 upsert_c:21 upsert_d:22 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 column19:19
+      │    ├── columns: upsert_a:20 upsert_c:21 upsert_d:22 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 d_comp:19
       │    ├── project
-      │    │    ├── columns: column19:19 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    ├── columns: d_comp:19 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    ├── columns: a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: a:9 b:10 c:11 d:13
+      │    │    │    │    ├── columns: a:9 b:10 c_default:11 d_comp:13
       │    │    │    │    ├── grouping columns: a:9
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: d:13 a:9 b:10 c:11
+      │    │    │    │    │    ├── columns: d_comp:13 a:9 b:10 c_default:11
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column12:12 a:9 b:10 c:11
+      │    │    │    │    │    │    ├── columns: d_comp:12 a:9 b:10 c_default:11
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: a:9 b:10 c:11
+      │    │    │    │    │    │    │    ├── columns: a:9 b:10 c_default:11
       │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7
+      │    │    │    │    │    │    │    │    ├── columns: c_default:8!null column1:6!null column2:7
       │    │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7
       │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │    │    │    │    │         └── 1.23 [as=c_default:8]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:7, 1) [as=b:10]
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
+      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:8, 1) [as=c_default:11]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a:9 + c:11 [as=column12:12]
+      │    │    │    │    │    │         └── a:9 + c_default:11 [as=d_comp:12]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
+      │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:12, 1) [as=d_comp:13]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=b:10]
       │    │    │    │         │    └── b:10
-      │    │    │    │         ├── first-agg [as=c:11]
-      │    │    │    │         │    └── c:11
-      │    │    │    │         └── first-agg [as=d:13]
-      │    │    │    │              └── d:13
+      │    │    │    │         ├── first-agg [as=c_default:11]
+      │    │    │    │         │    └── c_default:11
+      │    │    │    │         └── first-agg [as=d_comp:13]
+      │    │    │    │              └── d_comp:13
       │    │    │    ├── scan decimals
-      │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── decimals.d:17
-      │    │    │    │              └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL
+      │    │    │    │         └── d:17
+      │    │    │    │              └── decimals.a:14::DECIMAL + c:16::DECIMAL
       │    │    │    └── filters
       │    │    │         └── a:9 = decimals.a:14
       │    │    └── projections
-      │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column19:19]
+      │    │         └── decimals.a:14::DECIMAL + c:16::DECIMAL [as=d_comp:19]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:20]
-      │         ├── CASE WHEN decimals.a:14 IS NULL THEN c:11 ELSE decimals.c:16 END [as=upsert_c:21]
-      │         └── CASE WHEN decimals.a:14 IS NULL THEN d:13 ELSE decimals.d:17 END [as=upsert_d:22]
+      │         ├── CASE WHEN decimals.a:14 IS NULL THEN c_default:11 ELSE c:16 END [as=upsert_c:21]
+      │         └── CASE WHEN decimals.a:14 IS NULL THEN d_comp:13 ELSE d:17 END [as=upsert_d:22]
       └── projections
            ├── round(upsert_a:20) = upsert_a:20 [as=check1:23]
            └── b:10[0] > 1 [as=check2:24]
@@ -1763,67 +1763,67 @@ upsert decimals
  ├── columns: <none>
  ├── arbiter indexes: primary
  ├── canary column: decimals.a:14
- ├── fetch columns: decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17
+ ├── fetch columns: decimals.a:14 b:15 c:16 d:17
  ├── insert-mapping:
  │    ├── a:9 => decimals.a:1
- │    ├── b:10 => decimals.b:2
- │    ├── c:11 => decimals.c:3
- │    └── d:13 => decimals.d:4
+ │    ├── b_default:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    └── d_comp:13 => d:4
  ├── check columns: check1:24 check2:25
  └── project
-      ├── columns: check1:24 check2:25 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 column19:19 upsert_a:20 upsert_b:21 upsert_c:22 upsert_d:23
+      ├── columns: check1:24 check2:25 a:9 b_default:10 c_default:11 d_comp:13 decimals.a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 d_comp:19 upsert_a:20 upsert_b:21 upsert_c:22 upsert_d:23
       ├── project
-      │    ├── columns: upsert_a:20 upsert_b:21 upsert_c:22 upsert_d:23 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 column19:19
+      │    ├── columns: upsert_a:20 upsert_b:21 upsert_c:22 upsert_d:23 a:9 b_default:10 c_default:11 d_comp:13 decimals.a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 d_comp:19
       │    ├── project
-      │    │    ├── columns: column19:19 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    ├── columns: d_comp:19 a:9 b_default:10 c_default:11 d_comp:13 decimals.a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    ├── columns: a:9 b_default:10 c_default:11 d_comp:13 decimals.a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: a:9 b:10 c:11 d:13
+      │    │    │    │    ├── columns: a:9 b_default:10 c_default:11 d_comp:13
       │    │    │    │    ├── grouping columns: a:9
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: d:13 a:9 b:10 c:11
+      │    │    │    │    │    ├── columns: d_comp:13 a:9 b_default:10 c_default:11
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: column12:12 a:9 b:10 c:11
+      │    │    │    │    │    │    ├── columns: d_comp:12 a:9 b_default:10 c_default:11
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: a:9 b:10 c:11
+      │    │    │    │    │    │    │    ├── columns: a:9 b_default:10 c_default:11
       │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: column7:7 column8:8!null column1:6!null
+      │    │    │    │    │    │    │    │    ├── columns: b_default:7 c_default:8!null column1:6!null
       │    │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    │    ├── columns: column1:6!null
       │    │    │    │    │    │    │    │    │    └── (1.1,)
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         ├── NULL::DECIMAL(5,1)[] [as=column7:7]
-      │    │    │    │    │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │    │    │    │    │         ├── NULL::DECIMAL(5,1)[] [as=b_default:7]
+      │    │    │    │    │    │    │    │         └── 1.23 [as=c_default:8]
       │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
-      │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column7:7, 1) [as=b:10]
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
+      │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(b_default:7, 1) [as=b_default:10]
+      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:8, 1) [as=c_default:11]
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── a:9 + c:11 [as=column12:12]
+      │    │    │    │    │    │         └── a:9 + c_default:11 [as=d_comp:12]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
+      │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:12, 1) [as=d_comp:13]
       │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=b:10]
-      │    │    │    │         │    └── b:10
-      │    │    │    │         ├── first-agg [as=c:11]
-      │    │    │    │         │    └── c:11
-      │    │    │    │         └── first-agg [as=d:13]
-      │    │    │    │              └── d:13
+      │    │    │    │         ├── first-agg [as=b_default:10]
+      │    │    │    │         │    └── b_default:10
+      │    │    │    │         ├── first-agg [as=c_default:11]
+      │    │    │    │         │    └── c_default:11
+      │    │    │    │         └── first-agg [as=d_comp:13]
+      │    │    │    │              └── d_comp:13
       │    │    │    ├── scan decimals
-      │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    │    ├── columns: decimals.a:14!null b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── decimals.d:17
-      │    │    │    │              └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL
+      │    │    │    │         └── d:17
+      │    │    │    │              └── decimals.a:14::DECIMAL + c:16::DECIMAL
       │    │    │    └── filters
       │    │    │         └── a:9 = decimals.a:14
       │    │    └── projections
-      │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column19:19]
+      │    │         └── decimals.a:14::DECIMAL + c:16::DECIMAL [as=d_comp:19]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:20]
-      │         ├── CASE WHEN decimals.a:14 IS NULL THEN b:10 ELSE decimals.b:15 END [as=upsert_b:21]
-      │         ├── CASE WHEN decimals.a:14 IS NULL THEN c:11 ELSE decimals.c:16 END [as=upsert_c:22]
-      │         └── CASE WHEN decimals.a:14 IS NULL THEN d:13 ELSE decimals.d:17 END [as=upsert_d:23]
+      │         ├── CASE WHEN decimals.a:14 IS NULL THEN b_default:10 ELSE b:15 END [as=upsert_b:21]
+      │         ├── CASE WHEN decimals.a:14 IS NULL THEN c_default:11 ELSE c:16 END [as=upsert_c:22]
+      │         └── CASE WHEN decimals.a:14 IS NULL THEN d_comp:13 ELSE d:17 END [as=upsert_d:23]
       └── projections
            ├── round(upsert_a:20) = upsert_a:20 [as=check1:24]
            └── upsert_b:21[0] > 1 [as=check2:25]
@@ -1838,63 +1838,63 @@ upsert decimals
  ├── columns: <none>
  ├── arbiter indexes: primary
  ├── canary column: decimals.a:14
- ├── fetch columns: decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17
+ ├── fetch columns: decimals.a:14 decimals.b:15 c:16 d:17
  ├── insert-mapping:
  │    ├── a:9 => decimals.a:1
  │    ├── b:10 => decimals.b:2
- │    ├── c:11 => decimals.c:3
- │    └── d:13 => decimals.d:4
+ │    ├── c_default:11 => c:3
+ │    └── d_comp:13 => d:4
  ├── update-mapping:
  │    └── upsert_b:23 => decimals.b:2
  ├── check columns: check1:26 check2:27
  └── project
-      ├── columns: check1:26 check2:27 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b_new:20 column21:21 upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25
+      ├── columns: check1:26 check2:27 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 b_new:20 d_comp:21 upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25
       ├── project
-      │    ├── columns: upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b_new:20 column21:21
+      │    ├── columns: upsert_a:22 upsert_b:23 upsert_c:24 upsert_d:25 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 b_new:20 d_comp:21
       │    ├── project
-      │    │    ├── columns: column21:21 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18 b_new:20
+      │    │    ├── columns: d_comp:21 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 b_new:20
       │    │    ├── project
-      │    │    │    ├── columns: b_new:20 a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    ├── columns: b_new:20 a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    ├── project
-      │    │    │    │    ├── columns: b_new:19!null a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    │    ├── columns: b_new:19!null a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: a:9 b:10 c:11 d:13 decimals.a:14 decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    │    │    ├── columns: a:9 b:10 c_default:11 d_comp:13 decimals.a:14 decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    │    │    ├── columns: a:9 b:10 c:11 d:13
+      │    │    │    │    │    │    ├── columns: a:9 b:10 c_default:11 d_comp:13
       │    │    │    │    │    │    ├── grouping columns: a:9
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: d:13 a:9 b:10 c:11
+      │    │    │    │    │    │    │    ├── columns: d_comp:13 a:9 b:10 c_default:11
       │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: column12:12 a:9 b:10 c:11
+      │    │    │    │    │    │    │    │    ├── columns: d_comp:12 a:9 b:10 c_default:11
       │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    ├── columns: a:9 b:10 c:11
+      │    │    │    │    │    │    │    │    │    ├── columns: a:9 b:10 c_default:11
       │    │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    │    ├── columns: column8:8!null column1:6!null column2:7
+      │    │    │    │    │    │    │    │    │    │    ├── columns: c_default:8!null column1:6!null column2:7
       │    │    │    │    │    │    │    │    │    │    ├── values
       │    │    │    │    │    │    │    │    │    │    │    ├── columns: column1:6!null column2:7
       │    │    │    │    │    │    │    │    │    │    │    └── (1.1, ARRAY[0.95])
       │    │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │    │         └── 1.23 [as=column8:8]
+      │    │    │    │    │    │    │    │    │    │         └── 1.23 [as=c_default:8]
       │    │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column1:6, 0) [as=a:9]
       │    │    │    │    │    │    │    │    │         ├── crdb_internal.round_decimal_values(column2:7, 1) [as=b:10]
-      │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column8:8, 1) [as=c:11]
+      │    │    │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(c_default:8, 1) [as=c_default:11]
       │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         └── a:9 + c:11 [as=column12:12]
+      │    │    │    │    │    │    │    │         └── a:9 + c_default:11 [as=d_comp:12]
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(column12:12, 1) [as=d:13]
+      │    │    │    │    │    │    │         └── crdb_internal.round_decimal_values(d_comp:12, 1) [as=d_comp:13]
       │    │    │    │    │    │    └── aggregations
       │    │    │    │    │    │         ├── first-agg [as=b:10]
       │    │    │    │    │    │         │    └── b:10
-      │    │    │    │    │    │         ├── first-agg [as=c:11]
-      │    │    │    │    │    │         │    └── c:11
-      │    │    │    │    │    │         └── first-agg [as=d:13]
-      │    │    │    │    │    │              └── d:13
+      │    │    │    │    │    │         ├── first-agg [as=c_default:11]
+      │    │    │    │    │    │         │    └── c_default:11
+      │    │    │    │    │    │         └── first-agg [as=d_comp:13]
+      │    │    │    │    │    │              └── d_comp:13
       │    │    │    │    │    ├── scan decimals
-      │    │    │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 decimals.c:16 decimals.d:17 crdb_internal_mvcc_timestamp:18
+      │    │    │    │    │    │    ├── columns: decimals.a:14!null decimals.b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18
       │    │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │    │         └── decimals.d:17
-      │    │    │    │    │    │              └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL
+      │    │    │    │    │    │         └── d:17
+      │    │    │    │    │    │              └── decimals.a:14::DECIMAL + c:16::DECIMAL
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── a:9 = decimals.a:14
       │    │    │    │    └── projections
@@ -1902,12 +1902,12 @@ upsert decimals
       │    │    │    └── projections
       │    │    │         └── crdb_internal.round_decimal_values(b_new:19, 1) [as=b_new:20]
       │    │    └── projections
-      │    │         └── decimals.a:14::DECIMAL + decimals.c:16::DECIMAL [as=column21:21]
+      │    │         └── decimals.a:14::DECIMAL + c:16::DECIMAL [as=d_comp:21]
       │    └── projections
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN a:9 ELSE decimals.a:14 END [as=upsert_a:22]
       │         ├── CASE WHEN decimals.a:14 IS NULL THEN b:10 ELSE b_new:20 END [as=upsert_b:23]
-      │         ├── CASE WHEN decimals.a:14 IS NULL THEN c:11 ELSE decimals.c:16 END [as=upsert_c:24]
-      │         └── CASE WHEN decimals.a:14 IS NULL THEN d:13 ELSE decimals.d:17 END [as=upsert_d:25]
+      │         ├── CASE WHEN decimals.a:14 IS NULL THEN c_default:11 ELSE c:16 END [as=upsert_c:24]
+      │         └── CASE WHEN decimals.a:14 IS NULL THEN d_comp:13 ELSE d:17 END [as=upsert_d:25]
       └── projections
            ├── round(upsert_a:22) = upsert_a:22 [as=check1:26]
            └── upsert_b:23[0] > 1 [as=check2:27]

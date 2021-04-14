@@ -88,14 +88,14 @@ insert ab
  ├── insert-mapping:
  │    ├── column1:5 => a:1
  │    ├── column2:6 => b:2
- │    └── column7:7 => rowid:3
+ │    └── rowid_default:7 => rowid:3
  └── project
-      ├── columns: column7:7 column1:5 column2:6
+      ├── columns: rowid_default:7 column1:5 column2:6
       ├── values
       │    ├── columns: column1:5 column2:6
       │    └── (random(), random())
       └── projections
-           └── unique_rowid() [as=column7:7]
+           └── unique_rowid() [as=rowid_default:7]
 
 # Make sure impure default expressions are not deduplicated.
 exec-ddl
@@ -110,18 +110,18 @@ insert abcd
  ├── insert-mapping:
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
- │    ├── column9:9 => c:3
- │    ├── column10:10 => d:4
- │    └── column11:11 => rowid:5
+ │    ├── c_default:9 => c:3
+ │    ├── d_default:10 => d:4
+ │    └── rowid_default:11 => rowid:5
  └── project
-      ├── columns: column9:9 column10:10 column11:11 column1:7!null column2:8!null
+      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7!null column2:8!null
       ├── values
       │    ├── columns: column1:7!null column2:8!null
       │    └── (1.0, 1.0)
       └── projections
-           ├── random() [as=column9:9]
-           ├── random() [as=column10:10]
-           └── unique_rowid() [as=column11:11]
+           ├── random() [as=c_default:9]
+           ├── random() [as=d_default:10]
+           └── unique_rowid() [as=rowid_default:11]
 
 build
 INSERT INTO abcd VALUES (random(), random())
@@ -131,18 +131,18 @@ insert abcd
  ├── insert-mapping:
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
- │    ├── column9:9 => c:3
- │    ├── column10:10 => d:4
- │    └── column11:11 => rowid:5
+ │    ├── c_default:9 => c:3
+ │    ├── d_default:10 => d:4
+ │    └── rowid_default:11 => rowid:5
  └── project
-      ├── columns: column9:9 column10:10 column11:11 column1:7 column2:8
+      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7 column2:8
       ├── values
       │    ├── columns: column1:7 column2:8
       │    └── (random(), random())
       └── projections
-           ├── random() [as=column9:9]
-           ├── random() [as=column10:10]
-           └── unique_rowid() [as=column11:11]
+           ├── random() [as=c_default:9]
+           ├── random() [as=d_default:10]
+           └── unique_rowid() [as=rowid_default:11]
 
 build
 UPSERT INTO abcd VALUES (1, 1)
@@ -152,18 +152,18 @@ upsert abcd
  ├── upsert-mapping:
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
- │    ├── column9:9 => c:3
- │    ├── column10:10 => d:4
- │    └── column11:11 => rowid:5
+ │    ├── c_default:9 => c:3
+ │    ├── d_default:10 => d:4
+ │    └── rowid_default:11 => rowid:5
  └── project
-      ├── columns: column9:9 column10:10 column11:11 column1:7!null column2:8!null
+      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7!null column2:8!null
       ├── values
       │    ├── columns: column1:7!null column2:8!null
       │    └── (1.0, 1.0)
       └── projections
-           ├── random() [as=column9:9]
-           ├── random() [as=column10:10]
-           └── unique_rowid() [as=column11:11]
+           ├── random() [as=c_default:9]
+           ├── random() [as=d_default:10]
+           └── unique_rowid() [as=rowid_default:11]
 
 build
 UPSERT INTO abcd VALUES (random(), random())
@@ -173,18 +173,18 @@ upsert abcd
  ├── upsert-mapping:
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
- │    ├── column9:9 => c:3
- │    ├── column10:10 => d:4
- │    └── column11:11 => rowid:5
+ │    ├── c_default:9 => c:3
+ │    ├── d_default:10 => d:4
+ │    └── rowid_default:11 => rowid:5
  └── project
-      ├── columns: column9:9 column10:10 column11:11 column1:7 column2:8
+      ├── columns: c_default:9 d_default:10 rowid_default:11 column1:7 column2:8
       ├── values
       │    ├── columns: column1:7 column2:8
       │    └── (random(), random())
       └── projections
-           ├── random() [as=column9:9]
-           ├── random() [as=column10:10]
-           └── unique_rowid() [as=column11:11]
+           ├── random() [as=c_default:9]
+           ├── random() [as=d_default:10]
+           └── unique_rowid() [as=rowid_default:11]
 
 build
 UPDATE abcd SET a = random(), b = random() WHERE a=1

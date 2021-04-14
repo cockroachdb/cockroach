@@ -1093,13 +1093,13 @@ update uniq_computed_pk
  │    ├── i_new:17 => uniq_computed_pk.i:1
  │    ├── s_new:18 => uniq_computed_pk.s:2
  │    ├── d_new:19 => uniq_computed_pk.d:3
- │    ├── column20:20 => uniq_computed_pk.c_i_expr:4
+ │    ├── c_i_expr_comp:20 => uniq_computed_pk.c_i_expr:4
  │    ├── s_new:18 => uniq_computed_pk.c_s:5
  │    ├── d_new:19 => uniq_computed_pk.c_d:6
- │    └── column21:21 => uniq_computed_pk.c_d_expr:7
+ │    └── c_d_expr_comp:21 => uniq_computed_pk.c_d_expr:7
  ├── input binding: &1
  ├── project
- │    ├── columns: column20:20!null column21:21!null uniq_computed_pk.i:9!null uniq_computed_pk.s:10 uniq_computed_pk.d:11 uniq_computed_pk.c_i_expr:12!null uniq_computed_pk.c_s:13 uniq_computed_pk.c_d:14 uniq_computed_pk.c_d_expr:15 crdb_internal_mvcc_timestamp:16 i_new:17!null s_new:18!null d_new:19!null
+ │    ├── columns: c_i_expr_comp:20!null c_d_expr_comp:21!null uniq_computed_pk.i:9!null uniq_computed_pk.s:10 uniq_computed_pk.d:11 uniq_computed_pk.c_i_expr:12!null uniq_computed_pk.c_s:13 uniq_computed_pk.c_d:14 uniq_computed_pk.c_d_expr:15 crdb_internal_mvcc_timestamp:16 i_new:17!null s_new:18!null d_new:19!null
  │    ├── project
  │    │    ├── columns: i_new:17!null s_new:18!null d_new:19!null uniq_computed_pk.i:9!null uniq_computed_pk.s:10 uniq_computed_pk.d:11 uniq_computed_pk.c_i_expr:12!null uniq_computed_pk.c_s:13 uniq_computed_pk.c_d:14 uniq_computed_pk.c_d_expr:15 crdb_internal_mvcc_timestamp:16
  │    │    ├── project
@@ -1122,8 +1122,8 @@ update uniq_computed_pk
  │    │         ├── 'a' [as=s_new:18]
  │    │         └── 1.0 [as=d_new:19]
  │    └── projections
- │         ├── CASE WHEN i_new:17 < 0 THEN 'foo' ELSE 'bar' END [as=column20:20]
- │         └── d_new:19::STRING [as=column21:21]
+ │         ├── CASE WHEN i_new:17 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr_comp:20]
+ │         └── d_new:19::STRING [as=c_d_expr_comp:21]
  └── unique-checks
       └── unique-checks-item: uniq_computed_pk(d)
            └── project
@@ -1136,10 +1136,10 @@ update uniq_computed_pk
                      │         ├──  i_new:17 => i:46
                      │         ├──  s_new:18 => s:47
                      │         ├──  d_new:19 => d:48
-                     │         ├──  column20:20 => c_i_expr:49
+                     │         ├──  c_i_expr_comp:20 => c_i_expr:49
                      │         ├──  s_new:18 => c_s:50
                      │         ├──  d_new:19 => c_d:51
-                     │         └──  column21:21 => c_d_expr:52
+                     │         └──  c_d_expr_comp:21 => c_d_expr:52
                      ├── project
                      │    ├── columns: uniq_computed_pk.c_s:42 uniq_computed_pk.i:38!null uniq_computed_pk.s:39 uniq_computed_pk.d:40 uniq_computed_pk.c_i_expr:41!null uniq_computed_pk.c_d:43 uniq_computed_pk.c_d_expr:44
                      │    ├── scan uniq_computed_pk

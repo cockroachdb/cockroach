@@ -1236,15 +1236,15 @@ with &1
  │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
  │    ├── insert-mapping:
  │    │    ├── column1:5 => abc.a:1
- │    │    ├── column6:6 => abc.b:2
- │    │    └── column6:6 => abc.c:3
+ │    │    ├── b_default:6 => abc.b:2
+ │    │    └── b_default:6 => abc.c:3
  │    └── project
- │         ├── columns: column6:6 column1:5!null
+ │         ├── columns: b_default:6 column1:5!null
  │         ├── values
  │         │    ├── columns: column1:5!null
  │         │    └── (1,)
  │         └── projections
- │              └── NULL::INT8 [as=column6:6]
+ │              └── NULL::INT8 [as=b_default:6]
  └── with &2 (cte)
       ├── columns: abc.a:10!null abc.b:11 abc.c:12
       ├── limit
@@ -1415,14 +1415,14 @@ insert inaccessible
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:4 => k:1
- │    └── column5:5 => v:2
+ │    └── v_default:5 => v:2
  └── project
-      ├── columns: column5:5 column1:4!null
+      ├── columns: v_default:5 column1:4!null
       ├── values
       │    ├── columns: column1:4!null
       │    └── (1,)
       └── projections
-           └── NULL::INT8 [as=column5:5]
+           └── NULL::INT8 [as=v_default:5]
 
 build
 INSERT INTO inaccessible VALUES (1) RETURNING v
