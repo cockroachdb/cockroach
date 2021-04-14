@@ -219,7 +219,7 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 			continue
 		}
 		s.cols = append(s.cols, scopeColumn{
-			name:       tabCol.ColName(),
+			name:       scopeColName(string(tabCol.ColName())),
 			table:      *alias,
 			typ:        tabCol.DatumType(),
 			id:         tabMeta.MetaID.ColumnID(i),
@@ -260,11 +260,10 @@ func (s *scope) addExtraColumns(cols []scopeColumn) {
 	}
 }
 
-// addColumn adds a column to scope with the given alias and typed expression.
+// addColumn adds a column to scope with the given name and typed expression.
 // It returns a pointer to the new column. The column ID and group are left
 // empty so they can be filled in later.
-func (s *scope) addColumn(alias string, expr tree.TypedExpr) *scopeColumn {
-	name := tree.Name(alias)
+func (s *scope) addColumn(name scopeColumnName, expr tree.TypedExpr) *scopeColumn {
 	s.cols = append(s.cols, scopeColumn{
 		name: name,
 		typ:  expr.ResolvedType(),
@@ -361,7 +360,7 @@ func (s *scope) makePresentation() physical.Presentation {
 		col := &s.cols[i]
 		if col.visibility == cat.Visible {
 			presentation = append(presentation, opt.AliasedColumn{
-				Alias: string(col.name),
+				Alias: col.name.ReferenceString(),
 				ID:    col.id,
 			})
 		}
@@ -379,7 +378,7 @@ func (s *scope) makePresentationWithHiddenCols() physical.Presentation {
 	for i := range s.cols {
 		col := &s.cols[i]
 		presentation = append(presentation, opt.AliasedColumn{
-			Alias: string(col.name),
+			Alias: col.name.ReferenceString(),
 			ID:    col.id,
 		})
 	}
@@ -720,7 +719,7 @@ func (s *scope) FindSourceProvidingColumn(
 	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.name != colName {
+			if !col.name.MatchesReferenceName(colName) {
 				continue
 			}
 
@@ -876,7 +875,7 @@ func (s *scope) Resolve(
 	inScope := srcMeta.(*scope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
-		if col.name == colName && sourceNameMatches(*prefix, col.table) {
+		if col.name.MatchesReferenceName(colName) && sourceNameMatches(*prefix, col.table) {
 			return col, nil
 		}
 	}
@@ -1029,7 +1028,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 
 	var typedFuncExpr = typedFunc.(*tree.FuncExpr)
 	if s.builder.shouldCreateDefaultColumn(typedFuncExpr) {
-		outCol = srfScope.addColumn(def.Name, typedFunc)
+		outCol = srfScope.addColumn(scopeColName(def.Name), typedFunc)
 	}
 	out := s.builder.buildFunction(typedFuncExpr, s, srfScope, outCol, nil)
 	srf := &srf{
@@ -1266,7 +1265,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 	}
 
 	info.col = &scopeColumn{
-		name: tree.Name(def.Name),
+		name: scopeColName(def.Name),
 		typ:  f.ResolvedType(),
 		id:   s.builder.factory.Metadata().AddColumn(def.Name, f.ResolvedType()),
 		expr: &info,
@@ -1531,7 +1530,7 @@ func (s *scope) newAmbiguousColumnError(
 	}
 	for i := range s.cols {
 		col := &s.cols[i]
-		if col.name == n && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
+		if col.name.MatchesReferenceName(n) && (col.visibility == cat.Visible || (col.visibility == cat.Hidden && allowHidden)) {
 			if col.table.ObjectName == "" && col.visibility == cat.Visible {
 				if moreThanOneCandidateFromAnonSource {
 					// Only print first anonymous source, since other(s) are identical.
@@ -1581,13 +1580,13 @@ func (s *scope) String() string {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "%s:%d", c.name.String(), c.id)
+		fmt.Fprintf(&buf, "%s:%d", c.name.ReferenceString(), c.id)
 	}
 	for i, c := range s.extraCols {
 		if i > 0 || len(s.cols) > 0 {
 			buf.WriteByte(',')
 		}
-		fmt.Fprintf(&buf, "%s:%d!extra", c.name.String(), c.id)
+		fmt.Fprintf(&buf, "%s:%d!extra", c.name.ReferenceString(), c.id)
 	}
 	buf.WriteByte(')')
 

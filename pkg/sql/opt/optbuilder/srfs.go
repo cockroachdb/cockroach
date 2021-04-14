@@ -113,7 +113,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 				// when used in a from clause.
 				alias = def.ReturnLabels[0]
 			}
-			outCol = outScope.addColumn(alias, texpr)
+			outCol = outScope.addColumn(scopeColName(alias), texpr)
 		}
 
 		scalar := b.buildScalar(texpr, inScope, outScope, outCol, nil)
@@ -151,7 +151,7 @@ func (b *Builder) finishBuildGeneratorFunction(
 		// as column aliases.
 		typ := f.ResolvedType()
 		for i := range typ.TupleContents() {
-			b.synthesizeColumn(outScope, typ.TupleLabels()[i], typ.TupleContents()[i], nil, fn)
+			b.synthesizeColumn(outScope, scopeColName(typ.TupleLabels()[i]), typ.TupleContents()[i], nil, fn)
 		}
 	}
 
