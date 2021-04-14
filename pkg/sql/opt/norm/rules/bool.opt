@@ -156,8 +156,9 @@ $input
 (Or
     $left:^(Or)
     $right:^(Or) &
-        (Succeeded
-            $conjunct:(FindRedundantConjunct $left $right)
+        (Let ($conjunct $ok):
+            (FindRedundantConjunct $left $right)
+            $ok
         )
 )
 =>

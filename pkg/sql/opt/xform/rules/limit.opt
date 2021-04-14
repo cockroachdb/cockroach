@@ -82,13 +82,14 @@
         ^(ScanIsInverted $scanPrivate)
     $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
     $ordering:* &
-        (Succeeded
-            $unionScans:(SplitScanIntoUnionScans
+        (Let ($unionScans $ok):
+            (SplitScanIntoUnionScans
                 $ordering
                 $scan
                 $scanPrivate
                 $limit
             )
+            $ok
         )
 )
 =>

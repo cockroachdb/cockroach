@@ -280,6 +280,22 @@ func (c *CustomFuncs) areRowsDistinct(
 	return true
 }
 
+// SingleRegressionCountArgument checks if either arg is non-null and returns
+// the other one. If neither is non-null it returns ok=false.
+func (c *CustomFuncs) SingleRegressionCountArgument(
+	y, x opt.ScalarExpr, input memo.RelExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	notNullCols := c.NotNullCols(input)
+	if c.ExprIsNeverNull(y, notNullCols) {
+		return x, true
+	}
+	if c.ExprIsNeverNull(x, notNullCols) {
+		return y, true
+	}
+
+	return nil, false
+}
+
 // CanMergeAggs returns true if one of the following applies to each of the
 // given outer aggregation expressions:
 //   1. The aggregation can be merged with a single inner aggregation.

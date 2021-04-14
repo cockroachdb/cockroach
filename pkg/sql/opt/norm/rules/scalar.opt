@@ -93,7 +93,7 @@ $input
 (Comparison
     $left:(Variable)
     $right:(Const) &
-        (Succeeded $result:(UnifyComparison $left $right))
+        (Let ($result $ok):(UnifyComparison $left $right) $ok)
 )
 =>
 ((OpName) $left $result)

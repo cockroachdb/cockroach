@@ -82,7 +82,10 @@
     $left:* & (IsConstValueOrGroupOfConstValues $left)
     $right:* &
         (IsConstValueOrGroupOfConstValues $right) &
-        (Succeeded $result:(FoldBinary (OpName) $left $right))
+        (Let ($result $ok):
+            (FoldBinary (OpName) $left $right)
+            $ok
+        )
 )
 =>
 $result
@@ -94,7 +97,7 @@ $result
 (Unary
     $input:* &
         (IsConstValueOrGroupOfConstValues $input) &
-        (Succeeded $result:(FoldUnary (OpName) $input))
+        (Let ($result $ok):(FoldUnary (OpName) $input) $ok)
 )
 =>
 $result
@@ -107,8 +110,9 @@ $result
     $left:* & (IsConstValueOrGroupOfConstValues $left)
     $right:* &
         (IsConstValueOrGroupOfConstValues $right) &
-        (Succeeded
-            $result:(FoldComparison (OpName) $left $right)
+        (Let ($result $ok):
+            (FoldComparison (OpName) $left $right)
+            $ok
         )
 )
 =>
@@ -122,7 +126,7 @@ $result
     $input:*
     $typ:* &
         (IsConstValueOrGroupOfConstValues $input) &
-        (Succeeded $result:(FoldCast $input $typ))
+        (Let ($result $ok):(FoldCast $input $typ) $ok)
 )
 =>
 $result
@@ -139,7 +143,7 @@ $result
     $input:*
     $index:* &
         (IsConstValueOrGroupOfConstValues $index) &
-        (Succeeded $result:(FoldIndirection $input $index))
+        (Let ($result $ok):(FoldIndirection $input $index) $ok)
 )
 =>
 $result
@@ -155,7 +159,8 @@ $result
 [FoldColumnAccess, Normalize]
 (ColumnAccess
     $input:*
-    $idx:* & (Succeeded $result:(FoldColumnAccess $input $idx))
+    $idx:* &
+        (Let ($result $ok):(FoldColumnAccess $input $idx) $ok)
 )
 =>
 $result
@@ -203,7 +208,7 @@ $result
 (Function
     $args:* & (IsListOfConstants $args)
     $private:* &
-        (Succeeded $result:(FoldFunction $args $private))
+        (Let ($result $ok):(FoldFunction $args $private) $ok)
 )
 =>
 $result

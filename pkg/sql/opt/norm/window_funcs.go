@@ -18,15 +18,15 @@ import (
 )
 
 // MakeSegmentedOrdering returns an ordering choice which satisfies both
-// limitOrdering and the ordering required by a window function. Returns nil if
-// no such ordering exists. See OrderingChoice.PrefixIntersection for more
-// details.
+// limitOrdering and the ordering required by a window function. Returns
+// ok=false if no such ordering exists. See OrderingChoice.PrefixIntersection
+// for more details.
 func (c *CustomFuncs) MakeSegmentedOrdering(
 	input memo.RelExpr,
 	prefix opt.ColSet,
 	ordering physical.OrderingChoice,
 	limitOrdering physical.OrderingChoice,
-) *physical.OrderingChoice {
+) (_ *physical.OrderingChoice, ok bool) {
 
 	// The columns in the closure of the prefix may be included in it. It's
 	// beneficial to do so for a given column iff that column appears in the
@@ -38,9 +38,9 @@ func (c *CustomFuncs) MakeSegmentedOrdering(
 
 	oc, ok := limitOrdering.PrefixIntersection(prefix, ordering.Columns)
 	if !ok {
-		return nil
+		return nil, false
 	}
-	return &oc
+	return &oc, true
 }
 
 // AllArePrefixSafe returns whether every window function in the list satisfies
@@ -138,11 +138,6 @@ func (c *CustomFuncs) ExtractUndeterminedConditions(
 		}
 	}
 	return newFilters
-}
-
-// OrderingSucceeded returns true if an OrderingChoice is not nil.
-func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
-	return result != nil
 }
 
 // DerefOrderingChoice returns an OrderingChoice from a pointer.
