@@ -16,5 +16,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

@@ -1852,25 +1852,29 @@ func (crt ChangeReplicasTrigger) Removed() []ReplicaDescriptor {
 // LeaseSequence is a custom type for a lease sequence number.
 type LeaseSequence int64
 
-// String implements the fmt.Stringer interface.
-func (s LeaseSequence) String() string {
-	return strconv.FormatInt(int64(s), 10)
-}
+// SafeValue implements the redact.SafeValue interface.
+func (s LeaseSequence) SafeValue() {}
 
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
+	return redact.StringWithoutMarkers(l)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 	if l.Empty() {
-		return "<empty>"
-	}
-	var proposedSuffix string
-	if l.ProposedTS != nil {
-		proposedSuffix = fmt.Sprintf(" pro=%s", l.ProposedTS)
+		w.SafeString("<empty>")
+		return
 	}
 	if l.Type() == LeaseExpiration {
-		return fmt.Sprintf("repl=%s seq=%s start=%s exp=%s%s", l.Replica, l.Sequence, l.Start, l.Expiration, proposedSuffix)
+		w.Printf("repl=%s seq=%d start=%s exp=%s", l.Replica, l.Sequence, l.Start, l.Expiration)
+	} else {
+		w.Printf("repl=%s seq=%d start=%s epo=%d", l.Replica, l.Sequence, l.Start, l.Epoch)
 	}
-	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
+	if l.ProposedTS != nil {
+		w.Printf(" pro=%s", l.ProposedTS)
+	}
 }
 
 // Empty returns true for the Lease zero-value.
