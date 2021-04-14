@@ -727,6 +727,20 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		// replica is not the leaseholder, the previous target is meaningless.
 		closedTSTarget = newLease.Start.ToTimestamp()
 	} else {
+		// Sanity check that this command is not violating the closed timestamp. It
+		// must be writing at a timestamp above assignedClosedTimestamp
+		// (assignedClosedTimestamp represents the promise that this replica made
+		// through previous commands to not evaluate requests with lower
+		// timestamps); in other words, assignedClosedTimestamp was not supposed to
+		// have been incremented while requests with lower timestamps were
+		// evaluating.
+		if !b.assignedClosedTimestamp.LessEq(p.Request.WriteTimestamp()) &&
+			!b.assignedClosedTimestamp.IsEmpty() && p.Request.IsIntentWrite() {
+			wts := p.Request.WriteTimestamp()
+			return errors.AssertionFailedf("attempting to propose command writing below closed timestamp. "+
+				"wts: %s < assigned closed: %s; ba: %s", wts, b.assignedClosedTimestamp, p.Request)
+		}
+
 		lb := b.evalTracker.LowerBound(ctx)
 		if !lb.IsEmpty() {
 			// If the tracker told us that requests are currently evaluating at
