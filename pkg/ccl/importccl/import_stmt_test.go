@@ -5237,8 +5237,6 @@ func TestImportMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 40263)
-
 	const (
 		nodes = 3
 	)
@@ -5339,7 +5337,8 @@ func TestImportMysql(t *testing.T) {
 					if got, expected := res[i][0], fmt.Sprintf("%v", everythingTestRows[i].i); got != expected {
 						t.Fatalf("expected %s got %s", expected, got)
 					}
-					if got, expected := res[i][1], everythingTestRows[i].c; got != expected {
+					if got, expected := res[i][1],
+						fmt.Sprintf("%v", everythingTestRows[i].c); got != expected {
 						t.Fatalf("expected %s got %s", expected, got)
 					}
 					if got, expected := res[i][2], fmt.Sprintf("%v", everythingTestRows[i].iw); got != expected {
