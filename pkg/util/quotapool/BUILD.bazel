@@ -8,6 +8,7 @@ go_library(
         "intpool.go",
         "notify_queue.go",
         "quotapool.go",
+        "token_bucket.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/quotapool",
     visibility = ["//visibility:public"],
@@ -29,6 +30,7 @@ go_test(
         "intpool_test.go",
         "node_size_test.go",
         "notify_queue_test.go",
+        "token_bucket_test.go",
     ],
     embed = [":quotapool"],
     deps = [
