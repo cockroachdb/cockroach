@@ -201,9 +201,10 @@ type proposalCreator struct {
 	lease kvserverpb.LeaseStatus
 }
 
-func (pc proposalCreator) newPutProposal() (*ProposalData, []byte) {
+func (pc proposalCreator) newPutProposal(ts hlc.Timestamp) (*ProposalData, []byte) {
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.PutRequest{})
+	ba.Timestamp = ts
 	return pc.newProposal(ba)
 }
 
@@ -268,7 +269,7 @@ func TestProposalBuffer(t *testing.T) {
 		if leaseReq {
 			pd, data = pc.newLeaseProposal(roachpb.Lease{})
 		} else {
-			pd, data = pc.newPutProposal()
+			pd, data = pc.newPutProposal(hlc.Timestamp{})
 		}
 		_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		mlai, err := b.Insert(ctx, pd, data, tok)
@@ -293,7 +294,7 @@ func TestProposalBuffer(t *testing.T) {
 	// Insert another proposal. This causes the buffer to flush. Doing so
 	// results in a lease applied index being skipped, which is harmless.
 	// Remember that the lease request above did not receive a lease index.
-	pd, data := pc.newPutProposal()
+	pd, data := pc.newPutProposal(hlc.Timestamp{})
 	_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 	mlai, err := b.Insert(ctx, pd, data, tok)
 	require.Nil(t, err)
@@ -361,7 +362,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	for i := 0; i < concurrency; i++ {
 		g.Go(func() error {
 			for {
-				pd, data := pc.newPutProposal()
+				pd, data := pc.newPutProposal(hlc.Timestamp{})
 				_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 				mlai, err := b.Insert(ctx, pd, data, tok)
 				if err != nil {
@@ -429,7 +430,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	num := propBufArrayMinSize
 	toks := make([]TrackedRequestToken, num)
 	for i := 0; i < num; i++ {
-		pd, data := pc.newPutProposal()
+		pd, data := pc.newPutProposal(hlc.Timestamp{})
 		_, toks[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		_, err := b.Insert(ctx, pd, data, toks[i])
 		require.Nil(t, err)
@@ -474,7 +475,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		if i%2 == 0 {
 			pd, data = pc.newLeaseProposal(roachpb.Lease{})
 		} else {
-			pd, data = pc.newPutProposal()
+			pd, data = pc.newPutProposal(hlc.Timestamp{})
 		}
 		_, toks1[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		_, err := b.Insert(ctx, pd, data, toks1[i])
@@ -493,7 +494,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		if i%2 == 0 {
 			pd, data = pc.newLeaseProposal(roachpb.Lease{})
 		} else {
-			pd, data = pc.newPutProposal()
+			pd, data = pc.newPutProposal(hlc.Timestamp{})
 		}
 		_, toks2[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 		_, err := b.Insert(ctx, pd, data, toks2[i])
@@ -871,7 +872,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			var data []byte
 			switch tc.reqType {
 			case regularWrite:
-				pd, data = pc.newPutProposal()
+				pd, data = pc.newPutProposal(now.ToTimestamp())
 			case newLease:
 				pd, data = pc.newLeaseProposal(tc.lease)
 			case leaseTransfer:
