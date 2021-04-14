@@ -78,6 +78,7 @@ type testState struct {
 	m           *metric.Registry
 	clock       *timeutil.ManualTime
 	settings    *cluster.Settings
+	config      tenantrate.Config
 }
 
 type launchState struct {
@@ -144,11 +145,14 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 	ts.tenants = make(map[roachpb.TenantID][]tenantrate.Limiter)
 	ts.clock = timeutil.NewManualTime(t0)
 	ts.settings = cluster.MakeTestingClusterSettings()
-	settings := parseSettings(t, d)
-	tenantrate.OverrideSettings(&ts.settings.SV, settings)
+	ts.config = tenantrate.DefaultConfig()
+
+	parseSettings(t, d, &ts.config)
+
 	ts.rl = tenantrate.NewLimiterFactory(ts.settings, &tenantrate.TestingKnobs{
 		TimeSource: ts.clock,
 	})
+	ts.rl.UpdateConfig(ts.config)
 	ts.m = metric.NewRegistry()
 	ts.m.AddMetricStruct(ts.rl.Metrics())
 	return ts.clock.Now().Format(timeFormat)
@@ -158,8 +162,8 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 // yaml object representing the limits and updates accordingly. It returns
 // the current time. See init for more details as the semantics are the same.
 func (ts *testState) updateSettings(t *testing.T, d *datadriven.TestData) string {
-	settings := parseSettings(t, d)
-	tenantrate.OverrideSettings(&ts.settings.SV, settings)
+	parseSettings(t, d, &ts.config)
+	ts.rl.UpdateConfig(ts.config)
 	return ts.formatTime()
 }
 
@@ -579,12 +583,40 @@ func parseTenantIDs(t *testing.T, d *datadriven.TestData) []uint64 {
 	return tenantIDs
 }
 
-func parseSettings(t *testing.T, d *datadriven.TestData) tenantrate.SettingValues {
-	var vals tenantrate.SettingValues
+// SettingValues is a struct that can be populated from test files, via YAML.
+type SettingValues struct {
+	Rate  float64
+	Burst float64
+
+	Read  Factors
+	Write Factors
+}
+
+// Factors for reads and writes.
+type Factors struct {
+	Base    float64
+	PerByte float64
+}
+
+// parseSettings parses a SettingValues yaml and updates the given config.
+// Missing (zero) values are ignored.
+func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Config) {
+	var vals SettingValues
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
-	return vals
+
+	override := func(dest *float64, val float64) {
+		if val != 0 {
+			*dest = val
+		}
+	}
+	override(&config.Rate, vals.Rate)
+	override(&config.Burst, vals.Burst)
+	override(&config.ReadRequestUnits, vals.Read.Base)
+	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
+	override(&config.WriteRequestUnits, vals.Write.Base)
+	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
 }
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {
