@@ -483,6 +483,16 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 				return err
 			}
 		default:
+			// If the portal is immediately followed by a COMMIT, we can proceed and
+			// let the portal be destroyed at the end of the transaction.
+			if execStmt, ok := cmd.(sql.ExecStmt); ok {
+				if _, isCommit := execStmt.AST.(*tree.CommitTransaction); isCommit {
+					r.conn.stmtBuf.Rewind(ctx, prevPos)
+					// Don't send an CommandComplete for the portal; it got suspended.
+					r.typ = noCompletionMsg
+					return sql.ErrLimitedResultClosed
+				}
+			}
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
 			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
