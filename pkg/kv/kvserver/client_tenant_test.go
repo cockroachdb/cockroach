@@ -173,31 +173,50 @@ func TestTenantRateLimiter(t *testing.T) {
 	mkKey := func() roachpb.Key {
 		return encoding.EncodeUUIDValue(tablePrefix, 1, uuid.MakeV4())
 	}
-
 	// Ensure that the qps rate limit does not affect the system tenant even for
 	// the tenant range.
 	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
-	cfg := tenantrate.LimitConfigsFromSettings(s.ClusterSettings())
-	for i := 0; i < int(cfg.WriteRequests.Burst); i++ {
+	cfg := tenantrate.ConfigFromSettings(s.ClusterSettings())
+
+	// We don't know the exact size of the write, but we can set lower and upper
+	// bounds.
+	writeCostLower := cfg.WriteRequestUnits
+	writeCostUpper := cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
+	// burstWrites is a number of writes that don't exceed the burst limit.
+	burstWrites := int(cfg.Burst / writeCostUpper)
+	// tooManyWrites is a number of writes which definitely exceed the burst
+	// limit.
+	tooManyWrites := int(cfg.Burst/writeCostLower) + 2
+
+	// Make sure that writes to the system tenant don't block, even if we
+	// definitely exceed the burst rate.
+	for i := 0; i < tooManyWrites; i++ {
 		require.NoError(t, db.Put(ctx, mkKey(), 0))
 	}
 	// Now ensure that in the same instant the write QPS limit does affect the
-	// tenant. Issuing up to the burst limit of requests can happen without
-	// blocking.
-	for i := 0; i < int(cfg.WriteRequests.Burst); i++ {
+	// tenant. First issue requests that can happen without blocking.
+	for i := 0; i < burstWrites; i++ {
 		require.NoError(t, db.Put(tenantCtx, mkKey(), 0))
 	}
 	// Attempt to issue another request, make sure that it gets blocked by
 	// observing a timer.
 	errCh := make(chan error, 1)
-	go func() { errCh <- db.Put(tenantCtx, mkKey(), 0) }()
-	expectedTimer := t0.Add(time.Duration(float64(1/cfg.WriteRequests.Rate) * float64(time.Second)))
+	go func() {
+		// Issue enough requests so that one has to block.
+		for i := burstWrites; i < tooManyWrites; i++ {
+			if err := db.Put(tenantCtx, mkKey(), 0); err != nil {
+				errCh <- err
+				return
+			}
+		}
+		errCh <- nil
+	}()
+
 	testutils.SucceedsSoon(t, func() error {
 		timers := timeSource.Timers()
 		if len(timers) != 1 {
 			return errors.Errorf("seeing %d timers: %v", len(timers), timers)
 		}
-		require.EqualValues(t, expectedTimer, timers[0])
 		return nil
 	})
 
@@ -220,14 +239,11 @@ func TestTenantRateLimiter(t *testing.T) {
 		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
 	}
 
-	// Ensure that the metric for the admitted requests is equal to the number of
-	// requests which we've admitted.
-	require.Contains(t, getMetrics(), makeMetricStr(cfg.WriteRequests.Burst))
-
 	// Allow the blocked request to proceed.
 	timeSource.Advance(time.Second)
 	require.NoError(t, <-errCh)
 
-	// Ensure that it is now reflected in the metrics.
-	require.Contains(t, getMetrics(), makeMetricStr(cfg.WriteRequests.Burst+1))
+	// Ensure that the metric for the admitted requests reflects the number of
+	// admitted requests.
+	require.Contains(t, getMetrics(), makeMetricStr(int64(tooManyWrites)))
 }

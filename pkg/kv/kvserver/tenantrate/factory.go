@@ -32,7 +32,7 @@ type LimiterFactory struct {
 	systemLimiter systemLimiter
 	mu            struct {
 		syncutil.RWMutex
-		limits  LimitConfigs
+		limits  Config
 		tenants map[roachpb.TenantID]*refCountedLimiter
 	}
 }
@@ -53,12 +53,12 @@ func NewLimiterFactory(st *cluster.Settings, knobs *TestingKnobs) *LimiterFactor
 		rl.knobs = *knobs
 	}
 	rl.mu.tenants = make(map[roachpb.TenantID]*refCountedLimiter)
-	rl.mu.limits = LimitConfigsFromSettings(st)
+	rl.mu.limits = ConfigFromSettings(st)
 	rl.systemLimiter = systemLimiter{
 		tenantMetrics: rl.metrics.tenantMetrics(roachpb.SystemTenantID),
 	}
-	for _, setOnChange := range settingsSetOnChangeFuncs {
-		setOnChange(&st.SV, rl.updateLimits)
+	for _, setting := range configSettings {
+		setting.SetOnChange(&st.SV, rl.updateConfig)
 	}
 	return rl
 }
@@ -114,12 +114,12 @@ func (rl *LimiterFactory) Release(lim Limiter) {
 	}
 }
 
-func (rl *LimiterFactory) updateLimits() {
+func (rl *LimiterFactory) updateConfig() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	rl.mu.limits = LimitConfigsFromSettings(rl.settings)
+	rl.mu.limits = ConfigFromSettings(rl.settings)
 	for _, rcLim := range rl.mu.tenants {
-		rcLim.lim.updateLimits(rl.mu.limits)
+		rcLim.lim.updateConfig(rl.mu.limits)
 	}
 }
 

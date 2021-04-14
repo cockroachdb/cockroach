@@ -1470,29 +1470,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 		// Increase tenant rate limits for faster tests.
 		conn := t.cluster.ServerConn(0)
-		for _, settingName := range []string{
-			"kv.tenant_rate_limiter.read_requests.rate_limit",
-			"kv.tenant_rate_limiter.read_requests.burst_limit",
-			"kv.tenant_rate_limiter.write_requests.rate_limit",
-			"kv.tenant_rate_limiter.write_requests.burst_limit",
-		} {
-			if _, err := conn.Exec(
-				fmt.Sprintf("SET CLUSTER SETTING %s = %d", settingName, 100000),
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, settingName := range []string{
-			"kv.tenant_rate_limiter.read_bytes.rate_limit",
-			"kv.tenant_rate_limiter.read_bytes.burst_limit",
-			"kv.tenant_rate_limiter.write_bytes.rate_limit",
-			"kv.tenant_rate_limiter.write_bytes.burst_limit",
-		} {
-			if _, err := conn.Exec(
-				fmt.Sprintf("SET CLUSTER SETTING %s = '1GB'", settingName),
-			); err != nil {
-				t.Fatal(err)
-			}
+		if _, err := conn.Exec("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 100000"); err != nil {
+			t.Fatal(err)
 		}
 	}
 
