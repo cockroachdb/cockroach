@@ -2036,6 +2036,8 @@ func createSchemaChangeEvalCtx(
 ) extendedEvalContext {
 
 	sd := NewFakeSessionData()
+	sd.VectorizeMode = sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(execCfg.SV()))
+	sd.DistSQLMode = sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(execCfg.SV()))
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
