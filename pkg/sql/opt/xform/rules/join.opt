@@ -404,11 +404,12 @@
     $input:*
     $on:*
     $private:* &
-        (LocalAndRemoteLookupExprsSucceeded
-            $localAndRemoteLookupExprs:(GetLocalityOptimizedAntiJoinLookupExprs
+        (Let ($localExpr $remoteExpr $ok):
+            (GetLocalityOptimizedAntiJoinLookupExprs
                 $input
                 $private
             )
+            $ok
         )
 )
 =>
@@ -417,13 +418,13 @@
         $input
         $on
         (CreateLocalityOptimizedAntiLookupJoinPrivate
-            (LocalLookupExpr $localAndRemoteLookupExprs)
+            $localExpr
             $private
         )
     )
     $on
     (CreateLocalityOptimizedAntiLookupJoinPrivate
-        (RemoteLookupExpr $localAndRemoteLookupExprs)
+        $remoteExpr
         $private
     )
 )

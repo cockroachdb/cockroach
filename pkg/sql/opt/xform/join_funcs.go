@@ -1126,20 +1126,6 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 	return result
 }
 
-// LocalAndRemoteLookupExprs is used by the GenerateLocalityOptimizedAntiJoin
-// rule to hold two sets of filters: one targeting local partitions and one
-// targeting remote partitions.
-type LocalAndRemoteLookupExprs struct {
-	Local  memo.FiltersExpr
-	Remote memo.FiltersExpr
-}
-
-// LocalAndRemoteLookupExprsSucceeded returns true if the
-// LocalAndRemoteLookupExprs is not empty.
-func (c *CustomFuncs) LocalAndRemoteLookupExprsSucceeded(le LocalAndRemoteLookupExprs) bool {
-	return len(le.Local) != 0 && len(le.Remote) != 0
-}
-
 // CreateLocalityOptimizedAntiLookupJoinPrivate creates a new lookup join
 // private from the given private and replaces the LookupExpr with the given
 // filters. It also marks the private as locality optimized.
@@ -1152,57 +1138,45 @@ func (c *CustomFuncs) CreateLocalityOptimizedAntiLookupJoinPrivate(
 	return &newPrivate
 }
 
-// LocalLookupExpr extracts the Local filters expr from the given
-// LocalAndRemoteLookupExprs.
-func (c *CustomFuncs) LocalLookupExpr(le LocalAndRemoteLookupExprs) memo.FiltersExpr {
-	return le.Local
-}
-
-// RemoteLookupExpr extracts the Remote filters expr from the given
-// LocalAndRemoteLookupExprs.
-func (c *CustomFuncs) RemoteLookupExpr(le LocalAndRemoteLookupExprs) memo.FiltersExpr {
-	return le.Remote
-}
-
-// GetLocalityOptimizedAntiJoinLookupExprs gets the lookup expressions needed to
-// build a locality optimized anti join if possible from the given lookup join
-// private. See the comment above the GenerateLocalityOptimizedAntiJoin rule for
-// more details.
+// GetLocalityOptimizedAntiJoinLookupExprs returns the local and remote lookup
+// expressions needed to build a locality optimized anti join from the given
+// lookup join private, if possible. Otherwise, it returns ok=false. See the
+// comment above the GenerateLocalityOptimizedAntiJoin rule for more details.
 func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	input memo.RelExpr, private *memo.LookupJoinPrivate,
-) LocalAndRemoteLookupExprs {
+) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
 	// Respect the session setting LocalityOptimizedSearch.
 	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// Check whether this lookup join has already been locality optimized.
 	if private.LocalityOptimized {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// We can only apply this optimization to anti-joins.
 	if private.JoinType != opt.AntiJoinOp {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// This lookup join cannot not be part of a paired join.
 	if private.IsSecondJoinInPairedJoiner {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// This lookup join should have the LookupExpr filled in, indicating that one
 	// or more of the join filters constrain an index column to multiple constant
 	// values.
 	if private.LookupExpr == nil {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// The local region must be set, or we won't be able to determine which
 	// partitions are local.
 	localRegion, found := c.e.evalCtx.Locality.Find(regionKey)
 	if !found {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// There should be at least two partitions, or we won't be able to
@@ -1210,7 +1184,7 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
 	index := tabMeta.Table.Index(private.Index)
 	if index.PartitionCount() < 2 {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// Determine whether the index has both local and remote partitions.
@@ -1223,13 +1197,13 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	}
 	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
 		// The partitions are either all local or all remote.
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// Find a filter that constrains the first column of the index.
 	filterIdx, ok := c.getConstPrefixFilter(index, private.Table, private.LookupExpr)
 	if !ok {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 	filter := private.LookupExpr[filterIdx]
 
@@ -1238,14 +1212,14 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	// can target a local partition and one can target a remote partition.
 	col, vals, ok := filter.ScalarProps().Constraints.HasSingleColumnConstValues(c.e.evalCtx)
 	if !ok || len(vals) < 2 {
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// Determine whether the values target both local and remote partitions.
 	localValOrds := c.getLocalValues(index, localPartitions, vals)
 	if localValOrds.Len() == 0 || localValOrds.Len() == len(vals) {
 		// The values target all local or all remote partitions.
-		return LocalAndRemoteLookupExprs{}
+		return nil, nil, false
 	}
 
 	// Split the values into local and remote sets.
@@ -1254,20 +1228,17 @@ func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
 	// Copy all of the filters from the LookupExpr, and replace the filter that
 	// constrains the first index column with a filter targeting only local
 	// partitions or only remote partitions.
-	localExpr := make(memo.FiltersExpr, len(private.LookupExpr))
+	localExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(localExpr, private.LookupExpr)
 	localExpr[filterIdx] = c.makeConstFilter(col, localValues)
 
-	remoteExpr := make(memo.FiltersExpr, len(private.LookupExpr))
+	remoteExpr = make(memo.FiltersExpr, len(private.LookupExpr))
 	copy(remoteExpr, private.LookupExpr)
 	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
 
 	// Return the two sets of lookup expressions. They will be used to construct
 	// two nested anti joins.
-	return LocalAndRemoteLookupExprs{
-		Local:  localExpr,
-		Remote: remoteExpr,
-	}
+	return localExpr, remoteExpr, true
 }
 
 // getConstPrefixFilter finds the position of the filter in the given slice of
