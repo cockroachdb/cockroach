@@ -2039,6 +2039,15 @@ func (desc *wrapper) MakeFirstMutationPublic(
 	return table, nil
 }
 
+// MakePublic creates a Mutable from the immutable by making the it public.
+func (desc *wrapper) MakePublic() catalog.TableDescriptor {
+	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
+	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+	table.State = descpb.DescriptorState_PUBLIC
+	table.Version++
+	return table
+}
+
 // ColumnNeedsBackfill returns true if adding or dropping (according to
 // the direction) the given column requires backfill.
 func ColumnNeedsBackfill(

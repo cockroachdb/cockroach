@@ -296,6 +296,7 @@ type TableDescriptor interface {
 
 	HasColumnBackfillMutation() bool
 	MakeFirstMutationPublic(includeConstraints bool) (TableDescriptor, error)
+	MakePublic() TableDescriptor
 	AllMutations() []Mutation
 	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
