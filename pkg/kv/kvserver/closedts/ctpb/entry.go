@@ -25,6 +25,9 @@ type Epoch int64
 // mix-ups in positional arguments.
 type LAI int64
 
+// SafeValue implements the redact.SafeValue interface.
+func (LAI) SafeValue() {}
+
 // String formats Entry for human consumption as well as testing (by avoiding
 // randomness in the output caused by map iteraton order).
 func (e Entry) String() string {

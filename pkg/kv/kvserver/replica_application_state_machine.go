@@ -1044,17 +1044,17 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 	wts := cmd.raftCmd.ReplicatedEvalResult.WriteTimestamp
 	if !wts.IsEmpty() && wts.LessEq(b.state.RaftClosedTimestamp) {
 		wts := wts // Make a shadow variable that escapes to the heap.
-		var req string
+		var req redact.StringBuilder
 		if cmd.proposal != nil {
-			req = cmd.proposal.Request.String()
+			req.Print(cmd.proposal.Request)
 		} else {
-			req = "request unknown; not leaseholder"
+			req.SafeString("request unknown; not leaseholder")
 		}
 		return wrapWithNonDeterministicFailure(errors.AssertionFailedf(
 			"command writing below closed timestamp; cmd: %x, write ts: %s, "+
 				"batch state closed: %s, command closed: %s, request: %s, lease: %s",
 			cmd.idKey, wts,
-			b.state.RaftClosedTimestamp.String(), cmd.raftCmd.ClosedTimestamp,
+			b.state.RaftClosedTimestamp, cmd.raftCmd.ClosedTimestamp,
 			req, b.state.Lease),
 			"command writing below closed timestamp")
 	}
@@ -1067,14 +1067,14 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
 	}
-	existingClosed := b.state.RaftClosedTimestamp
+	existingClosed := &b.state.RaftClosedTimestamp
 	newClosed := cmd.raftCmd.ClosedTimestamp
-	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(existingClosed) {
-		var req string
+	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(*existingClosed) {
+		var req redact.StringBuilder
 		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
-			req = cmd.proposal.Request.String()
+			req.Print(cmd.proposal.Request)
 		} else {
-			req = "<unknown; not leaseholder>"
+			req.SafeString("<unknown; not leaseholder>")
 		}
 		var prevReq redact.StringBuilder
 		if req := b.closedTimestampSetter.leaseReq; req != nil {
@@ -1086,7 +1086,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 		return errors.AssertionFailedf(
 			"raft closed timestamp regression in cmd: %x; batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.",
-			cmd.idKey, existingClosed.String(), newClosed.String(), b.state.Lease, req, cmd.leaseIndex,
+			cmd.idKey, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries)
 	}
 	return nil
