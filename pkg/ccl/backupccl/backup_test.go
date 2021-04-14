@@ -5996,6 +5996,7 @@ func getTableID(db *kv.DB, dbName, tableName string) descpb.ID {
 // protected ts records will be created.
 func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 63209, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStressRace(t,
