@@ -724,6 +724,9 @@ INDEX tbl@a_idx  ALTER INDEX tbl@a_idx CONFIGURE ZONE USING
                  voter_constraints = '[+region=us-east-1]',
                  lease_preferences = '[[+region=us-east-1]]'
 
+# Drop the last region, making the database a non-multi-region database.
+# Then, modify the zone configs so that we can test transitioning to
+# multi-region with a zone config applied.
 statement ok
 ALTER DATABASE initial_multiregion_db DROP REGION "us-east-1";
 ALTER INDEX tbl@a_idx CONFIGURE ZONE USING num_replicas = 10
@@ -731,6 +734,8 @@ ALTER INDEX tbl@a_idx CONFIGURE ZONE USING num_replicas = 10
 statement error zone configuration for index tbl@a_idx has field "num_replicas" set which will be overwritten when setting the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
+# Variations of tests where a zone config is present while we try to transition
+# to a multi-region database.
 statement ok
 ALTER INDEX tbl@a_idx CONFIGURE ZONE DISCARD;
 ALTER TABLE tbl CONFIGURE ZONE USING num_replicas = 10
@@ -740,11 +745,150 @@ ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
 statement ok
 ALTER TABLE tbl CONFIGURE ZONE DISCARD;
-ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING num_replicas = 10;
+ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING num_replicas = 10
 
 statement error zone configuration for database initial_multiregion_db has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
 
+# Validate that if we DISCARD the zone configuration, we can successfully turn
+# this database into a multi-region database.
 statement ok
 ALTER DATABASE initial_multiregion_db CONFIGURE ZONE DISCARD;
 ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
+
+# Test case where user has an applied zone config that won't directly get
+# overwritten by the locality transition.
+subtest force_repaving_all_zone_configs
+
+statement ok
+USE initial_multiregion_db;
+CREATE TABLE tbl1 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
+ALTER TABLE tbl1 SET LOCALITY GLOBAL
+
+# This statement should wipe out the zone configuration we applied on the
+# index above.
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl1 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+
+# Validate that the zone configuration is gone
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl1@tbl1_i_idx
+----
+TABLE tbl1  ALTER TABLE tbl1 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 90000,
+            global_reads = true,
+            num_replicas = 3,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+# Confirm that the zone configuration was wiped above by changing the locality
+# again, this time without an override.
+statement ok
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+# Repeat the test, this time with an alter to REGIONAL BY TABLE.
+statement ok
+ALTER TABLE tbl1 SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl1 SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY ROW
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl1 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+SET override_multi_region_zone_config = false
+
+# Now test to ensure that the same test holds true if we're transitioning from
+# REGIONAL BY ROW.
+statement ok
+CREATE TABLE tbl2 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+statement error attempting to update zone config which contains an extra zone configuration for index tbl2@tbl2_i_idx with field num_replicas populated
+ALTER TABLE tbl2 SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl2 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl2 SET LOCALITY REGIONAL BY ROW
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl2 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+statement error attempting to update zone configuration for table tbl2 which contains modified field "num_replicas"
+ALTER TABLE tbl2 SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl2 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE tbl2 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
