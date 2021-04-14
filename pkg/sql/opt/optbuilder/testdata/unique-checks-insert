@@ -641,16 +641,16 @@ insert uniq_hidden_pk
  │    ├── column2:8 => uniq_hidden_pk.b:2
  │    ├── column3:9 => uniq_hidden_pk.c:3
  │    ├── column4:10 => uniq_hidden_pk.d:4
- │    └── column11:11 => uniq_hidden_pk.rowid:5
+ │    └── rowid_default:11 => uniq_hidden_pk.rowid:5
  ├── input binding: &1
  ├── project
- │    ├── columns: column11:11 column1:7!null column2:8!null column3:9!null column4:10!null
+ │    ├── columns: rowid_default:11 column1:7!null column2:8!null column3:9!null column4:10!null
  │    ├── values
  │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
  │    │    ├── (1, 1, 1, 1)
  │    │    └── (2, 2, 2, 2)
  │    └── projections
- │         └── unique_rowid() [as=column11:11]
+ │         └── unique_rowid() [as=rowid_default:11]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── project
@@ -664,7 +664,7 @@ insert uniq_hidden_pk
       │              │         ├──  column2:8 => b:19
       │              │         ├──  column3:9 => c:20
       │              │         ├──  column4:10 => d:21
-      │              │         └──  column11:11 => rowid:22
+      │              │         └──  rowid_default:11 => rowid:22
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16!null
       │              └── filters
@@ -683,7 +683,7 @@ insert uniq_hidden_pk
       │              │         ├──  column2:8 => b:30
       │              │         ├──  column3:9 => c:31
       │              │         ├──  column4:10 => d:32
-      │              │         └──  column11:11 => rowid:33
+      │              │         └──  rowid_default:11 => rowid:33
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:23 uniq_hidden_pk.b:24 uniq_hidden_pk.c:25 uniq_hidden_pk.d:26 uniq_hidden_pk.rowid:27!null
       │              └── filters
@@ -703,7 +703,7 @@ insert uniq_hidden_pk
                      │         ├──  column2:8 => b:41
                      │         ├──  column3:9 => c:42
                      │         ├──  column4:10 => d:43
-                     │         └──  column11:11 => rowid:44
+                     │         └──  rowid_default:11 => rowid:44
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:34 uniq_hidden_pk.b:35 uniq_hidden_pk.c:36 uniq_hidden_pk.d:37 uniq_hidden_pk.rowid:38!null
                      └── filters
@@ -722,16 +722,16 @@ insert uniq_hidden_pk
  │    ├── v:8 => uniq_hidden_pk.b:2
  │    ├── x:10 => uniq_hidden_pk.c:3
  │    ├── y:11 => uniq_hidden_pk.d:4
- │    └── column14:14 => uniq_hidden_pk.rowid:5
+ │    └── rowid_default:14 => uniq_hidden_pk.rowid:5
  ├── input binding: &1
  ├── project
- │    ├── columns: column14:14 k:7 v:8 x:10 y:11
+ │    ├── columns: rowid_default:14 k:7 v:8 x:10 y:11
  │    ├── project
  │    │    ├── columns: k:7 v:8 x:10 y:11
  │    │    └── scan other
  │    │         └── columns: k:7 v:8 w:9!null x:10 y:11 other.rowid:12!null other.crdb_internal_mvcc_timestamp:13
  │    └── projections
- │         └── unique_rowid() [as=column14:14]
+ │         └── unique_rowid() [as=rowid_default:14]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── project
@@ -745,7 +745,7 @@ insert uniq_hidden_pk
       │              │         ├──  v:8 => b:22
       │              │         ├──  x:10 => c:23
       │              │         ├──  y:11 => d:24
-      │              │         └──  column14:14 => rowid:25
+      │              │         └──  rowid_default:14 => rowid:25
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:15 uniq_hidden_pk.b:16 uniq_hidden_pk.c:17 uniq_hidden_pk.d:18 uniq_hidden_pk.rowid:19!null
       │              └── filters
@@ -764,7 +764,7 @@ insert uniq_hidden_pk
       │              │         ├──  v:8 => b:33
       │              │         ├──  x:10 => c:34
       │              │         ├──  y:11 => d:35
-      │              │         └──  column14:14 => rowid:36
+      │              │         └──  rowid_default:14 => rowid:36
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:26 uniq_hidden_pk.b:27 uniq_hidden_pk.c:28 uniq_hidden_pk.d:29 uniq_hidden_pk.rowid:30!null
       │              └── filters
@@ -784,7 +784,7 @@ insert uniq_hidden_pk
                      │         ├──  v:8 => b:44
                      │         ├──  x:10 => c:45
                      │         ├──  y:11 => d:46
-                     │         └──  column14:14 => rowid:47
+                     │         └──  rowid_default:14 => rowid:47
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
                      └── filters
@@ -1215,18 +1215,18 @@ insert uniq_partial_hidden_pk
  ├── insert-mapping:
  │    ├── column1:6 => uniq_partial_hidden_pk.a:1
  │    ├── column2:7 => uniq_partial_hidden_pk.b:2
- │    ├── column8:8 => uniq_partial_hidden_pk.c:3
- │    └── column9:9 => uniq_partial_hidden_pk.rowid:4
+ │    ├── c_default:8 => uniq_partial_hidden_pk.c:3
+ │    └── rowid_default:9 => uniq_partial_hidden_pk.rowid:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column8:8 column9:9 column1:6!null column2:7!null
+ │    ├── columns: c_default:8 rowid_default:9 column1:6!null column2:7!null
  │    ├── values
  │    │    ├── columns: column1:6!null column2:7!null
  │    │    ├── (1, 1)
  │    │    └── (2, 2)
  │    └── projections
- │         ├── NULL::INT8 [as=column8:8]
- │         └── unique_rowid() [as=column9:9]
+ │         ├── NULL::INT8 [as=c_default:8]
+ │         └── unique_rowid() [as=rowid_default:9]
  └── unique-checks
       └── unique-checks-item: uniq_partial_hidden_pk(b)
            └── project
@@ -1238,8 +1238,8 @@ insert uniq_partial_hidden_pk
                      │    └── mapping:
                      │         ├──  column1:6 => a:15
                      │         ├──  column2:7 => b:16
-                     │         ├──  column8:8 => c:17
-                     │         └──  column9:9 => rowid:18
+                     │         ├──  c_default:8 => c:17
+                     │         └──  rowid_default:9 => rowid:18
                      ├── scan uniq_partial_hidden_pk
                      │    └── columns: uniq_partial_hidden_pk.a:10 uniq_partial_hidden_pk.b:11 uniq_partial_hidden_pk.c:12 uniq_partial_hidden_pk.rowid:13!null
                      └── filters
@@ -1257,18 +1257,18 @@ insert uniq_partial_hidden_pk
  ├── insert-mapping:
  │    ├── k:6 => uniq_partial_hidden_pk.a:1
  │    ├── v:7 => uniq_partial_hidden_pk.b:2
- │    ├── column13:13 => uniq_partial_hidden_pk.c:3
- │    └── column14:14 => uniq_partial_hidden_pk.rowid:4
+ │    ├── c_default:13 => uniq_partial_hidden_pk.c:3
+ │    └── rowid_default:14 => uniq_partial_hidden_pk.rowid:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column13:13 column14:14 k:6 v:7
+ │    ├── columns: c_default:13 rowid_default:14 k:6 v:7
  │    ├── project
  │    │    ├── columns: k:6 v:7
  │    │    └── scan other
  │    │         └── columns: k:6 v:7 w:8!null x:9 y:10 other.rowid:11!null other.crdb_internal_mvcc_timestamp:12
  │    └── projections
- │         ├── NULL::INT8 [as=column13:13]
- │         └── unique_rowid() [as=column14:14]
+ │         ├── NULL::INT8 [as=c_default:13]
+ │         └── unique_rowid() [as=rowid_default:14]
  └── unique-checks
       └── unique-checks-item: uniq_partial_hidden_pk(b)
            └── project
@@ -1280,8 +1280,8 @@ insert uniq_partial_hidden_pk
                      │    └── mapping:
                      │         ├──  k:6 => a:20
                      │         ├──  v:7 => b:21
-                     │         ├──  column13:13 => c:22
-                     │         └──  column14:14 => rowid:23
+                     │         ├──  c_default:13 => c:22
+                     │         └──  rowid_default:14 => rowid:23
                      ├── scan uniq_partial_hidden_pk
                      │    └── columns: uniq_partial_hidden_pk.a:15 uniq_partial_hidden_pk.b:16 uniq_partial_hidden_pk.c:17 uniq_partial_hidden_pk.rowid:18!null
                      └── filters
@@ -1526,20 +1526,20 @@ insert uniq_computed_pk
  │    ├── column1:9 => uniq_computed_pk.i:1
  │    ├── column2:10 => uniq_computed_pk.s:2
  │    ├── column3:11 => uniq_computed_pk.d:3
- │    ├── column12:12 => uniq_computed_pk.c_i_expr:4
+ │    ├── c_i_expr_comp:12 => uniq_computed_pk.c_i_expr:4
  │    ├── column2:10 => uniq_computed_pk.c_s:5
  │    ├── column3:11 => uniq_computed_pk.c_d:6
- │    └── column13:13 => uniq_computed_pk.c_d_expr:7
+ │    └── c_d_expr_comp:13 => uniq_computed_pk.c_d_expr:7
  ├── input binding: &1
  ├── project
- │    ├── columns: column12:12!null column13:13!null column1:9!null column2:10!null column3:11!null
+ │    ├── columns: c_i_expr_comp:12!null c_d_expr_comp:13!null column1:9!null column2:10!null column3:11!null
  │    ├── values
  │    │    ├── columns: column1:9!null column2:10!null column3:11!null
  │    │    ├── (1, 'a', 1.0)
  │    │    └── (2, 'b', 2.0)
  │    └── projections
- │         ├── CASE WHEN column1:9 < 0 THEN 'foo' ELSE 'bar' END [as=column12:12]
- │         └── column3:11::STRING [as=column13:13]
+ │         ├── CASE WHEN column1:9 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr_comp:12]
+ │         └── column3:11::STRING [as=c_d_expr_comp:13]
  └── unique-checks
       └── unique-checks-item: uniq_computed_pk(d)
            └── project
@@ -1552,10 +1552,10 @@ insert uniq_computed_pk
                      │         ├──  column1:9 => i:38
                      │         ├──  column2:10 => s:39
                      │         ├──  column3:11 => d:40
-                     │         ├──  column12:12 => c_i_expr:41
+                     │         ├──  c_i_expr_comp:12 => c_i_expr:41
                      │         ├──  column2:10 => c_s:42
                      │         ├──  column3:11 => c_d:43
-                     │         └──  column13:13 => c_d_expr:44
+                     │         └──  c_d_expr_comp:13 => c_d_expr:44
                      ├── project
                      │    ├── columns: uniq_computed_pk.c_s:34 uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
                      │    ├── scan uniq_computed_pk
