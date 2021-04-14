@@ -1688,7 +1688,13 @@ func (ef *execFactory) ConstructCreateView(
 		if !d.ColumnOrdinals.Empty() {
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
-				ref.ColumnIDs = append(ref.ColumnIDs, desc.Columns[ord].ID)
+				if ord < len(desc.Columns) {
+					ref.ColumnIDs = append(ref.ColumnIDs, desc.Columns[ord].ID)
+				} else {
+					// This is a system column.
+					systemColOrd := ord - len(desc.Columns)
+					ref.ColumnIDs = append(ref.ColumnIDs, colinfo.AllSystemColumnDescs[systemColOrd].ID)
+				}
 			})
 		}
 		entry := planDeps[desc.ID]
