@@ -70,6 +70,9 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 		//
 		// https://github.com/cockroachdb/cockroach/issues/35337
 		"-o", "ServerAliveInterval=60",
+		// Adding timeout so the roachtest context cancellation does hide failure
+		// information by kill hanging processes before they fail.
+		"-o", "ConnectTimeout=5",
 	}
 	args = append(args, sshAuthArgs()...)
 	ctx, cancel := context.WithCancel(context.Background())
