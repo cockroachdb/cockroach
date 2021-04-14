@@ -93,6 +93,7 @@ go_library(
         "schemachange_random_load.go",
         "scrub.go",
         "secondary_indexes.go",
+        "sequelize.go",
         "sequence_upgrade.go",
         "slack.go",
         "split.go",
