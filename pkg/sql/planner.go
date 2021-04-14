@@ -347,11 +347,12 @@ func newInternalPlanner(
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.TypeResolver = p
 
-	plannerMon := mon.NewUnlimitedMonitor(ctx,
-		fmt.Sprintf("internal-planner.%s.%s", user, opName),
+	plannerMon := mon.NewMonitor(fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		-1, /* increment */
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
+	plannerMon.Start(ctx, execCfg.RootMemoryMonitor, mon.BoundAccount{})
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(
 		ctx, sd, dataMutator, params.collection, txn, ts, ts, execCfg, plannerMon,
