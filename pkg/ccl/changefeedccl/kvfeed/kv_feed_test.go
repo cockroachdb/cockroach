@@ -194,8 +194,8 @@ func TestKVFeed(t *testing.T) {
 				ts(3),
 			},
 			descs: []catalog.TableDescriptor{
-				makeTableDesc(42, 1, ts(1), 2),
-				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
+				makeTableDesc(42, 1, ts(1), 2, 1),
+				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1, 1)),
 			},
 			expEvents: 2,
 		},
@@ -218,8 +218,8 @@ func TestKVFeed(t *testing.T) {
 				ts(2),
 			},
 			descs: []catalog.TableDescriptor{
-				makeTableDesc(42, 1, ts(1), 2),
-				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
+				makeTableDesc(42, 1, ts(1), 2, 1),
+				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1, 1)),
 			},
 			expEvents: 4,
 		},
@@ -243,8 +243,8 @@ func TestKVFeed(t *testing.T) {
 				ts(2),
 			},
 			descs: []catalog.TableDescriptor{
-				makeTableDesc(42, 1, ts(1), 2),
-				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1)),
+				makeTableDesc(42, 1, ts(1), 2, 1),
+				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1, 1)),
 			},
 			expEvents: 2,
 			expErrRE:  "schema change ...",
