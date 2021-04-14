@@ -189,15 +189,15 @@ insert child_nullable
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:4 => c:1
- │    └── column5:5 => p:2
+ │    └── p_default:5 => p:2
  └── project
-      ├── columns: column5:5 column1:4!null
+      ├── columns: p_default:5 column1:4!null
       ├── values
       │    ├── columns: column1:4!null
       │    ├── (100,)
       │    └── (200,)
       └── projections
-           └── NULL::INT8 [as=column5:5]
+           └── NULL::INT8 [as=p_default:5]
 
 # Check planning of filter with FULL match (which should be the same on a
 # single column).
@@ -243,15 +243,15 @@ insert child_nullable_full
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:4 => c:1
- │    └── column5:5 => p:2
+ │    └── p_default:5 => p:2
  └── project
-      ├── columns: column5:5 column1:4!null
+      ├── columns: p_default:5 column1:4!null
       ├── values
       │    ├── columns: column1:4!null
       │    ├── (100,)
       │    └── (200,)
       └── projections
-           └── NULL::INT8 [as=column5:5]
+           └── NULL::INT8 [as=p_default:5]
 
 # Tests with multicolumn FKs.
 exec-ddl
