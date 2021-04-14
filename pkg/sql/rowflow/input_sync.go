@@ -74,6 +74,33 @@ func (s *serialSynchronizer) GetSources() []srcInfo {
 	return s.sources
 }
 
+// Start is part of the RowSource interface.
+func (s *serialSynchronizer) Start(ctx context.Context) {
+	for _, src := range s.sources {
+		src.src.Start(ctx)
+	}
+}
+
+// OutputTypes is part of the RowSource interface.
+func (s *serialSynchronizer) OutputTypes() []*types.T {
+	return s.types
+}
+
+func (u *serialSynchronizer) ConsumerDone() {
+	if u.state != draining {
+		for i := range u.sources {
+			u.sources[i].src.ConsumerDone()
+		}
+		u.state = draining
+	}
+}
+
+func (u *serialSynchronizer) ConsumerClosed() {
+	for i := range u.sources {
+		u.sources[i].src.ConsumerClosed()
+	}
+}
+
 // orderedSynchronizer receives rows from multiple streams and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns
@@ -105,33 +132,6 @@ type serialOrderedSynchronizer struct {
 	// metadata is accumulated from all the sources and is passed on as soon as
 	// possible.
 	metadata []*execinfrapb.ProducerMetadata
-}
-
-// Start is part of the RowSource interface.
-func (s *serialSynchronizer) Start(ctx context.Context) {
-	for _, src := range s.sources {
-		src.src.Start(ctx)
-	}
-}
-
-// OutputTypes is part of the RowSource interface.
-func (s *serialSynchronizer) OutputTypes() []*types.T {
-	return s.types
-}
-
-func (u *serialSynchronizer) ConsumerDone() {
-	if u.state != draining {
-		for i := range u.sources {
-			u.sources[i].src.ConsumerDone()
-		}
-		u.state = draining
-	}
-}
-
-func (u *serialSynchronizer) ConsumerClosed() {
-	for i := range u.sources {
-		u.sources[i].src.ConsumerClosed()
-	}
 }
 
 var _ execinfra.RowSource = &serialOrderedSynchronizer{}
