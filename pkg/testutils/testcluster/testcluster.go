@@ -880,7 +880,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		return errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
 	}
 
-	destServer, err := tc.findMemberServer(dest.StoreID)
+	destServer, err := tc.FindMemberServer(dest.StoreID)
 	if err != nil {
 		return err
 	}
@@ -970,7 +970,7 @@ func (tc *TestCluster) FindRangeLease(
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
 	// it.
-	hintServer, err := tc.findMemberServer(hint.StoreID)
+	hintServer, err := tc.FindMemberServer(hint.StoreID)
 	if err != nil {
 		return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
 	}
@@ -1062,8 +1062,8 @@ func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error
 	})
 }
 
-// findMemberServer returns the server containing a given store.
-func (tc *TestCluster) findMemberServer(storeID roachpb.StoreID) (*server.TestServer, error) {
+// FindMemberServer returns the server containing a given store.
+func (tc *TestCluster) FindMemberServer(storeID roachpb.StoreID) (*server.TestServer, error) {
 	for _, server := range tc.Servers {
 		if server.Stores().HasStore(storeID) {
 			return server, nil
@@ -1074,7 +1074,7 @@ func (tc *TestCluster) findMemberServer(storeID roachpb.StoreID) (*server.TestSe
 
 // findMemberStore returns the store with a given ID.
 func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store, error) {
-	server, err := tc.findMemberServer(storeID)
+	server, err := tc.FindMemberServer(storeID)
 	if err != nil {
 		return nil, err
 	}

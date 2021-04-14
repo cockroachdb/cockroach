@@ -514,6 +514,34 @@ func (sp *StorePool) ClusterNodeCount() int {
 	return sp.nodeCountFn()
 }
 
+// IsDead determines if a store is dead. It will return an error if the store is
+// not found in the store pool or the status is unknown. If the store is not dead,
+// it returns the time to death.
+func (sp *StorePool) IsDead(storeId roachpb.StoreID) (bool, time.Duration, error) {
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
+
+	sd, ok := sp.detailsMu.storeDetails[storeId]
+	if !ok {
+		return false, 0, errors.Errorf("store %d was not found", storeId)
+	}
+	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() is order to
+	// take clock signals from remote nodes into consideration.
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+
+	deadAsOf := sd.lastUpdatedTime.Add(timeUntilStoreDead)
+	if now.After(deadAsOf) {
+		return true, 0, nil
+	}
+	// If there's no descriptor (meaning no gossip ever arrived for this
+	// store), return unavailable.
+	if sd.desc == nil {
+		return false, 0, errors.Errorf("store %d status unknown, cant tell if it's dead or alive", storeId)
+	}
+	return false, deadAsOf.Sub(now), nil
+}
+
 // liveAndDeadReplicas divides the provided repls slice into two slices: the
 // first for live replicas, and the second for dead replicas.
 // Replicas for which liveness or deadness cannot be ascertained are excluded
