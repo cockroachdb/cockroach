@@ -40,6 +40,7 @@ module.exports = (env) => ({
     new webpack.DllPlugin({
       name: "[name]_[hash]",
       path: path.resolve(__dirname, `protos.${env.dist}.manifest.json`),
+      entryOnly: true,
     }),
   ],
 
