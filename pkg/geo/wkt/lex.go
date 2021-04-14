@@ -22,68 +22,6 @@ import (
 // Constant expected by parser when lexer reaches EOF.
 const eof = 0
 
-// SyntaxError is an error that occurs during parsing of a WKT string.
-type SyntaxError struct {
-	wkt       string
-	problem   string
-	lineNum   int
-	lineStart int
-	linePos   int
-	hint      string
-}
-
-// Error generates a detailed syntax error message with line and pos numbers as well as a snippet of
-// the erroneous input.
-func (e *SyntaxError) Error() string {
-	// These constants define the maximum number of characters of the line to show on each side of the cursor.
-	const (
-		leftPadding  = 30
-		rightPadding = 30
-	)
-
-	// Print the problem along with line and pos number.
-	err := fmt.Sprintf("syntax error: %s at line %d, pos %d\n", e.problem, e.lineNum, e.linePos)
-
-	// Find the position of the end of the line.
-	lineEnd := strings.IndexRune(e.wkt[e.lineStart:], '\n')
-	if lineEnd == -1 {
-		lineEnd = len(e.wkt)
-	} else {
-		lineEnd += e.lineStart
-	}
-
-	// Prepend the line with the line number.
-	strLinePrefix := fmt.Sprintf("LINE %d: ", e.lineNum)
-	strLineSuffix := "\n"
-
-	// Trim the start and end of the line as needed.
-	snipPos := e.linePos
-	snipStart := e.lineStart
-	leftMin := e.lineStart + e.linePos - leftPadding
-	if snipStart < leftMin {
-		snipPos -= leftMin - snipStart
-		snipStart = leftMin
-		strLinePrefix += "..."
-	}
-	snipEnd := lineEnd
-	rightMax := e.lineStart + e.linePos + rightPadding
-	if snipEnd > rightMax {
-		snipEnd = rightMax
-		strLineSuffix = "..." + strLineSuffix
-	}
-
-	// Print a cursor pointing to the token where the problem occurred.
-	err += strLinePrefix + e.wkt[snipStart:snipEnd] + strLineSuffix
-	err += fmt.Sprintf("%s^", strings.Repeat(" ", len(strLinePrefix)+snipPos))
-
-	// Print a hint, if applicable.
-	if e.hint != "" {
-		err += fmt.Sprintf("\nHINT: %s", e.hint)
-	}
-
-	return err
-}
-
 // We define a base type geometry as a geometry type keyword without a type suffix.
 // For example, POINT is a base type and POINTZ is not.
 //
@@ -99,125 +37,6 @@ func (e *SyntaxError) Error() string {
 // 3. As a consequence of 1. and 2., special care must be given to parsing base geometry types inside a XYM
 //    geometrycollection since a base geometry type is permitted inside a GEOMETRYCOLECTIONM only if it is empty.
 //    For example, GEOMETRYCOLLECTION M (POINT EMPTY) should parse while GEOMETRYCOLLECTION M (POINT(0 0 0)) shouldn't.
-
-// layoutStackObj is a stack object used in the layout parsing stack.
-type layoutStackObj struct {
-	// layout is the currently parsed geometry type.
-	layout geom.Layout
-	// inBaseTypeCollection is a bool where true means we are at the top-level or in a base type GEOMETRYCOLLECTION.
-	inBaseTypeCollection bool
-	// nextPointMustBeEmpty is a bool where true means the next scanned point must be EMPTY. It is used to handle
-	// the edge case where a base type geometry is allowed in a GEOMETRYCOLLECTIONM but only if it is EMPTY.
-	nextPointMustBeEmpty bool
-}
-
-// layoutStack is a stack used for parsing the geometry type. An initial frame is pushed for the top level context.
-// After that, a frame is pushed for each (nested) geometrycollection is encountered and it is popped when we
-// finish scanning that geometrycollection. The initial frame should never be popped off.
-type layoutStack struct {
-	data []layoutStackObj
-}
-
-// makeLayoutStack returns a newly created layoutStack. An initial frame is pushed for the top level context.
-func makeLayoutStack() layoutStack {
-	return layoutStack{
-		data: []layoutStackObj{{layout: geom.NoLayout, inBaseTypeCollection: true}},
-	}
-}
-
-// push constructs a layoutStackObj for a layout and pushes it onto the layout stack.
-func (s *layoutStack) push(layout geom.Layout) {
-	// inBaseTypeCollection inherits from outer context.
-	stackObj := layoutStackObj{
-		layout:               layout,
-		inBaseTypeCollection: s.topInBaseTypeCollection(),
-	}
-
-	switch layout {
-	case geom.NoLayout:
-		stackObj.layout = s.topLayout()
-	case geom.XYM, geom.XYZ, geom.XYZM:
-		stackObj.inBaseTypeCollection = false
-	default:
-		// This should never happen.
-		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
-	}
-
-	s.data = append(s.data, stackObj)
-}
-
-// pop pops a layoutStackObj from the layout stack and returns its layout.
-func (s *layoutStack) pop() geom.Layout {
-	s.checkNotEmpty()
-	if s.atTopLevel() {
-		panic("top level stack frame should never be popped")
-	}
-	curTopLayout := s.topLayout()
-	s.data = s.data[:len(s.data)-1]
-	return curTopLayout
-}
-
-// top returns a pointer to the layoutStackObj currently at the top of the stack.
-func (s *layoutStack) top() *layoutStackObj {
-	s.checkNotEmpty()
-	return &s.data[len(s.data)-1]
-}
-
-// topLayout returns the layout field of the topmost layoutStackObj.
-func (s layoutStack) topLayout() geom.Layout {
-	return s.top().layout
-}
-
-// topLayout returns the inBaseTypeCollection field of the topmost layoutStackObj.
-func (s layoutStack) topInBaseTypeCollection() bool {
-	return s.top().inBaseTypeCollection
-}
-
-// topLayout returns the nextPointMustBeEmpty field of the topmost layoutStackObj.
-func (s layoutStack) topNextPointMustBeEmpty() bool {
-	return s.top().nextPointMustBeEmpty
-}
-
-// setTopLayout sets the layout field of the topmost layoutStackObj.
-func (s layoutStack) setTopLayout(layout geom.Layout) {
-	switch layout {
-	case geom.XY, geom.XYM, geom.XYZ, geom.XYZM:
-		s.top().layout = layout
-	default:
-		// This should never happen.
-		panic(fmt.Sprintf("unknown geom.Layout %d", layout))
-	}
-}
-
-// setTopNextPointMustBeEmpty sets the nextPointMustBeEmpty field of the topmost layoutStackObj.
-func (s layoutStack) setTopNextPointMustBeEmpty(nextPointMustBeEmpty bool) {
-	if s.topLayout() != geom.XYM {
-		panic("setTopNextPointMustBeEmpty called for non-XYM geometry collection")
-	}
-	s.top().nextPointMustBeEmpty = nextPointMustBeEmpty
-}
-
-// checkNotEmpty checks that the stack is not empty and panics if it is.
-func (s layoutStack) checkNotEmpty() {
-	// Layout stack should never be empty.
-	if len(s.data) == 0 {
-		panic("layout stack is empty")
-	}
-}
-
-// checkNoGeometryCollectionFramesLeft checks that no frames corresponding to geometrycollections are left on the stack.
-func (s layoutStack) checkNoGeometryCollectionFramesLeft() {
-	// The initial stack frame should be the only one remaining at the end.
-	if !s.atTopLevel() {
-		panic("layout stack still has geometrycollection frames")
-	}
-}
-
-// atTopLevel returns whether or not the stack has only the first frame which represents that we are currently
-// not inside a geometrycollection.
-func (s layoutStack) atTopLevel() bool {
-	return len(s.data) == 1
-}
 
 // lexPos is a struct for keeping track of both the actual and human-readable lexed position in the string.
 type lexPos struct {
@@ -483,6 +302,43 @@ func (l *wktLex) validateAndPopLayoutStackFrame() bool {
 // validateLayoutStackAtEnd returns whether the layout stack is in the expected state at the end of parsing.
 func (l *wktLex) validateLayoutStackAtEnd() bool {
 	l.lytStack.checkNoGeometryCollectionFramesLeft()
+	return true
+}
+
+func (l *wktLex) isValidPoint(flatCoords []float64) bool {
+	switch stride := len(flatCoords); stride {
+	case 1:
+		l.setParseError("not enough coordinates", "each point needs at least 2 coords")
+		return false
+	case 2, 3, 4:
+		return l.validateStrideAndSetDefaultLayoutIfNoLayout(stride)
+	default:
+		l.setParseError("too many coordinates", "each point can have at most 4 coords")
+		return false
+	}
+}
+
+func (l *wktLex) isValidLineString(flatCoords []float64) bool {
+	stride := l.curLayout().Stride()
+	if len(flatCoords) < 2*stride {
+		l.setParseError("non-empty linestring with only one point", "minimum number of points is 2")
+		return false
+	}
+	return true
+}
+
+func (l *wktLex) isValidPolygonRing(flatCoords []float64) bool {
+	stride := l.curLayout().Stride()
+	if len(flatCoords) < 4*stride {
+		l.setParseError("polygon ring doesn't have enough points", "minimum number of points is 4")
+		return false
+	}
+	for i := 0; i < stride; i++ {
+		if flatCoords[i] != flatCoords[len(flatCoords)-stride+i] {
+			l.setParseError("polygon ring not closed", "ensure first and last point are the same")
+			return false
+		}
+	}
 	return true
 }
 
