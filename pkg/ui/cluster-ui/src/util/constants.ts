@@ -7,6 +7,7 @@ export const nodeIDAttr = "node_id";
 export const nodeQueryString = "node";
 export const rangeIDAttr = "range_id";
 export const statementAttr = "statement";
+export const databaseAttr = "database";
 export const tableNameAttr = "table_name";
 export const sessionAttr = "session";
 

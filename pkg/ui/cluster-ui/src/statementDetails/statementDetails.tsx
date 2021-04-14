@@ -59,6 +59,7 @@ export interface Fraction {
 interface SingleStatementStatistics {
   statement: string;
   app: string[];
+  database: string;
   distSQL: Fraction;
   vec: Fraction;
   opt: Fraction;
@@ -389,6 +390,7 @@ export class StatementDetails extends React.Component<
       opt,
       failed,
       implicit_txn,
+      database,
     } = this.props.statement;
 
     if (!stats) {
@@ -570,6 +572,10 @@ export class StatementDetails extends React.Component<
                 <div className={summaryCardStylesCx("summary--card__item")}>
                   <Text>Last execution time</Text>
                   <Text>{lastExec}</Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Database</Text>
+                  <Text>{database}</Text>
                 </div>
                 <p
                   className={summaryCardStylesCx(
