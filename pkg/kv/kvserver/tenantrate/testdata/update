@@ -39,15 +39,15 @@ timers
 ----
 00:00:03.000
 
-# Advance time by a second, at this point the limiter should have zero
-# writebytes available.
+# Advance time by a second, at this point the debt should be paid and the
+# limiter should have zero units available.
 
 advance
 1s
 ----
 00:00:01.000
 
-# Update the settings to double the writebytes rate.
+# Update the settings to double the rate but reduce the burst.
 
 update_settings
 rate:  4
