@@ -158,7 +158,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// specs.
 		for _, spec := range flows {
 			if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
-				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+				log.VEventf(ctx, 2, "failed to vectorize: %s", err)
 				if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
 					return nil, nil, err
 				}
@@ -295,7 +295,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if logPlanDiagram {
-		log.VEvent(ctx, 1, "creating plan diagram for logging")
+		log.VEvent(ctx, 3, "creating plan diagram for logging")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -308,7 +308,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	log.VEvent(ctx, 1, "running DistSQL plan")
+	log.VEvent(ctx, 2, "running DistSQL plan")
 
 	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
@@ -400,9 +400,9 @@ type DistSQLReceiver struct {
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []*types.T
 
-	// noColsRequired indicates that the caller is only interested in the
-	// existence of a single row. Used by subqueries in EXISTS mode.
-	noColsRequired bool
+	// existsMode indicates that the caller is only interested in the existence
+	// of a single row. Used by subqueries in EXISTS mode.
+	existsMode bool
 
 	// discardRows is set when we want to discard rows (for testing/benchmarks).
 	// See EXECUTE .. DISCARD ROWS.
@@ -605,8 +605,10 @@ func (r *DistSQLReceiver) SetError(err error) {
 	// If we encountered an error, we will transition to draining unless we were
 	// canceled.
 	if r.ctx.Err() != nil {
+		log.VEventf(r.ctx, 1, "encountered error (transitioning to shutting down): %v", r.ctx.Err())
 		r.status = execinfra.ConsumerClosed
 	} else {
+		log.VEventf(r.ctx, 1, "encountered error (transitioning to draining): %v", err)
 		r.status = execinfra.DrainRequested
 	}
 }
@@ -717,11 +719,11 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 
-	// If no columns are needed by the output, the consumer is only looking for
-	// whether a single row is pushed or not, so the contents do not matter, and
-	// planNodeToRowSource is not set up to handle decoding the row.
-	if r.noColsRequired {
+	if r.existsMode {
+		// In "exists" mode, the consumer is only looking for whether a single
+		// row is pushed or not, so the contents do not matter.
 		r.row = []tree.Datum{}
+		log.VEvent(r.ctx, 2, `a row is pushed in "exists" mode, so transition to draining`)
 		r.status = execinfra.DrainRequested
 	} else {
 		if r.row == nil {
@@ -738,10 +740,14 @@ func (r *DistSQLReceiver) Push(
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		if errors.Is(commErr, ErrLimitedResultClosed) || errors.Is(commErr, errIEResultChannelClosed) {
-			// ErrLimitedResultClosed and errIEResultChannelClosed are not real
-			// errors, it is a signal to stop distsql and return success to the
-			// client (that's why we don't set the error on the resultWriter).
+		// ErrLimitedResultClosed and errIEResultChannelClosed are not real
+		// errors, it is a signal to stop distsql and return success to the
+		// client (that's why we don't set the error on the resultWriter).
+		if errors.Is(commErr, ErrLimitedResultClosed) {
+			log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
+			r.status = execinfra.DrainRequested
+		} else if errors.Is(commErr, errIEResultChannelClosed) {
+			log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 			r.status = execinfra.DrainRequested
 		} else {
 			// Set the error on the resultWriter to notify the consumer about
@@ -879,7 +885,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	var typ colinfo.ColTypeInfo
 	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
-		subqueryRecv.noColsRequired = true
+		subqueryRecv.existsMode = true
 		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
 		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.GetResultTypes())
@@ -967,7 +973,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	plan planMaybePhysical,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
-	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
+	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	physPlan, err := dsp.createPhysPlan(planCtx, plan)
 	if err != nil {
@@ -1018,7 +1024,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			}
 		}
 
-		log.VEventf(ctx, 1, "executing cascade for constraint %s", plan.cascades[i].FKName)
+		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKName)
 
 		// We place a sequence point before every cascade, so
 		// that each subsequent cascade can observe the writes
@@ -1103,7 +1109,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	}
 
 	for i := range plan.checkPlans {
-		log.VEventf(ctx, 1, "executing check query %d out of %d", i+1, len(plan.checkPlans))
+		log.VEventf(ctx, 2, "executing check query %d out of %d", i+1, len(plan.checkPlans))
 		if err := dsp.planAndRunPostquery(
 			ctx,
 			plan.checkPlans[i].plan,
