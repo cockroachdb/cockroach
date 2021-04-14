@@ -260,7 +260,7 @@ type Server struct {
 
 	reCache *tree.RegexpCache
 
-	// pool is the parent monitor for all session monitors except "internal" ones.
+	// pool is the parent monitor for all session monitors.
 	pool *mon.BytesMonitor
 
 	// Metrics is used to account normal queries.
