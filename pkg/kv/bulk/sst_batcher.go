@@ -345,8 +345,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		}
 	}
 
+	b.rowCounter.BulkOpSummary.DataSize += b.sstWriter.DataSize
 	b.totalRows.Add(b.rowCounter.BulkOpSummary)
-	b.totalRows.DataSize += b.sstWriter.DataSize
 	return nil
 }
 
@@ -371,6 +371,11 @@ func (b *SSTBatcher) Close() {
 // GetSummary returns this batcher's total added rows/bytes/etc.
 func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 	return b.totalRows
+}
+
+// GetBatchSummary returns rows/bytes/etc. added in this batch.
+func (b *SSTBatcher) GetBatchSummary() roachpb.BulkOpSummary {
+	return b.rowCounter.BulkOpSummary
 }
 
 // SSTSender is an interface to send SST data to an engine.

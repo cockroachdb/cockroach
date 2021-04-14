@@ -45,8 +45,9 @@ type restoreDataProcessor struct {
 	input   execinfra.RowSource
 	output  execinfra.RowReceiver
 
-	alloc rowenc.DatumAlloc
-	kr    *storageccl.KeyRewriter
+	alloc   rowenc.DatumAlloc
+	kr      *storageccl.KeyRewriter
+	batcher *bulk.SSTBatcher
 
 	timing struct {
 		startTime  time.Time
@@ -101,6 +102,17 @@ func newRestoreDataProcessor(
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = rd.StartInternal(ctx, restoreDataProcName)
 	rd.timing.startTime = timeutil.Now()
+
+	evalCtx := rd.FlowCtx.EvalCtx
+	db := rd.FlowCtx.Cfg.DB
+	var err error
+	rd.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
+		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
+	if err != nil {
+		rd.MoveToDraining(errors.Wrap(err, "creating sst batcher"))
+		return
+	}
+
 	rd.input.Start(ctx)
 }
 
@@ -172,6 +184,19 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 }
 
+// ConsumerClosed is part of the RowSource interface.
+func (rd *restoreDataProcessor) ConsumerClosed() {
+	rd.close()
+}
+
+func (rd *restoreDataProcessor) close() {
+	if rd.InternalClose() {
+		if rd.batcher != nil {
+			rd.batcher.Close()
+		}
+	}
+}
+
 func init() {
 	rowexec.NewRestoreDataProcessor = newRestoreDataProcessor
 }
@@ -179,11 +204,11 @@ func init() {
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	entry execinfrapb.RestoreSpanEntry, newSpanKey roachpb.Key,
 ) (roachpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
 	ctx := rd.Ctx
-	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
 	rd.timing.entryCount++
+
+	rd.batcher.Reset(ctx)
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
@@ -211,18 +236,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 	timeOpeningIters := timeutil.Since(beforeItersOpen)
 	rd.timing.totalIterators += timeOpeningIters
-
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
-	if err != nil {
-		return summary, err
-	}
-	defer func() {
-		if rd.shouldLogProgress() {
-			batcher.LogSummary(ctx)
-		}
-	}()
-	defer batcher.Close()
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
@@ -284,7 +297,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if log.V(5) {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
-		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
+		if err := rd.batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 	}
@@ -293,16 +306,17 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 	// Flush out the last batch.
 	beforeFlush := timeutil.Now()
-	if err := batcher.Flush(ctx); err != nil {
+	if err := rd.batcher.Flush(ctx); err != nil {
 		return summary, err
 	}
 	timeFlushing := timeutil.Since(beforeFlush)
 	rd.timing.totalFlushing += timeFlushing
 
+	batchSummary := rd.batcher.GetBatchSummary()
 	if rd.shouldLogProgress() {
 		log.Infof(ctx, "processor running for %v", timeutil.Since(rd.timing.startTime))
 		log.Infof(ctx, "on this iteration, added %+v bytes over %+v keys",
-			humanizeutil.IBytes(int64(batcher.GetSummary().DataSize)), batcher.GetSummary().EntryCounts)
+			humanizeutil.IBytes(int64(batchSummary.DataSize)), batchSummary.EntryCounts)
 		log.Infof(ctx, "on this iteration, spent %v opening iterators, %v producing the kvs, and %v flushing",
 			timeOpeningIters, timeProducing, timeFlushing)
 		log.Infof(ctx, "processor spent %v time opening iterators, %v producing SSTs, and %v flushing",
@@ -315,7 +329,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		}
 	}
 
-	return batcher.GetSummary(), nil
+	return batchSummary, nil
 }
 
 func (rd *restoreDataProcessor) shouldLogProgress() bool {
