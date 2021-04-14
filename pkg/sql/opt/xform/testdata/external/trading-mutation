@@ -1265,12 +1265,12 @@ insert transactions
  │    ├── column4:14 => accountname:4
  │    ├── column5:15 => customername:5
  │    ├── column6:16 => operationid:6
- │    ├── column17:17 => version:7
- │    └── column18:18 => olddate:8
+ │    ├── version_default:17 => version:7
+ │    └── olddate_default:18 => olddate:8
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── values
-      ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null column17:17 column18:18!null
+      ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null version_default:17 olddate_default:18!null
       ├── cardinality: [1 - 1]
       ├── volatile
       ├── key: ()
@@ -1294,24 +1294,24 @@ upsert transactions
  │    ├── column4:14 => accountname:4
  │    ├── column5:15 => customername:5
  │    ├── column6:16 => operationid:6
- │    ├── column17:17 => version:7
- │    └── column18:18 => olddate:8
+ │    ├── version_default:17 => version:7
+ │    └── olddate_default:18 => olddate:8
  ├── update-mapping:
  │    ├── column4:14 => accountname:4
  │    ├── column5:15 => customername:5
  │    ├── column6:16 => operationid:6
- │    └── column18:18 => olddate:8
+ │    └── olddate_default:18 => olddate:8
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── left-join (cross)
-      ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null column17:17 column18:18!null dealerid:19 isbuy:20 date:21 accountname:22 customername:23 operationid:24 version:25 olddate:26 extra:27
+      ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null version_default:17 olddate_default:18!null dealerid:19 isbuy:20 date:21 accountname:22 customername:23 operationid:24 version:25 olddate:26 extra:27
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── volatile
       ├── key: ()
       ├── fd: ()-->(11-27)
       ├── values
-      │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null column17:17 column18:18!null
+      │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column6:16!null version_default:17 olddate_default:18!null
       │    ├── cardinality: [1 - 1]
       │    ├── volatile
       │    ├── key: ()
@@ -1344,7 +1344,7 @@ upsert transactiondetails
  ├── columns: <none>
  ├── arbiter indexes: detailsprimarykey
  ├── canary column: transactiondetails.dealerid:26
- ├── fetch columns: transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
+ ├── fetch columns: transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 discount:34 transactiondetails.extra:35
  ├── insert-mapping:
  │    ├── "?column?":14 => transactiondetails.dealerid:2
  │    ├── bool:15 => transactiondetails.isbuy:3
@@ -1353,23 +1353,23 @@ upsert transactiondetails
  │    ├── int8:18 => quantity:6
  │    ├── sellprice:23 => transactiondetails.sellprice:7
  │    ├── buyprice:24 => transactiondetails.buyprice:8
- │    ├── column21:21 => transactiondetails.version:9
- │    └── discount:25 => transactiondetails.discount:10
+ │    ├── version_default:21 => transactiondetails.version:9
+ │    └── discount_default:25 => discount:10
  ├── update-mapping:
  │    ├── sellprice:23 => transactiondetails.sellprice:7
  │    ├── buyprice:24 => transactiondetails.buyprice:8
- │    └── discount:25 => transactiondetails.discount:10
+ │    └── discount_default:25 => discount:10
  ├── input binding: &2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39 upsert_cardid:40 "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
+ │    ├── columns: upsert_dealerid:37 upsert_isbuy:38 upsert_transactiondate:39 upsert_cardid:40 "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null version_default:21 sellprice:23 buyprice:24 discount_default:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 discount:34 transactiondetails.extra:35
  │    ├── cardinality: [1 - 2]
  │    ├── volatile
  │    ├── key: (17,18)
  │    ├── fd: ()-->(14-16,25), (17,18)-->(21,23,24,26-35), (26-30)-->(31-35), (26)-->(37), (26,27)-->(38), (26,28)-->(39), (17,26,29)-->(40)
  │    ├── left-join (lookup transactiondetails)
- │    │    ├── columns: "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 transactiondetails.discount:34 transactiondetails.extra:35
+ │    │    ├── columns: "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null version_default:21 sellprice:23 buyprice:24 discount_default:25!null transactiondetails.dealerid:26 transactiondetails.isbuy:27 transactiondetails.transactiondate:28 transactiondetails.cardid:29 quantity:30 transactiondetails.sellprice:31 transactiondetails.buyprice:32 transactiondetails.version:33 discount:34 transactiondetails.extra:35
  │    │    ├── key columns: [14 15 16 17 18] = [26 27 28 29 30]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [1 - 2]
@@ -1377,7 +1377,7 @@ upsert transactiondetails
  │    │    ├── key: (17,18)
  │    │    ├── fd: ()-->(14-16,25), (17,18)-->(21,23,24,26-35), (26-30)-->(31-35)
  │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null column21:21 sellprice:23 buyprice:24 discount:25!null
+ │    │    │    ├── columns: "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null version_default:21 sellprice:23 buyprice:24 discount_default:25!null
  │    │    │    ├── grouping columns: int8:17!null int8:18!null
  │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
  │    │    │    ├── cardinality: [1 - 2]
@@ -1385,7 +1385,7 @@ upsert transactiondetails
  │    │    │    ├── key: (17,18)
  │    │    │    ├── fd: ()-->(14-16,25), (17,18)-->(14-16,21,23-25)
  │    │    │    ├── project
- │    │    │    │    ├── columns: sellprice:23 buyprice:24 discount:25!null column21:21 "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null
+ │    │    │    │    ├── columns: sellprice:23 buyprice:24 discount_default:25!null version_default:21 "?column?":14!null bool:15!null current_timestamp:16!null int8:17!null int8:18!null
  │    │    │    │    ├── cardinality: [2 - 2]
  │    │    │    │    ├── volatile
  │    │    │    │    ├── fd: ()-->(14-16,25)
@@ -1397,8 +1397,8 @@ upsert transactiondetails
  │    │    │    │    └── projections
  │    │    │    │         ├── crdb_internal.round_decimal_values(detail_s:67::STRING::DECIMAL(10,4), 4) [as=sellprice:23, outer=(67), immutable]
  │    │    │    │         ├── crdb_internal.round_decimal_values(detail_b:64::STRING::DECIMAL(10,4), 4) [as=buyprice:24, outer=(64), immutable]
- │    │    │    │         ├── 0.0000 [as=discount:25]
- │    │    │    │         ├── cluster_logical_timestamp() [as=column21:21, volatile]
+ │    │    │    │         ├── 0.0000 [as=discount_default:25]
+ │    │    │    │         ├── cluster_logical_timestamp() [as=version_default:21, volatile]
  │    │    │    │         ├── 1 [as="?column?":14]
  │    │    │    │         ├── false [as=bool:15]
  │    │    │    │         ├── '2017-05-10 13:00:00+00:00' [as=current_timestamp:16]
@@ -1409,10 +1409,10 @@ upsert transactiondetails
  │    │    │         │    └── sellprice:23
  │    │    │         ├── first-agg [as=buyprice:24, outer=(24)]
  │    │    │         │    └── buyprice:24
- │    │    │         ├── first-agg [as=column21:21, outer=(21)]
- │    │    │         │    └── column21:21
- │    │    │         ├── first-agg [as=discount:25, outer=(25)]
- │    │    │         │    └── discount:25
+ │    │    │         ├── first-agg [as=version_default:21, outer=(21)]
+ │    │    │         │    └── version_default:21
+ │    │    │         ├── first-agg [as=discount_default:25, outer=(25)]
+ │    │    │         │    └── discount_default:25
  │    │    │         ├── const-agg [as="?column?":14, outer=(14)]
  │    │    │         │    └── "?column?":14
  │    │    │         ├── const-agg [as=bool:15, outer=(15)]
@@ -1490,41 +1490,41 @@ WHERE ci.cardid = Updates.c AND ci.dealerid = 1
 ----
 update cardsinfo [as=ci]
  ├── columns: <none>
- ├── fetch columns: ci.dealerid:20 ci.cardid:21 buyprice:22 sellprice:23 discount:24 desiredinventory:25 actualinventory:26 maxinventory:27 ci.version:28 ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32
+ ├── fetch columns: ci.dealerid:20 ci.cardid:21 buyprice:22 sellprice:23 discount:24 desiredinventory:25 actualinventory:26 maxinventory:27 ci.version:28 discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32
  ├── update-mapping:
  │    ├── actualinventory_new:46 => actualinventory:12
- │    ├── discountbuyprice:50 => ci.discountbuyprice:15
- │    ├── column47:47 => notes:16
- │    └── column48:48 => oldinventory:17
+ │    ├── discountbuyprice_comp:50 => discountbuyprice:15
+ │    ├── notes_default:47 => notes:16
+ │    └── oldinventory_default:48 => oldinventory:17
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: discountbuyprice:50 column47:47 column48:48!null actualinventory_new:46 ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
+      ├── columns: discountbuyprice_comp:50 notes_default:47 oldinventory_default:48!null actualinventory_new:46 ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
       ├── immutable
       ├── key: (21)
       ├── fd: ()-->(20,47,48), (21)-->(22-32,34,35,46,50), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
       ├── group-by
-      │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null sum_int:44
+      │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null sum_int:44
       │    ├── grouping columns: ci.cardid:21!null
       │    ├── key: (21)
       │    ├── fd: ()-->(20), (21)-->(20,22-32,34,35,44), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
       │    ├── left-join (lookup inventorydetails [as=id])
-      │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null id.dealerid:36 id.cardid:37 quantity:39
+      │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null id.dealerid:36 id.cardid:37 quantity:39
       │    │    ├── key columns: [53 21] = [36 37]
       │    │    ├── fd: ()-->(20), (21)-->(22-32,34,35), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
       │    │    ├── project
-      │    │    │    ├── columns: "lookup_join_const_col_@36":53!null ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
+      │    │    │    ├── columns: "lookup_join_const_col_@36":53!null ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
       │    │    │    ├── cardinality: [0 - 2]
       │    │    │    ├── key: (21)
       │    │    │    ├── fd: ()-->(20,53), (21)-->(22-32,34,35), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
       │    │    │    ├── distinct-on
-      │    │    │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
+      │    │    │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
       │    │    │    │    ├── grouping columns: ci.cardid:21!null
       │    │    │    │    ├── cardinality: [0 - 2]
       │    │    │    │    ├── key: (21)
       │    │    │    │    ├── fd: ()-->(20), (21)-->(20,22-32,34,35), (28)-->(21-27,29-32), (21)==(34), (34)==(21)
       │    │    │    │    ├── inner-join (lookup cardsinfo [as=ci])
-      │    │    │    │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null ci.discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
+      │    │    │    │    │    ├── columns: ci.dealerid:20!null ci.cardid:21!null buyprice:22!null sellprice:23!null discount:24!null desiredinventory:25!null actualinventory:26!null maxinventory:27!null ci.version:28!null discountbuyprice:29 notes:30 oldinventory:31 ci.extra:32 c:34!null q:35!null
       │    │    │    │    │    ├── key columns: [51 34] = [20 21]
       │    │    │    │    │    ├── lookup columns are key
       │    │    │    │    │    ├── cardinality: [0 - 2]
@@ -1556,8 +1556,8 @@ update cardsinfo [as=ci]
       │    │    │    │         │    └── maxinventory:27
       │    │    │    │         ├── first-agg [as=ci.version:28, outer=(28)]
       │    │    │    │         │    └── ci.version:28
-      │    │    │    │         ├── first-agg [as=ci.discountbuyprice:29, outer=(29)]
-      │    │    │    │         │    └── ci.discountbuyprice:29
+      │    │    │    │         ├── first-agg [as=discountbuyprice:29, outer=(29)]
+      │    │    │    │         │    └── discountbuyprice:29
       │    │    │    │         ├── first-agg [as=notes:30, outer=(30)]
       │    │    │    │         │    └── notes:30
       │    │    │    │         ├── first-agg [as=oldinventory:31, outer=(31)]
@@ -1592,8 +1592,8 @@ update cardsinfo [as=ci]
       │         │    └── maxinventory:27
       │         ├── const-agg [as=ci.version:28, outer=(28)]
       │         │    └── ci.version:28
-      │         ├── const-agg [as=ci.discountbuyprice:29, outer=(29)]
-      │         │    └── ci.discountbuyprice:29
+      │         ├── const-agg [as=discountbuyprice:29, outer=(29)]
+      │         │    └── discountbuyprice:29
       │         ├── const-agg [as=notes:30, outer=(30)]
       │         │    └── notes:30
       │         ├── const-agg [as=oldinventory:31, outer=(31)]
@@ -1605,7 +1605,7 @@ update cardsinfo [as=ci]
       │         └── const-agg [as=q:35, outer=(35)]
       │              └── q:35
       └── projections
-           ├── crdb_internal.round_decimal_values(buyprice:22::DECIMAL - discount:24::DECIMAL, 4) [as=discountbuyprice:50, outer=(22,24), immutable]
-           ├── CAST(NULL AS STRING) [as=column47:47]
-           ├── 0 [as=column48:48]
+           ├── crdb_internal.round_decimal_values(buyprice:22::DECIMAL - discount:24::DECIMAL, 4) [as=discountbuyprice_comp:50, outer=(22,24), immutable]
+           ├── CAST(NULL AS STRING) [as=notes_default:47]
+           ├── 0 [as=oldinventory_default:48]
            └── COALESCE(sum_int:44, 0) [as=actualinventory_new:46, outer=(44)]

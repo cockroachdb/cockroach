@@ -146,13 +146,13 @@ root
            │    ├── c:15 => child_multicol.p:10
            │    ├── q_new:24 => child_multicol.q:11
            │    ├── r_new:25 => child_multicol.r:12
-           │    └── column26:26 => x:13
+           │    └── x_comp:26 => x:13
            ├── check columns: check1:27
            ├── input binding: &2
            ├── project
-           │    ├── columns: check1:27!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 column26:26
+           │    ├── columns: check1:27!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 x_comp:26
            │    ├── project
-           │    │    ├── columns: column26:26 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
+           │    │    ├── columns: x_comp:26 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
            │    │    ├── project
            │    │    │    ├── columns: q_new:24 r_new:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    ├── semi-join (hash)
@@ -176,7 +176,7 @@ root
            │    │    │         ├── child_multicol.p:16 + 1 [as=q_new:24]
            │    │    │         └── child_multicol.p:16 + child_multicol.q:17 [as=r_new:25]
            │    │    └── projections
-           │    │         └── (c:15 + q_new:24) + r_new:25 [as=column26:26]
+           │    │         └── (c:15 + q_new:24) + r_new:25 [as=x_comp:26]
            │    └── projections
            │         └── (c:15 > 100) OR (c:15 > c:15) [as=check1:27]
            └── f-k-checks
