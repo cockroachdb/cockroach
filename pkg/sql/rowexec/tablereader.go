@@ -39,8 +39,8 @@ type tableReader struct {
 	parallelize bool
 
 	// serial means we stagger the StartScans until we need them.
-	serial       bool
-	scansStarted bool
+	serial      bool
+	scanStarted bool
 
 	// See TableReaderSpec.MaxTimestampAgeNanos.
 	maxTimestampAge time.Duration
@@ -85,7 +85,7 @@ func newTableReader(
 	tr := trPool.Get().(*tableReader)
 	// RFC: is there a better way?
 	tr.serial = post.Limit == 1
-	tr.scansStarted = false // RFC: is this necessary?
+	tr.scanStarted = false // RFC: is this necessary?
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 	// Parallelize shouldn't be set when there's a limit hint, but double-check
 	// just in case.
@@ -190,14 +190,17 @@ func (tr *tableReader) Start(ctx context.Context) {
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
 
 	if !tr.serial {
-		err := tr.startScans(ctx)
+		err := tr.startScan(ctx)
 		if err != nil {
 			tr.MoveToDraining(err)
 		}
 	}
 }
 
-func (tr *tableReader) startScans(ctx context.Context) error {
+func (tr *tableReader) startScan(ctx context.Context) error {
+	if tr.scanStarted {
+		return nil
+	}
 	limitBatches := !tr.parallelize
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
@@ -215,7 +218,7 @@ func (tr *tableReader) startScans(ctx context.Context) error {
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
-	tr.scansStarted = true
+	tr.scanStarted = true
 	return err
 }
 
@@ -245,8 +248,8 @@ func TestingSetScannedRowProgressFrequency(val int64) func() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
-		if tr.serial && !tr.scansStarted {
-			err := tr.startScans(tr.Ctx)
+		if tr.serial {
+			err := tr.startScan(tr.Ctx)
 			if err != nil {
 				tr.MoveToDraining(err)
 				break

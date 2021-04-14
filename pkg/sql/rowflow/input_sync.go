@@ -86,6 +86,9 @@ func (s *serialSynchronizer) OutputTypes() []*types.T {
 	return s.types
 }
 
+var _ SourceContainer = &serialSynchronizer{}
+var _ execinfra.RowSource = &serialSynchronizer{}
+
 func (u *serialSynchronizer) ConsumerDone() {
 	if u.state != draining {
 		for i := range u.sources {
@@ -260,7 +263,7 @@ func (s *serialOrderedSynchronizer) consumeMetadata(
 // If an error is returned, then either the heap is in a bad state (s.err has
 // been set), or one of the sources is borked. In either case, advanceRoot()
 // should not be called again - the caller should update the
-// orderedSynchronizer.state accordingly.
+// serialOrderedSynchronizer.state accordingly.
 func (s *serialOrderedSynchronizer) advanceRoot() error {
 	if s.state != returningRows {
 		return errors.Errorf("advanceRoot() called in unsupported state: %d", s.state)
