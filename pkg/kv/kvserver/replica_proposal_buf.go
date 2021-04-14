@@ -713,7 +713,6 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 	// Lease transfers behave like regular proposals. Note that transfers
 	// carry a summary of the timestamp cache, so the new leaseholder will be
 	// aware of all the reads performed by the previous leaseholder.
-	isBrandNewLeaseRequest := false
 	if p.Request.IsLeaseRequest() {
 		// We read the lease from the ReplicatedEvalResult, not from leaseReq, because the
 		// former is more up to date, having been modified by the evaluation.
@@ -723,12 +722,10 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		if leaseExtension {
 			return nil
 		}
-		isBrandNewLeaseRequest = true
 		// For brand new leases, we close the lease start time. Since this proposing
 		// replica is not the leaseholder, the previous target is meaningless.
 		closedTSTarget = newLease.Start.ToTimestamp()
-	}
-	if !isBrandNewLeaseRequest {
+	} else {
 		lb := b.evalTracker.LowerBound(ctx)
 		if !lb.IsEmpty() {
 			// If the tracker told us that requests are currently evaluating at
