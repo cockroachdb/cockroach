@@ -45,7 +45,30 @@ export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
-export const StatementTableTitle = {
+// Single place for column names. Used in table columns and in columns selector.
+export const statementColumnLabels = {
+  statements: "Statements",
+  database: "Database",
+  executionCount: "Execution Count",
+  rowsRead: "Rows Read",
+  bytesRead: "Bytes Read",
+  statementTime: "Statement Time",
+  transactionTime: "Transaction Time",
+  contention: "Contention",
+  maxMemUsage: "Max Memory",
+  networkBytes: "Network",
+  retries: "Retries",
+  workloadPct: "% of All Runtime",
+  diagnostics: "Diagnostics",
+};
+
+export type StatementTableColumnKeys = keyof typeof statementColumnLabels;
+
+type StatementTableTitleType = {
+  [key in StatementTableColumnKeys]: JSX.Element;
+};
+
+export const StatementTableTitle: StatementTableTitleType = {
   statements: (
     <Tooltip
       placement="bottom"
@@ -65,7 +88,16 @@ export const StatementTableTitle = {
         </>
       }
     >
-      Statements
+      {statementColumnLabels.statements}
+    </Tooltip>
+  ),
+  database: (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={<p>Database on which the statement was executed.</p>}
+    >
+      Database
     </Tooltip>
   ),
   executionCount: (
@@ -322,7 +354,7 @@ export const StatementTableTitle = {
         </p>
       }
     >
-      % of all runtime
+      % of All Runtime
     </Tooltip>
   ),
   diagnostics: (
@@ -357,6 +389,7 @@ export const StatementTableCell = {
   ) => (stmt: any) => (
     <StatementLink
       statement={stmt.label}
+      database={stmt.database}
       implicitTxn={stmt.implicitTxn}
       search={search}
       app={selectedApp}
@@ -442,6 +475,7 @@ interface StatementLinkProps {
   implicitTxn: boolean;
   search: string;
   anonStatement?: string;
+  database?: string;
   onClick?: (statement: string) => void;
 }
 
@@ -450,9 +484,14 @@ interface StatementLinkProps {
 export const StatementLinkTarget = (props: StatementLinkProps) => {
   let base: string;
   if (props.app && props.app.length > 0) {
-    base = `/statements/${props.app}/${props.implicitTxn}`;
+    base = `/statements/${props.app}`;
   } else {
-    base = `/statement/${props.implicitTxn}`;
+    base = `/statement`;
+  }
+  if (props.database && props.database.length > 0) {
+    base = base + `/${props.database}/${props.implicitTxn}`;
+  } else {
+    base = base + `/${props.implicitTxn}`;
   }
 
   let linkStatement = props.statement;

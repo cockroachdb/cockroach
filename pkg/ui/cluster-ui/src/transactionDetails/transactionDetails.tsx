@@ -241,7 +241,6 @@ export class TransactionDetails extends React.Component<
                         aggregatedStatements,
                         "",
                         totalWorkload,
-                        "",
                       )}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
