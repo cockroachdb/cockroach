@@ -285,7 +285,7 @@ func (rq *replicateQueue) shouldQueue(
 	// If the lease is valid, check to see if we should transfer it.
 	status := repl.LeaseStatusAt(ctx, now)
 	if status.IsValid() &&
-		rq.canTransferLease() &&
+		rq.canTransferLease(ctx, repl) &&
 		rq.allocator.ShouldTransferLease(ctx, zone, voterReplicas, status.Lease.Replica.StoreID, repl.leaseholderStats) {
 
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
@@ -344,7 +344,10 @@ func (rq *replicateQueue) process(
 }
 
 func (rq *replicateQueue) processOneChange(
-	ctx context.Context, repl *Replica, canTransferLease func() bool, dryRun bool,
+	ctx context.Context,
+	repl *Replica,
+	canTransferLease func(ctx context.Context, repl *Replica) bool,
+	dryRun bool,
 ) (requeue bool, _ error) {
 	// Check lease and destroy status here. The queue does this higher up already, but
 	// adminScatter (and potential other future callers) also call this method and don't
@@ -805,12 +808,12 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 	repl *Replica,
 	removeStoreID roachpb.StoreID,
 	dryRun bool,
-	canTransferLease func() bool,
+	canTransferLease func(ctx context.Context, repl *Replica) bool,
 ) (done bool, _ error) {
 	if removeStoreID != repl.store.StoreID() {
 		return false, nil
 	}
-	if canTransferLease != nil && !canTransferLease() {
+	if canTransferLease != nil && !canTransferLease(ctx, repl) {
 		return false, errors.Errorf("cannot transfer lease")
 	}
 	desc, zone := repl.DescAndZone()
@@ -1066,7 +1069,7 @@ func (rq *replicateQueue) considerRebalance(
 	ctx context.Context,
 	repl *Replica,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	canTransferLease func() bool,
+	canTransferLease func(ctx context.Context, repl *Replica) bool,
 	dryRun bool,
 ) (requeue bool, _ error) {
 	desc, zone := repl.DescAndZone()
@@ -1144,7 +1147,7 @@ func (rq *replicateQueue) considerRebalance(
 		}
 	}
 
-	if !canTransferLease() {
+	if !canTransferLease(ctx, repl) {
 		// No action was necessary and no rebalance target was found. Return
 		// without re-queuing this replica.
 		return false, nil
@@ -1378,7 +1381,14 @@ func (rq *replicateQueue) changeReplicas(
 	return nil
 }
 
-func (rq *replicateQueue) canTransferLease() bool {
+func (rq *replicateQueue) canTransferLease(ctx context.Context, repl *Replica) bool {
+	// Do a best effort check to see if this replica conforms to the configured
+	// lease preferences, if it does not we want to encourage more aggressive lease
+	// movement and not delay it.
+	respectsLeasePreferences, err := repl.checkLeaseRespectsPreferences(ctx)
+	if err == nil && !respectsLeasePreferences {
+		return true
+	}
 	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
 		minInterval := minLeaseTransferInterval.Get(&rq.store.cfg.Settings.SV)
 		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
