@@ -1593,6 +1593,9 @@ message AddSSTableRequest {
 // AddSSTableResponse is the response to a AddSSTable() operation.
 message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID"];
+  google.protobuf.Duration prewait = 3 [(gogoproto.nullable) = false,
+                                         (gogoproto.stdduration) = true];
 }
 
 // RefreshRequest is arguments to the Refresh() method, which verifies that no

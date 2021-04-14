@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -109,13 +110,13 @@ func runTestDBAddSSTable(
 		}
 
 		// Key is before the range in the request span.
-		if err := db.AddSSTable(
+		if _, err := db.AddSSTable(
 			ctx, "d", "e", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
-		if err := db.AddSSTable(
+		if _, err := db.AddSSTable(
 			ctx, "a", "b", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
@@ -124,7 +125,7 @@ func runTestDBAddSSTable(
 		// Do an initial ingest.
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 		defer cancel()
-		if err := db.AddSSTable(
+		if _, err := db.AddSSTable(
 			ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); err != nil {
 			t.Fatalf("%+v", err)
@@ -167,7 +168,7 @@ func runTestDBAddSSTable(
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(
+		if _, err := db.AddSSTable(
 			ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); err != nil {
 			t.Fatalf("%+v", err)
@@ -204,7 +205,7 @@ func runTestDBAddSSTable(
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 			defer cancel()
 
-			if err := db.AddSSTable(
+			if _, err := db.AddSSTable(
 				ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 			); err != nil {
 				t.Fatalf("%+v", err)
@@ -259,7 +260,7 @@ func runTestDBAddSSTable(
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 			defer cancel()
 
-			if err := db.AddSSTable(
+			if _, err := db.AddSSTable(
 				ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, true, /* ingestAsWrites */
 			); err != nil {
 				t.Fatalf("%+v", err)
@@ -299,7 +300,7 @@ func runTestDBAddSSTable(
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.AddSSTable(
+		if _, err := db.AddSSTable(
 			ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
 		); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
@@ -333,6 +334,11 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+
+	evalCtx := (&batcheval.MockEvalCtx{
+		ClusterSettings: cluster.MakeTestingClusterSettings(),
+		NodeID:          1,
+	}).EvalContext()
 	for _, engineImpl := range engineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			e := engineImpl.create()
@@ -431,9 +437,10 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 					RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
 					Data:          sstBytes,
 				},
-				Stats: &enginepb.MVCCStats{},
+				Stats:   &enginepb.MVCCStats{},
+				EvalCtx: evalCtx,
 			}
-			if _, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil); err != nil {
+			if _, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{}); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
@@ -472,9 +479,10 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 					}}),
 					MVCCStats: &enginepb.MVCCStats{KeyCount: 10},
 				},
-				Stats: &enginepb.MVCCStats{},
+				Stats:   &enginepb.MVCCStats{},
+				EvalCtx: evalCtx,
 			}
-			if _, err := batcheval.EvalAddSSTable(ctx, e, cArgsWithStats, nil); err != nil {
+			if _, err := batcheval.EvalAddSSTable(ctx, e, cArgsWithStats, &roachpb.AddSSTableResponse{}); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			expected := enginepb.MVCCStats{ContainsEstimates: 1, KeyCount: 10}
@@ -490,6 +498,10 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	evalCtx := (&batcheval.MockEvalCtx{
+		ClusterSettings: cluster.MakeTestingClusterSettings(),
+		NodeID:          1,
+	}).EvalContext()
 	for _, engineImpl := range engineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			e := engineImpl.create()
@@ -559,10 +571,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						DisallowShadowing: true,
 						MVCCStats:         &stats,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"a\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -585,10 +598,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"g\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -616,7 +630,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					},
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -642,10 +656,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						DisallowShadowing: true,
 						MVCCStats:         &stats,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
@@ -673,10 +688,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -701,10 +717,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"b\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -730,10 +747,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -777,10 +795,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "conflicting intents on \"t") {
 					t.Fatalf("%+v", err)
 				}
@@ -815,10 +834,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "inline values are unsupported when checking for key collisions") {
 					t.Fatalf("%+v", err)
 				}
@@ -845,10 +865,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						DisallowShadowing: true,
 						MVCCStats:         &stats,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
@@ -873,10 +894,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -901,10 +923,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"y\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -929,10 +952,11 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						Data:              sstBytes,
 						DisallowShadowing: true,
 					},
-					Stats: &enginepb.MVCCStats{},
+					Stats:   &enginepb.MVCCStats{},
+					EvalCtx: evalCtx,
 				}
 
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if !testutils.IsError(err, "ingested key collides with an existing one: \"z\"") {
 					t.Fatalf("%+v", err)
 				}
@@ -969,9 +993,10 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 						DisallowShadowing: true,
 						MVCCStats:         &stats,
 					},
-					Stats: &commandStats,
+					Stats:   &commandStats,
+					EvalCtx: evalCtx,
 				}
-				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				_, err := batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
@@ -1001,7 +1026,8 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					DisallowShadowing: true,
 					MVCCStats:         &secondStats,
 				}
-				_, err = batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				cArgs.EvalCtx = evalCtx
+				_, err = batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
@@ -1028,7 +1054,8 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					DisallowShadowing: true,
 					MVCCStats:         &thirdStats,
 				}
-				_, err = batcheval.EvalAddSSTable(ctx, e, cArgs, nil)
+				cArgs.EvalCtx = evalCtx
+				_, err = batcheval.EvalAddSSTable(ctx, e, cArgs, &roachpb.AddSSTableResponse{})
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}

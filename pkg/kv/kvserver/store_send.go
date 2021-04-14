@@ -54,7 +54,9 @@ func (s *Store) Send(
 
 	// Limit the number of concurrent AddSSTable requests, since they're expensive
 	// and block all other writes to the same span.
-	if ba.IsSingleAddSSTableRequest() {
+	var preSendWait time.Duration
+	isSST := ba.IsSingleAddSSTableRequest()
+	if isSST {
 		before := timeutil.Now()
 		if err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx); err != nil {
 			return nil, roachpb.NewError(err)
@@ -72,6 +74,7 @@ func (s *Store) Send(
 			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
 				waited, waitedEngine)
 		}
+		preSendWait = waited
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
@@ -194,6 +197,9 @@ func (s *Store) Send(
 
 	br, pErr = repl.Send(ctx, ba)
 	if pErr == nil {
+		if isSST {
+			br.Responses[0].GetAddSstable().Prewait = preSendWait
+		}
 		return br, nil
 	}
 

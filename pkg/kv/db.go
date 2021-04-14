@@ -688,10 +688,13 @@ func (db *DB) AddSSTable(
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
-) error {
+) (*roachpb.AddSSTableResponse, error) {
 	b := &Batch{}
 	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
-	return getOneErr(db.Run(ctx, b), b)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return nil, err
+	}
+	return b.response.Responses[0].GetAddSstable(), nil
 }
 
 // Migrate is used instruct all ranges overlapping with the provided keyspace to

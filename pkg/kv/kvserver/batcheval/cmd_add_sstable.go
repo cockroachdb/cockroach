@@ -34,11 +34,13 @@ func init() {
 // NB: These sstables do not contain intents/locks, so the code below only
 // needs to deal with MVCCKeys.
 func EvalAddSSTable(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
+	reply := resp.(*roachpb.AddSSTableResponse)
+	reply.NodeID = cArgs.EvalCtx.NodeID()
 	mvccStartKey, mvccEndKey := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
 
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
