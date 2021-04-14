@@ -762,37 +762,48 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		// proposed.
 		lease roachpb.Lease
 
+		// expClosed is the expected closed timestamp carried by the proposal. Empty
+		// means the proposal is not expected to carry a closed timestamp update.
 		expClosed hlc.Timestamp
+		// expAssignedClosedBumped, if set, means that the test expects
+		// b.assignedClosedTimestamp to be bumped before proposing. If not set, then
+		// the test expects b.assignedClosedTimestamp to be left at
+		// prevClosedTimestamp, regardless of whether the proposal carries a closed
+		// timestamp or not (expClosed).
+		expAssignedClosedBumped bool
 	}{
 		{
-			name:                "basic",
-			reqType:             regularWrite,
-			trackerLowerBound:   hlc.Timestamp{},
-			leaseExp:            hlc.MaxTimestamp,
-			rangePolicy:         roachpb.LAG_BY_CLUSTER_SETTING,
-			prevClosedTimestamp: hlc.Timestamp{},
-			expClosed:           nowMinusClosedLag,
+			name:                    "basic",
+			reqType:                 regularWrite,
+			trackerLowerBound:       hlc.Timestamp{},
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LAG_BY_CLUSTER_SETTING,
+			prevClosedTimestamp:     hlc.Timestamp{},
+			expClosed:               nowMinusClosedLag,
+			expAssignedClosedBumped: true,
 		},
 		{
 			// The request tracker will prevent us from closing below its lower bound.
-			name:                "not closing below evaluating requests",
-			reqType:             regularWrite,
-			trackerLowerBound:   nowMinusTwiceClosedLag,
-			leaseExp:            hlc.MaxTimestamp,
-			rangePolicy:         roachpb.LAG_BY_CLUSTER_SETTING,
-			prevClosedTimestamp: hlc.Timestamp{},
-			expClosed:           nowMinusTwiceClosedLag.FloorPrev(),
+			name:                    "not closing below evaluating requests",
+			reqType:                 regularWrite,
+			trackerLowerBound:       nowMinusTwiceClosedLag,
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LAG_BY_CLUSTER_SETTING,
+			prevClosedTimestamp:     hlc.Timestamp{},
+			expClosed:               nowMinusTwiceClosedLag.FloorPrev(),
+			expAssignedClosedBumped: true,
 		},
 		{
 			// Like the basic test, except that we can't close timestamp below what
 			// we've already closed previously.
-			name:                "no regression",
-			reqType:             regularWrite,
-			trackerLowerBound:   hlc.Timestamp{},
-			leaseExp:            hlc.MaxTimestamp,
-			rangePolicy:         roachpb.LAG_BY_CLUSTER_SETTING,
-			prevClosedTimestamp: someClosedTS,
-			expClosed:           someClosedTS,
+			name:                    "no regression",
+			reqType:                 regularWrite,
+			trackerLowerBound:       hlc.Timestamp{},
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LAG_BY_CLUSTER_SETTING,
+			prevClosedTimestamp:     someClosedTS,
+			expClosed:               someClosedTS,
+			expAssignedClosedBumped: false,
 		},
 		{
 			name:    "brand new lease",
@@ -808,6 +819,11 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			leaseExp:    expiredLeaseTimestamp,
 			rangePolicy: roachpb.LAG_BY_CLUSTER_SETTING,
 			expClosed:   now.ToTimestamp(),
+			// Check that the lease proposal does not bump b.assignedClosedTimestamp.
+			// The proposer cannot make promises about the write timestamps of further
+			// requests based on the start time of a proposed lease. See comments in
+			// propBuf.assignClosedTimestampToProposalLocked().
+			expAssignedClosedBumped: false,
 		},
 		{
 			name:    "lease extension",
@@ -824,7 +840,8 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			rangePolicy: roachpb.LAG_BY_CLUSTER_SETTING,
 			// Lease extensions don't carry closed timestamps because they don't get
 			// MLAIs, and so they can be reordered.
-			expClosed: hlc.Timestamp{},
+			expClosed:               hlc.Timestamp{},
+			expAssignedClosedBumped: false,
 		},
 		{
 			// Lease transfers behave just like regular writes. The lease start time
@@ -835,21 +852,23 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 				Sequence: curLease.Sequence + 1,
 				Start:    now,
 			},
-			trackerLowerBound: hlc.Timestamp{},
-			leaseExp:          hlc.MaxTimestamp,
-			rangePolicy:       roachpb.LAG_BY_CLUSTER_SETTING,
-			expClosed:         nowMinusClosedLag,
+			trackerLowerBound:       hlc.Timestamp{},
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LAG_BY_CLUSTER_SETTING,
+			expClosed:               nowMinusClosedLag,
+			expAssignedClosedBumped: true,
 		},
 		{
 			// With the LEAD_FOR_GLOBAL_READS policy, we're expecting to close
 			// timestamps in the future.
-			name:                "global range",
-			reqType:             regularWrite,
-			trackerLowerBound:   hlc.Timestamp{},
-			leaseExp:            hlc.MaxTimestamp,
-			rangePolicy:         roachpb.LEAD_FOR_GLOBAL_READS,
-			prevClosedTimestamp: hlc.Timestamp{},
-			expClosed:           nowPlusGlobalReadLead,
+			name:                    "global range",
+			reqType:                 regularWrite,
+			trackerLowerBound:       hlc.Timestamp{},
+			leaseExp:                hlc.MaxTimestamp,
+			rangePolicy:             roachpb.LEAD_FOR_GLOBAL_READS,
+			prevClosedTimestamp:     hlc.Timestamp{},
+			expClosed:               nowPlusGlobalReadLead,
+			expAssignedClosedBumped: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -899,6 +918,11 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
 			checkClosedTS(t, r, tc.expClosed)
+			if tc.expAssignedClosedBumped {
+				require.Equal(t, tc.expClosed, b.assignedClosedTimestamp)
+			} else {
+				require.Equal(t, tc.prevClosedTimestamp, b.assignedClosedTimestamp)
+			}
 		})
 	}
 }
