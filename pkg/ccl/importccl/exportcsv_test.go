@@ -192,8 +192,11 @@ func TestMultiNodeExportStmt(t *testing.T) {
 			totalBytes += bytes
 			nodesSeen[strings.SplitN(filename, ".", 2)[0]] = true
 		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("unexpected error during export: %s", err.Error())
+		}
 		if totalRows != exportRows {
-			t.Fatalf("Expected %d rows, got %d", exportRows, totalRows)
+			t.Fatalf("expected %d rows, got %d", exportRows, totalRows)
 		}
 		if expected := exportRows / chunkSize; files < expected {
 			t.Fatalf("expected at least %d files, got %d", expected, files)

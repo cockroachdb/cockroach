@@ -24,7 +24,6 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",
-        "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/mon",

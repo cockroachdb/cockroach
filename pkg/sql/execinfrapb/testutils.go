@@ -61,8 +61,7 @@ func StartMockDistSQLServer(
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows
 // clients to control the inbound streams.
 type MockDistSQLServer struct {
-	InboundStreams   chan InboundStreamNotification
-	RunSyncFlowCalls chan RunSyncFlowCall
+	InboundStreams chan InboundStreamNotification
 }
 
 // InboundStreamNotification is the MockDistSQLServer's way to tell its clients
@@ -73,29 +72,13 @@ type InboundStreamNotification struct {
 	Donec  chan<- error
 }
 
-// RunSyncFlowCall is the MockDistSQLServer's way to tell its clients that a
-// RunSyncFlowCall has arrived. The rpc handler is blocked until Donec is
-// signaled.
-type RunSyncFlowCall struct {
-	Stream DistSQL_RunSyncFlowServer
-	Donec  chan<- error
-}
-
 // MockDistSQLServer implements the DistSQLServer interface.
 var _ DistSQLServer = &MockDistSQLServer{}
 
 func newMockDistSQLServer() *MockDistSQLServer {
 	return &MockDistSQLServer{
-		InboundStreams:   make(chan InboundStreamNotification),
-		RunSyncFlowCalls: make(chan RunSyncFlowCall),
+		InboundStreams: make(chan InboundStreamNotification),
 	}
-}
-
-// RunSyncFlow is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
-	donec := make(chan error)
-	ds.RunSyncFlowCalls <- RunSyncFlowCall{Stream: stream, Donec: donec}
-	return <-donec
 }
 
 // SetupFlow is part of the DistSQLServer interface.

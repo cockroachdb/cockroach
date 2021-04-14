@@ -305,6 +305,9 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 					output.WriteString(strings.Join(elems, " "))
 					output.WriteString("\n")
 				}
+				if err := rows.Err(); err != nil {
+					t.Fatal(err)
+				}
 				return output.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -913,7 +916,8 @@ func backupAndRestore(
 
 		found := false
 		const stmt = "SELECT payload FROM system.jobs ORDER BY created DESC LIMIT 10"
-		for rows := sqlDB.Query(t, stmt); rows.Next(); {
+		rows := sqlDB.Query(t, stmt)
+		for rows.Next() {
 			var payloadBytes []byte
 			if err := rows.Scan(&payloadBytes); err != nil {
 				t.Fatal(err)
@@ -938,6 +942,9 @@ func backupAndRestore(
 			if backupManifest.DeprecatedStatistics != nil {
 				t.Fatal("expected statistics field of backup descriptor payload to be nil")
 			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("unexpected error querying jobs: %s", err.Error())
 		}
 		if !found {
 			t.Fatal("scanned job rows did not contain a backup!")

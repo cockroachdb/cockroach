@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -71,6 +72,7 @@ func lookupStreamInfo(
 
 func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	reg := NewFlowRegistry(0)
 
 	id1 := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -210,6 +212,7 @@ func TestFlowRegistry(t *testing.T) {
 // are propagated to their consumers and future attempts to connect them fail.
 func TestStreamConnectionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	reg := NewFlowRegistry(0)
 
 	jiffy := time.Nanosecond
@@ -277,6 +280,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 // - once the consumer connects, another Handshake message is sent.
 func TestHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	reg := NewFlowRegistry(0)
 
@@ -375,6 +379,7 @@ func TestHandshake(t *testing.T) {
 // subtests for more details.
 func TestFlowRegistryDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	reg := NewFlowRegistry(0)
@@ -521,6 +526,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 // TODO(asubiotto): This error should also be considered retryable by clients.
 func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	fr := NewFlowRegistry(0)
 	wg := sync.WaitGroup{}
@@ -550,6 +556,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 // error, we are still able to register flows while Pushing the error (#34041).
 func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	fr := NewFlowRegistry(0)
@@ -605,6 +612,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 // into a flow even if one of the inbound streams are blocked (#35859).
 func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	fr := NewFlowRegistry(0)
