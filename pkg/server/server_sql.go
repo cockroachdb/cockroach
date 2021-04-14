@@ -313,7 +313,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs,
 		cfg.stopper,
 		cfg.rangeFeedFactory,
-		cfg.LeaseManagerConfig,
 	)
 	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
