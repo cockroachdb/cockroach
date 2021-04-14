@@ -812,7 +812,7 @@ var specs = []stmtSpec{
 		stmt:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'DISTSQL' | 'DEBUG' )",
+			"explain_option_name": "( 'PLAN' | 'DISTSQL' | 'DEBUG' )",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
