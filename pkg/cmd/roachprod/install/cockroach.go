@@ -457,7 +457,10 @@ func (h *crdbInstallHelper) generateStartArgs(
 	}
 
 	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
-	args = append(args, "--log-dir="+logDir)
+	if vers.AtLeast(version.MustParse("v21.1.0")) {
+		// Specify exit-on-error=false to work around #62763.
+		args = append(args, `--log "file-defaults: {dir: '`+logDir+`', exit-on-error: false}"`)
+	}
 
 	if vers.AtLeast(version.MustParse("v1.1.0")) {
 		cache := 25
