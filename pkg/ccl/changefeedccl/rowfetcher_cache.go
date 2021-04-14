@@ -82,18 +82,16 @@ func (c *rowFetcherCache) TableDescForKey(
 
 		// Retrieve the target TableDescriptor from the lease manager. No caching
 		// is attempted because the lease manager does its own caching.
-		desc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
+		desc, err := c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
 			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
+		tableDesc = desc.Desc().(catalog.TableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
-		if err := c.leaseMgr.Release(desc); err != nil {
-			return nil, err
-		}
-		tableDesc = desc.(catalog.TableDescriptor)
+		desc.Release(ctx)
 		if tableDesc.ContainsUserDefinedTypes() {
 			// If the table contains user defined types, then use the descs.Collection
 			// to retrieve a TableDescriptor with type metadata hydrated. We open a

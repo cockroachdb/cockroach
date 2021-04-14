@@ -338,22 +338,17 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp.Prev()) {
-					t.Fatalf("did not update deadline")
-				}
-
+				err := txn.UpdateDeadline(ctx, pushedTimestamp.Prev())
+				require.NoError(t, err, "Deadline update to past failed")
 			case 2:
 				// Equal deadline.
-				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp) {
-					t.Fatalf("did not update deadline")
-				}
+				err := txn.UpdateDeadline(ctx, pushedTimestamp)
+				require.NoError(t, err, "Deadline update to equal failed")
 
 			case 3:
 				// Future deadline.
-
-				if !txn.UpdateDeadlineMaybe(ctx, pushedTimestamp.Next()) {
-					t.Fatalf("did not update deadline")
-				}
+				err := txn.UpdateDeadline(ctx, pushedTimestamp.Next())
+				require.NoError(t, err, "Deadline update to future failed")
 			}
 			err = txn.CommitOrCleanup(ctx)
 
@@ -2163,11 +2158,12 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	t.Run("standalone commit", func(t *testing.T) {
 		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		// Set a deadline. We'll generate a retriable error with a higher timestamp.
-		txn.UpdateDeadlineMaybe(ctx, clock.Now())
+		err := txn.UpdateDeadline(ctx, clock.Now())
+		require.NoError(t, err, "Deadline update to now failed")
 		if _, err := txn.Get(ctx, "k"); err != nil {
 			t.Fatal(err)
 		}
-		err := txn.Commit(ctx)
+		err = txn.Commit(ctx)
 		assertTransactionRetryError(t, err)
 		if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
 			t.Fatalf("expected deadline exceeded, got: %s", err)
@@ -2177,10 +2173,11 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	t.Run("commit in batch", func(t *testing.T) {
 		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		// Set a deadline. We'll generate a retriable error with a higher timestamp.
-		txn.UpdateDeadlineMaybe(ctx, clock.Now())
+		err := txn.UpdateDeadline(ctx, clock.Now())
+		require.NoError(t, err, "Deadline update to now failed")
 		b := txn.NewBatch()
 		b.Get("k")
-		err := txn.CommitInBatch(ctx, b)
+		err = txn.CommitInBatch(ctx, b)
 		assertTransactionRetryError(t, err)
 		if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
 			t.Fatalf("expected deadline exceeded, got: %s", err)
