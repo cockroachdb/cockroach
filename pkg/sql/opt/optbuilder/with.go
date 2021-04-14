@@ -296,7 +296,7 @@ func (b *Builder) buildCTE(
 	// initial columns directly because they might contain duplicate IDs (e.g.
 	// consider initial query SELECT 0, 0).
 	for i, c := range cteSrc.cols {
-		newCol := b.synthesizeColumn(outScope, c.Alias, initialTypes[i], nil /* expr */, nil /* scalar */)
+		newCol := b.synthesizeColumn(outScope, scopeColName(c.Alias), initialTypes[i], nil /* expr */, nil /* scalar */)
 		cteSrc.cols[i].ID = newCol.id
 	}
 
