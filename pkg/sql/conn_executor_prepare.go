@@ -73,7 +73,6 @@ func (ex *connExecutor) execPrepare(
 			}
 		}
 	}
-
 	stmt := makeStatement(parseCmd.Statement, ex.generateID())
 	ps, err := ex.addPreparedStmt(
 		ctx,
