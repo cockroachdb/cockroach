@@ -36,6 +36,7 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
   border: 0.5px solid #E5E5E5;
   box-shadow: 0px 0px 4px rgba(154, 161, 171, 0.33);
   border-radius: 4px;
+  z-index: 2;
 
   .dropdown-content-wrapper {
     padding: 18px 20px 22px 16px;

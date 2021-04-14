@@ -22,6 +22,8 @@ interface QueryFilter {
   appNames: SelectOptions[];
   activeFilters: number;
   filters: Filters;
+  dbNames?: string[];
+  showDB?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
 }
@@ -39,6 +41,7 @@ export interface Filters {
   app?: string;
   timeNumber?: string;
   timeUnit?: string;
+  database?: string;
   sqlType?: string;
   fullScan?: boolean;
   distributed?: boolean;
@@ -49,17 +52,13 @@ const timeUnit = [
   { label: "milliseconds", value: "milliseconds" },
 ];
 
-const defaultSelectProps = {
-  searchable: false,
-  clearable: false,
-};
-
 export const defaultFilters: Filters = {
   app: "All",
   timeNumber: "0",
   timeUnit: "seconds",
   fullScan: false,
   sqlType: "",
+  database: "",
 };
 
 /**
@@ -101,6 +100,7 @@ export const inactiveFiltersState: Filters = {
   timeNumber: "0",
   fullScan: false,
   sqlType: "",
+  database: "",
 };
 
 export const calculateActiveFilters = (filters: Filters) => {
@@ -202,15 +202,22 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  isSQLTypeSelected = (option: string) => {
-    const selection = this.state.filters.sqlType.split(",");
+  isOptionSelected = (option: string, field: string) => {
+    const selection = field.split(",");
     if (selection.length > 0 && selection.includes(option)) return true;
     return false;
   };
 
   render() {
     const { hide, filters } = this.state;
-    const { appNames, activeFilters, showSqlType, showScan } = this.props;
+    const {
+      appNames,
+      dbNames,
+      activeFilters,
+      showDB,
+      showSqlType,
+      showScan,
+    } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
       container: (provided: any) => ({
@@ -239,31 +246,58 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       width: "141px",
       border: "none",
     });
+
+    const databasesOptions = showDB
+      ? dbNames.map(db => ({
+          label: db,
+          value: db,
+          isSelected: this.isOptionSelected(db, filters.database),
+        }))
+      : [];
+
+    const databaseValue = databasesOptions.filter(option => {
+      return filters.database.split(",").includes(option.label);
+    });
+    const dbFilter = (
+      <div>
+        <div className={filterLabel.margin}>Database</div>
+        <MultiSelectCheckbox
+          options={databasesOptions}
+          placeholder="All"
+          field="database"
+          parent={this}
+          value={databaseValue}
+        />
+      </div>
+    );
+
     const sqlTypes = [
       {
         label: "DDL",
         value: "TypeDDL",
-        isSelected: this.isSQLTypeSelected("DDL"),
+        isSelected: this.isOptionSelected("DDL", filters.sqlType),
       },
       {
         label: "DML",
         value: "TypeDML",
-        isSelected: this.isSQLTypeSelected("DML"),
+        isSelected: this.isOptionSelected("DML", filters.sqlType),
       },
       {
         label: "DCL",
         value: "TypeDCL",
-        isSelected: this.isSQLTypeSelected("DCL"),
+        isSelected: this.isOptionSelected("DCL", filters.sqlType),
       },
       {
         label: "TCL",
         value: "TypeTCL",
-        isSelected: this.isSQLTypeSelected("TCL"),
+        isSelected: this.isOptionSelected("TCL", filters.sqlType),
       },
     ];
+
     const sqlTypeValue = sqlTypes.filter(option => {
       return filters.sqlType.split(",").includes(option.label);
     });
+
     const sqlTypeFilter = (
       <div>
         <div className={filterLabel.margin}>Statement Type</div>
@@ -273,7 +307,6 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           field="sqlType"
           parent={this}
           value={sqlTypeValue}
-          {...defaultSelectProps}
         />
       </div>
     );
@@ -308,8 +341,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
               value={appNames.filter(app => app.label == filters.app)}
               placeholder="All"
               styles={customStyles}
-              {...defaultSelectProps}
             />
+            {showDB ? dbFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             <div className={filterLabel.margin}>
               Query fingerprint runs longer than
@@ -327,7 +360,6 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
                 onChange={e => this.handleChange(e, "timeUnit")}
                 className={timePair.timeUnit}
                 styles={customStylesSmall}
-                {...defaultSelectProps}
               />
             </section>
             {showScan ? fullScanFilter : ""}
