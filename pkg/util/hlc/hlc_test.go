@@ -523,6 +523,21 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 	}
 }
 
+// Ensure that an appropriately structured error is returned when trying to
+// update a clock using a timestamp too far in the future.
+func TestClock_UpdateAndCheckMaxOffset_UntrustworthyValue(t *testing.T) {
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	m := NewManualClock(t0.UnixNano())
+	c := NewClock(m.UnixNano, 500*time.Millisecond)
+	require.NoError(t, c.UpdateAndCheckMaxOffset(context.Background(), ClockTimestamp{
+		WallTime: t0.Add(499 * time.Millisecond).UnixNano(),
+	}))
+	err := c.UpdateAndCheckMaxOffset(context.Background(), ClockTimestamp{
+		WallTime: t0.Add(time.Second).UnixNano(),
+	})
+	require.True(t, IsUntrustworthyRemoteWallTimeError(err), err)
+}
+
 func TestResetAndRefreshHLCUpperBound(t *testing.T) {
 	testCases := []struct {
 		name        string

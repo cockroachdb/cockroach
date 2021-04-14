@@ -410,17 +410,33 @@ func (c *Clock) Update(rt ClockTimestamp) {
 	c.enforceWallTimeWithinBoundLocked()
 }
 
+type untrustworthyRemoveWallTimeError struct {
+	offset time.Duration
+}
+
+func (e *untrustworthyRemoveWallTimeError) Error() string {
+	return fmt.Sprintf(
+		"remote wall time is too far ahead (%s) to be trustworthy", e.offset,
+	)
+}
+
+// IsUntrustworthyRemoteWallTimeError returns
+func IsUntrustworthyRemoteWallTimeError(err error) bool {
+	return errors.HasType(err, (*untrustworthyRemoveWallTimeError)(nil))
+}
+
 // UpdateAndCheckMaxOffset is like Update, but also takes the wall time into account and
 // returns an error in the event that the supplied remote timestamp exceeds
 // the wall clock time by more than the maximum clock offset.
+//
+// If an error is returned, it will be detectable with
+// IsUntrustworthyRemoteWallTimeError.
 func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt ClockTimestamp) error {
-	var err error
 	physicalClock := c.getPhysicalClockAndCheck(ctx)
 
 	offset := time.Duration(rt.WallTime - physicalClock)
 	if c.maxOffset > 0 && offset > c.maxOffset {
-		err = fmt.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset)
-		return err
+		return &untrustworthyRemoveWallTimeError{offset: offset}
 	}
 
 	if physicalClock > rt.WallTime {
