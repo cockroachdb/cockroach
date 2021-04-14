@@ -150,11 +150,12 @@ type propBuf struct {
 	cnt    propBufCnt
 	arr    propBufArray
 
-	// assignedClosedTimestamp is the largest "closed timestamp" - i.e. the largest
-	// timestamp that was communicated to other replicas as closed, representing a
-	// promise that this leaseholder will not evaluate writes below this timestamp
-	// any more. It is set when proposals are flushed from the buffer, and also
-	// by the side-transport which closes timestamps out of band.
+	// assignedClosedTimestamp is the largest "closed timestamp" - i.e. the
+	// largest timestamp that was communicated to other replicas as closed,
+	// representing a promise that this leaseholder will not evaluate writes with
+	// timestamp <= assignedClosedTimestamp any more. It is set when proposals are
+	// flushed from the buffer, and also by the side-transport which closes
+	// timestamps out of band.
 	//
 	// Note that this field is not used by the local replica (or by anybody)
 	// directly to decide whether follower reads can be served. See
