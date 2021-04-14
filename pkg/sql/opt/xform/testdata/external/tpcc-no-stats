@@ -143,14 +143,14 @@ insert order
  │    ├── column3:12 => "order".o_w_id:3
  │    ├── column4:13 => "order".o_c_id:4
  │    ├── column5:14 => o_entry_d:5
- │    ├── column17:17 => o_carrier_id:6
+ │    ├── o_carrier_id_default:17 => o_carrier_id:6
  │    ├── column6:15 => o_ol_cnt:7
  │    └── column7:16 => o_all_local:8
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column7:16!null column17:17
+ │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column7:16!null o_carrier_id_default:17
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(10-17)
@@ -361,7 +361,7 @@ insert order_line
  │    ├── column4:15 => ol_number:4
  │    ├── column5:16 => order_line.ol_i_id:5
  │    ├── column6:17 => order_line.ol_supply_w_id:6
- │    ├── column21:21 => ol_delivery_d:7
+ │    ├── ol_delivery_d_default:21 => ol_delivery_d:7
  │    ├── column7:18 => ol_quantity:8
  │    ├── ol_amount:22 => order_line.ol_amount:9
  │    └── column9:20 => ol_dist_info:10
@@ -369,7 +369,7 @@ insert order_line
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: ol_amount:22 column21:21 column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column9:20!null
+ │    ├── columns: ol_amount:22 ol_delivery_d_default:21 column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column9:20!null
  │    ├── cardinality: [6 - 6]
  │    ├── immutable
  │    ├── fd: ()-->(21)
@@ -384,7 +384,7 @@ insert order_line
  │    │    └── (3045, 2, 10, 6, 92966, 0, 4, 366.760000, 'saCXoEzmssaF9m9cdLXe0Yhg')
  │    └── projections
  │         ├── crdb_internal.round_decimal_values(column8:19, 2) [as=ol_amount:22, outer=(19), immutable]
- │         └── CAST(NULL AS TIMESTAMP) [as=column21:21]
+ │         └── CAST(NULL AS TIMESTAMP) [as=ol_delivery_d_default:21]
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
       │    └── anti-join (lookup order)
@@ -597,7 +597,7 @@ VALUES
 insert history
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column19:19 => rowid:1
+ │    ├── rowid_default:19 => rowid:1
  │    ├── column1:11 => history.h_c_id:2
  │    ├── column2:12 => history.h_c_d_id:3
  │    ├── column3:13 => history.h_c_w_id:4
@@ -610,7 +610,7 @@ insert history
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column7:17!null column8:18!null column19:19 h_amount:20!null
+ │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column7:17!null column8:18!null rowid_default:19 h_amount:20!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile
  │    ├── key: ()

@@ -608,9 +608,13 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 		tabColID := mb.tabID.ColumnID(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 
-		// Add synthesized column. It is important to use the real column name, as
-		// this column may later be referred to by a computed column.
-		newCol, _ := pb.Add(scopeColName(tabCol.ColName()), expr, tabCol.DatumType())
+		// Add synthesized column. It is important to use the real column
+		// reference name, as this column may later be referred to by a computed
+		// column.
+		colName := scopeColName(tabCol.ColName()).WithMetadataName(
+			string(tabCol.ColName()) + "_default",
+		)
+		newCol, _ := pb.Add(colName, expr, tabCol.DatumType())
 
 		// Remember id of newly synthesized column.
 		colIDs[i] = newCol
@@ -662,7 +666,10 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 
 		// Add synthesized column.
-		newCol, scalar := pb.Add(scopeColName(tabCol.ColName()), expr, tabCol.DatumType())
+		colName := scopeColName(tabCol.ColName()).WithMetadataName(
+			string(tabCol.ColName()) + "_comp",
+		)
+		newCol, scalar := pb.Add(colName, expr, tabCol.DatumType())
 
 		if restrict && kind != cat.WriteOnly {
 			// Check if any of the columns referred to in the computed column

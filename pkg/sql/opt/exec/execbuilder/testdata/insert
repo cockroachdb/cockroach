@@ -315,9 +315,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (x, v, column11)
+    │ columns: (x, v, rowid_default)
     │ estimated row count: 10 (missing stats)
-    │ render column11: unique_rowid()
+    │ render rowid_default: unique_rowid()
     │ render x: x
     │ render v: v
     │
@@ -352,9 +352,9 @@ vectorized: true
 │ auto commit
 │
 └── • render
-    │ columns: (x, v, column11)
+    │ columns: (x, v, rowid_default)
     │ estimated row count: 1 (missing stats)
-    │ render column11: unique_rowid()
+    │ render rowid_default: unique_rowid()
     │ render x: x
     │ render v: v
     │
@@ -477,9 +477,9 @@ vectorized: true
     │ into: insert_t(x, v, rowid)
     │
     └── • render
-        │ columns: (length, "?column?", column13)
+        │ columns: (length, "?column?", rowid_default)
         │ estimated row count: 10 (missing stats)
-        │ render column13: unique_rowid()
+        │ render rowid_default: unique_rowid()
         │ render length: length
         │ render ?column?: "?column?"
         │
@@ -610,9 +610,9 @@ vectorized: true
                 │ into: xyz(x, y, z, rowid)
                 │
                 └── • render
-                    │ columns: (a, b, c, column13)
+                    │ columns: (a, b, c, rowid_default)
                     │ estimated row count: 1,000 (missing stats)
-                    │ render column13: unique_rowid()
+                    │ render rowid_default: unique_rowid()
                     │ render a: a
                     │ render b: b
                     │ render c: c

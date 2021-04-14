@@ -7560,18 +7560,18 @@ with &1
  │    │    ├── columns: abc.rowid:9!null
  │    │    ├── insert-mapping:
  │    │    │    ├── "?column?":16 => abc.a:6
- │    │    │    ├── column17:17 => abc.b:7
- │    │    │    ├── column17:17 => abc.c:8
- │    │    │    └── column18:18 => abc.rowid:9
+ │    │    │    ├── b_default:17 => abc.b:7
+ │    │    │    ├── b_default:17 => abc.c:8
+ │    │    │    └── rowid_default:18 => abc.rowid:9
  │    │    ├── volatile, mutations
  │    │    └── project
- │    │         ├── columns: column17:17 column18:18 "?column?":16!null
+ │    │         ├── columns: b_default:17 rowid_default:18 "?column?":16!null
  │    │         ├── volatile
  │    │         ├── fd: ()-->(16,17)
  │    │         ├── scan abc
  │    │         └── projections
- │    │              ├── CAST(NULL AS INT8) [as=column17:17]
- │    │              ├── unique_rowid() [as=column18:18, volatile]
+ │    │              ├── CAST(NULL AS INT8) [as=b_default:17]
+ │    │              ├── unique_rowid() [as=rowid_default:18, volatile]
  │    │              └── 1 [as="?column?":16]
  │    └── projections
  │         └── 1 [as="?column?":19]

@@ -68,7 +68,7 @@ update abcde
  │    ├── a_new:15 => a:1
  │    └── a_new:15 => e:5
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
+      ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
       ├── project
       │    ├── columns: a_new:15!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── select
@@ -85,7 +85,7 @@ update abcde
       │    └── projections
       │         └── 2 [as=a_new:15]
       └── projections
-           └── (b:9 + c:10) + 1 [as=column16:16]
+           └── (b:9 + c:10) + 1 [as=d_comp:16]
 
 # Set all non-computed columns.
 build
@@ -98,11 +98,11 @@ update abcde
  │    ├── a_new:15 => a:1
  │    ├── b_new:16 => b:2
  │    ├── c_new:17 => c:3
- │    ├── column19:19 => d:4
+ │    ├── d_comp:19 => d:4
  │    ├── a_new:15 => e:5
  │    └── rowid_new:18 => rowid:6
  └── project
-      ├── columns: column19:19!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null b_new:16!null c_new:17!null rowid_new:18!null
+      ├── columns: d_comp:19!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null b_new:16!null c_new:17!null rowid_new:18!null
       ├── project
       │    ├── columns: a_new:15!null b_new:16!null c_new:17!null rowid_new:18!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -118,7 +118,7 @@ update abcde
       │         ├── 3 [as=c_new:17]
       │         └── 4 [as=rowid_new:18]
       └── projections
-           └── (b_new:16 + c_new:17) + 1 [as=column19:19]
+           └── (b_new:16 + c_new:17) + 1 [as=d_comp:19]
 
 # Set all non-computed columns in reverse order.
 build
@@ -131,11 +131,11 @@ update abcde
  │    ├── a_new:18 => a:1
  │    ├── b_new:17 => b:2
  │    ├── c_new:16 => c:3
- │    ├── column19:19 => d:4
+ │    ├── d_comp:19 => d:4
  │    ├── a_new:18 => e:5
  │    └── rowid_new:15 => rowid:6
  └── project
-      ├── columns: column19:19!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 rowid_new:15!null c_new:16!null b_new:17!null a_new:18!null
+      ├── columns: d_comp:19!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 rowid_new:15!null c_new:16!null b_new:17!null a_new:18!null
       ├── project
       │    ├── columns: rowid_new:15!null c_new:16!null b_new:17!null a_new:18!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -151,7 +151,7 @@ update abcde
       │         ├── 3 [as=b_new:17]
       │         └── 4 [as=a_new:18]
       └── projections
-           └── (b_new:17 + c_new:16) + 1 [as=column19:19]
+           └── (b_new:17 + c_new:16) + 1 [as=d_comp:19]
 
 # Set all non-computed columns to NULL.
 build
@@ -164,11 +164,11 @@ update abcde
  │    ├── a_new:15 => a:1
  │    ├── a_new:15 => b:2
  │    ├── a_new:15 => c:3
- │    ├── column16:16 => d:4
+ │    ├── d_comp:16 => d:4
  │    ├── a_new:15 => e:5
  │    └── a_new:15 => rowid:6
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
+      ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
       ├── project
       │    ├── columns: a_new:15 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -181,7 +181,7 @@ update abcde
       │    └── projections
       │         └── NULL::INT8 [as=a_new:15]
       └── projections
-           └── (a_new:15 + a_new:15) + 1 [as=column16:16]
+           └── (a_new:15 + a_new:15) + 1 [as=d_comp:16]
 
 # Set columns using variable expressions.
 build
@@ -193,10 +193,10 @@ update abcde
  ├── update-mapping:
  │    ├── a_new:15 => a:1
  │    ├── b_new:16 => b:2
- │    ├── column17:17 => d:4
+ │    ├── d_comp:17 => d:4
  │    └── a_new:15 => e:5
  └── project
-      ├── columns: column17:17 a:8!null b:9!null c:10 d:11 e:12!null rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null b_new:16
+      ├── columns: d_comp:17 a:8!null b:9!null c:10 d:11 e:12!null rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null b_new:16
       ├── project
       │    ├── columns: a_new:15!null b_new:16 a:8!null b:9!null c:10 d:11 e:12!null rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── select
@@ -214,7 +214,7 @@ update abcde
       │         ├── a:8 + 1 [as=a_new:15]
       │         └── b:9 * c:10 [as=b_new:16]
       └── projections
-           └── (b_new:16 + c:10) + 1 [as=column17:17]
+           └── (b_new:16 + c:10) + 1 [as=d_comp:17]
 
 # Set columns using aliased expressions.
 build
@@ -226,10 +226,10 @@ update abcde [as=foo]
  ├── update-mapping:
  │    ├── b:9 => a:1
  │    ├── c:10 => b:2
- │    ├── column15:15 => d:4
+ │    ├── d_comp:15 => d:4
  │    └── b:9 => e:5
  └── project
-      ├── columns: column15:15 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+      ├── columns: d_comp:15 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       ├── scan abcde [as=foo]
       │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    └── computed column expressions
@@ -238,7 +238,7 @@ update abcde [as=foo]
       │         └── e:12
       │              └── a:8
       └── projections
-           └── (c:10 + c:10) + 1 [as=column15:15]
+           └── (c:10 + c:10) + 1 [as=d_comp:15]
 
 # Use WHERE, ORDER BY, LIMIT.
 build
@@ -249,9 +249,9 @@ update abcde
  ├── fetch columns: a:8 b:9 c:10 d:11 e:12 rowid:13
  ├── update-mapping:
  │    ├── b_new:15 => b:2
- │    └── column16:16 => d:4
+ │    └── d_comp:16 => d:4
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15!null
+      ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15!null
       ├── project
       │    ├── columns: b_new:15!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── limit
@@ -276,7 +276,7 @@ update abcde
       │    └── projections
       │         └── 1 [as=b_new:15]
       └── projections
-           └── (b_new:15 + c:10) + 1 [as=column16:16]
+           └── (b_new:15 + c:10) + 1 [as=d_comp:16]
 
 # UPDATE with index hints.
 exec-ddl
@@ -443,10 +443,10 @@ update abcde
  ├── update-mapping:
  │    ├── a_new:15 => a:1
  │    ├── a_new:15 => b:2
- │    ├── column16:16 => d:4
+ │    ├── d_comp:16 => d:4
  │    └── a_new:15 => e:5
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10!null d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
+      ├── columns: d_comp:16 a:8!null b:9 c:10!null d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
       ├── project
       │    ├── columns: a_new:15 a:8!null b:9 c:10!null d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── select
@@ -463,7 +463,7 @@ update abcde
       │    └── projections
       │         └── $1 + 1 [as=a_new:15]
       └── projections
-           └── (a_new:15 + c:10) + 1 [as=column16:16]
+           └── (a_new:15 + c:10) + 1 [as=d_comp:16]
 
 
 # Unknown target table.
@@ -502,10 +502,10 @@ with &1
  │         ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13
  │         ├── update-mapping:
  │         │    ├── abcde.b:9 => abcde.a:1
- │         │    ├── column15:15 => abcde.d:4
+ │         │    ├── d_comp:15 => abcde.d:4
  │         │    └── abcde.b:9 => abcde.e:5
  │         └── project
- │              ├── columns: column15:15 abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
+ │              ├── columns: d_comp:15 abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              ├── scan abcde
  │              │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              │    └── computed column expressions
@@ -514,7 +514,7 @@ with &1
  │              │         └── abcde.e:12
  │              │              └── abcde.a:8
  │              └── projections
- │                   └── (abcde.b:9 + abcde.c:10) + 1 [as=column15:15]
+ │                   └── (abcde.b:9 + abcde.c:10) + 1 [as=d_comp:15]
  └── with &2 (cte)
       ├── project
       │    ├── columns: b:17
@@ -531,10 +531,10 @@ with &1
            ├── fetch columns: abcde.a:28 abcde.b:29 abcde.c:30 abcde.d:31 abcde.e:32 rowid:33
            ├── update-mapping:
            │    ├── abcde.b:29 => abcde.a:21
-           │    ├── column35:35 => abcde.d:24
+           │    ├── d_comp:35 => abcde.d:24
            │    └── abcde.b:29 => abcde.e:25
            └── project
-                ├── columns: column35:35 abcde.a:28!null abcde.b:29 abcde.c:30 abcde.d:31 abcde.e:32 rowid:33!null crdb_internal_mvcc_timestamp:34
+                ├── columns: d_comp:35 abcde.a:28!null abcde.b:29 abcde.c:30 abcde.d:31 abcde.e:32 rowid:33!null crdb_internal_mvcc_timestamp:34
                 ├── scan abcde
                 │    ├── columns: abcde.a:28!null abcde.b:29 abcde.c:30 abcde.d:31 abcde.e:32 rowid:33!null crdb_internal_mvcc_timestamp:34
                 │    └── computed column expressions
@@ -543,7 +543,7 @@ with &1
                 │         └── abcde.e:32
                 │              └── abcde.a:28
                 └── projections
-                     └── (abcde.b:29 + abcde.c:30) + 1 [as=column35:35]
+                     └── (abcde.b:29 + abcde.c:30) + 1 [as=d_comp:35]
 
 # With alias, original table name should be inaccessible.
 build
@@ -574,7 +574,7 @@ project
       │    ├── a_new:15 => a:1
       │    └── a_new:15 => e:5
       └── project
-           ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
+           ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
            ├── project
            │    ├── columns: a_new:15!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
            │    ├── select
@@ -591,7 +591,7 @@ project
            │    └── projections
            │         └── 2 [as=a_new:15]
            └── projections
-                └── (b:9 + c:10) + 1 [as=column16:16]
+                └── (b:9 + c:10) + 1 [as=d_comp:16]
 
 # Return values from aliased table.
 build
@@ -606,7 +606,7 @@ project
  │    │    ├── a_new:15 => a:1
  │    │    └── a_new:15 => e:5
  │    └── project
- │         ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
+ │         ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
  │         ├── project
  │         │    ├── columns: a_new:15!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │         │    ├── select
@@ -623,7 +623,7 @@ project
  │         │    └── projections
  │         │         └── 2 [as=a_new:15]
  │         └── projections
- │              └── (b:9 + c:10) + 1 [as=column16:16]
+ │              └── (b:9 + c:10) + 1 [as=d_comp:16]
  └── projections
       ├── a:1 + 1 [as="?column?":17]
       └── b:2 * d:4 [as="?column?":18]
@@ -643,7 +643,7 @@ with &1
  │         │    ├── a_new:15 => abcde.a:1
  │         │    └── a_new:15 => abcde.e:5
  │         └── project
- │              ├── columns: column16:16 abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
+ │              ├── columns: d_comp:16 abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null
  │              ├── project
  │              │    ├── columns: a_new:15!null abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
  │              │    ├── limit
@@ -668,7 +668,7 @@ with &1
  │              │    └── projections
  │              │         └── 2 [as=a_new:15]
  │              └── projections
- │                   └── (abcde.b:9 + abcde.c:10) + 1 [as=column16:16]
+ │                   └── (abcde.b:9 + abcde.c:10) + 1 [as=d_comp:16]
  └── project
       ├── columns: a:17!null d:20
       └── with-scan &1
@@ -692,7 +692,7 @@ project
       ├── update-mapping:
       │    └── rowid_new:15 => rowid:6
       └── project
-           ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 rowid_new:15!null
+           ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 rowid_new:15!null
            ├── project
            │    ├── columns: rowid_new:15!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
            │    ├── scan abcde
@@ -705,7 +705,7 @@ project
            │    └── projections
            │         └── rowid:13 + 1 [as=rowid_new:15]
            └── projections
-                └── (b:9 + c:10) + 1 [as=column16:16]
+                └── (b:9 + c:10) + 1 [as=d_comp:16]
 
 # Try to use aggregate function in RETURNING clause.
 build
@@ -733,9 +733,9 @@ update abcde
  ├── update-mapping:
  │    ├── b_new:15 => b:2
  │    ├── c_new:16 => c:3
- │    └── column17:17 => d:4
+ │    └── d_comp:17 => d:4
  └── project
-      ├── columns: column17:17 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
+      ├── columns: d_comp:17 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
       ├── project
       │    ├── columns: b_new:15 c_new:16!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -749,7 +749,7 @@ update abcde
       │         ├── NULL::INT8 [as=b_new:15]
       │         └── 10 [as=c_new:16]
       └── projections
-           └── (b_new:15 + c_new:16) + 1 [as=column17:17]
+           └── (b_new:15 + c_new:16) + 1 [as=d_comp:17]
 
 # Allow not-null column to be updated with NULL DEFAULT value (would fail at
 # runtime if there are any rows to update).
@@ -763,7 +763,7 @@ update abcde
  │    ├── a_new:15 => a:1
  │    └── a_new:15 => e:5
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
+      ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
       ├── project
       │    ├── columns: a_new:15 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -776,7 +776,7 @@ update abcde
       │    └── projections
       │         └── NULL::INT8 [as=a_new:15]
       └── projections
-           └── (b:9 + c:10) + 1 [as=column16:16]
+           └── (b:9 + c:10) + 1 [as=d_comp:16]
 
 build
 UPDATE abcde SET c=1+DEFAULT
@@ -797,10 +797,10 @@ update abcde
  │    ├── a_new:15 => a:1
  │    ├── b_new:16 => b:2
  │    ├── c_new:17 => c:3
- │    ├── column18:18 => d:4
+ │    ├── d_comp:18 => d:4
  │    └── a_new:15 => e:5
  └── project
-      ├── columns: column18:18!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null b_new:16!null c_new:17!null
+      ├── columns: d_comp:18!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15!null b_new:16!null c_new:17!null
       ├── project
       │    ├── columns: a_new:15!null b_new:16!null c_new:17!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -815,7 +815,7 @@ update abcde
       │         ├── 2 [as=b_new:16]
       │         └── 3 [as=c_new:17]
       └── projections
-           └── (b_new:16 + c_new:17) + 1 [as=column18:18]
+           └── (b_new:16 + c_new:17) + 1 [as=d_comp:18]
 
 build
 UPDATE abcde SET (c) = (NULL), (b, a) = (1, 2)
@@ -827,10 +827,10 @@ update abcde
  │    ├── a_new:17 => a:1
  │    ├── b_new:16 => b:2
  │    ├── c_new:15 => c:3
- │    ├── column18:18 => d:4
+ │    ├── d_comp:18 => d:4
  │    └── a_new:17 => e:5
  └── project
-      ├── columns: column18:18 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 c_new:15 b_new:16!null a_new:17!null
+      ├── columns: d_comp:18 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 c_new:15 b_new:16!null a_new:17!null
       ├── project
       │    ├── columns: c_new:15 b_new:16!null a_new:17!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -845,7 +845,7 @@ update abcde
       │         ├── 1 [as=b_new:16]
       │         └── 2 [as=a_new:17]
       └── projections
-           └── (b_new:16 + c_new:15) + 1 [as=column18:18]
+           └── (b_new:16 + c_new:15) + 1 [as=d_comp:18]
 
 # Tuples + DEFAULT.
 build
@@ -857,9 +857,9 @@ update abcde
  ├── update-mapping:
  │    ├── b_new:15 => b:2
  │    ├── c_new:16 => c:3
- │    └── column17:17 => d:4
+ │    └── d_comp:17 => d:4
  └── project
-      ├── columns: column17:17 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
+      ├── columns: d_comp:17 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 b_new:15 c_new:16!null
       ├── project
       │    ├── columns: b_new:15 c_new:16!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -873,7 +873,7 @@ update abcde
       │         ├── NULL::INT8 [as=b_new:15]
       │         └── 10 [as=c_new:16]
       └── projections
-           └── (b_new:15 + c_new:16) + 1 [as=column17:17]
+           └── (b_new:15 + c_new:16) + 1 [as=d_comp:17]
 
 # Tuples + non-null DEFAULT.
 build
@@ -885,10 +885,10 @@ update abcde
  ├── update-mapping:
  │    ├── a_new:15 => a:1
  │    ├── a_new:15 => b:2
- │    ├── column16:16 => d:4
+ │    ├── d_comp:16 => d:4
  │    └── a_new:15 => e:5
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
+      ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 a_new:15
       ├── project
       │    ├── columns: a_new:15 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14
       │    ├── scan abcde
@@ -901,7 +901,7 @@ update abcde
       │    └── projections
       │         └── NULL::INT8 [as=a_new:15]
       └── projections
-           └── (a_new:15 + c:10) + 1 [as=column16:16]
+           └── (a_new:15 + c:10) + 1 [as=d_comp:16]
 
 build
 UPDATE abcde SET (a, b)=(1, 2, 3)
@@ -938,7 +938,7 @@ update abcde
  │    ├── one:15 => a:1
  │    └── one:15 => e:5
  └── project
-      ├── columns: column16:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 one:15
+      ├── columns: d_comp:16 a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 one:15
       ├── left-join-apply
       │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null crdb_internal_mvcc_timestamp:14 one:15
       │    ├── scan abcde
@@ -958,7 +958,7 @@ update abcde
       │    │              └── 1 [as=one:15]
       │    └── filters (true)
       └── projections
-           └── (b:9 + c:10) + 1 [as=column16:16]
+           └── (b:9 + c:10) + 1 [as=d_comp:16]
 
 # Update all updatable columns.
 build
@@ -971,11 +971,11 @@ update abcde
  │    ├── x:19 => a:1
  │    ├── y:16 => b:2
  │    ├── z:20 => c:3
- │    ├── column22:22 => d:4
+ │    ├── d_comp:22 => d:4
  │    ├── x:19 => e:5
  │    └── y1:21 => rowid:6
  └── project
-      ├── columns: column22:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 x:19 z:20 y1:21
+      ├── columns: d_comp:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 x:19 z:20 y1:21
       ├── left-join-apply
       │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 x:19 z:20 y1:21
       │    ├── scan abcde
@@ -997,7 +997,7 @@ update abcde
       │    │              └── y:16 + 1 [as=y1:21]
       │    └── filters (true)
       └── projections
-           └── (y:16 + z:20) + 1 [as=column22:22]
+           └── (y:16 + z:20) + 1 [as=d_comp:22]
 
 # Update using combination of subquery and tuple SET expressions.
 build
@@ -1010,11 +1010,11 @@ update abcde
  │    ├── y:16 => a:1
  │    ├── y1:19 => b:2
  │    ├── c_new:20 => c:3
- │    ├── column22:22 => d:4
+ │    ├── d_comp:22 => d:4
  │    ├── y:16 => e:5
  │    └── rowid_new:21 => rowid:6
  └── project
-      ├── columns: column22:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 c_new:20!null rowid_new:21!null
+      ├── columns: d_comp:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 c_new:20!null rowid_new:21!null
       ├── project
       │    ├── columns: c_new:20!null rowid_new:21!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19
       │    ├── left-join-apply
@@ -1039,7 +1039,7 @@ update abcde
       │         ├── 1 [as=c_new:20]
       │         └── 2 [as=rowid_new:21]
       └── projections
-           └── (y1:19 + c_new:20) + 1 [as=column22:22]
+           └── (y1:19 + c_new:20) + 1 [as=d_comp:22]
 
 # Use subquery SET expression after other expressions.
 build
@@ -1052,11 +1052,11 @@ update abcde
  │    ├── a_new:20 => a:1
  │    ├── b_new:21 => b:2
  │    ├── y:16 => c:3
- │    ├── column22:22 => d:4
+ │    ├── d_comp:22 => d:4
  │    ├── a_new:20 => e:5
  │    └── y1:19 => rowid:6
  └── project
-      ├── columns: column22:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 a_new:20!null b_new:21!null
+      ├── columns: d_comp:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 a_new:20!null b_new:21!null
       ├── project
       │    ├── columns: a_new:20!null b_new:21!null a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19
       │    ├── left-join-apply
@@ -1081,7 +1081,7 @@ update abcde
       │         ├── 1 [as=a_new:20]
       │         └── 2 [as=b_new:21]
       └── projections
-           └── (b_new:21 + y:16) + 1 [as=column22:22]
+           └── (b_new:21 + y:16) + 1 [as=d_comp:22]
 
 # Multiple subqueries in SET expressions.
 build
@@ -1094,11 +1094,11 @@ update abcde
  │    ├── y1:19 => a:1
  │    ├── y:16 => b:2
  │    ├── one:20 => c:3
- │    ├── column22:22 => d:4
+ │    ├── d_comp:22 => d:4
  │    ├── y1:19 => e:5
  │    └── two:21 => rowid:6
  └── project
-      ├── columns: column22:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 one:20 two:21
+      ├── columns: d_comp:22 a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 one:20 two:21
       ├── left-join-apply
       │    ├── columns: a:8!null b:9 c:10 d:11 e:12 rowid:13!null abcde.crdb_internal_mvcc_timestamp:14 y:16 y1:19 one:20 two:21
       │    ├── left-join-apply
@@ -1130,7 +1130,7 @@ update abcde
       │    │              └── 2 [as=two:21]
       │    └── filters (true)
       └── projections
-           └── (y:16 + one:20) + 1 [as=column22:22]
+           └── (y:16 + one:20) + 1 [as=d_comp:22]
 
 # Incorporate desired types when compiling subquery.
 build
@@ -1173,9 +1173,9 @@ project
       ├── fetch columns: abcde1.a:8 abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13
       ├── update-mapping:
       │    ├── b_new:22 => abcde1.b:2
-      │    └── column23:23 => abcde1.d:4
+      │    └── d_comp:23 => abcde1.d:4
       └── project
-           ├── columns: column23:23 abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14 b_new:22
+           ├── columns: d_comp:23 abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14 b_new:22
            ├── project
            │    ├── columns: b_new:22 abcde1.a:8!null abcde1.b:9 abcde1.c:10 abcde1.d:11 abcde1.e:12 abcde1.rowid:13!null abcde1.crdb_internal_mvcc_timestamp:14
            │    ├── scan abcde [as=abcde1]
@@ -1203,7 +1203,7 @@ project
            │                             └── filters
            │                                  └── abcde2.rowid:20 = abcde1.a:8
            └── projections
-                └── (b_new:22 + abcde1.c:10) + 1 [as=column23:23]
+                └── (b_new:22 + abcde1.c:10) + 1 [as=d_comp:23]
 
 # Too many values.
 build
@@ -1247,10 +1247,10 @@ with &1 (cte)
       ├── fetch columns: a:12 b:13 c:14 d:15 e:16 rowid:17
       ├── update-mapping:
       │    ├── b:13 => a:5
-      │    ├── column20:20 => d:8
+      │    ├── d_comp:20 => d:8
       │    └── b:13 => e:9
       └── project
-           ├── columns: column20:20 a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
+           ├── columns: d_comp:20 a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
            ├── select
            │    ├── columns: a:12!null b:13 c:14 d:15 e:16 rowid:17!null abcde.crdb_internal_mvcc_timestamp:18
            │    ├── scan abcde
@@ -1267,7 +1267,7 @@ with &1 (cte)
            │                   └── mapping:
            │                        └──  xyz.x:1 => x:19
            └── projections
-                └── (b:13 + c:14) + 1 [as=column20:20]
+                └── (b:13 + c:14) + 1 [as=d_comp:20]
 
 # Use CTE within SET expression.
 build
@@ -1286,10 +1286,10 @@ with &1 (a)
       ├── update-mapping:
       │    ├── y:20 => a:6
       │    ├── y1:21 => b:7
-      │    ├── column22:22 => d:9
+      │    ├── d_comp:22 => d:9
       │    └── y:20 => e:10
       └── project
-           ├── columns: column22:22 a:13!null b:14 c:15 d:16 e:17 rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 y:20 y1:21
+           ├── columns: d_comp:22 a:13!null b:14 c:15 d:16 e:17 rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 y:20 y1:21
            ├── left-join-apply
            │    ├── columns: a:13!null b:14 c:15 d:16 e:17 rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 y:20 y1:21
            │    ├── scan abcde
@@ -1308,7 +1308,7 @@ with &1 (a)
            │    │              └──  y1:5 => y1:21
            │    └── filters (true)
            └── projections
-                └── (y1:21 + c:15) + 1 [as=column22:22]
+                └── (y1:21 + c:15) + 1 [as=d_comp:22]
 
 # ------------------------------------------------------------------------------
 # Tests with mutations.
@@ -1323,15 +1323,15 @@ update mutation
  ├── fetch columns: m:7 n:8 o:9 p:10 q:11
  ├── update-mapping:
  │    ├── m_new:13 => m:1
- │    ├── column14:14 => o:3
- │    └── column15:15 => p:4
+ │    ├── o_default:14 => o:3
+ │    └── p_comp:15 => p:4
  ├── check columns: check1:16
  └── project
-      ├── columns: check1:16!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null column14:14!null column15:15
+      ├── columns: check1:16!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null o_default:14!null p_comp:15
       ├── project
-      │    ├── columns: column15:15 m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null column14:14!null
+      │    ├── columns: p_comp:15 m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null o_default:14!null
       │    ├── project
-      │    │    ├── columns: column14:14!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null
+      │    │    ├── columns: o_default:14!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null
       │    │    ├── project
       │    │    │    ├── columns: m_new:13!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12
       │    │    │    ├── scan mutation
@@ -1341,9 +1341,9 @@ update mutation
       │    │    │    └── projections
       │    │    │         └── 1 [as=m_new:13]
       │    │    └── projections
-      │    │         └── 10 [as=column14:14]
+      │    │         └── 10 [as=o_default:14]
       │    └── projections
-      │         └── column14:14 + n:8 [as=column15:15]
+      │         └── o_default:14 + n:8 [as=p_comp:15]
       └── projections
            └── m_new:13 > 0 [as=check1:16]
 
@@ -1357,15 +1357,15 @@ update mutation
  ├── update-mapping:
  │    ├── m_new:13 => m:1
  │    ├── n_new:14 => n:2
- │    ├── column15:15 => o:3
- │    └── column16:16 => p:4
+ │    ├── o_default:15 => o:3
+ │    └── p_comp:16 => p:4
  ├── check columns: check1:17
  └── project
-      ├── columns: check1:17!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null n_new:14!null column15:15!null column16:16!null
+      ├── columns: check1:17!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null n_new:14!null o_default:15!null p_comp:16!null
       ├── project
-      │    ├── columns: column16:16!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null n_new:14!null column15:15!null
+      │    ├── columns: p_comp:16!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null n_new:14!null o_default:15!null
       │    ├── project
-      │    │    ├── columns: column15:15!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null n_new:14!null
+      │    │    ├── columns: o_default:15!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null n_new:14!null
       │    │    ├── project
       │    │    │    ├── columns: m_new:13!null n_new:14!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12
       │    │    │    ├── scan mutation
@@ -1376,9 +1376,9 @@ update mutation
       │    │    │         ├── 1 [as=m_new:13]
       │    │    │         └── 2 [as=n_new:14]
       │    │    └── projections
-      │    │         └── 10 [as=column15:15]
+      │    │         └── 10 [as=o_default:15]
       │    └── projections
-      │         └── column15:15 + n_new:14 [as=column16:16]
+      │         └── o_default:15 + n_new:14 [as=p_comp:16]
       └── projections
            └── m_new:13 > 0 [as=check1:17]
 
@@ -1391,15 +1391,15 @@ update mutation
  ├── fetch columns: m:7 n:8 o:9 p:10 q:11
  ├── update-mapping:
  │    ├── m_new:13 => m:1
- │    ├── column14:14 => o:3
- │    └── column15:15 => p:4
+ │    ├── o_default:14 => o:3
+ │    └── p_comp:15 => p:4
  ├── check columns: check1:16
  └── project
-      ├── columns: check1:16!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null column14:14!null column15:15
+      ├── columns: check1:16!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null o_default:14!null p_comp:15
       ├── project
-      │    ├── columns: column15:15 m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null column14:14!null
+      │    ├── columns: p_comp:15 m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null o_default:14!null
       │    ├── project
-      │    │    ├── columns: column14:14!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null
+      │    │    ├── columns: o_default:14!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12 m_new:13!null
       │    │    ├── project
       │    │    │    ├── columns: m_new:13!null m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12
       │    │    │    ├── limit
@@ -1418,9 +1418,9 @@ update mutation
       │    │    │    └── projections
       │    │    │         └── 1 [as=m_new:13]
       │    │    └── projections
-      │    │         └── 10 [as=column14:14]
+      │    │         └── 10 [as=o_default:14]
       │    └── projections
-      │         └── column14:14 + n:8 [as=column15:15]
+      │         └── o_default:14 + n:8 [as=p_comp:15]
       └── projections
            └── m_new:13 > 0 [as=check1:16]
 
@@ -1469,12 +1469,12 @@ update checks
  │    ├── a_new:11 => a:1
  │    ├── b_new:12 => b:2
  │    ├── c_new:13 => c:3
- │    └── column14:14 => d:4
+ │    └── d_comp:14 => d:4
  ├── check columns: check1:15 check2:16
  └── project
-      ├── columns: check1:15!null check2:16!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null b_new:12!null c_new:13!null column14:14!null
+      ├── columns: check1:15!null check2:16!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null b_new:12!null c_new:13!null d_comp:14!null
       ├── project
-      │    ├── columns: column14:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null b_new:12!null c_new:13!null
+      │    ├── columns: d_comp:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null b_new:12!null c_new:13!null
       │    ├── project
       │    │    ├── columns: a_new:11!null b_new:12!null c_new:13!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
       │    │    ├── scan checks
@@ -1489,9 +1489,9 @@ update checks
       │    │         ├── 2 [as=b_new:12]
       │    │         └── 3 [as=c_new:13]
       │    └── projections
-      │         └── c_new:13 + 1 [as=column14:14]
+      │         └── c_new:13 + 1 [as=d_comp:14]
       └── projections
-           ├── b_new:12 < column14:14 [as=check1:15]
+           ├── b_new:12 < d_comp:14 [as=check1:15]
            └── a_new:11 > 0 [as=check2:16]
 
 # Do not update columns for one of the constraints.
@@ -1505,9 +1505,9 @@ update checks
  │    └── a_new:11 => a:1
  ├── check columns: check2:14
  └── project
-      ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null column12:12
+      ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null d_comp:12
       ├── project
-      │    ├── columns: column12:12 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null
+      │    ├── columns: d_comp:12 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:11!null
       │    ├── project
       │    │    ├── columns: a_new:11!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
       │    │    ├── scan checks
@@ -1520,7 +1520,7 @@ update checks
       │    │    └── projections
       │    │         └── 1 [as=a_new:11]
       │    └── projections
-      │         └── c:8 + 1 [as=column12:12]
+      │         └── c:8 + 1 [as=d_comp:12]
       └── projections
            ├── b:7 < d:9 [as=check1:13]
            └── a_new:11 > 0 [as=check2:14]
@@ -1536,9 +1536,9 @@ update checks
  │    └── b_new:11 => b:2
  ├── check columns: check1:13
  └── project
-      ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 b_new:11!null column12:12
+      ├── columns: check1:13 check2:14!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 b_new:11!null d_comp:12
       ├── project
-      │    ├── columns: column12:12 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 b_new:11!null
+      │    ├── columns: d_comp:12 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 b_new:11!null
       │    ├── project
       │    │    ├── columns: b_new:11!null a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
       │    │    ├── scan checks
@@ -1551,7 +1551,7 @@ update checks
       │    │    └── projections
       │    │         └── 2 [as=b_new:11]
       │    └── projections
-      │         └── c:8 + 1 [as=column12:12]
+      │         └── c:8 + 1 [as=d_comp:12]
       └── projections
            ├── b_new:11 < d:9 [as=check1:13]
            └── a:6 > 0 [as=check2:14]
@@ -1568,9 +1568,9 @@ update checks
  │    └── abcde.b:12 => checks.b:2
  ├── check columns: check1:19 check2:20
  └── project
-      ├── columns: check1:19 check2:20 checks.a:6!null checks.b:7 checks.c:8 checks.d:9 checks.crdb_internal_mvcc_timestamp:10 abcde.a:11 abcde.b:12 column18:18
+      ├── columns: check1:19 check2:20 checks.a:6!null checks.b:7 checks.c:8 checks.d:9 checks.crdb_internal_mvcc_timestamp:10 abcde.a:11 abcde.b:12 d_comp:18
       ├── project
-      │    ├── columns: column18:18 checks.a:6!null checks.b:7 checks.c:8 checks.d:9 checks.crdb_internal_mvcc_timestamp:10 abcde.a:11 abcde.b:12
+      │    ├── columns: d_comp:18 checks.a:6!null checks.b:7 checks.c:8 checks.d:9 checks.crdb_internal_mvcc_timestamp:10 abcde.a:11 abcde.b:12
       │    ├── left-join-apply
       │    │    ├── columns: checks.a:6!null checks.b:7 checks.c:8 checks.d:9 checks.crdb_internal_mvcc_timestamp:10 abcde.a:11 abcde.b:12
       │    │    ├── scan checks
@@ -1597,7 +1597,7 @@ update checks
       │    │    │                   └── abcde.a:11 = checks.a:6
       │    │    └── filters (true)
       │    └── projections
-      │         └── checks.c:8 + 1 [as=column18:18]
+      │         └── checks.c:8 + 1 [as=d_comp:18]
       └── projections
            ├── abcde.b:12 < checks.d:9 [as=check1:19]
            └── abcde.a:11 > 0 [as=check2:20]
@@ -1611,26 +1611,26 @@ UPDATE decimals SET a=1.1, b=ARRAY[0.95, NULL, 15]
 ----
 update decimals
  ├── columns: <none>
- ├── fetch columns: a:6 b:7 c:8 decimals.d:9
+ ├── fetch columns: a:6 b:7 c:8 d:9
  ├── update-mapping:
  │    ├── a_new:13 => a:1
  │    ├── b_new:14 => b:2
- │    └── d:16 => decimals.d:4
+ │    └── d_comp:16 => d:4
  ├── check columns: check1:17 check2:18
  └── project
-      ├── columns: check1:17 check2:18 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14 d:16
+      ├── columns: check1:17 check2:18 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14 d_comp:16
       ├── project
-      │    ├── columns: d:16 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14
+      │    ├── columns: d_comp:16 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14
       │    ├── project
-      │    │    ├── columns: column15:15 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14
+      │    │    ├── columns: d_comp:15 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10 a_new:13 b_new:14
       │    │    ├── project
-      │    │    │    ├── columns: a_new:13 b_new:14 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    ├── columns: a_new:13 b_new:14 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
       │    │    │    ├── project
-      │    │    │    │    ├── columns: a_new:11!null b_new:12 a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    │    ├── columns: a_new:11!null b_new:12 a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
       │    │    │    │    ├── scan decimals
-      │    │    │    │    │    ├── columns: a:6!null b:7 c:8 decimals.d:9 crdb_internal_mvcc_timestamp:10
+      │    │    │    │    │    ├── columns: a:6!null b:7 c:8 d:9 crdb_internal_mvcc_timestamp:10
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         └── decimals.d:9
+      │    │    │    │    │         └── d:9
       │    │    │    │    │              └── a:6::DECIMAL + c:8::DECIMAL
       │    │    │    │    └── projections
       │    │    │    │         ├── 1.1 [as=a_new:11]
@@ -1639,9 +1639,9 @@ update decimals
       │    │    │         ├── crdb_internal.round_decimal_values(a_new:11, 0) [as=a_new:13]
       │    │    │         └── crdb_internal.round_decimal_values(b_new:12, 1) [as=b_new:14]
       │    │    └── projections
-      │    │         └── a_new:13 + c:8::DECIMAL [as=column15:15]
+      │    │         └── a_new:13 + c:8::DECIMAL [as=d_comp:15]
       │    └── projections
-      │         └── crdb_internal.round_decimal_values(column15:15, 1) [as=d:16]
+      │         └── crdb_internal.round_decimal_values(d_comp:15, 1) [as=d_comp:16]
       └── projections
            ├── round(a_new:13) = a_new:13 [as=check1:17]
            └── b_new:14[0] > 1 [as=check2:18]
