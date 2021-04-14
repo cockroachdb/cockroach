@@ -256,7 +256,7 @@ message InterleaveDescriptor {
 // As as example, sample field values for the following table:
 //
 // CREATE TABLE abc (
-//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1 
+//   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=10,  // column id: 1
 //   b BYTES
 // );
 //
@@ -266,9 +266,9 @@ message InterleaveDescriptor {
 //   column_names:  ["a"]
 message ShardedDescriptor {
   option (gogoproto.equal) = true;
-  
+
   // IsSharded indicates whether the index in question is a sharded one.
-  optional bool is_sharded = 1 [(gogoproto.nullable) = false]; 
+  optional bool is_sharded = 1 [(gogoproto.nullable) = false];
   // Name is the name of the shard column.
   optional string name = 2 [(gogoproto.nullable) = false];
 
@@ -909,6 +909,7 @@ message TableDescriptor {
 
   optional DescriptorState state = 19 [(gogoproto.nullable) = false];
   optional string offline_reason = 38 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp last_writeable_time = 46 [(gogoproto.nullable) = false];
 
   message CheckConstraint {
     option (gogoproto.equal) = true;
@@ -1171,6 +1172,8 @@ message TableDescriptor {
   // This means that all indexes implicitly inherit all partitioning
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  // NEXT ID: 47.
 }
 
 // SurvivalGoal is the survival goal for a database.
