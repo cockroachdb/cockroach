@@ -41,11 +41,6 @@ func (c *CustomFuncs) Init(f *Factory) {
 	}
 }
 
-// Succeeded returns true if a result expression is not nil.
-func (c *CustomFuncs) Succeeded(result opt.Expr) bool {
-	return result != nil
-}
-
 // ----------------------------------------------------------------------
 //
 // Typing functions
@@ -164,22 +159,6 @@ func (c *CustomFuncs) OutputCols2(left, right memo.RelExpr) opt.ColSet {
 // are guaranteed to never be NULL.
 func (c *CustomFuncs) NotNullCols(input memo.RelExpr) opt.ColSet {
 	return input.Relational().NotNullCols
-}
-
-// SingleRegressionCountArgument checks if either arg is non-null and returns
-// the other one (or nil if neither is non-null).
-func (c *CustomFuncs) SingleRegressionCountArgument(
-	y, x opt.ScalarExpr, input memo.RelExpr,
-) opt.ScalarExpr {
-	notNullCols := c.NotNullCols(input)
-	if c.ExprIsNeverNull(y, notNullCols) {
-		return x
-	}
-	if c.ExprIsNeverNull(x, notNullCols) {
-		return y
-	}
-
-	return nil
 }
 
 // IsColNotNull returns true if the given input column is never null.
