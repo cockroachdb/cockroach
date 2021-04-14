@@ -78,9 +78,9 @@ define FiltersItem {
 	$filters:* &
 	    (Let ($a):(Foo $input) $a) &
 	    (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
-	    (Let ($filtersA $filtersB $filtersC $filtersD $filtersE $filtersF $filtersG $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $filtersD $filtersE $ok):(SplitFilters $input $filters) $ok) &
 	    (Let ($a $b $c $ok):(SplitFilters $input $filters $long $arg $list) $ok) &
-	    (Let ($filtersA $filtersB $filtersC $filtersD $ok):(SplitFilters $input $filters $long $arg $list $longer) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $ok):(SplitFilters $input $filters $long $arg $list $longer) $ok) &
 	    (IsValid (Let ($filtersX $filtersY):(SplitFilters $input $filters) $filtersX)) &
 	    (OuterFunc (InnerFunc (Let ($foo $bar):(SplitFilters $input $filters) $foo))) &
 	    (Let ($foo $bar $baz):(Split (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)) $foo)
@@ -176,17 +176,29 @@ define FiltersItem {
     $filters:* &
         (Let ($a):(Foo $input) $a) &
         (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
-        (Let ($filtersA $filtersB $filtersC $filtersD $filtersE
-            $filtersF $filtersG $ok):
-            (SplitFilters $input $filters)
+        (Let
+            (
+                $filtersA
+                $filtersB
+                $filtersC
+                $filtersD
+                $filtersE
+                $ok
+            ):(SplitFilters $input $filters)
             $ok
         ) &
-        (Let ($a $b $c $ok):
-            (SplitFilters $input $filters $long $arg $list)
+        (Let
+            ($a $b $c $ok):(SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+            )
             $ok
         ) &
-        (Let ($filtersA $filtersB $filtersC $filtersD $ok):
-            (SplitFilters
+        (Let
+            ($filtersA $filtersB $filtersC $ok):(SplitFilters
                 $input
                 $filters
                 $long
@@ -197,21 +209,23 @@ define FiltersItem {
             $ok
         ) &
         (IsValid
-            (Let ($filtersX $filtersY):
-                (SplitFilters $input $filters)
+            (Let
+                ($filtersX $filtersY):(SplitFilters
+                    $input
+                    $filters
+                )
                 $filtersX
             )
         ) &
         (OuterFunc
             (InnerFunc
-                (Let ($foo $bar):
-                    (SplitFilters $input $filters)
+                (Let ($foo $bar):(SplitFilters $input $filters)
                     $foo
                 )
             )
         ) &
-        (Let ($foo $bar $baz):
-            (Split
+        (Let
+            ($foo $bar $baz):(Split
                 (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)
             )
             $foo
