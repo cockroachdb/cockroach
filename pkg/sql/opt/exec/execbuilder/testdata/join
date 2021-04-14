@@ -1636,13 +1636,13 @@ vectorized: true
     │     columns: (a, b1)
     │     estimated row count: 1 (missing stats)
     │     table: l@primary
-    │     spans: /3-/3/#
+    │     spans: /3/0
     │
     └── • scan
           columns: (a, b2)
           estimated row count: 1 (missing stats)
           table: r@primary
-          spans: /3-/3/#
+          spans: /3/0
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
@@ -1662,13 +1662,13 @@ vectorized: true
 │     columns: (a, b1)
 │     estimated row count: 1 (missing stats)
 │     table: l@primary
-│     spans: /3-/3/#
+│     spans: /3/0
 │
 └── • scan
       columns: (a, b2)
       estimated row count: 1 (missing stats)
       table: r@primary
-      spans: /3-/3/#
+      spans: /3/0
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
@@ -1692,13 +1692,13 @@ vectorized: true
     │     columns: (a, b2)
     │     estimated row count: 1 (missing stats)
     │     table: r@primary
-    │     spans: /3-/3/#
+    │     spans: /3/0
     │
     └── • scan
           columns: (a, b1)
           estimated row count: 1 (missing stats)
           table: l@primary
-          spans: /3-/3/#
+          spans: /3/0
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
@@ -1718,13 +1718,13 @@ vectorized: true
 │     columns: (a, b2)
 │     estimated row count: 1 (missing stats)
 │     table: r@primary
-│     spans: /3-/3/#
+│     spans: /3/0
 │
 └── • scan
       columns: (a, b1)
       estimated row count: 1 (missing stats)
       table: l@primary
-      spans: /3-/3/#
+      spans: /3/0
 
 # Regression tests for #21243
 statement ok

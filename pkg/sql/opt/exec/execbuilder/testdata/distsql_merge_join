@@ -456,7 +456,7 @@ vectorized: true
     │     ordering: +pid1
     │     estimated row count: 4 (missing stats)
     │     table: parent1@primary
-    │     spans: /1-/1/# /11-/11/# /21-/21/# /31-/31/#
+    │     spans: /1/0 /11/0 /21/0 /31/0
     │     parallel
     │
     └── • scan
@@ -486,7 +486,7 @@ vectorized: true
       table: child2@primary
       spans: [/1 - /1] [/11 - /11] [/21 - /21] [/31 - /31]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFv0zAQx9_5FKfbSwtGqV22h0hIARYgU9eMpAgQyoOJjzZSZgfbkUBVvzuKM2lk6oDt7Xx3_7vf_-Q9uh8txph-vlq9ytYwO8_KTflhNYcyXaVvNvAU3hb5JXTSkvYcLvJsDfWuaZWAj2W2fgezrlF8Dp_ep0UKQwzDGM6AcwaCM1jyOeTFeVrA6y-hARlqo2gtr8lh_BU5Vgw7a2pyztghtQ8NmfqJ8YJho7veD-mKYW0sYbxH3_iWMMaN_NZSQVKRjRbIUJGXTRvG3iAnnW2upf2FDMtOahdDxJ9HPDoBqRUswfgdWYfVgaHp_e0m5-WWMOYH9jgaPqUZb3YMJjqJTs9umIZI_B-YuBfslqfXxiqypCYs1aD8V8sRd5dkt3RhGk02ElN3LX33s4Q_m7-0zXY3hsgw730MCWeJYMkLlpyy5OxeP8uHHLog1xnt6K6vo5MXgxlSWxqP40xva7qypg5rxmcedCGhyPmxKsZHpkMp_IQ_xfwBYnFXLP4qXk7Ei0N1ePI7AAD__9aLKbQ=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJycklFvlEAQx9_9FJPx5U63gd2zfSAxQS0qDYUK16gxPKzseEdCd3F3STSX--4G0NRrrmp9IbMz85_5_Sfs0H3tMMLkw1X2Is1hcZ5W6-pdtoQqyZJXa3gCr8viEnppSXsOF0WaQ7NtOyXgukrzN7DoW8WX8P5tUiYwxjCO4Qw4ZyA4gxVfQlGeJyW8_Dg1IENtFOXyhhxGn5BjzbC3piHnjB1Tu6khVd8wChm2uh_8mK4ZNsYSRjv0re8II1zLzx2VJBXZIESGirxsu2nsT-S4t-2NtN-RYdVL7SIIeBCejJ8gv84ykFrBCozfknVY7xmawd8udF5uCCO-Z_8HxQ-h5tMdZXocnJ4F_ORXJP4NTNwLdsszaGMVWVIHLPWo_FvLEXeXZDd0YVpNNhCH7jr64hcxf7p8btvNdg6RYTH4CGLOYsHiZyw-ZfHZvX5WDzl0Sa432tFdX0cnh6MZUhuaj-PMYBu6sqaZ1szPYtJNCUXOz1UxP1I9laY_4Xcxf4BY3BWLP4pXB-JwX-8f_QgAAP__02Qrig==
 
 # Parent-grandchild.
 # We add the pa1 > 0 condition so a lookup join is not considered to be a better plan.

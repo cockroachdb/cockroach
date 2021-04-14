@@ -60,7 +60,7 @@ vectorized: true
           columns: (a, b, c, d)
           estimated row count: 1 (missing stats)
           table: abc@primary
-          spans: /1-/1/#
+          spans: /1/0
 
 statement ok
 SET reorder_joins_limit = 3
@@ -89,4 +89,4 @@ vectorized: true
           columns: (a, b, c, d)
           estimated row count: 1 (missing stats)
           table: abc@primary
-          spans: /1-/1/#
+          spans: /1/0

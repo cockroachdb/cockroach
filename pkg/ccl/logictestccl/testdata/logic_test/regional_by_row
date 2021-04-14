@@ -689,7 +689,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/1{-/#}, /Table/73/1/"\x80"/1{-/#}, /Table/73/1/"\xc0"/1{-/#}
+Scan /Table/73/1/"@"/1/0, /Table/73/1/"\x80"/1/0, /Table/73/1/"\xc0"/1/0
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -716,7 +716,7 @@ vectorized: true
       table: regional_by_row_table@primary
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVEL0zAQx9_9FOF8Uclo0ylIQIhoxULdZjtQsGVkzTGLXVKTFDdGv7usRbbJJmw-3l3-l98vOYD72QCH-OsifZvMyLP3Sb7MP6fPSR6n8bsleUE-ZPNPxOKmNlo2q_V-Zc2vlZfrBsmXj3EWk_YHeUMYUNBG4Uxu0QH_BgxKCq01FTpn7LF1GA4kagc8pFDrtvPHdkmhMhaBH8DXvkHgsDxuz1AqtEEIFBR6WTfD2qsgorX1Vto9UMhbqR0nQQFFsXsdFhCwyXkRPCVSK8KI8d_RAoV55zkRjIqIiikVL6l4BWVPwXT-BOi83CBw1tPHJNijEuKPgBjh7wSObgKfODttrEKL6oKx7K8ozczEtEF0KZPW29oTdpMhvOfRMnSt0Q7_Yrm1uaSAaoOjkDOdrXBhTTVcM5bzITc0FDo_TqOxSPQwGn71PMz-Jxz9Mzy9CId92T_5HQAA__-b4SGh
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVFr2zAUhd_3K8R92oaGLWeDIRh4bC41uElqB1qoTVCsS2rqSK4k04Tg_15iP6QpSSHp4z1X5-g70hbscw0covtp8jcek6__42yW3SbfSBYl0b8Z-U6u0skNMbistBL1fLGZG_0yd2JRI7m7jtKINE_kD2FAQWmJY7FCC_wBGBQUGqNLtFabnbTtD8RyDdynUKmmdTu5oFBqg8C34CpXI3CY7dJTFBKN5wMFiU5UdR97FCRsTLUSZgMUskYoy4mXQ56vf_s5eMzziVCSMKLdIxqgMGkdJyGjYUDDEQ1_0vAXFB0F3bo9k3ViicBZRy_jZpdyhwPzmZzBSc49Xqu0kWhQHqAV3ZEmY_1DN15w2CGpVpUj7CSDf85bpWgbrSy-YzmVXFBAucShkNWtKXFqdNlfM4yT3tcLEq0btsEwxKpf9Z_51sw-Yw4-NI8OzH5XdF9eAwAA__86rhxz
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
@@ -728,7 +728,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/1{-/#}
+Scan /Table/73/1/"@"/1/0
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -743,8 +743,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/73/1/"@"/10{-/#}
-Scan /Table/73/1/"\x80"/10{-/#}, /Table/73/1/"\xc0"/10{-/#}
+Scan /Table/73/1/"@"/10/0
+Scan /Table/73/1/"\x80"/10/0, /Table/73/1/"\xc0"/10/0
 fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
 
@@ -824,9 +824,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10{-/#}, /Table/75/1/"\x80"/10{-/#}, /Table/75/1/"\xc0"/10{-/#}
+Scan /Table/75/1/"@"/10/0{-/NULL}, /Table/75/1/"\x80"/10/0{-/NULL}, /Table/75/1/"\xc0"/10/0{-/NULL}
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
-Scan /Table/74/1/"@"/10{-/#}, /Table/74/1/"\x80"/10{-/#}, /Table/74/1/"\xc0"/10{-/#}
+Scan /Table/74/1/"@"/10/0, /Table/74/1/"\x80"/10/0, /Table/74/1/"\xc0"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 
 statement ok
@@ -862,7 +862,7 @@ vectorized: true
               table: child@primary
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k1Fr2zAQx9_3KY7bQ5KhEtlxoQgKLqvLXDynSwwrLKZ41tF6SyRPliEl5LuP2GGNwxLSjr35Tve3fv_T3QqrX3MUGNzfRVdhDP3rcJpMv0QDmAZR8DGBD3AzGX-G_KmYS_j6KZgE0I_HCQT3m0Lod8vKzJCy27ryoZBwCfnD5mMwgKv4Gvp5m3T4ABkqLSnOFlSh-IYOpgxLo3OqKm02qVVTEMolCs6wUGVtN-mUYa4NoVihLeycUGCSfZ_ThDJJZsiRoSSbFfPmtw25X5pikZlnZDgtM1UJGM5wNlte8BkOHX7WiYbvIVMSHND2iQwyHNdWgO8w38V0zVDX9oWkstkjoXDW7G20zqm0_h9Sf0t5Gpl7kOwFqFbaSDIkOzDp-i_ssT7T5dDtUkfForDgHGTgr-nOrS7Utjmj7jXJc0kCouAmgas4CeF2HMbIsB26naZFWv-sS_ihCwVaCej7I7gE392OoO_BJSx7Hu8JIXyHc37uDU5r5uiNRrz_ZWSzssvexa4VBste3vF2ojnvNeYmVJVaVbQ3MYfeP2VI8pHasat0bXK6MzpvrmnDcaNrEpIq2566bRCq5qhZsl2x8y9i96h41BHzffHoqNg7LvaOis_3xOn63e8AAAD__2Pcwcc=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fr2zwQx98_n-K4N0keNCI7LhRBwGF1mYvndIlhhcUUzzpab4nkyTKkhHz3ETvQOCwh7dg763R_3-9_uttg9WuJAoOH-2gSxtC_CefJ_Es0gHkQBR8T-B9uZ9PPkD8XSwlfPwWzAPrxNIHgYZcI_W5amRlSdp9XPhYSxpA_7j4GA5jEN9DP26DDB8hQaUlxtqIKxTd0MGVYGp1TVWmzC22ahFCuUXCGhSpruwunDHNtCMUGbWGXhAKT7PuSZpRJMkOODCXZrFg2v23I_dIUq8y8IMN5malKwHCBi8X6mi9w6PAhh0xJcEDbZzLIcFpbAb7DfBfTLUNd29falc2eCIWzZe_jcy7l8_dsl_G4J3leMWqljSRDsoOQbv9AHOsPuhy6XdaoWBUWnJMM_C09udOF2rdk1C2TvJQkIApuE5jESQh30zBGhu1wHbQq0vpnXcIPXSjQSkDfH8EYfHc_ar4HY1j3PN4TQvgO5_zKG1zWzNE7jXj_yshuNde960MrDNa9vOPtQnPeW8zNqCq1quhoYk69f8qQ5BO1Y1fp2uR0b3TelGmP00bXBCRVtr1120OomqtmtQ7Fzt-I3bPiUUfMj8Wjs2LvvNg7K746Eqfb_34HAAD__-igvDk=
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
@@ -874,9 +874,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/10{-/#}
+Scan /Table/75/1/"@"/10/0
 fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
-Scan /Table/74/1/"@"/10{-/#}
+Scan /Table/74/1/"@"/10/0
 fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
 
 statement ok
@@ -890,11 +890,11 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/75/1/"@"/20{-/#}
-Scan /Table/75/1/"\x80"/20{-/#}, /Table/75/1/"\xc0"/20{-/#}
+Scan /Table/75/1/"@"/20/0
+Scan /Table/75/1/"\x80"/20/0, /Table/75/1/"\xc0"/20/0
 fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
-Scan /Table/74/1/"@"/20{-/#}
-Scan /Table/74/1/"\x80"/20{-/#}, /Table/74/1/"\xc0"/20{-/#}
+Scan /Table/74/1/"@"/20/0
+Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 
 query T

@@ -755,7 +755,7 @@ vectorized: true
           columns: (a, b)
           estimated row count: 1 (missing stats)
           table: t@primary
-          spans: /3-/3/#
+          spans: /3/0
 
 query T
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b

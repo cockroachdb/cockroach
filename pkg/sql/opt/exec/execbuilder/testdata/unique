@@ -348,7 +348,7 @@ vectorized: true
     │     columns: (k)
     │     estimated row count: 1 (missing stats)
     │     table: uniq@primary
-    │     spans: /1/0-/1/1
+    │     spans: /1/0
     │
     └── • hash join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
@@ -1170,7 +1170,7 @@ vectorized: true
                                       columns: (k)
                                       estimated row count: 1 (missing stats)
                                       table: uniq_partial@primary
-                                      spans: /1/0-/1/1
+                                      spans: /1/0
 
 # Insert with non-constant input.
 query T
@@ -2507,7 +2507,7 @@ vectorized: true
 │                     columns: (r, a, b, c)
 │                     estimated row count: 1 (0.10% of the table; stats collected <hidden> ago)
 │                     table: uniq_partial_enum@primary
-│                     spans: /"@"/2/0-/"@"/2/1 /"@"/2/2/1-/"@"/2/3/2 /"\x80"/2/0-/"\x80"/2/1 /"\x80"/2/2/1-/"\x80"/2/3/2 /"\xc0"/2/0-/"\xc0"/2/1 /"\xc0"/2/2/1-/"\xc0"/2/3/2
+│                     spans: /"@"/2/0 /"@"/2/2/1-/"@"/2/3/2 /"\x80"/2/0 /"\x80"/2/2/1-/"\x80"/2/3/2 /"\xc0"/2/0 /"\xc0"/2/2/1-/"\xc0"/2/3/2
 │                     parallel
 │                     locking strength: for update
 │

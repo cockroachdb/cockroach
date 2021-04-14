@@ -148,7 +148,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for update
 
 query T
@@ -161,7 +161,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for no key update
 
 query T
@@ -174,7 +174,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for share
 
 query T
@@ -187,7 +187,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for key share
 
 query T
@@ -200,7 +200,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for share
 
 query T
@@ -213,7 +213,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for no key update
 
 query T
@@ -226,7 +226,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for update
 
 query T
@@ -239,7 +239,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -260,7 +260,7 @@ vectorized: true
       columns: (a)
       estimated row count: 1 (missing stats)
       table: t@primary
-      spans: /1-/1/#
+      spans: /1/0
       locking strength: for update
 
 # ------------------------------------------------------------------------------
@@ -1769,7 +1769,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for update
   locking wait policy: nowait
 
@@ -1783,7 +1783,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for no key update
   locking wait policy: nowait
 
@@ -1797,7 +1797,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for share
   locking wait policy: nowait
 
@@ -1811,7 +1811,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for key share
   locking wait policy: nowait
 
@@ -1825,7 +1825,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for share
   locking wait policy: nowait
 
@@ -1839,7 +1839,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for no key update
   locking wait policy: nowait
 
@@ -1853,7 +1853,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for update
   locking wait policy: nowait
 
@@ -1867,7 +1867,7 @@ vectorized: true
   columns: (a, b)
   estimated row count: 1 (missing stats)
   table: t@primary
-  spans: /1-/1/#
+  spans: /1/0
   locking strength: for update
   locking wait policy: nowait
 
@@ -1889,6 +1889,6 @@ vectorized: true
       columns: (a)
       estimated row count: 1 (missing stats)
       table: t@primary
-      spans: /1-/1/#
+      spans: /1/0
       locking strength: for update
       locking wait policy: nowait
