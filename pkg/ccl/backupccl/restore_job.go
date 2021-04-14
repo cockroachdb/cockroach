@@ -1748,7 +1748,7 @@ func revalidateIndexes(
 	// since our table is offline.
 	var runner sql.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sql.InternalExecFn) error {
 		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData()).(*sql.InternalExecutor)
+			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData(execCfg.SV())).(*sql.InternalExecutor)
 			return fn(ctx, txn, ie)
 		})
 	}
