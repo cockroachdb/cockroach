@@ -67,8 +67,9 @@ type serialSynchronizer struct {
 	types    []*types.T
 	sources  []srcInfo
 	rowAlloc rowenc.EncDatumRowAlloc
-	ctx      context.Context
 }
+
+var _ SourceContainer = &serialSynchronizer{}
 
 func (s *serialSynchronizer) GetSources() []srcInfo {
 	return s.sources
@@ -85,9 +86,6 @@ func (s *serialSynchronizer) Start(ctx context.Context) {
 func (s *serialSynchronizer) OutputTypes() []*types.T {
 	return s.types
 }
-
-var _ SourceContainer = &serialSynchronizer{}
-var _ execinfra.RowSource = &serialSynchronizer{}
 
 func (u *serialSynchronizer) ConsumerDone() {
 	if u.state != draining {
@@ -387,6 +385,9 @@ func (s *serialOrderedSynchronizer) consumerStatusChanged(
 	s.state = newState
 }
 
+// serialUnordereSynchronizer exhausts its sources in order one at a time until
+// each is drained in turn.   Its necessary to have the row engine support locality
+// optimized scans.
 type serialUnorderedSynchronizer struct {
 	serialSynchronizer
 
@@ -395,16 +396,9 @@ type serialUnorderedSynchronizer struct {
 
 var _ execinfra.RowSource = &serialUnorderedSynchronizer{}
 
-func (s *serialUnorderedSynchronizer) Start(ctx context.Context) {
-	s.ctx = ctx
-	for _, src := range s.sources {
-		src.src.Start(ctx)
-	}
-}
-
 func (u *serialUnorderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for u.srcIndex < len(u.sources) {
-		row, metadata := u.sources[u.srcIndex%len(u.sources)].src.Next()
+		row, metadata := u.sources[u.srcIndex].src.Next()
 
 		// If we're draining only return metadata.
 		if u.state == draining && row != nil {
@@ -439,16 +433,18 @@ func makeSerialSync(
 		return nil, errors.Errorf("only %d sources for serial synchronizer", len(sources))
 	}
 
+	base := serialSynchronizer{
+		state:   notInitialized,
+		sources: make([]srcInfo, len(sources)),
+		types:   sources[0].OutputTypes(),
+	}
+
 	if len(ordering) > 0 {
 		os := &serialOrderedSynchronizer{
-			serialSynchronizer: serialSynchronizer{
-				state:   notInitialized,
-				sources: make([]srcInfo, len(sources)),
-				types:   sources[0].OutputTypes(),
-			},
-			heap:     make([]srcIdx, 0, len(sources)),
-			ordering: ordering,
-			evalCtx:  evalCtx,
+			serialSynchronizer: base,
+			heap:               make([]srcIdx, 0, len(sources)),
+			ordering:           ordering,
+			evalCtx:            evalCtx,
 		}
 		for i := range os.sources {
 			os.sources[i].src = sources[i]
@@ -458,11 +454,7 @@ func makeSerialSync(
 		return os, nil
 	} else {
 		us := &serialUnorderedSynchronizer{
-			serialSynchronizer: serialSynchronizer{
-				state:   returningRows,
-				sources: make([]srcInfo, len(sources)),
-				types:   sources[0].OutputTypes(),
-			},
+			serialSynchronizer: base,
 		}
 		for i := range us.sources {
 			us.sources[i].src = sources[i]
