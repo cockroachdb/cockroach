@@ -684,29 +684,27 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	return err
 }
 
-// UpdateDeadlineMaybe sets the transactions deadline to the lower of the
-// current one (if any) and the passed value.
+// UpdateDeadline sets the transactions deadline to the passed deadline.
+// It may move the deadline further into the future.
 //
 // The deadline cannot be lower than txn.ReadTimestamp.
-func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
+func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) error {
 	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadlineMaybe() called on leaf txn"), ctx))
+		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadline() called on leaf txn"), ctx))
 	}
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
-		readTimestamp := txn.readTimestampLocked()
-		if deadline.Less(txn.readTimestampLocked()) {
-			log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
-				"txn has would have no change to commit. Deadline: %s. Read timestamp: %s.",
-				deadline, readTimestamp)
-		}
-		txn.mu.deadline = new(hlc.Timestamp)
-		*txn.mu.deadline = deadline
-		return true
+
+	readTimestamp := txn.readTimestampLocked()
+	if deadline.Less(readTimestamp) {
+		log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
+			"txn has would have no change to commit. Deadline: %s. Read timestamp: %s Previous Deadline: %s.",
+			deadline, readTimestamp, txn.mu.deadline)
 	}
-	return false
+	txn.mu.deadline = new(hlc.Timestamp)
+	*txn.mu.deadline = deadline
+	return nil
 }
 
 // resetDeadlineLocked resets the deadline.
