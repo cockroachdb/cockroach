@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -2006,7 +2007,7 @@ func (sc *SchemaChanger) txn(
 func (sc *SchemaChanger) txnWithModified(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) (descsWithNewVersions []lease.IDVersion, _ error) {
-	ie := sc.ieFactory(ctx, NewFakeSessionData())
+	ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
 	if err := descs.Txn(ctx, sc.settings, sc.leaseMgr, ie, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
@@ -2035,7 +2036,7 @@ func createSchemaChangeEvalCtx(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) extendedEvalContext {
 
-	sd := NewFakeSessionData()
+	sd := NewFakeSessionData(execCfg.SV())
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
@@ -2081,7 +2082,7 @@ func createSchemaChangeEvalCtx(
 // NewFakeSessionData returns "fake" session data for use in internal queries
 // that are not run on behalf of a user session, such as those run during the
 // steps of background jobs and schema changes.
-func NewFakeSessionData() *sessiondata.SessionData {
+func NewFakeSessionData(sv *settings.Values) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			// The database is not supposed to be needed in schema changes, as there
@@ -2092,13 +2093,18 @@ func NewFakeSessionData() *sessiondata.SessionData {
 			// And in fact it is used by `current_schemas()`, which, although is a pure
 			// function, takes arguments which might be impure (so it can't always be
 			// pre-evaluated).
-			Database:  "",
-			UserProto: security.NodeUserName().EncodeProto(),
+			Database:      "",
+			UserProto:     security.NodeUserName().EncodeProto(),
+			VectorizeMode: sessiondatapb.VectorizeExecMode(VectorizeClusterMode.Get(sv)),
+		},
+		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			DistSQLMode: sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)),
 		},
 		SearchPath:    sessiondata.DefaultSearchPathForUser(security.NodeUserName()),
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
 	}
+
 	return sd
 }
 
