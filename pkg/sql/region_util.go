@@ -440,11 +440,10 @@ func dropZoneConfigsForMultiRegionIndexes(
 		regionConfig multiregion.RegionConfig,
 		table catalog.TableDescriptor,
 	) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error) {
-		for _, indexID := range indexIDs {
-			for _, region := range regionConfig.Regions() {
-				zoneConfig.DeleteSubzone(uint32(indexID), string(region))
-			}
-		}
+		// Clear all multi-region fields of the subzones. If this leaves them
+		// empty, they will automatically be removed.
+		zoneConfig.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
 		// Strip placeholder status and spans if there are no more subzones.
 		if len(zoneConfig.Subzones) == 0 && zoneConfig.IsSubzonePlaceholder() {
 			zoneConfig.NumReplicas = nil
@@ -516,15 +515,7 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	// have to override to perform the ALTER, we want to wipe out the index
 	// zone config so that the user won't have to override again the next time
 	// the want to ALTER the table locality.
-	newSubzones := zc.Subzones[:0]
-	for _, sz := range zc.Subzones {
-		sz.Config.CopyFromZone(zonepb.ZoneConfig{}, zonepb.MultiRegionZoneConfigFields)
-		// If we haven't emptied out the subzone, append it to the new slice.
-		if !sz.Config.Equal(zonepb.ZoneConfig{}) && !sz.Config.Equal(zonepb.NewZoneConfig()) {
-			newSubzones = append(newSubzones, sz)
-		}
-	}
-	zc.Subzones = newSubzones
+	zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
 
 	zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
