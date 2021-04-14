@@ -849,6 +849,23 @@ func (z *ZoneConfig) DiffWithZone(
 	return true, DiffWithZoneMismatch{}, nil
 }
 
+// ClearFieldsOfAllSubzones uses the supplied fieldList and clears those fields
+// from all of the zone config's subzones.
+func (z *ZoneConfig) ClearFieldsOfAllSubzones(fieldList []tree.Name) {
+	newSubzones := z.Subzones[:0]
+	emptyZone := NewZoneConfig()
+	for _, sz := range z.Subzones {
+		// By copying from an empty zone, we'll end up clearing out all of the
+		// fields in the fieldList.
+		sz.Config.CopyFromZone(*emptyZone, fieldList)
+		// If we haven't emptied out the subzone, append it to the new slice.
+		if !sz.Config.Equal(emptyZone) {
+			newSubzones = append(newSubzones, sz)
+		}
+	}
+	z.Subzones = newSubzones
+}
+
 // StoreSatisfiesConstraint checks whether a store satisfies the given constraint.
 // If the constraint is of the PROHIBITED type, satisfying it means the store
 // not matching the constraint's spec.
