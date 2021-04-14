@@ -421,6 +421,11 @@ func (t *ClockTimestamp) ProtoMessage() {}
 // MarshalTo implements the protoutil.Message interface.
 func (t *ClockTimestamp) MarshalTo(data []byte) (int, error) { return (*Timestamp)(t).MarshalTo(data) }
 
+// MarshalToSizedBuffer implements the protoutil.Message interface.
+func (t *ClockTimestamp) MarshalToSizedBuffer(data []byte) (int, error) {
+	return (*Timestamp)(t).MarshalToSizedBuffer(data)
+}
+
 // Unmarshal implements the protoutil.Message interface.
 func (t *ClockTimestamp) Unmarshal(data []byte) error { return (*Timestamp)(t).Unmarshal(data) }
 
