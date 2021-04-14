@@ -141,7 +141,7 @@ func (b *Builder) analyzeSelectList(
 						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
 					}
 					for j, e := range exprs {
-						outScope.addColumn(aliases[j], e)
+						outScope.addColumn(scopeColName(tree.Name(aliases[j])), e)
 					}
 					continue
 				}
@@ -162,7 +162,7 @@ func (b *Builder) analyzeSelectList(
 			outScope.cols = make([]scopeColumn, 0, len(selects))
 		}
 		alias := b.getColName(e)
-		outScope.addColumn(alias, texpr)
+		outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
 	}
 }
 
@@ -296,7 +296,7 @@ func (b *Builder) finishBuildScalarRef(
 		// Avoid synthesizing a new column if possible.
 		existing := outScope.findExistingCol(col, false /* allowSideEffects */)
 		if existing == nil || existing == outCol {
-			if outCol.name == "" {
+			if outCol.name.IsAnonymous() {
 				outCol.name = col.name
 			}
 			group := b.factory.ConstructVariable(col.id)
@@ -339,7 +339,7 @@ func makeProjectionBuilder(b *Builder, inScope *scope) projectionBuilder {
 // given expression is a just bare column reference, it returns that column's ID
 // and a nil scalar expression.
 func (pb *projectionBuilder) Add(
-	name tree.Name, expr tree.Expr, desiredType *types.T,
+	name scopeColumnName, expr tree.Expr, desiredType *types.T,
 ) (opt.ColumnID, opt.ScalarExpr) {
 	if pb.outScope == nil {
 		pb.outScope = pb.inScope.replace()
@@ -350,7 +350,7 @@ func (pb *projectionBuilder) Add(
 	// auto-generated name in the metadata. We then override it below. This
 	// reduces clashes between column names in the metadata.
 	// TODO(radu): is this really better than using the real column name?
-	scopeCol := pb.outScope.addColumn("" /* alias */, typedExpr)
+	scopeCol := pb.outScope.addColumn(scopeColName(""), typedExpr)
 	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
 	scopeCol.name = name
 

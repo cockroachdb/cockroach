@@ -64,7 +64,7 @@ func (b *Builder) buildSetOp(
 		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 		for i := range leftScope.cols {
 			c := &leftScope.cols[i]
-			b.synthesizeColumn(outScope, string(c.name), c.typ, nil, nil /* scalar */)
+			b.synthesizeColumn(outScope, c.name, c.typ, nil, nil /* scalar */)
 		}
 	} else {
 		outScope.appendColumnsFromScope(leftScope)
@@ -205,7 +205,7 @@ func (b *Builder) addCasts(dst *scope, outTypes []*types.T) *scope {
 		if !dstCols[i].typ.Identical(outTypes[i]) {
 			// Create a new column which casts the old column to the correct type.
 			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), outTypes[i])
-			b.synthesizeColumn(dst, string(dstCols[i].name), outTypes[i], nil /* expr */, castExpr)
+			b.synthesizeColumn(dst, dstCols[i].name, outTypes[i], nil /* expr */, castExpr)
 		} else {
 			// The column is already the correct type, so add it as a passthrough
 			// column.
