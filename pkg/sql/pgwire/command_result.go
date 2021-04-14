@@ -12,6 +12,7 @@ package pgwire
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -484,9 +485,8 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 		default:
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithSafeDetails(sql.ErrLimitedResultNotSupported,
-				"cannot perform operation %T while a different portal is open",
-				errors.Safe(c))
+			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
 		}
 		prevPos = curPos
 	}
