@@ -12,6 +12,7 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter } from "react-router-dom";
 import { refreshStatements } from "src/redux/apiReducers";
+import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
@@ -58,6 +59,7 @@ const TransactionsPageConnected = withRouter(
     }),
     {
       refreshData: refreshStatements,
+      resetSQLStats: resetSQLStatsAction,
     },
   )(TransactionsPage),
 );

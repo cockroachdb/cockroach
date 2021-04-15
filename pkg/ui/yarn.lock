@@ -1813,13 +1813,13 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/cluster-ui@^0.2.15":
-  version "0.2.15"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.15.tgz#4411c126c0d6c8e453e5841d10cebb5604606b2a"
-  integrity sha512-nGsYLA5m2WT5WHMTn5fWJJMuuy3idru6kxtyJ/BqyN97PHZbisQDjMcX1wuLHYhPaQbhXBmfEefyehcn93CpWg==
+"@cockroachlabs/cluster-ui@^0.2.28":
+  version "0.2.28"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.28.tgz#9d4a6467e4abdfb13911f7fc73935dae7a5b188b"
+  integrity sha512-Yog17595qSxgXeGG7ykpaiXs0JTEhfbdrzI+CNXSub20gi4g2qI8FQ0ksKiSI9k2HoNI2fWBj3c/xkJ9brgCHA==
   dependencies:
     "@babel/runtime" "^7.12.13"
-    "@cockroachlabs/crdb-protobuf-client" "^0.0.7"
+    "@cockroachlabs/crdb-protobuf-client" "^0.0.8"
     "@cockroachlabs/icons" "0.3.0"
     "@cockroachlabs/ui-components" "0.2.14-alpha.0"
     "@popperjs/core" "^2.4.0"
@@ -1836,10 +1836,10 @@
     react-select "^1.2.1"
     reselect "^4.0.0"
 
-"@cockroachlabs/crdb-protobuf-client@^0.0.7":
-  version "0.0.7"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.7.tgz#b0b405f04acc56932ed698a7d532c71c0b7f43bd"
-  integrity sha512-LjpKVeeeIrUG91uxi5jq3g6AXU6oj/HgvfnhL2YJaUeVC4S12AcSVMLMQ2S06mgB7pVXBs66mH2Lt4R0s6l4Lg==
+"@cockroachlabs/crdb-protobuf-client@^0.0.8":
+  version "0.0.8"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.8.tgz#064f44664091dd23e18167c67cf1713ff7845470"
+  integrity sha512-JP6miYNX8FvFSTSZ51etCfyxO/mi/TVVyeVIFsnN/CTlbHI6QZODHJIS1OSPvzfBnfXgFwcb1tQmMrK0L9xFEA==
 
 "@cockroachlabs/eslint-config@^0.1.11":
   version "0.1.11"
