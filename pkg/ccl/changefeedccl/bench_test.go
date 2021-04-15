@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -178,7 +177,7 @@ func (s *benchSink) WaitForEmit() (int, int64) {
 // if the changefeed had failed before the closure was called.
 //
 // This intentionally skips the distsql and sink parts to keep the benchmark
-// focused on the core changefeed work, but it does include the poller.
+// focused on the core changefeed work.
 func createBenchmarkChangefeed(
 	ctx context.Context,
 	s serverutils.TestServerInterface,
@@ -205,7 +204,6 @@ func createBenchmarkChangefeed(
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := s.LeaseManager().(*lease.Manager)
 	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
@@ -223,12 +221,12 @@ func createBenchmarkChangefeed(
 		Spans:            spans,
 		Targets:          details.Targets,
 		Sink:             buf,
-		LeaseMgr:         leaseMgr,
 		Metrics:          &metrics.KVFeedMetrics,
 		MM:               mm,
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,
+		SchemaFeed:       doNothingSchemaFeed{},
 	}
 
 	sf := span.MakeFrontier(spans...)

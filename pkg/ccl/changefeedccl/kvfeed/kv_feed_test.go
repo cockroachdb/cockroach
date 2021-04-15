@@ -116,7 +116,7 @@ func TestKVFeed(t *testing.T) {
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater,
 			keys.SystemSQLCodec,
-			&tf, sf, rangefeedFactory(ref.run), bufferFactory)
+			tf, sf, rangefeedFactory(ref.run), bufferFactory)
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
@@ -268,7 +268,7 @@ type rawTableFeed struct {
 	events []schemafeed.TableEvent
 }
 
-func newRawTableFeed(descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp) rawTableFeed {
+func newRawTableFeed(descs []catalog.TableDescriptor, initialHighWater hlc.Timestamp) SchemaFeed {
 	sort.Slice(descs, func(i, j int) bool {
 		if descs[i].GetID() != descs[j].GetID() {
 			return descs[i].GetID() < descs[j].GetID()
@@ -290,7 +290,12 @@ func newRawTableFeed(descs []catalog.TableDescriptor, initialHighWater hlc.Times
 			After:  d,
 		})
 	}
-	return f
+	return &f
+}
+
+func (r *rawTableFeed) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (r *rawTableFeed) Peek(
@@ -352,7 +357,7 @@ func (f rawEventFeed) run(
 	return nil
 }
 
-var _ schemaFeed = (*rawTableFeed)(nil)
+var _ SchemaFeed = (*rawTableFeed)(nil)
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{
