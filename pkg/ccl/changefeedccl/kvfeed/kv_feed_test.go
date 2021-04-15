@@ -352,7 +352,7 @@ func (f rawEventFeed) run(
 	return nil
 }
 
-var _ schemaFeed = (*rawTableFeed)(nil)
+var _ SchemaFeed = (*rawTableFeed)(nil)
 
 func tableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{

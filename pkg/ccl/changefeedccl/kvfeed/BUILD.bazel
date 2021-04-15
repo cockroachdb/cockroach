@@ -23,7 +23,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/catalog/lease",
         "//pkg/sql/covering",
         "//pkg/sql/rowcontainer",
         "//pkg/sql/rowenc",
