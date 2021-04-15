@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -179,15 +178,10 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	} else {
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// Release the reference to curAgg eagerly.
-	// {{if eq .VecMethod "Bytes"}}
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
-	// {{else}}
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
-	}
-	// {{end}}
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 	// {{end}}
 }

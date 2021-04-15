@@ -1137,6 +1137,126 @@ func (b *crossJoinerBase) buildFromLeftInput(ctx context.Context, destStartIdx i
 								}
 							}
 						}
+					case types.JsonFamily:
+						switch b.left.types[colIdx].Width() {
+						case -1:
+						default:
+							srcCol := src.JSON()
+							outCol := out.JSON()
+							if leftNumRepeats == 1 {
+								// Loop over every tuple in the current batch.
+								for b.builderState.left.curSrcStartIdx < batchLength {
+									// Repeat each tuple one time.
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx++
+									}
+
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										outCol.Set(outStartIdx, val)
+									}
+									outStartIdx++
+									b.builderState.left.curSrcStartIdx++
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+								}
+							} else {
+								// Loop over every tuple in the current batch.
+								for ; b.builderState.left.curSrcStartIdx < batchLength; b.builderState.left.curSrcStartIdx++ {
+									// Repeat each row leftNumRepeats times.
+									srcStartIdx := b.builderState.left.curSrcStartIdx
+									toAppend := leftNumRepeats - b.builderState.left.numRepeatsIdx
+									if outStartIdx+toAppend > outputCapacity {
+										toAppend = outputCapacity - outStartIdx
+									}
+
+									if isSetOp {
+										if b.builderState.left.setOpLeftSrcIdx == b.builderState.setup.leftSrcEndIdx {
+											// We have fully materialized first leftSrcEndIdx
+											// tuples in the current column, so we need to
+											// either transition to the next column or exit.
+											if colIdx == len(b.left.types)-1 {
+												// This is the last column.
+												return
+											}
+											// We need to start building the next column
+											// with the same initial builder state as the
+											// current column.
+											b.builderState.left = initialBuilderState
+											continue LeftColLoop
+										}
+										b.builderState.left.setOpLeftSrcIdx += toAppend
+									}
+
+									if srcNulls.NullAt(srcStartIdx) {
+										outNulls.SetNullRange(outStartIdx, outStartIdx+toAppend)
+										outStartIdx += toAppend
+									} else {
+										val := srcCol.Get(srcStartIdx)
+										for i := 0; i < toAppend; i++ {
+											outCol.Set(outStartIdx, val)
+											outStartIdx++
+										}
+									}
+
+									if outStartIdx == outputCapacity {
+										// We reached the capacity of the output vector,
+										// so we move to the next column.
+										if colIdx == len(b.left.types)-1 {
+											// This is the last column.
+											b.builderState.left.numRepeatsIdx += toAppend
+											if b.builderState.left.numRepeatsIdx == leftNumRepeats {
+												// The current tuple has already been repeated
+												// the desired number of times, so we advance
+												// the source index.
+												b.builderState.left.curSrcStartIdx++
+												b.builderState.left.numRepeatsIdx = 0
+											}
+											return
+										}
+										// We need to start building the next column
+										// with the same initial builder state as the
+										// current column.
+										b.builderState.left = initialBuilderState
+										continue LeftColLoop
+									}
+									// We fully processed the current tuple for the current
+									// column, and before moving on to the next one, we need
+									// to reset numRepeatsIdx (so that the next tuple would
+									// be repeated leftNumRepeats times).
+									b.builderState.left.numRepeatsIdx = 0
+								}
+							}
+						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch b.left.types[colIdx].Width() {
 						case -1:
@@ -1568,6 +1688,35 @@ func (b *crossJoinerBase) buildFromRightInput(ctx context.Context, destStartIdx 
 									} else {
 										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
 										outCol[outStartIdx] = v
+									}
+								} else {
+									out.Copy(
+										coldata.CopySliceArgs{
+											SliceArgs: coldata.SliceArgs{
+												Src:         src,
+												DestIdx:     outStartIdx,
+												SrcStartIdx: b.builderState.right.curSrcStartIdx,
+												SrcEndIdx:   b.builderState.right.curSrcStartIdx + toAppend,
+											},
+										},
+									)
+								}
+							}
+						case types.JsonFamily:
+							switch b.right.types[colIdx].Width() {
+							case -1:
+							default:
+								srcCol := src.JSON()
+								outCol := out.JSON()
+
+								// Optimization in the case that group length is 1, use assign
+								// instead of copy.
+								if toAppend == 1 {
+									if srcNulls.NullAt(b.builderState.right.curSrcStartIdx) {
+										outNulls.SetNull(outStartIdx)
+									} else {
+										v := srcCol.Get(b.builderState.right.curSrcStartIdx)
+										outCol.Set(outStartIdx, v)
 									}
 								} else {
 									out.Copy(

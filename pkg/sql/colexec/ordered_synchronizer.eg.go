@@ -61,6 +61,7 @@ type OrderedSynchronizer struct {
 	outFloat64Cols   []coldata.Float64s
 	outTimestampCols []coldata.Times
 	outIntervalCols  []coldata.Durations
+	outJSONCols      []*coldata.JSONs
 	outDatumCols     []coldata.DatumVec
 	// outColsMap contains the positions of the corresponding vectors in the
 	// slice for the same types. For example, if we have an output batch with
@@ -220,6 +221,15 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 							v := srcCol.Get(srcRowIdx)
 							outCol[outputIdx] = v
 						}
+					case types.JsonFamily:
+						switch o.typs[i].Width() {
+						case -1:
+						default:
+							srcCol := vec.JSON()
+							outCol := o.outJSONCols[o.outColsMap[i]]
+							v := srcCol.Get(srcRowIdx)
+							outCol.Set(outputIdx, v)
+						}
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch o.typs[i].Width() {
 						case -1:
@@ -272,6 +282,7 @@ func (o *OrderedSynchronizer) resetOutput() {
 		o.outFloat64Cols = o.outFloat64Cols[:0]
 		o.outTimestampCols = o.outTimestampCols[:0]
 		o.outIntervalCols = o.outIntervalCols[:0]
+		o.outJSONCols = o.outJSONCols[:0]
 		o.outDatumCols = o.outDatumCols[:0]
 		for i, outVec := range o.output.ColVecs() {
 			o.outNulls[i] = outVec.Nulls()
@@ -330,6 +341,13 @@ func (o *OrderedSynchronizer) resetOutput() {
 				default:
 					o.outColsMap[i] = len(o.outIntervalCols)
 					o.outIntervalCols = append(o.outIntervalCols, outVec.Interval())
+				}
+			case types.JsonFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outJSONCols)
+					o.outJSONCols = append(o.outJSONCols, outVec.JSON())
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch o.typs[i].Width() {
