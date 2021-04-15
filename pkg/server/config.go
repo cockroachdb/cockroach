@@ -534,12 +534,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
-				Attrs:           spec.Attributes,
-				Dir:             spec.Path,
-				MaxSize:         sizeInBytes,
-				Settings:        cfg.Settings,
-				UseFileRegistry: spec.UseFileRegistry,
-				ExtraOptions:    spec.ExtraOptions,
+				Attrs:             spec.Attributes,
+				Dir:               spec.Path,
+				MaxSize:           sizeInBytes,
+				Settings:          cfg.Settings,
+				UseFileRegistry:   spec.UseFileRegistry,
+				EncryptionOptions: spec.EncryptionOptions,
 			}
 			pebbleConfig := storage.PebbleConfig{
 				StorageConfig: storageConfig,

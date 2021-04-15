@@ -182,9 +182,9 @@ type StoreSpec struct {
 	// Pebble OPTIONS file but treating any whitespace as a newline:
 	// (Eg, "[Options] delete_range_flush_delay=2s flush_split_bytes=4096")
 	PebbleOptions string
-	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
-	// to C CCL code.
-	ExtraOptions []byte
+	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
+	// through to C CCL code.
+	EncryptionOptions []byte
 }
 
 // String returns a fully parsable version of the store spec.
