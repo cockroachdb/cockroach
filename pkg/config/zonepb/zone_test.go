@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	proto "github.com/gogo/protobuf/proto"
@@ -957,6 +958,7 @@ func TestConstraintsListYAML(t *testing.T) {
 
 func TestMarshalableZoneConfigRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 63676, "flaky test")
 
 	original := NewPopulatedZoneConfig(
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())), false /* easy */)
