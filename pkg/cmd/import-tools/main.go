@@ -25,6 +25,7 @@ import (
 	_ "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports"
 	_ "github.com/cockroachdb/stress"
 	_ "github.com/go-swagger/go-swagger/cmd/swagger"
+	_ "github.com/golang/mock/mockgen"
 	_ "github.com/goware/modvendor"
 	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway"
 	_ "github.com/kevinburke/go-bindata/go-bindata"

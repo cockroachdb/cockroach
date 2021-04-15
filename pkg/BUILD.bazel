@@ -133,6 +133,7 @@ ALL_TESTS = [
     "//pkg/roachpb:string_test",
     "//pkg/rpc/nodedialer:nodedialer_test",
     "//pkg/rpc:rpc_test",
+    "//pkg/security/certmgr:certmgr_test",
     "//pkg/security:security_test",
     "//pkg/server/debug/goroutineui:goroutineui_test",
     "//pkg/server/debug/pprofui:pprofui_test",
