@@ -11,6 +11,8 @@
 package geomfn
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 )
@@ -96,6 +98,9 @@ func Difference(a, b geo.Geometry) (geo.Geometry, error) {
 
 // Simplify returns a simplified Geometry.
 func Simplify(g geo.Geometry, tolerance float64) (geo.Geometry, error) {
+	if math.IsNaN(tolerance) {
+		return g, nil
+	}
 	simplifiedEWKB, err := geos.Simplify(g.EWKB(), tolerance)
 	if err != nil {
 		return geo.Geometry{}, err
