@@ -12,6 +12,7 @@ package builtins
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -3973,6 +3975,24 @@ may increase either contention or retry errors, or both.`,
 				if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique {
 					indexColIDs = append(indexColIDs, indexDesc.ExtraColumnIDs...)
 				}
+				// Hydrate all user-defined types.
+				typeResolver := &catalogKVTypeResolver{
+					txn:   ctx.Txn,
+					codec: ctx.Codec,
+				}
+				cols := tableDesc.PublicColumns()
+				typs := catalog.ColumnTypes(cols)
+				for _, t := range typs {
+					if t.UserDefined() {
+						name, desc, err := typeResolver.GetTypeDescriptor(ctx.Context, typedesc.GetTypeDescID(t))
+						if err != nil {
+							return nil, err
+						}
+						if err := desc.HydrateTypeInfoWithName(ctx.Context, t, &name, typeResolver); err != nil {
+							return nil, err
+						}
+					}
+				}
 
 				// Ensure that the input tuple length equals the number of index cols.
 				if len(rowDatums.D) != len(indexColIDs) {
@@ -6407,6 +6427,24 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 			Volatility: tree.VolatilityLeakProof,
 		},
 	)
+}
+
+// catalogKVTypeResolver is a type resolver that uses a DB read to resolve
+// types.
+type catalogKVTypeResolver struct {
+	txn   *kv.Txn
+	codec keys.SQLCodec
+}
+
+func (r *catalogKVTypeResolver) GetTypeDescriptor(
+	ctx context.Context, id descpb.ID,
+) (tree.TypeName, catalog.TypeDescriptor, error) {
+	desc, err := catalogkv.MustGetTypeDescByID(ctx, r.txn, r.codec, id)
+	if err != nil {
+		return tree.TypeName{}, nil, err
+	}
+	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
+	return name, desc, nil
 }
 
 type regexpEscapeKey struct {
