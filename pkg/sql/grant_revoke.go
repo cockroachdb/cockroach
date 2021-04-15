@@ -312,10 +312,14 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// Record the privilege changes in the event log. This is an
 	// auditable log event and is recorded in the same transaction as
 	// the table descriptor update.
+	descIDs := make(descpb.IDs, 0, len(events))
+	eventPayloads := make([]eventpb.EventPayload, 0, len(events))
 	for _, ev := range events {
-		if err := params.p.logEvent(params.ctx, ev.descID, ev.event); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, ev.descID)
+		eventPayloads = append(eventPayloads, ev.event)
+	}
+	if err := params.p.batchLogEvents(params.ctx, descIDs, eventPayloads); err != nil {
+		return err
 	}
 	return nil
 }
