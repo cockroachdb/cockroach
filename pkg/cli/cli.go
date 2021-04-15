@@ -19,7 +19,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
