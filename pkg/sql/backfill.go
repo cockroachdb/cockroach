@@ -54,7 +54,7 @@ const (
 	// TODO(vivek): Replace these constants with a runtime budget for the
 	// operation chunk involved.
 
-	// columnTruncateAndBackfillChunkSize is the maximum number of columns
+	// columnTruncateAndBackfillChunkSize is the maximum number of rows
 	// processed per chunk during column truncate or backfill.
 	columnTruncateAndBackfillChunkSize = 200
 

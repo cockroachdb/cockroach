@@ -208,6 +208,11 @@ func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
 	panic("unimplemented")
 }
 
+// DeferCommitWait is part of the TxnSender interface.
+func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (

@@ -309,6 +309,17 @@ type TxnSender interface {
 	// refresh reads performed on the RHS after the RHS has been subsumed but
 	// before the merge transaction completed.
 	ManualRefresh(ctx context.Context) error
+
+	// DeferCommitWait defers the transaction's commit-wait operation, passing
+	// responsibility of commit-waiting from the TxnSender to the caller of this
+	// method. The method returns a function which the caller must eventually
+	// run if the transaction completes without error. This function is safe to
+	// call multiple times.
+	//
+	// WARNING: failure to call the returned function could lead to consistency
+	// violations where a future, causally dependent transaction may fail to
+	// observe the writes performed by this transaction.
+	DeferCommitWait(ctx context.Context) func(context.Context)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
