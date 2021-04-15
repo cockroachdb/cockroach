@@ -1410,7 +1410,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		if storeSpec.InMemory {
 			continue
 		}
-		if len(storeSpec.ExtraOptions) > 0 {
+		if len(storeSpec.EncryptionOptions) > 0 {
 			encryptedStore = true
 		}
 
