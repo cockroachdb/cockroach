@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -161,6 +162,14 @@ func (r *testRunner) Run(
 	if len(tests) == 0 {
 		return fmt.Errorf("no test matched filters")
 	}
+
+	hasDevLicense := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "") != ""
+	for _, t := range tests {
+		if t.RequiresLicense && !hasDevLicense {
+			return fmt.Errorf("test %q requires an enterprise license, set COCKROACH_DEV_LICENSE", t.Name)
+		}
+	}
+
 	if err := clustersOpt.validate(); err != nil {
 		return err
 	}

@@ -585,9 +585,10 @@ func runCDCKafkaAuth(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
-		Name:    "cdc/tpcc-1000",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/tpcc-1000",
+		Owner:           OwnerCDC,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -599,10 +600,11 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/tpcc-1000/sink=null",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
-		Tags:    []string{"manual"},
+		Name:            "cdc/tpcc-1000/sink=null",
+		Owner:           OwnerCDC,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		Tags:            []string{"manual"},
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -615,9 +617,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/initial-scan",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/initial-scan",
+		Owner:           OwnerCDC,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -630,9 +633,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/sink-chaos",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/sink-chaos",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -645,9 +649,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/crdb-chaos",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/crdb-chaos",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -667,7 +672,8 @@ func registerCDC(r *testRegistry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
@@ -680,9 +686,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4, cpu(16)),
+		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4, cpu(16)),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
@@ -700,25 +707,28 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/kafka-auth",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(1),
+		Name:            "cdc/kafka-auth",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(1),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/bank",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(4),
+		Name:            "cdc/bank",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(4),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/schemareg",
-		Owner:   `cdc`,
-		Cluster: makeClusterSpec(1),
+		Name:            "cdc/schemareg",
+		Owner:           `cdc`,
+		Cluster:         makeClusterSpec(1),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
