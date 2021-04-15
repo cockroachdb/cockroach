@@ -358,6 +358,7 @@ func registerRestore(r *testRegistry) {
 					return nil
 				})
 				m.Wait()
+				t.Errorf("failing on purpose")
 			},
 		})
 	}
