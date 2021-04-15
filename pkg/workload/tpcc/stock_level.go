@@ -13,9 +13,9 @@ package tpcc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/jackc/pgconn"
 	"golang.org/x/exp/rand"
 )
 
@@ -51,25 +51,12 @@ type stockLevel struct {
 
 var _ tpccTx = &stockLevel{}
 
-func createStockLevel(
-	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
-) (tpccTx, error) {
-	s := &stockLevel{
-		config: config,
-		mcp:    mcp,
-	}
-
-	s.selectDNextOID = s.sr.Define(`
+const selectDNextOIDStmt = `
 		SELECT d_next_o_id
 		FROM district
-		WHERE d_w_id = $1 AND d_id = $2`,
-	)
+		WHERE d_w_id = $1 AND d_id = $2`
 
-	// Count the number of recently sold items that have a stock level below
-	// the threshold.
-	// TODO(radu): we use count(DISTINCT s_i_id) because DISTINCT inside
-	// aggregates was not supported by the optimizer. This can be cleaned up.
-	s.countRecentlySold = s.sr.Define(`
+const countRecentlySoldStmt = `
 		SELECT count(*) FROM (
 			SELECT DISTINCT s_i_id
 			FROM order_line
@@ -79,8 +66,32 @@ func createStockLevel(
 				AND ol_d_id = $2
 				AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
 				AND s_quantity < $4
-		)`,
-	)
+		)`
+
+func getStockLevelStmts() []string {
+	return []string{
+		selectDNextOIDStmt, countRecentlySoldStmt,
+	}
+}
+
+func createStockLevel(
+	ctx context.Context,
+	config *tpcc,
+	mcp *workload.MultiConnPool,
+	preparedStmts map[string]*pgconn.StatementDescription,
+) (tpccTx, error) {
+	s := &stockLevel{
+		config: config,
+		mcp:    mcp,
+	}
+
+	s.selectDNextOID = s.sr.DefinePrepared(selectDNextOIDStmt, preparedStmts[selectDNextOIDStmt])
+
+	// Count the number of recently sold items that have a stock level below
+	// the threshold.
+	// TODO(radu): we use count(DISTINCT s_i_id) because DISTINCT inside
+	// aggregates was not supported by the optimizer. This can be cleaned up.
+	s.countRecentlySold = s.sr.DefinePrepared(countRecentlySoldStmt, preparedStmts[countRecentlySoldStmt])
 
 	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {
 		return nil, err
@@ -99,12 +110,12 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 		dID:       rng.Intn(10) + 1,
 	}
 
-	tx, err := s.mcp.Get().BeginEx(ctx, s.config.txOpts)
+	tx, err := s.mcp.Get().BeginTx(ctx, s.config.txOpts)
 	if err != nil {
 		return nil, err
 	}
-	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+	if err := workload.ExecuteInTx(
+		ctx, tx,
 		func() error {
 			var dNextOID int
 			if err := s.selectDNextOID.QueryRowTx(

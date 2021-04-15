@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"golang.org/x/exp/rand"
 )
 
@@ -35,7 +36,12 @@ type tpccTx interface {
 	run(ctx context.Context, wID int) (interface{}, error)
 }
 
-type createTxFn func(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error)
+type createTxFn func(
+	ctx context.Context,
+	config *tpcc,
+	mcp *workload.MultiConnPool,
+	preparedStmts map[string]*pgconn.StatementDescription,
+) (tpccTx, error)
 
 // txInfo stores high-level information about the TPCC transactions. The create
 // function is used to create an object that implements tpccTx.
@@ -139,6 +145,7 @@ func newWorker(
 	mcp *workload.MultiConnPool,
 	hists *histogram.Histograms,
 	warehouse int,
+	preparedStmts map[string]*pgconn.StatementDescription,
 ) (*worker, error) {
 	w := &worker{
 		config:    config,
@@ -150,7 +157,7 @@ func newWorker(
 	}
 	for i := range w.txs {
 		var err error
-		w.txs[i], err = config.txInfos[i].constructor(ctx, config, mcp)
+		w.txs[i], err = config.txInfos[i].constructor(ctx, config, mcp, preparedStmts)
 		if err != nil {
 			return nil, err
 		}

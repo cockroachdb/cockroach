@@ -27,7 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -80,7 +81,7 @@ type tpcc struct {
 
 	usePostgres  bool
 	serializable bool
-	txOpts       *pgx.TxOptions
+	txOpts       pgx.TxOptions
 
 	expensiveChecks bool
 
@@ -296,7 +297,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			if w.serializable {
-				w.txOpts = &pgx.TxOptions{IsoLevel: pgx.Serializable}
+				w.txOpts = pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
 			w.auditor = newAuditor(w.activeWarehouses)
@@ -619,13 +620,30 @@ func (w *tpcc) Ops(
 	w.reg = reg
 	w.usePostgres = parsedURL.Port() == "5432"
 
+	deliveryStmts := getDeliveryStmts()
+	stockLevelStmts := getStockLevelStmts()
+	orderStatusStmts := getOrderStatusStmts()
+	paymentStmts := getCreatePaymentStmts()
+	newOrderStmts := getCreateNewOrderStmts()
+
+	stmts := append([]string{}, deliveryStmts...)
+	stmts = append(stmts, stockLevelStmts...)
+	stmts = append(stmts, orderStatusStmts...)
+	stmts = append(stmts, paymentStmts...)
+	stmts = append(stmts, newOrderStmts...)
+
+	name := "tpcc"
+	preparedStmts := make(map[string]*pgconn.StatementDescription)
+	preparedStmtsFn := workload.GetPreparedStatementsCallback(name, stmts, preparedStmts)
+
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: (w.numConns + len(urls) - 1) / len(urls), // round up
 		// Limit the number of connections per pool (otherwise preparing statements
 		// at startup can be slow).
-		MaxConnsPerPool: 50,
+		MaxConnsPerPool:     50,
+		PrepareStatementsFn: preparedStmtsFn,
 	}
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
@@ -635,7 +653,7 @@ func (w *tpcc) Ops(
 		i := i
 		g.Go(func() error {
 			var err error
-			dbs[i], err = workload.NewMultiConnPool(cfg, urls[i])
+			dbs[i], err = workload.NewMultiConnPool(ctx, cfg, urls[i])
 			return err
 		})
 	}
@@ -683,11 +701,7 @@ func (w *tpcc) Ops(
 	var conns []*pgx.Conn
 	for i := 0; i < w.idleConns; i++ {
 		for _, url := range urls {
-			connConfig, err := pgx.ParseURI(url)
-			if err != nil {
-				return workload.QueryLoad{}, err
-			}
-			conn, err := pgx.Connect(connConfig)
+			conn, err := pgx.Connect(ctx, url)
 			if err != nil {
 				return workload.QueryLoad{}, err
 			}
@@ -730,7 +744,7 @@ func (w *tpcc) Ops(
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(ctx, w, db, reg.GetHandle(), warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), warehouse, preparedStmts)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}
@@ -749,7 +763,7 @@ func (w *tpcc) Ops(
 	// Close idle connections.
 	ql.Close = func(context context.Context) {
 		for _, conn := range conns {
-			if err := conn.Close(); err != nil {
+			if err := conn.Close(ctx); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
 		}
