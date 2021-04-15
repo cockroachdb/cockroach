@@ -886,7 +886,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
 // CurrentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
-// and as such is intended for DML use. It returns an empty DatabaseRegionConfig
+// and as such is intended for DML use. It returns nil
 // if the current database is not multi-region enabled.
 func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
@@ -907,37 +907,19 @@ func (p *planner) CurrentDatabaseRegionConfig(
 		return nil, nil
 	}
 
-	// Construct a region config from leased descriptors.
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return nil, err
-	}
-
-	regionEnum, err := p.Descriptors().GetImmutableTypeByID(
+	return SynthesizeRegionConfig(
 		ctx,
 		p.txn,
-		regionEnumID,
-		tree.ObjectLookupFlags{},
+		dbDesc.GetID(),
+		p.Descriptors(),
+		SynthesizeRegionConfigOptionUseCache,
 	)
-	if err != nil {
-		return nil, err
-	}
-	regionNames, err := regionEnum.RegionNames()
-	if err != nil {
-		return nil, err
-	}
-
-	return multiregion.MakeRegionConfig(
-		regionNames,
-		dbDesc.GetRegionConfig().PrimaryRegion,
-		dbDesc.GetRegionConfig().SurvivalGoal,
-		regionEnumID,
-	), nil
 }
 
 type synthesizeRegionConfigOptions struct {
 	includeOffline bool
 	forValidation  bool
+	useCache       bool
 }
 
 // SynthesizeRegionConfigOption is an option to pass into SynthesizeRegionConfig.
@@ -956,10 +938,16 @@ var SynthesizeRegionConfigOptionForValidation SynthesizeRegionConfigOption = fun
 	o.forValidation = true
 }
 
+// SynthesizeRegionConfigOptionUseCache uses a cache for synthesizing the region
+// config.
+var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *synthesizeRegionConfigOptions) {
+	o.useCache = true
+}
+
 // SynthesizeRegionConfig returns a RegionConfig representing the user
 // configured state of a multi-region database by coalescing state from both
-// the database descriptor and multi-region type descriptor. It avoids the cache
-// and is intended for use by DDL statements.
+// the database descriptor and multi-region type descriptor. By default, it
+// avoids the cache and is intended for use by DDL statements.
 func SynthesizeRegionConfig(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -974,7 +962,7 @@ func SynthesizeRegionConfig(
 
 	regionConfig := multiregion.RegionConfig{}
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidCached:    true,
+		AvoidCached:    !o.useCache,
 		Required:       true,
 		IncludeOffline: o.includeOffline,
 	})
@@ -993,7 +981,7 @@ func SynthesizeRegionConfig(
 		regionEnumID,
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached:    true,
+				AvoidCached:    !o.useCache,
 				IncludeOffline: o.includeOffline,
 			},
 		},
