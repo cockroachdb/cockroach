@@ -1202,7 +1202,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
-							} else if st := r.CurrentLeaseStatus(ctx); st.IsValid() {
+							} else if st := r.CurrentLeaseStatus(ctx); !st.IsValid() {
 								err = newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.Desc(),
 									"lease acquisition attempt lost to another lease, which has expired in the meantime")
 							} else {
