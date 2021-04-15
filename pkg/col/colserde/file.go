@@ -334,7 +334,7 @@ func schema(fb *flatbuffers.Builder, typs []*types.T) flatbuffers.UOffsetT {
 			arrowserde.BoolStart(fb)
 			fbTypOffset = arrowserde.BoolEnd(fb)
 			fbTyp = arrowserde.TypeBool
-		case types.BytesFamily:
+		case types.BytesFamily, types.JsonFamily:
 			arrowserde.BinaryStart(fb)
 			fbTypOffset = arrowserde.BinaryEnd(fb)
 			fbTyp = arrowserde.TypeBinary

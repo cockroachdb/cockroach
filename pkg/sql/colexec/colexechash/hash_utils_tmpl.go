@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,6 +39,7 @@ import (
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ coldataext.Datum
+	_ json.JSON
 )
 
 // {{/*
@@ -119,7 +121,7 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
-	overloadHelper execgen.OverloadHelper,
+	overloadHelper *execgen.OverloadHelper,
 	datumAlloc *rowenc.DatumAlloc,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
