@@ -48,8 +48,8 @@ exp,benchmark
 40,DropView/drop_2_views
 57,DropView/drop_3_views
 19,Grant/grant_all_on_1_table
-23,Grant/grant_all_on_2_tables
-27,Grant/grant_all_on_3_tables
+22,Grant/grant_all_on_2_tables
+25,Grant/grant_all_on_3_tables
 19,GrantRole/grant_1_role
 22,GrantRole/grant_2_roles
 2,ORMQueries/activerecord_type_introspection_query
@@ -61,8 +61,8 @@ exp,benchmark
 2,ORMQueries/pg_namespace
 2,ORMQueries/pg_type
 19,Revoke/revoke_all_on_1_table
-23,Revoke/revoke_all_on_2_tables
-27,Revoke/revoke_all_on_3_tables
+22,Revoke/revoke_all_on_2_tables
+25,Revoke/revoke_all_on_3_tables
 18,RevokeRole/revoke_1_role
 20,RevokeRole/revoke_2_roles
 1,SystemDatabaseQueries/select_system.users_with_empty_database_name
