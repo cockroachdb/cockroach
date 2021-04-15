@@ -487,25 +487,18 @@ func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	return nil, false
 }
 
-// getJSONPath is used for the #> and #>> operators.
-func getJSONPath(j DJSON, ary DArray) (Datum, error) {
+// GetJSONPath is used for the #> and #>> operators.
+func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
 		if v == DNull {
-			return DNull, nil
+			return nil, nil
 		}
 		path[i] = string(MustBeDString(v))
 	}
-	result, err := json.FetchPath(j.JSON, path)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return DNull, nil
-	}
-	return &DJSON{result}, nil
+	return json.FetchPath(j, path)
 }
 
 // BinOps contains the binary operations indexed by operation type.
@@ -1874,7 +1867,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				path, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
+				if err != nil {
+					return nil, err
+				}
+				if path == nil {
+					return DNull, nil
+				}
+				return &DJSON{path}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1935,14 +1935,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				res, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
 				if err != nil {
 					return nil, err
 				}
-				if res == DNull {
+				if res == nil {
 					return DNull, nil
 				}
-				text, err := res.(*DJSON).JSON.AsText()
+				text, err := res.AsText()
 				if err != nil {
 					return nil, err
 				}

@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/randgen",
         "//pkg/sql/types",
         "//pkg/util/duration",
+        "//pkg/util/json",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,6 +89,12 @@ func newMinOrderedAggAlloc(
 		case -1:
 		default:
 			return &minIntervalOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &minJSONOrderedAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -613,8 +620,9 @@ func (a *minBytesOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -2658,6 +2666,385 @@ func (a *minIntervalOrderedAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+type minJSONOrderedAgg struct {
+	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col *coldata.JSONs
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	curAgg json.JSON
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &minJSONOrderedAgg{}
+
+func (a *minJSONOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.JSON()
+}
+
+func (a *minJSONOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.JSON(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
+		col := col
+		if sel == nil {
+			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			} else {
+				for i := 0; i < inputLen; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			}
+		} else {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.Size()
+	}
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *minJSONOrderedAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
+	}
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *minJSONOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
+type minJSONOrderedAggAlloc struct {
+	aggAllocBase
+	aggFuncs []minJSONOrderedAgg
+}
+
+var _ aggregateFuncAlloc = &minJSONOrderedAggAlloc{}
+
+const sizeOfminJSONOrderedAgg = int64(unsafe.Sizeof(minJSONOrderedAgg{}))
+const minJSONOrderedAggSliceOverhead = int64(unsafe.Sizeof([]minJSONOrderedAgg{}))
+
+func (a *minJSONOrderedAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(minJSONOrderedAggSliceOverhead + sizeOfminJSONOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]minJSONOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
 type minDatumOrderedAgg struct {
 	orderedAggregateFuncBase
 	// col points to the output vector we are updating.
@@ -2900,10 +3287,13 @@ func (a *minDatumOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -2983,6 +3373,12 @@ func newMaxOrderedAggAlloc(
 		case -1:
 		default:
 			return &maxIntervalOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxJSONOrderedAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -3508,8 +3904,9 @@ func (a *maxBytesOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -5553,6 +5950,385 @@ func (a *maxIntervalOrderedAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+type maxJSONOrderedAgg struct {
+	orderedAggregateFuncBase
+	// col points to the output vector we are updating.
+	col *coldata.JSONs
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	curAgg json.JSON
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &maxJSONOrderedAgg{}
+
+func (a *maxJSONOrderedAgg) SetOutput(vec coldata.Vec) {
+	a.orderedAggregateFuncBase.SetOutput(vec)
+	a.col = vec.JSON()
+}
+
+func (a *maxJSONOrderedAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.JSON(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		// Capture groups and col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		groups := a.groups
+		col := col
+		if sel == nil {
+			_ = groups[inputLen-1]
+			_ = col.Get(inputLen - 1)
+			if nulls.MaybeHasNulls() {
+				for i := 0; i < inputLen; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			} else {
+				for i := 0; i < inputLen; i++ {
+
+					//gcassert:bce
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			}
+		} else {
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					if groups[i] {
+						if !a.isFirstGroup {
+							// If we encounter a new group, and we haven't found any non-nulls for the
+							// current group, the output for this group should be null.
+							if !a.foundNonNullForCurrentGroup {
+								a.nulls.SetNull(a.curIdx)
+							} else {
+								a.col.Set(a.curIdx, a.curAgg)
+							}
+							a.curIdx++
+							a.foundNonNullForCurrentGroup = false
+						}
+						a.isFirstGroup = false
+					}
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.Size()
+	}
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *maxJSONOrderedAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
+	a.curIdx++
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
+	}
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *maxJSONOrderedAgg) Reset() {
+	a.orderedAggregateFuncBase.Reset()
+	a.foundNonNullForCurrentGroup = false
+}
+
+type maxJSONOrderedAggAlloc struct {
+	aggAllocBase
+	aggFuncs []maxJSONOrderedAgg
+}
+
+var _ aggregateFuncAlloc = &maxJSONOrderedAggAlloc{}
+
+const sizeOfmaxJSONOrderedAgg = int64(unsafe.Sizeof(maxJSONOrderedAgg{}))
+const maxJSONOrderedAggSliceOverhead = int64(unsafe.Sizeof([]maxJSONOrderedAgg{}))
+
+func (a *maxJSONOrderedAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(maxJSONOrderedAggSliceOverhead + sizeOfmaxJSONOrderedAgg*a.allocSize)
+		a.aggFuncs = make([]maxJSONOrderedAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
 type maxDatumOrderedAgg struct {
 	orderedAggregateFuncBase
 	// col points to the output vector we are updating.
@@ -5795,10 +6571,13 @@ func (a *maxDatumOrderedAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
