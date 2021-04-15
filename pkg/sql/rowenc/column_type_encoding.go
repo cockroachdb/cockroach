@@ -1124,7 +1124,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return scratch, err
 	}
 	scratch = scratch[0:0]
-	elementType, err := datumTypeToArrayElementEncodingType(d.ParamTyp)
+	elementType, err := DatumTypeToArrayElementEncodingType(d.ParamTyp)
 
 	if err != nil {
 		return nil, err
@@ -1297,10 +1297,10 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
-// datumTypeToArrayElementEncodingType decides an encoding type to
+// DatumTypeToArrayElementEncodingType decides an encoding type to
 // place in the array header given a datum type. The element encoding
 // type is then used to encode/decode array elements.
-func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
+func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	switch t.Family() {
 	case types.IntFamily:
 		return encoding.Int, nil

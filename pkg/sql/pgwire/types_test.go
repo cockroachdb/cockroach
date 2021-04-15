@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -194,7 +194,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
 	for i := 0; i < 10; i++ {
-		d := rowenc.RandDatum(rng, types.Bytes, false /* nullOK */)
+		d := randgen.RandDatum(rng, types.Bytes, false /* nullOK */)
 		randValues = append(randValues, d)
 	}
 
@@ -246,7 +246,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 		buf := newWriteBuffer(nil /* bytecount */)
 
 		for i := 0; i < 10; i++ {
-			d := rowenc.RandDatum(rng, typ, true)
+			d := randgen.RandDatum(rng, typ, true)
 
 			buf.writeTextDatum(context.Background(), d, defaultConv, defaultLoc, typ)
 			if buf.err != nil {

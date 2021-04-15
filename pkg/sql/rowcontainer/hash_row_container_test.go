@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -64,9 +65,9 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 
 	const numRows = 10
 	const numCols = 1
-	rows := rowenc.MakeIntRows(numRows, numCols)
+	rows := randgen.MakeIntRows(numRows, numCols)
 	storedEqColumns := columns{0}
-	types := rowenc.OneIntCol
+	typs := types.OneIntCol
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func() *HashDiskBackedRowContainer {
@@ -74,7 +75,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		err = rc.Init(
 			ctx,
 			false, /* shouldMark */
-			types,
+			typs,
 			storedEqColumns,
 			true, /*encodeNull */
 		)
@@ -215,7 +216,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				rowenc.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				types.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -240,7 +241,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				rowenc.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				types.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -290,7 +291,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				rowenc.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				types.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -350,7 +351,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	const numRowsInBucket = 4
 	const numRows = 12
 	const numCols = 2
-	rows := rowenc.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
+	rows := randgen.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
 	storedEqColumns := columns{0}
 	types := []*types.T{types.Int, types.Int}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}

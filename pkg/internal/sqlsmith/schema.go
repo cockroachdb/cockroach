@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -243,7 +243,7 @@ FROM
 	return &typeInfo{
 		udts:        udtMapping,
 		scalarTypes: append(udts, types.Scalar...),
-		seedTypes:   append(udts, rowenc.SeedTypes...),
+		seedTypes:   append(udts, randgen.SeedTypes...),
 	}, nil
 }
 

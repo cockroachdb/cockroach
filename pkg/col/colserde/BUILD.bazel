@@ -45,6 +45,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
+        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/types",
         "//pkg/testutils",

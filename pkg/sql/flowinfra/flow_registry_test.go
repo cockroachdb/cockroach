@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -531,7 +532,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	fr := NewFlowRegistry(0)
 	wg := sync.WaitGroup{}
 	rc := &execinfra.RowChannel{}
-	rc.InitWithBufSizeAndNumSenders(rowenc.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+	rc.InitWithBufSizeAndNumSenders(types.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
 			receiver:  RowInboundStreamHandler{rc},
@@ -564,7 +565,7 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// occurred.
 	pushChan := make(chan *execinfrapb.ProducerMetadata)
 	rc := distsqlutils.NewRowBuffer(
-		rowenc.OneIntCol,
+		types.OneIntCol,
 		nil, /* rows */
 		distsqlutils.RowBufferArgs{
 			OnPush: func(_ rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {

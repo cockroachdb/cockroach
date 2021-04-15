@@ -8,8 +8,7 @@ go_library(
     deps = [
         "//pkg/cmd/cmpconn",
         "//pkg/internal/sqlsmith",
-        "//pkg/sql/mutations",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/timeutil",

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,8 +35,8 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	datums := make([]tree.Datum, nCols)
 	typs := make([]*types.T, nCols)
 	for i := 0; i < nCols; i++ {
-		ct := rowenc.RandType(rng)
-		datum := rowenc.RandDatum(rng, ct, false /* nullOk */)
+		ct := randgen.RandType(rng)
+		datum := randgen.RandDatum(rng, ct, false /* nullOk */)
 		typs[i] = ct
 		datums[i] = datum
 		var err error

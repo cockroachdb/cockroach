@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -142,7 +141,7 @@ func (tc *aggregatorTestCase) init() error {
 var aggregatorsTestCases = []aggregatorTestCase{
 	{
 		name: "OneTuple",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 		},
@@ -158,7 +157,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "OneGroup",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 1},
@@ -175,7 +174,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "MultiGroup",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 0},
@@ -197,7 +196,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "CarryBetweenInputBatches",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
@@ -218,7 +217,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "CarryBetweenOutputBatches",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
@@ -241,7 +240,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "CarryBetweenInputAndOutputBatches",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 1},
@@ -274,7 +273,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "NoGroupingCols",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},
@@ -293,7 +292,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "UnorderedWithNullsInGroupingCol",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{nil, 1},
 			{4, 42},
@@ -313,7 +312,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "CountRows",
-		typs: rowenc.OneIntCol,
+		typs: types.OneIntCol,
 		input: colexectestutils.Tuples{
 			{1},
 			{2},
@@ -346,7 +345,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "OutputOrder",
-		typs: rowenc.ThreeIntCols,
+		typs: types.ThreeIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1, 2},
 			{0, 1, 2},
@@ -623,7 +622,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		name: "DistinctAggregation",
-		typs: rowenc.TwoIntCols,
+		typs: types.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{0, 2},

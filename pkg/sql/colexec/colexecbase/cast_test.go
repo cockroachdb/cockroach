@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,7 +67,7 @@ func TestRandomizedCast(t *testing.T) {
 		}
 	}
 
-	collatedStringType := types.MakeCollatedString(types.String, *rowenc.RandCollationLocale(rng))
+	collatedStringType := types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 	collatedStringVec := testColumnFactory.MakeColumn(collatedStringType, 1 /* n */).(coldata.DatumVec)
 	getCollatedStringsThatCanBeCastAsBools := func() []tree.Datum {
 		var res []tree.Datum
@@ -134,12 +134,12 @@ func TestRandomizedCast(t *testing.T) {
 			} else {
 				// We don't allow any NULL datums to be generated, so disable
 				// this ability in the RandDatum function.
-				fromDatum = rowenc.RandDatum(rng, c.fromTyp, false)
+				fromDatum = randgen.RandDatum(rng, c.fromTyp, false)
 				toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
 				if c.retryGeneration {
 					for err != nil {
 						// If we are allowed to retry, make a new datum and cast it on error.
-						fromDatum = rowenc.RandDatum(rng, c.fromTyp, false)
+						fromDatum = randgen.RandDatum(rng, c.fromTyp, false)
 						toDatum, err = tree.PerformCast(&evalCtx, fromDatum, c.toTyp)
 					}
 				}

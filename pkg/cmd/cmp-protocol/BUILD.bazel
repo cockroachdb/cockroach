@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/cmd/cmp-protocol/pgconnect",
         "//pkg/sql/pgwire/pgwirebase",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/randutil",
