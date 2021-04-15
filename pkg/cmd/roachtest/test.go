@@ -74,6 +74,12 @@ type testSpec struct {
 	// still be run regularly.
 	NonReleaseBlocker bool
 
+	// RequiresLicense indicates that the test requires an
+	// enterprise license to run correctly. Use this to ensure
+	// tests will fail-early if COCKROACH_DEV_LICENSE is not set
+	// in the environment.
+	RequiresLicense bool
+
 	// Run is the test function.
 	Run func(ctx context.Context, t *test, c *cluster)
 }
