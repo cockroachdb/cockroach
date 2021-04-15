@@ -145,6 +145,7 @@ go_library(
         "//pkg/util/cancelchecker",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
