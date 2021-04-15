@@ -82,6 +82,12 @@ func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bo
 			default:
 				return true
 			}
+		case types.JsonFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return true
+			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch t.Width() {
 			case -1:
@@ -132,6 +138,12 @@ func isSorterSupported(t *types.T, dir execinfrapb.Ordering_Column_Direction) bo
 				return true
 			}
 		case types.IntervalFamily:
+			switch t.Width() {
+			case -1:
+			default:
+				return true
+			}
+		case types.JsonFamily:
 			switch t.Width() {
 			case -1:
 			default:
@@ -202,6 +214,12 @@ func newSingleSorter(
 				default:
 					return &sortIntervalAscWithNullsOp{}
 				}
+			case types.JsonFamily:
+				switch t.Width() {
+				case -1:
+				default:
+					return &sortJSONAscWithNullsOp{}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch t.Width() {
 				case -1:
@@ -256,6 +274,12 @@ func newSingleSorter(
 				case -1:
 				default:
 					return &sortIntervalDescWithNullsOp{}
+				}
+			case types.JsonFamily:
+				switch t.Width() {
+				case -1:
+				default:
+					return &sortJSONDescWithNullsOp{}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch t.Width() {
@@ -315,6 +339,12 @@ func newSingleSorter(
 				default:
 					return &sortIntervalAscOp{}
 				}
+			case types.JsonFamily:
+				switch t.Width() {
+				case -1:
+				default:
+					return &sortJSONAscOp{}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch t.Width() {
 				case -1:
@@ -369,6 +399,12 @@ func newSingleSorter(
 				case -1:
 				default:
 					return &sortIntervalDescOp{}
+				}
+			case types.JsonFamily:
+				switch t.Width() {
+				case -1:
+				default:
+					return &sortJSONDescOp{}
 				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch t.Width() {
@@ -1078,6 +1114,82 @@ func (s *sortIntervalAscWithNullsOp) Swap(i, j int) {
 }
 
 func (s *sortIntervalAscWithNullsOp) Len() int {
+	return len(s.order)
+}
+
+type sortJSONAscWithNullsOp struct {
+	sortCol       *coldata.JSONs
+	nulls         *coldata.Nulls
+	order         []int
+	cancelChecker colexecutils.CancelChecker
+}
+
+func (s *sortJSONAscWithNullsOp) init(col coldata.Vec, order []int) {
+	s.sortCol = col.JSON()
+	s.nulls = col.Nulls()
+	s.order = order
+}
+
+func (s *sortJSONAscWithNullsOp) sort(ctx context.Context) {
+	n := s.sortCol.Len()
+	s.quickSort(ctx, 0, n, maxDepth(n))
+}
+
+func (s *sortJSONAscWithNullsOp) sortPartitions(ctx context.Context, partitions []int) {
+	if len(partitions) < 1 {
+		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
+	}
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.quickSort(ctx, 0, n, maxDepth(n))
+	}
+}
+
+func (s *sortJSONAscWithNullsOp) Less(i, j int) bool {
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
+	// If ascending, nulls always sort first, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return true
+	} else if n2 {
+		return false
+	}
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+
+		var err error
+		cmpResult, err = arg1.Compare(arg2)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+
+		lt = cmpResult < 0
+	}
+
+	return lt
+}
+
+func (s *sortJSONAscWithNullsOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortJSONAscWithNullsOp) Len() int {
 	return len(s.order)
 }
 
@@ -1850,6 +1962,82 @@ func (s *sortIntervalDescWithNullsOp) Len() int {
 	return len(s.order)
 }
 
+type sortJSONDescWithNullsOp struct {
+	sortCol       *coldata.JSONs
+	nulls         *coldata.Nulls
+	order         []int
+	cancelChecker colexecutils.CancelChecker
+}
+
+func (s *sortJSONDescWithNullsOp) init(col coldata.Vec, order []int) {
+	s.sortCol = col.JSON()
+	s.nulls = col.Nulls()
+	s.order = order
+}
+
+func (s *sortJSONDescWithNullsOp) sort(ctx context.Context) {
+	n := s.sortCol.Len()
+	s.quickSort(ctx, 0, n, maxDepth(n))
+}
+
+func (s *sortJSONDescWithNullsOp) sortPartitions(ctx context.Context, partitions []int) {
+	if len(partitions) < 1 {
+		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
+	}
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.quickSort(ctx, 0, n, maxDepth(n))
+	}
+}
+
+func (s *sortJSONDescWithNullsOp) Less(i, j int) bool {
+	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
+	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
+	// If descending, nulls always sort last, so we encode that logic here.
+	if n1 && n2 {
+		return false
+	} else if n1 {
+		return false
+	} else if n2 {
+		return true
+	}
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+
+		var err error
+		cmpResult, err = arg1.Compare(arg2)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+
+		lt = cmpResult > 0
+	}
+
+	return lt
+}
+
+func (s *sortJSONDescWithNullsOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortJSONDescWithNullsOp) Len() int {
+	return len(s.order)
+}
+
 type sortDatumDescWithNullsOp struct {
 	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
@@ -2529,6 +2717,72 @@ func (s *sortIntervalAscOp) Len() int {
 	return len(s.order)
 }
 
+type sortJSONAscOp struct {
+	sortCol       *coldata.JSONs
+	nulls         *coldata.Nulls
+	order         []int
+	cancelChecker colexecutils.CancelChecker
+}
+
+func (s *sortJSONAscOp) init(col coldata.Vec, order []int) {
+	s.sortCol = col.JSON()
+	s.nulls = col.Nulls()
+	s.order = order
+}
+
+func (s *sortJSONAscOp) sort(ctx context.Context) {
+	n := s.sortCol.Len()
+	s.quickSort(ctx, 0, n, maxDepth(n))
+}
+
+func (s *sortJSONAscOp) sortPartitions(ctx context.Context, partitions []int) {
+	if len(partitions) < 1 {
+		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
+	}
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.quickSort(ctx, 0, n, maxDepth(n))
+	}
+}
+
+func (s *sortJSONAscOp) Less(i, j int) bool {
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+
+		var err error
+		cmpResult, err = arg1.Compare(arg2)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+
+		lt = cmpResult < 0
+	}
+
+	return lt
+}
+
+func (s *sortJSONAscOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortJSONAscOp) Len() int {
+	return len(s.order)
+}
+
 type sortDatumAscOp struct {
 	sortCol       coldata.DatumVec
 	nulls         *coldata.Nulls
@@ -3195,6 +3449,72 @@ func (s *sortIntervalDescOp) Swap(i, j int) {
 }
 
 func (s *sortIntervalDescOp) Len() int {
+	return len(s.order)
+}
+
+type sortJSONDescOp struct {
+	sortCol       *coldata.JSONs
+	nulls         *coldata.Nulls
+	order         []int
+	cancelChecker colexecutils.CancelChecker
+}
+
+func (s *sortJSONDescOp) init(col coldata.Vec, order []int) {
+	s.sortCol = col.JSON()
+	s.nulls = col.Nulls()
+	s.order = order
+}
+
+func (s *sortJSONDescOp) sort(ctx context.Context) {
+	n := s.sortCol.Len()
+	s.quickSort(ctx, 0, n, maxDepth(n))
+}
+
+func (s *sortJSONDescOp) sortPartitions(ctx context.Context, partitions []int) {
+	if len(partitions) < 1 {
+		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
+	}
+	order := s.order
+	for i, partitionStart := range partitions {
+		var partitionEnd int
+		if i == len(partitions)-1 {
+			partitionEnd = len(order)
+		} else {
+			partitionEnd = partitions[i+1]
+		}
+		s.order = order[partitionStart:partitionEnd]
+		n := partitionEnd - partitionStart
+		s.quickSort(ctx, 0, n, maxDepth(n))
+	}
+}
+
+func (s *sortJSONDescOp) Less(i, j int) bool {
+	var lt bool
+	// We always indirect via the order vector.
+	arg1 := s.sortCol.Get(s.order[i])
+	arg2 := s.sortCol.Get(s.order[j])
+
+	{
+		var cmpResult int
+
+		var err error
+		cmpResult, err = arg1.Compare(arg2)
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+
+		lt = cmpResult > 0
+	}
+
+	return lt
+}
+
+func (s *sortJSONDescOp) Swap(i, j int) {
+	// We don't physically swap the column - we merely edit the order vector.
+	s.order[i], s.order[j] = s.order[j], s.order[i]
+}
+
+func (s *sortJSONDescOp) Len() int {
 	return len(s.order)
 }
 

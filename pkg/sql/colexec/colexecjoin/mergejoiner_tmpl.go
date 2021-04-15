@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,6 +45,7 @@ var (
 	_ coldataext.Datum
 	_ duration.Duration
 	_ tree.AggType
+	_ json.JSON
 )
 
 // {{/*

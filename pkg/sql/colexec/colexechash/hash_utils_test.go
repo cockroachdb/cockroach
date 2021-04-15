@@ -51,7 +51,7 @@ func TestHashFunctionFamily(t *testing.T) {
 		// We need +1 here because 0 is not a valid initial hash value.
 		initHash(buckets, nKeys, uint64(initHashValue+1))
 		for _, keysCol := range keys {
-			rehash(ctx, buckets, keysCol, nKeys, nil /* sel */, cancelChecker, overloadHelperVar, &datumAlloc)
+			rehash(ctx, buckets, keysCol, nKeys, nil /* sel */, cancelChecker, &overloadHelperVar, &datumAlloc)
 		}
 		finalizeHash(buckets, nKeys, numBuckets)
 	}

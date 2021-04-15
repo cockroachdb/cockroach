@@ -118,14 +118,9 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BytesFamily:
-			var int32Offsets []int32
-			values, int32Offsets = vec.Bytes().ToArrowSerializationFormat(n)
-			// Cast int32Offsets to []byte.
-			int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&int32Offsets))
-			offsetsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&offsets))
-			offsetsHeader.Data = int32Header.Data
-			offsetsHeader.Len = int32Header.Len * sizeOfInt32
-			offsetsHeader.Cap = int32Header.Cap * sizeOfInt32
+			values = serializeBytesIntoArrow(n, &offsets, vec.Bytes())
+		case types.JsonFamily:
+			values = serializeBytesIntoArrow(n, &offsets, &vec.JSON().Bytes)
 		case types.IntFamily:
 			switch typ.Width() {
 			case 16:
@@ -184,6 +179,19 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		)
 	}
 	return c.scratch.arrowData, nil
+}
+
+// serializeBytesIntoArrow returns the bytes of a serialized flat bytes array. It
+// unsafely updates the passed-in offsets array.
+func serializeBytesIntoArrow(batchLength int, offsets *[]byte, bytes *coldata.Bytes) []byte {
+	values, int32Offsets := bytes.ToArrowSerializationFormat(batchLength)
+	// Cast int32Offsets to []byte.
+	int32Header := (*reflect.SliceHeader)(unsafe.Pointer(&int32Offsets))
+	offsetsHeader := (*reflect.SliceHeader)(unsafe.Pointer(offsets))
+	offsetsHeader.Data = int32Header.Data
+	offsetsHeader.Len = int32Header.Len * sizeOfInt32
+	offsetsHeader.Cap = int32Header.Cap * sizeOfInt32
+	return values
 }
 
 // batchToArrowSpecialType checks whether the vector requires special handling
@@ -309,16 +317,10 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			}
 
 		case types.BytesFamily:
-			bytesArr := array.NewBinaryData(d)
-			vec.Nulls().SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
-			bytes := bytesArr.ValueBytes()
-			if bytes == nil {
-				// All bytes values are empty, so the representation is solely with the
-				// offsets slice, so create an empty slice so that the conversion
-				// corresponds.
-				bytes = make([]byte, 0)
-			}
-			coldata.BytesFromArrowSerializationFormat(vec.Bytes(), bytes, bytesArr.ValueOffsets())
+			deserializeArrowIntoBytes(d, vec.Nulls(), vec.Bytes(), batchLength)
+
+		case types.JsonFamily:
+			deserializeArrowIntoBytes(d, vec.Nulls(), &vec.JSON().Bytes, batchLength)
 
 		case types.DecimalFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve
@@ -472,4 +474,21 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 	b.SetSelection(false)
 	b.SetLength(batchLength)
 	return nil
+}
+
+// deserializeArrowIntoBytes deserializes some arrow data into the given
+// Bytes structure, adding any nulls to the given null bitmap.
+func deserializeArrowIntoBytes(
+	d *array.Data, nulls *coldata.Nulls, bytes *coldata.Bytes, batchLength int,
+) {
+	bytesArr := array.NewBinaryData(d)
+	nulls.SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
+	b := bytesArr.ValueBytes()
+	if b == nil {
+		// All bytes values are empty, so the representation is solely with the
+		// offsets slice, so create an empty slice so that the conversion
+		// corresponds.
+		b = make([]byte, 0)
+	}
+	coldata.BytesFromArrowSerializationFormat(bytes, b, bytesArr.ValueOffsets())
 }

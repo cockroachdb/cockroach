@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -174,6 +175,15 @@ func RandomVec(args RandomVecArgs) {
 		intervals := args.Vec.Interval()
 		for i := 0; i < args.N; i++ {
 			intervals[i] = duration.FromFloat64(args.Rand.Float64())
+		}
+	case types.JsonFamily:
+		j := args.Vec.JSON()
+		for i := 0; i < args.N; i++ {
+			random, err := json.Random(20, args.Rand)
+			if err != nil {
+				panic(err)
+			}
+			j.Set(i, random)
 		}
 	default:
 		datums := args.Vec.Datum()

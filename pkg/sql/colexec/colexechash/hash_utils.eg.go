@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +32,7 @@ import (
 var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ coldataext.Datum
+	_ json.JSON
 )
 
 // rehash takes an element of a key (tuple representing a row of equality
@@ -43,7 +45,7 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
-	overloadHelper execgen.OverloadHelper,
+	overloadHelper *execgen.OverloadHelper,
 	datumAlloc *rowenc.DatumAlloc,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
@@ -899,6 +901,123 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&months)), p)
 						p = memhash64(noescape(unsafe.Pointer(&days)), p)
 						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				}
+			}
+		}
+	case types.JsonFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.JSON(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
 
 						//gcassert:bce
 						buckets[i] = uint64(p)

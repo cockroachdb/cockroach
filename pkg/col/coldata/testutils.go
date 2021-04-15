@@ -116,6 +116,21 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 					}
 				}
 			}
+		} else if canonicalTypeFamily == types.JsonFamily {
+			expectedJSON := expectedVec.JSON().Window(0, expected.Length())
+			resultJSON := actualVec.JSON().Window(0, actual.Length())
+			require.Equal(t, expectedJSON.Len(), resultJSON.Len())
+			for i := 0; i < expectedJSON.Len(); i++ {
+				if !expectedNulls.NullAt(i) {
+					cmp, err := expectedJSON.Get(i).Compare(resultJSON.Get(i))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if cmp != 0 {
+						t.Fatalf("json mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedJSON, resultJSON)
+					}
+				}
+			}
 		} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
 			expectedDatum := expectedVec.Datum().Slice(0 /* start */, expected.Length())
 			resultDatum := actualVec.Datum().Slice(0 /* start */, actual.Length())

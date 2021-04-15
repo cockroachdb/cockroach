@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // DatumVecCanonicalTypeFamily is the "canonical" type family of all types that
@@ -39,6 +40,8 @@ func TypeFamilyToCanonicalTypeFamily(family types.Family) types.Family {
 		return types.BytesFamily
 	case types.DecimalFamily:
 		return types.DecimalFamily
+	case types.JsonFamily:
+		return types.JsonFamily
 	case types.IntFamily, types.DateFamily:
 		return types.IntFamily
 	case types.FloatFamily:
@@ -90,6 +93,8 @@ func UnsafeFromGoType(v interface{}) *types.T {
 		return types.TimestampTZ
 	case duration.Duration:
 		return types.Interval
+	case json.JSON:
+		return types.Jsonb
 	default:
 		panic(fmt.Sprintf("type %s not supported yet", t))
 	}

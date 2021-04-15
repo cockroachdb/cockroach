@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,6 +42,8 @@ var (
 	_ tree.AggType
 	_ apd.Context
 	_ duration.Duration
+	_ json.JSON
+	_ coldataext.Datum
 )
 
 // Remove unused warning.
@@ -179,15 +182,10 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	} else {
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// Release the reference to curAgg eagerly.
-	// {{if eq .VecMethod "Bytes"}}
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
-	// {{else}}
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
-	}
-	// {{end}}
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 	// {{end}}
 }

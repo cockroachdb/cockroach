@@ -282,6 +282,13 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		vec.Interval()[idx] = d
+	case types.JsonFamily:
+		// Don't attempt to decode the JSON value. Instead, just return the
+		// remaining bytes of the key.
+		var jsonLen int
+		jsonLen, err = encoding.PeekLength(key)
+		vec.JSON().Bytes.Set(idx, key[:jsonLen])
+		rkey = key[jsonLen:]
 	default:
 		var d tree.Datum
 		encDir := encoding.Ascending
@@ -347,6 +354,10 @@ func UnmarshalColumnValueToCol(
 		var v duration.Duration
 		v, err = value.GetDuration()
 		vec.Interval()[idx] = v
+	case types.JsonFamily:
+		var v []byte
+		v, err = value.GetBytes()
+		vec.JSON().Bytes.Set(idx, v)
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum
