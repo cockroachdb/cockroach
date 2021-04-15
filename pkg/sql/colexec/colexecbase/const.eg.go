@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -131,6 +132,17 @@ func NewConstOp(
 				allocator:    allocator,
 				outputIdx:    outputIdx,
 				constVal:     constVal.(duration.Duration),
+			}, nil
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &constJSONOp{
+				OneInputNode: colexecop.NewOneInputNode(input),
+				allocator:    allocator,
+				outputIdx:    outputIdx,
+				constVal:     constVal.(json.JSON),
 			}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -572,6 +584,53 @@ func (c constIntervalOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					//gcassert:bce
 					col[i] = c.constVal
+				}
+			}
+		},
+	)
+	return batch
+}
+
+type constJSONOp struct {
+	colexecop.OneInputNode
+
+	allocator *colmem.Allocator
+	outputIdx int
+	constVal  json.JSON
+}
+
+func (c constJSONOp) Init() {
+	c.Input.Init()
+}
+
+func (c constJSONOp) Next(ctx context.Context) coldata.Batch {
+	batch := c.Input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(c.outputIdx)
+	col := vec.JSON()
+	if vec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		vec.Nulls().UnsetNulls()
+	}
+	c.allocator.PerformOperation(
+		[]coldata.Vec{vec},
+		func() {
+			// Shallow copy col to work around Go issue
+			// https://github.com/golang/go/issues/39756 which prevents bound check
+			// elimination from working in this case.
+			col := col
+			if sel := batch.Selection(); sel != nil {
+				for _, i := range sel[:n] {
+					col.Set(i, c.constVal)
+				}
+			} else {
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					col.Set(i, c.constVal)
 				}
 			}
 		},

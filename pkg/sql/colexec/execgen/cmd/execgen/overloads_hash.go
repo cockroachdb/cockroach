@@ -144,6 +144,18 @@ func (c intervalCustomizer) getHashAssignFunc() assignFunc {
 	}
 }
 
+func (c jsonCustomizer) getHashAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+		return fmt.Sprintf(`
+        _b, _err := json.EncodeJSON(nil, %[2]s)
+        if _err != nil {
+          colexecerror.ExpectedError(_err)
+        }
+        _sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+        %[1]s = memhash(unsafe.Pointer(_sh.Data), %[1]s, uintptr(len(_b)))`, targetElem, vElem)
+	}
+}
+
 func (c datumCustomizer) getHashAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
 		// Note that this overload assumes that there exists

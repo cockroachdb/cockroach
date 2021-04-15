@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
@@ -409,6 +410,36 @@ func ColVecToDatumAndDeselect(
 					converted[destIdx] = _converted
 				}
 			}
+		case types.JsonFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.JSON()
+				for idx = 0; idx < length; idx++ {
+					destIdx = idx
+					//gcassert:bce
+					srcIdx = sel[idx]
+					if nulls.NullAt(srcIdx) {
+						//gcassert:bce
+						converted[destIdx] = tree.DNull
+						continue
+					}
+					v := typedCol.Get(srcIdx)
+
+					_bytes, _err := json.EncodeJSON(nil, v)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					var _j json.JSON
+					_j, _err = json.FromEncoding(_bytes)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					_converted := da.NewDJSON(tree.DJSON{JSON: _j})
+					//gcassert:bce
+					converted[destIdx] = _converted
+				}
+			}
 		case types.UuidFamily:
 			switch ct.Width() {
 			case -1:
@@ -659,6 +690,31 @@ func ColVecToDatumAndDeselect(
 					// Note that there is no need for a copy since DBytes uses a string
 					// as underlying storage, which will perform the copy for us.
 					_converted := da.NewDBytes(tree.DBytes(v))
+					//gcassert:bce
+					converted[destIdx] = _converted
+				}
+			}
+		case types.JsonFamily:
+			switch ct.Width() {
+			case -1:
+			default:
+				typedCol := col.JSON()
+				for idx = 0; idx < length; idx++ {
+					destIdx = idx
+					//gcassert:bce
+					srcIdx = sel[idx]
+					v := typedCol.Get(srcIdx)
+
+					_bytes, _err := json.EncodeJSON(nil, v)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					var _j json.JSON
+					_j, _err = json.FromEncoding(_bytes)
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					_converted := da.NewDJSON(tree.DJSON{JSON: _j})
 					//gcassert:bce
 					converted[destIdx] = _converted
 				}
@@ -946,6 +1002,35 @@ func ColVecToDatum(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.JsonFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.JSON()
+					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
+						destIdx = sel[idx]
+						//gcassert:bce
+						srcIdx = sel[idx]
+						if nulls.NullAt(srcIdx) {
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v := typedCol.Get(srcIdx)
+
+						_bytes, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						var _j json.JSON
+						_j, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_converted := da.NewDJSON(tree.DJSON{JSON: _j})
+						converted[destIdx] = _converted
+					}
+				}
 			case types.UuidFamily:
 				switch ct.Width() {
 				case -1:
@@ -1248,6 +1333,35 @@ func ColVecToDatum(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.JsonFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.JSON()
+					for idx = 0; idx < length; idx++ {
+						destIdx = idx
+						srcIdx = idx
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v := typedCol.Get(srcIdx)
+
+						_bytes, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						var _j json.JSON
+						_j, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_converted := da.NewDJSON(tree.DJSON{JSON: _j})
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
 			case types.UuidFamily:
 				switch ct.Width() {
 				case -1:
@@ -1504,6 +1618,31 @@ func ColVecToDatum(
 						converted[destIdx] = _converted
 					}
 				}
+			case types.JsonFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.JSON()
+					for idx = 0; idx < length; idx++ {
+						//gcassert:bce
+						destIdx = sel[idx]
+						//gcassert:bce
+						srcIdx = sel[idx]
+						v := typedCol.Get(srcIdx)
+
+						_bytes, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						var _j json.JSON
+						_j, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_converted := da.NewDJSON(tree.DJSON{JSON: _j})
+						converted[destIdx] = _converted
+					}
+				}
 			case types.UuidFamily:
 				switch ct.Width() {
 				case -1:
@@ -1732,6 +1871,30 @@ func ColVecToDatum(
 						// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						_converted := da.NewDBytes(tree.DBytes(v))
+						//gcassert:bce
+						converted[destIdx] = _converted
+					}
+				}
+			case types.JsonFamily:
+				switch ct.Width() {
+				case -1:
+				default:
+					typedCol := col.JSON()
+					for idx = 0; idx < length; idx++ {
+						destIdx = idx
+						srcIdx = idx
+						v := typedCol.Get(srcIdx)
+
+						_bytes, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						var _j json.JSON
+						_j, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_converted := da.NewDJSON(tree.DJSON{JSON: _j})
 						//gcassert:bce
 						converted[destIdx] = _converted
 					}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -900,6 +901,107 @@ func rehash(
 						p = memhash64(noescape(unsafe.Pointer(&days)), p)
 						p = memhash64(noescape(unsafe.Pointer(&nanos)), p)
 
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				}
+			}
+		}
+	case types.JsonFamily:
+		switch col.Type().Width() {
+		case -1:
+		default:
+			keys, nulls := col.JSON(), col.Nulls()
+			if col.MaybeHasNulls() {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						_b, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						if nulls.NullAt(selIdx) {
+							continue
+						}
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						_b, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				}
+			} else {
+				if sel != nil {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					_ = sel[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						//gcassert:bce
+						selIdx = sel[i]
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						_b, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						//gcassert:bce
+						buckets[i] = uint64(p)
+					}
+					cancelChecker.CheckEveryCall(ctx)
+				} else {
+					// Early bounds checks.
+					_ = buckets[nKeys-1]
+					var selIdx int
+					for i := 0; i < nKeys; i++ {
+						selIdx = i
+						v := keys.Get(selIdx)
+						//gcassert:bce
+						p := uintptr(buckets[i])
+
+						_b, _err := json.EncodeJSON(nil, v)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}

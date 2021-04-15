@@ -29,6 +29,7 @@ var BinaryOpName = map[tree.BinaryOperator]string{
 	tree.LShift:           "LShift",
 	tree.RShift:           "RShift",
 	tree.JSONFetchVal:     "JSONFetchVal",
+	tree.JSONFetchText:    "JSONFetchText",
 	tree.JSONFetchValPath: "JSONFetchValPath",
 }
 

@@ -444,6 +444,49 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					return true
 				}
 			}
+		case types.JsonFamily:
+			switch input.sourceTypes[colIdx].Width() {
+			case -1:
+			default:
+				// We perform this null check on every equality column of the first
+				// buffered tuple regardless of the join type since it is done only once
+				// per batch. In some cases (like INNER join, or LEFT OUTER join with the
+				// right side being an input) this check will always return false since
+				// nulls couldn't be buffered up though.
+				// TODO(yuzefovich): consider templating this.
+				bufferedNull := bufferedGroup.firstTuple[colIdx].MaybeHasNulls() && bufferedGroup.firstTuple[colIdx].Nulls().NullAt(0)
+				incomingNull := batch.ColVec(int(colIdx)).MaybeHasNulls() && batch.ColVec(int(colIdx)).Nulls().NullAt(tupleToLookAtIdx)
+				if o.joinType.IsSetOpJoin() {
+					if bufferedNull && incomingNull {
+						// We have a NULL match, so move onto the next column.
+						continue
+					}
+				}
+				if bufferedNull || incomingNull {
+					return true
+				}
+				bufferedCol := bufferedGroup.firstTuple[colIdx].JSON()
+				prevVal := bufferedCol.Get(0)
+				col := batch.ColVec(int(colIdx)).JSON()
+				curVal := col.Get(tupleToLookAtIdx)
+				var match bool
+
+				{
+					var cmpResult int
+
+					var err error
+					cmpResult, err = prevVal.Compare(curVal)
+					if err != nil {
+						panic(err)
+					}
+
+					match = cmpResult == 0
+				}
+
+				if !match {
+					return true
+				}
+			}
 		case typeconv.DatumVecCanonicalTypeFamily:
 			switch input.sourceTypes[colIdx].Width() {
 			case -1:

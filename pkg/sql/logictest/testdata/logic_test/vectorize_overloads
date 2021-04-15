@@ -261,7 +261,7 @@ EXPLAIN (VEC) SELECT _json - _int FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projMinusDatumInt64Op
+  └ *colexecproj.projMinusJSONInt64Op
     └ *colfetcher.ColBatchScan
 
 query T rowsort
@@ -309,7 +309,7 @@ EXPLAIN (VEC) SELECT _json || _json FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projConcatDatumDatumOp
+  └ *colexecproj.projConcatJSONJSONOp
     └ *colfetcher.ColBatchScan
 
 query T
@@ -480,7 +480,7 @@ EXPLAIN (VEC) SELECT _json -> _int2 FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValDatumInt64Op
+  └ *colexecproj.projJSONFetchValJSONInt64Op
     └ *colexecbase.castInt16Int64Op
       └ *colfetcher.ColBatchScan
 
@@ -512,7 +512,7 @@ EXPLAIN (VEC) SELECT _json -> _int4 FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValDatumInt64Op
+  └ *colexecproj.projJSONFetchValJSONInt64Op
     └ *colexecbase.castInt32Int64Op
       └ *colfetcher.ColBatchScan
 
@@ -529,7 +529,7 @@ EXPLAIN (VEC) SELECT _json -> _int FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValDatumInt64Op
+  └ *colexecproj.projJSONFetchValJSONInt64Op
     └ *colfetcher.ColBatchScan
 
 query T
@@ -545,7 +545,7 @@ EXPLAIN (VEC) SELECT _json -> 2 FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValDatumInt64ConstOp
+  └ *colexecproj.projJSONFetchValJSONInt64ConstOp
     └ *colfetcher.ColBatchScan
 
 query T
@@ -561,8 +561,8 @@ EXPLAIN (VEC) SELECT _json -> 2 -> 'a' FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValDatumBytesConstOp
-    └ *colexecproj.projJSONFetchValDatumInt64ConstOp
+  └ *colexecproj.projJSONFetchValJSONBytesConstOp
+    └ *colexecproj.projJSONFetchValJSONInt64ConstOp
       └ *colfetcher.ColBatchScan
 
 query T
@@ -578,17 +578,14 @@ EXPLAIN (VEC) SELECT _json #> '{a,b}' FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValPathDatumDatumConstOp
-    └ *colfetcher.ColBatchScan
+  └ *rowexec.tableReader
 
 query T
 EXPLAIN (VEC) SELECT _json #> '{a,b}' #> '{c}' FROM many_types
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValPathDatumDatumConstOp
-    └ *colexecproj.projJSONFetchValPathDatumDatumConstOp
-      └ *colfetcher.ColBatchScan
+  └ *rowexec.tableReader
 
 query T
 SELECT _json #> '{2,a}' FROM many_types
@@ -663,7 +660,7 @@ EXPLAIN (VEC) SELECT '[2, "hi", {"b": ["bar", {"c": 4}]}]'::jsonb -> _int FROM m
 ----
 │
 └ Node 1
-  └ *colexecproj.projJSONFetchValDatumConstInt64Op
+  └ *colexecproj.projJSONFetchValJSONConstInt64Op
     └ *colfetcher.ColBatchScan
 
 query T rowsort

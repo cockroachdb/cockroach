@@ -15,6 +15,8 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -443,4 +445,55 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	data := b.data[:serializeLength]
 	offsets := b.offsets[:n+1]
 	return data, offsets
+}
+
+// AssertOffsetsAreNonDecreasing asserts that a bytes-like vec nas
+// non-decreasing offsets.
+func AssertOffsetsAreNonDecreasing(v Vec, n int) {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		v.Bytes().AssertOffsetsAreNonDecreasing(n)
+	case types.JsonFamily:
+		v.JSON().AssertOffsetsAreNonDecreasing(n)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
+}
+
+func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		v.Bytes().UpdateOffsetsToBeNonDecreasing(n)
+	case types.JsonFamily:
+		v.JSON().UpdateOffsetsToBeNonDecreasing(n)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
+}
+
+func ProportionalSize(v Vec, length int64) uintptr {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		return v.Bytes().ProportionalSize(length)
+	case types.JsonFamily:
+		return v.JSON().ProportionalSize(length)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
+	return 0
+}
+
+func Reset(v Vec) {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		v.Bytes().Reset()
+	case types.JsonFamily:
+		v.JSON().Reset()
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
 }
