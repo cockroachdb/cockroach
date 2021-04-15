@@ -391,7 +391,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// If we can't find one, we use the first StoreSpec in the list.
 	var specIdx = 0
 	for i := range serverCfg.Stores.Specs {
-		if serverCfg.Stores.Specs[i].ExtraOptions != nil {
+		if serverCfg.Stores.Specs[i].EncryptionOptions != nil {
 			specIdx = i
 		}
 	}
