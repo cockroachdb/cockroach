@@ -337,9 +337,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 				// RPCs that have this node as consumer to return errors.
 				m.flowCtxCancel()
 				// The consumer either doesn't care any more (it returned from the
-				// FlowStream RPC with an error if the outbox established the stream or
-				// it canceled the client context if the consumer established the
-				// stream through a RunSyncFlow RPC), or there was a communication error
+				// FlowStream RPC with an error), or there was a communication error
 				// and the stream is dead. In any case, the stream has been closed and
 				// the consumer will not consume more rows from this outbox. Make sure
 				// the stream is not used any more.
@@ -384,30 +382,23 @@ func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 
 	stream := m.stream
 	if err := m.flowCtx.Cfg.Stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
-		sendDrainSignal := func(drainRequested bool, err error) bool {
+		sendDrainSignal := func(drainRequested bool, err error) (shouldExit bool) {
 			select {
 			case ch <- drainSignal{drainRequested: drainRequested, err: err}:
-				return true
+				return false
 			case <-ctx.Done():
-				// Listening for consumer signals has been canceled. This generally
-				// means that the main outbox routine is no longer listening to these
-				// signals but, in the RunSyncFlow case, it may also mean that the
-				// client (the consumer) has canceled the RPC. In that case, the main
-				// routine is still listening (and this branch of the select has been
-				// randomly selected; the other was also available), so we have to
-				// notify it. Thus, we attempt sending again.
-				select {
-				case ch <- drainSignal{drainRequested: drainRequested, err: err}:
-					return true
-				default:
-					return false
-				}
+				// Listening for consumer signals has been canceled indicating
+				// that the main outbox routine is no longer listening to these
+				// signals.
+				return true
 			}
 		}
 
 		for {
 			signal, err := stream.Recv()
 			if err == io.EOF {
+				// io.EOF indicates graceful completion of the stream, so we
+				// don't use io.EOF as an error.
 				sendDrainSignal(false, nil)
 				return
 			}
@@ -417,12 +408,9 @@ func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 			}
 			switch {
 			case signal.DrainRequest != nil:
-				if !sendDrainSignal(true, nil) {
+				if shouldExit := sendDrainSignal(true, nil); shouldExit {
 					return
 				}
-			case signal.SetupFlowRequest != nil:
-				log.Fatalf(ctx, "unexpected SetupFlowRequest.\n"+
-					"This SyncFlow specific message should have been handled in RunSyncFlow.")
 			case signal.Handshake != nil:
 				log.Eventf(ctx, "consumer sent handshake.\nConsuming flow scheduled: %t",
 					signal.Handshake.ConsumerScheduled)

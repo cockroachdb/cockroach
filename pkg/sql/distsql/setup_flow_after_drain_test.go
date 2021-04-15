@@ -18,18 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// Test that we can register send a sync flow to the distSQLSrv after the
-// FlowRegistry is draining and the we can also clean that flow up (the flow
-// will get a draining error). This used to crash.
-func TestSyncFlowAfterDrain(t *testing.T) {
+// Test that we can send a setup flow request to the distSQLSrv after the
+// FlowRegistry is draining.
+func TestSetupFlowAfterDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	// We'll create a server just so that we can extract its distsql ServerConfig,
@@ -68,22 +67,13 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 		},
 	}
 
-	types := make([]*types.T, 0)
-	rb := distsqlutils.NewRowBuffer(types, nil /* rows */, distsqlutils.RowBufferArgs{})
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, distSQLSrv.memMonitor, &req, rb)
+	// We expect to see an error in the response.
+	resp, err := distSQLSrv.SetupFlow(ctx, &req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Start(ctx, func() {}); err != nil {
-		t.Fatal(err)
+	respErr := resp.Error.ErrorDetail(ctx)
+	if !testutils.IsError(respErr, "the registry is draining") {
+		t.Fatalf("expected draining err, got: %v", respErr)
 	}
-	flow.Wait()
-	_, meta := rb.Next()
-	if meta == nil {
-		t.Fatal("expected draining err, got no meta")
-	}
-	if !testutils.IsError(meta.Err, "the registry is draining") {
-		t.Fatalf("expected draining err, got: %v", meta.Err)
-	}
-	flow.Cleanup(ctx)
 }
