@@ -62,6 +62,7 @@ func TestShowSummary(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts2.AsOfSystemTime(), backupPath)
 
 	t.Run("show-summary-without-types-or-tables", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", dbOnlyBackupPath, dir))
 		require.NoError(t, err)
 		expectedOutput := fmt.Sprintf(
@@ -91,6 +92,7 @@ func TestShowSummary(t *testing.T) {
 	})
 
 	t.Run("show-summary-with-full-information", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
@@ -172,6 +174,7 @@ func TestListBackups(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
 	t.Run("show-backups-with-backups-in-collection", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
@@ -264,6 +267,16 @@ func TestExportData(t *testing.T) {
 	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupTestSchemaPath)
 
+	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable(id) SELECT * FROM generate_series(4,30)`)
+
+	sqlDB.Exec(t, `ALTER TABLE fooTable SPLIT AT VALUES (10), (20)`)
+	var rangeNum int
+	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW RANGES from TABLE fooTable]`).Scan(&rangeNum)
+	require.Equal(t, 3, rangeNum)
+
+	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts2.AsOfSystemTime()), backupTestSchemaPath)
+
 	testCasesOnError := []struct {
 		name           string
 		tableName      string
@@ -294,6 +307,7 @@ func TestExportData(t *testing.T) {
 	}
 	for _, tc := range testCasesOnError {
 		t.Run(tc.name, func(t *testing.T) {
+			setDebugContextDefault()
 			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
 				strings.Join(tc.backupPaths, " "),
 				tc.tableName,
@@ -308,32 +322,78 @@ func TestExportData(t *testing.T) {
 		tableName      string
 		backupPaths    []string
 		expectedDatums string
+		flags          string
 	}{
 		{
-			"show-data-with-qualified-table-name-of-user-defined-schema",
-			"testDB.testschema.fooTable",
-			[]string{backupTestSchemaPath},
-			"2,223,'dog'\n",
+			name:           "show-data-with-qualified-table-name-of-user-defined-schema",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath},
+			expectedDatums: "2,223,'dog'\n",
 		},
 		{
-			"show-data-with-qualified-table-name-of-public-schema",
-			"testDB.public.fooTable",
-			[]string{backupPublicSchemaPath},
-			"1,123,'cat'\n",
+			name:           "show-data-with-qualified-table-name-of-public-schema",
+			tableName:      "testDB.public.fooTable",
+			backupPaths:    []string{backupPublicSchemaPath},
+			expectedDatums: "1,123,'cat'\n",
 		}, {
-			"show-data-of-incremental-backup",
-			"testDB.testschema.fooTable",
-			[]string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
-			"2,223,'dog'\n3,333,'mickey mouse'\n",
+			name:           "show-data-of-incremental-backup",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: "2,223,'dog'\n3,333,'mickey mouse'\n",
+		}, {
+			name:           "show-data-of-incremental-backup-with-maxRows-flag",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: "2,223,'dog'\n3,333,'mickey mouse'\n4,null,null\n",
+			flags:          "--max-rows=3",
+		}, {
+			name:           "show-data-of-incremental-backup-with-maxRows-larger-than-total-rows-of-data",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: "2,223,'dog'\n3,333,'mickey mouse'\n" + generateRows(4, 27),
+			flags:          "--max-rows=300",
+		}, {
+			name:           "show-data-of-incremental-backup-with-start-key-specified",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: generateRows(5, 26),
+			flags:          "--start-key=raw:\\xbf\\x89\\x8c\\x8c",
+		}, {
+			name:           "show-data-of-incremental-backup-with-start-key-and-max-rows-specified",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: generateRows(5, 6),
+			flags:          "--start-key=raw:\\xbf\\x89\\x8c\\x8c --max-rows=6",
+		}, {
+			name:           "show-data-of-incremental-backup-of-multiple-entries-with-start-key-and-max-rows-specified",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: generateRows(5, 20),
+			flags:          "--start-key=raw:\\xbf\\x89\\x8c\\x8c --max-rows=20",
+		},
+		{
+			name:           "show-data-of-incremental-backup-with-start-key-of-bytekey-format-and-max-rows-specified",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: generateRows(5, 2),
+			flags:          "--start-key=bytekey:\\x8c\\x8c --max-rows=2",
+		}, {
+			name:           "show-data-of-incremental-backup-with-start-key-of-hex-format-and-max-rows-specified",
+			tableName:      "testDB.testschema.fooTable",
+			backupPaths:    []string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName), backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedDatums: generateRows(5, 2),
+			flags:          "--start-key=hex:bf898c8c --max-rows=2",
 		},
 	}
 
 	for _, tc := range testCasesDatumOutput {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
+			setDebugContextDefault()
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s %s",
 				strings.Join(tc.backupPaths, " "),
 				tc.tableName,
-				dir))
+				dir,
+				tc.flags))
 			require.NoError(t, err)
 			checkExpectedOutput(t, tc.expectedDatums, out)
 		})
@@ -380,6 +440,7 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	require.Equal(t, 8, rangeNum)
 
 	t.Run("export-data-with-multiple-ranges", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=testDB.public.fooTable  --external-io-dir=%s",
 			backupPath,
 			dir))
@@ -392,6 +453,7 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	})
 
 	t.Run("export-data-with-multiple-ranges-in-incremental-backups", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s %s --table=testDB.public.fooTable  --external-io-dir=%s",
 			backupPath, backupPath+ts.GoTime().Format(backupccl.DateBasedIncFolderName),
 			dir))
@@ -454,6 +516,7 @@ func TestExportDataAOST(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s' WITH revision_history`, ts3.AsOfSystemTime()), backupPathWithRev)
 
 	t.Run("show-data-as-of-a-uncovered-timestamp", func(t *testing.T) {
+		setDebugContextDefault()
 		tsNotCovered := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s",
 			backupPath,
@@ -468,6 +531,7 @@ func TestExportDataAOST(t *testing.T) {
 	})
 
 	t.Run("show-data-as-of-non-backup-ts-should-return-error", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --as-of=%s --external-io-dir=%s",
 			backupPath,
 			"testDB.public.fooTable",
@@ -491,146 +555,133 @@ func TestExportDataAOST(t *testing.T) {
 		expectedData string
 	}{
 		{
-			"show-data-of-public-schema-without-as-of-time",
-			"testDB.public.fooTable",
-			[]string{
+			name:      "show-data-of-public-schema-without-as-of-time",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
+				backupPath,
+				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			expectedData: "1,123,'cat',true\n2,223,'dog',null\n",
+		},
+		{
+			name:         "show-data-as-of-a-single-full-backup-timestamp",
+			tableName:    "testDB.public.fooTable",
+			backupPaths:  []string{backupPath},
+			asof:         ts1.AsOfSystemTime(),
+			expectedData: "1,123,'cat'\n2,223,'dog'\n",
+		},
+		{
+			name:      "show-data-of-public-schema-as-of-the-second-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
+				backupPath,
+				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			asof:         ts1.AsOfSystemTime(),
+			expectedData: "1,123,'cat'\n2,223,'dog'\n",
+		},
+		{
+			name:      "show-data-of-public-schema-as-of-the-second-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
 				backupPath,
 				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
-			"", /*asof*/
-			"1,123,'cat',true\n2,223,'dog',null\n",
+			asof:         ts2.AsOfSystemTime(),
+			expectedData: "1,123,'cat',null\n2,223,'dog',null\n3,323,'mickey mouse',null\n",
 		},
 		{
-			"show-data-as-of-a-single-full-backup-timestamp",
-			"testDB.public.fooTable",
-			[]string{
-				backupPath,
-			},
-			ts1.AsOfSystemTime(),
-			"1,123,'cat'\n2,223,'dog'\n",
-		},
-		{
-			"show-data-of-public-schema-as-of-the-second-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
-			"testDB.public.fooTable",
-			[]string{
+			name:      "show-data-as-of-foo-schema-as-of-the-second-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
+			tableName: "testDB.fooschema.fooTable",
+			backupPaths: []string{
 				backupPath,
 				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
-			ts1.AsOfSystemTime(),
-			"1,123,'cat'\n2,223,'dog'\n",
+			asof:         ts2.AsOfSystemTime(),
+			expectedData: "1,123,'foo cat'\n3,323,'foo mickey mouse'\n",
 		},
 		{
-			"show-data-of-public-schema-as-of-the-second-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
-			"testDB.public.fooTable",
-			[]string{
+			name:      "show-data-as-of-public-schema-as-of-the-third-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
 				backupPath,
 				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
-			ts2.AsOfSystemTime(),
-			"1,123,'cat',null\n2,223,'dog',null\n3,323,'mickey mouse',null\n",
+			asof:         ts3.AsOfSystemTime(),
+			expectedData: "1,123,'cat',true\n2,223,'dog',null\n",
 		},
 		{
-			"show-data-as-of-foo-schema-as-of-the-second-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
-			"testDB.fooschema.fooTable",
-			[]string{
-				backupPath,
-				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts2.AsOfSystemTime(),
-			"1,123,'foo cat'\n3,323,'foo mickey mouse'\n",
+			name:         "show-data-with-rev-history-as-of-time-after-first-insertion-should-work-in-a-single-full-backup",
+			tableName:    "testDB.fooschema.fooTable",
+			backupPaths:  []string{backupPathWithRev},
+			asof:         ts.AsOfSystemTime(),
+			expectedData: "1,123,'foo cat'\n7,723,'cockroach'\n",
 		},
 		{
-			"show-data-as-of-public-schema-as-of-the-third-backup-timestamp-should-work-in-a-chain-of-incremental-backups",
-			"testDB.public.fooTable",
-			[]string{
-				backupPath,
-				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts3.AsOfSystemTime(),
-			"1,123,'cat',true\n2,223,'dog',null\n",
+			name:         "show-data-with-rev-history-as-of-time-after-deteletion-should-work-in-a-single-full-backup",
+			tableName:    "testDB.fooschema.fooTable",
+			backupPaths:  []string{backupPathWithRev},
+			asof:         ts1.AsOfSystemTime(),
+			expectedData: "1,123,'foo cat'\n",
 		},
 		{
-			"show-data-with-rev-history-as-of-time-after-first-insertion-should-work-in-a-single-full-backup",
-			"testDB.fooschema.fooTable",
-			[]string{
-				backupPathWithRev,
-			},
-			ts.AsOfSystemTime(),
-			"1,123,'foo cat'\n7,723,'cockroach'\n",
-		},
-		{
-			"show-data-with-rev-history-as-of-time-after-deteletion-should-work-in-a-single-full-backup",
-			"testDB.fooschema.fooTable",
-			[]string{
-				backupPathWithRev,
-			},
-			ts1.AsOfSystemTime(),
-			"1,123,'foo cat'\n",
-		},
-		{
-			"show-data-with-rev-history-as-of-time-after-first-insertion-should-work-in-a-chain-of-backups",
-			"testDB.fooschema.fooTable",
-			[]string{
+			name:      "show-data-with-rev-history-as-of-time-after-first-insertion-should-work-in-a-chain-of-backups",
+			tableName: "testDB.fooschema.fooTable",
+			backupPaths: []string{
 				backupPathWithRev,
 				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts.AsOfSystemTime(),
-			"1,123,'foo cat'\n7,723,'cockroach'\n",
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			asof:         ts.AsOfSystemTime(),
+			expectedData: "1,123,'foo cat'\n7,723,'cockroach'\n",
 		},
 		{
-			"show-data-with-rev-history-as-of-time-after-deteletion-should-work-in-a-chain-of-backups",
-			"testDB.fooschema.fooTable",
-			[]string{
+			name:      "show-data-with-rev-history-as-of-time-after-deteletion-should-work-in-a-chain-of-backups",
+			tableName: "testDB.fooschema.fooTable",
+			backupPaths: []string{
 				backupPathWithRev,
 				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts1.AsOfSystemTime(),
-			"1,123,'foo cat'\n",
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			asof:         ts1.AsOfSystemTime(),
+			expectedData: "1,123,'foo cat'\n",
 		},
 		{
-			"show-data-with-rev-history-as-of-time-before-schema-changes-should-work-in-a-chain-of-backups",
-			"testDB.public.fooTable",
-			[]string{
+			name:      "show-data-with-rev-history-as-of-time-before-schema-changes-should-work-in-a-chain-of-backups",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
 				backupPathWithRev,
 				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts2BeforeSchemaChange.AsOfSystemTime(),
-			"1,123,'cat'\n2,223,'dog'\n3,323,'mickey mouse'\n",
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			asof:         ts2BeforeSchemaChange.AsOfSystemTime(),
+			expectedData: "1,123,'cat'\n2,223,'dog'\n3,323,'mickey mouse'\n",
 		},
 		{
-			"show-data-with-rev-history-history-as-of-time-after-schema-changes-should-work-in-a-chain-of-backups",
-			"testDB.public.fooTable",
-			[]string{
+			name:      "show-data-with-rev-history-history-as-of-time-after-schema-changes-should-work-in-a-chain-of-backups",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
 				backupPathWithRev,
 				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts2.AsOfSystemTime(),
-			"1,123,'cat',null\n2,223,'dog',null\n3,323,'mickey mouse',null\n",
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			asof:         ts2.AsOfSystemTime(),
+			expectedData: "1,123,'cat',null\n2,223,'dog',null\n3,323,'mickey mouse',null\n",
 		},
 		{
-			"show-data-with-rev-history-as-of-time-after-deletion-should-work-in-a-chain-of-backups",
-			"testDB.public.fooTable",
-			[]string{
+			name:      "show-data-with-rev-history-as-of-time-after-deletion-should-work-in-a-chain-of-backups",
+			tableName: "testDB.public.fooTable",
+			backupPaths: []string{
 				backupPathWithRev,
 				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts3AfterDeletion.AsOfSystemTime(),
-			"1,123,'cat',null\n2,223,'dog',null\n",
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			asof:         ts3AfterDeletion.AsOfSystemTime(),
+			expectedData: "1,123,'cat',null\n2,223,'dog',null\n",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			setDebugContextDefault()
 			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s ",
 				strings.Join(tc.backupPaths, " "),
 				tc.tableName,
@@ -661,4 +712,14 @@ func generateBackupTimestamps(n int) []hlc.Timestamp {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return timestamps
+}
+
+// generateRows generates rows of pattern "%d,null,null\n"
+// used to verify that --max-rows captures correct number of rows
+func generateRows(start int, rowCount int) string {
+	var res string
+	for i := 0; i < rowCount; i++ {
+		res += fmt.Sprintf("%d,null,null\n", start+i)
+	}
+	return res
 }
