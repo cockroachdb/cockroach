@@ -793,9 +793,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 	const numAccounts = 1000
 	ctx, _, srcDB, tempDir, cleanupSrc := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitNone, params)
-	_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
 	defer cleanupSrc()
-	defer cleanupDst()
 
 	dbBackupLoc := "nodelocal://0/my_db_backup"
 	clusterBackupLoc := "nodelocal://0/my_cluster_backup"
@@ -819,7 +817,10 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	<-dbRestoreStarted
 	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
 
-	// All the restore to finish. This will issue AddSSTable requests at a
+	var tsMidRestore string
+	srcDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsMidRestore)
+
+	// Allow the restore to finish. This will issue AddSSTable requests at a
 	// timestamp that is before the last incremental we just took.
 	close(blockDBRestore)
 
@@ -836,16 +837,43 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 
 	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
 
-	// Restore the incremental backup chain that has missing writes.
-	destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
+	t.Run("spans-reintroduced", func(t *testing.T) {
+		_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
+		defer cleanupDst()
 
-	// Assert that the restored database has the same number
-	// of rows in both the source and destination cluster.
-	checkQuery := `SELECT count(*) FROM restoredb.bank AS OF SYSTEM TIME ` + tsBefore
-	expectedCount := srcDB.QueryStr(t, checkQuery)
-	destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank`, expectedCount)
+		// Restore the incremental backup chain that has missing writes.
+		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
 
-	checkQuery = `SELECT count(*) FROM restoredb.bank@new_idx AS OF SYSTEM TIME ` + tsBefore
-	expectedCount = srcDB.QueryStr(t, checkQuery)
-	destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@new_idx`, expectedCount)
+		// Assert that the restored database has the same number of rows in both the
+		// source and destination cluster.
+		checkQuery := `SELECT count(*) FROM restoredb.bank AS OF SYSTEM TIME ` + tsBefore
+		expectedCount := srcDB.QueryStr(t, checkQuery)
+		destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank`, expectedCount)
+
+		checkQuery = `SELECT count(*) FROM restoredb.bank@new_idx AS OF SYSTEM TIME ` + tsBefore
+		expectedCount = srcDB.QueryStr(t, checkQuery)
+		destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@new_idx`, expectedCount)
+	})
+
+	t.Run("restore-canceled", func(t *testing.T) {
+		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+		_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone, base.TestClusterArgs{})
+		defer cleanupDst()
+
+		destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsMidRestore, clusterBackupLoc)
+
+		// Wait for the cluster restore job to finish, as well as the restored RESTORE TABLE
+		// job to revert.
+		destDB.CheckQueryResultsRetry(t, `
+		SELECT description, status FROM [SHOW JOBS]
+		WHERE job_type = 'RESTORE' AND status NOT IN ('succeeded', 'canceled')`,
+			[][]string{},
+		)
+		// The cluster restore should succeed, but the table restore should have failed.
+		destDB.CheckQueryResults(t,
+			`SELECT status, count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' GROUP BY status ORDER BY status`,
+			[][]string{{"canceled", "1"}, {"succeeded", "1"}})
+
+		destDB.ExpectErr(t, `relation "restoredb.bank" does not exist`, `SELECT count(*) FROM restoredb.bank`)
+	})
 }
