@@ -2005,8 +2005,13 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
+	typeDesc, isType := desc.(*typedesc.Immutable)
+	if !isType {
+		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
+			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
+	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(*typedesc.Immutable), nil
+	return name, typeDesc, nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
