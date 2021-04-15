@@ -337,6 +337,39 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 
 			return unique
 		}
+	case types.JsonFamily:
+		switch aColVec.Type().Width() {
+		case -1:
+		default:
+			aCol := aColVec.JSON()
+			bCol := bColVec.JSON()
+			aNulls := aColVec.Nulls()
+			bNulls := bColVec.Nulls()
+			aNull := aNulls.MaybeHasNulls() && aNulls.NullAt(aValueIdx)
+			bNull := bNulls.MaybeHasNulls() && bNulls.NullAt(bValueIdx)
+			if aNull && bNull {
+				return false
+			} else if aNull || bNull {
+				return true
+			}
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
+			var unique bool
+
+			{
+				var cmpResult int
+
+				var err error
+				cmpResult, err = arg1.Compare(arg2)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+
+				unique = cmpResult != 0
+			}
+
+			return unique
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch aColVec.Type().Width() {
 		case -1:

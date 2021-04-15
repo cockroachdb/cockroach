@@ -59,6 +59,9 @@ type Vec interface {
 	// CanonicalTypeFamily returns the canonical type family of data stored in
 	// this Vec.
 	CanonicalTypeFamily() types.Family
+	// IsBytesLike returns true if this data is stored with a flat bytes
+	// representation.
+	IsBytesLike() bool
 
 	// Bool returns a bool list.
 	Bool() Bools
@@ -78,6 +81,8 @@ type Vec interface {
 	Timestamp() Times
 	// Interval returns a duration.Duration slice.
 	Interval() Durations
+	// JSON returns a vector of JSONs.
+	JSON() *JSONs
 	// Datum returns a vector of Datums.
 	Datum() DatumVec
 
@@ -186,6 +191,8 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 		return make(Times, length)
 	case types.IntervalFamily:
 		return make(Durations, length)
+	case types.JsonFamily:
+		return NewJSONs(length)
 	default:
 		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))
 	}
@@ -208,6 +215,14 @@ func (m *memColumn) Type() *types.T {
 
 func (m *memColumn) CanonicalTypeFamily() types.Family {
 	return m.canonicalTypeFamily
+}
+
+func (m *memColumn) IsBytesLike() bool {
+	switch m.canonicalTypeFamily {
+	case types.BytesFamily, types.JsonFamily:
+		return true
+	}
+	return false
 }
 
 func (m *memColumn) SetCol(col interface{}) {
@@ -248,6 +263,10 @@ func (m *memColumn) Timestamp() Times {
 
 func (m *memColumn) Interval() Durations {
 	return m.col.(Durations)
+}
+
+func (m *memColumn) JSON() *JSONs {
+	return m.col.(*JSONs)
 }
 
 func (m *memColumn) Datum() DatumVec {
@@ -299,6 +318,8 @@ func (m *memColumn) Length() int {
 		return len(m.col.(Times))
 	case types.IntervalFamily:
 		return len(m.col.(Durations))
+	case types.JsonFamily:
+		return m.JSON().Len()
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return m.col.(DatumVec).Len()
 	default:
@@ -331,6 +352,8 @@ func (m *memColumn) Capacity() int {
 		return cap(m.col.(Times))
 	case types.IntervalFamily:
 		return cap(m.col.(Durations))
+	case types.JsonFamily:
+		return m.JSON().Len()
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return m.col.(DatumVec).Cap()
 	default:

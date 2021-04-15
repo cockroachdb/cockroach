@@ -50,6 +50,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/util/encoding",
+        "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/mon",
         "//pkg/util/randutil",
