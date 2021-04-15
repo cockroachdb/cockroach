@@ -10,5 +10,14 @@
 
 package tree
 
+import "golang.org/x/text/collate"
+
 // DefaultCollationTag is the "default" collation for strings.
 const DefaultCollationTag = "default"
+
+func init() {
+	if collate.CLDRVersion != "23" {
+		panic("This binary was built with an incompatible version of golang.org/x/text. " +
+			"See https://github.com/cockroachdb/cockroach/issues/63738 for details")
+	}
+}
