@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -575,7 +576,20 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	} {
 		t.Run(tc.locality, func(t *testing.T) {
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-				t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+				t, 3 /* numServers */, base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						// Disable the merge queue because it makes this test flakey
+						// under stress. Consider changing this when admin commands are
+						// better synchronized leading to less thrashing of the range cache.
+						// We may also need to retry ClearRange operations which bump into
+						// the GC threshold. Generally that's not a concern because
+						// generally that threshold isn't super small. The problem with
+						// ranges is that when they merge, as may happen during the parallel
+						// execution of a big ClearRange is that the highest threshold will
+						// be inherited.
+						DisableMergeQueue: true,
+					},
+				}, nil, /* baseDir */
 			)
 			defer cleanup()
 
