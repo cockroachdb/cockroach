@@ -143,6 +143,10 @@ func WriteInitialClusterData(
 		return r
 	}
 
+	initialReplicaVersion := bootstrapVersion
+	if knobs.InitialReplicaVersionOverride != nil {
+		initialReplicaVersion = *knobs.InitialReplicaVersionOverride
+	}
 	// We iterate through the ranges backwards, since they all need to contribute
 	// to the stats of the first range (i.e. because they all write meta2 records
 	// in the first range), and so we want to create the first range last so that
@@ -236,12 +240,12 @@ func WriteInitialClusterData(
 
 		if tt := knobs.TruncatedStateTypeOverride; tt != nil {
 			if err := stateloader.WriteInitialRangeStateWithTruncatedState(
-				ctx, batch, *desc, bootstrapVersion, *tt,
+				ctx, batch, *desc, initialReplicaVersion, *tt,
 			); err != nil {
 				return err
 			}
 		} else {
-			if err := stateloader.WriteInitialRangeState(ctx, batch, *desc, bootstrapVersion); err != nil {
+			if err := stateloader.WriteInitialRangeState(ctx, batch, *desc, initialReplicaVersion); err != nil {
 				return err
 			}
 		}

@@ -269,6 +269,10 @@ type StoreTestingKnobs struct {
 	// If set, use the given truncated state type when bootstrapping ranges.
 	// This is used for testing the truncated state migration.
 	TruncatedStateTypeOverride *stateloader.TruncatedStateType
+	// If set, use the given version as the initial replica version when
+	// bootstrapping ranges. This is used for testing the migration
+	// infrastructure.
+	InitialReplicaVersionOverride *roachpb.Version
 	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity values which need be exceeded before the store will
 	// gossip immediately without waiting for the periodic gossip interval.
