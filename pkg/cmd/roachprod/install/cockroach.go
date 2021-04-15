@@ -582,14 +582,16 @@ func (h *crdbInstallHelper) generateClusterSettingCmd(nodeIdx int) string {
 	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "settings-initialized")
 	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, 1))
 
+	// We ignore failures to set remote_debugging.mode, which was
+	// removed in v21.2.
 	clusterSettingCmd += fmt.Sprintf(`
 		if ! test -e %s ; then
+			COCKROACH_CONNECT_TIMEOUT=0 %s sql --url %s -e "SET CLUSTER SETTING server.remote_debugging.mode = 'any'" || true;
 			COCKROACH_CONNECT_TIMEOUT=0 %s sql --url %s -e "
-				SET CLUSTER SETTING server.remote_debugging.mode = 'any';
 				SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
 				SET CLUSTER SETTING enterprise.license = '%s';" \
 			&& touch %s
-		fi`, path, binary, url, license, path)
+		fi`, path, binary, url, binary, url, license, path)
 	return clusterSettingCmd
 }
 

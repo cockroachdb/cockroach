@@ -100,20 +100,11 @@ const (
 	// paginated request. This should be much lower than maxConcurrentRequests
 	// as too much concurrency here can result in wasted results.
 	maxConcurrentPaginatedRequests = 4
-
-	// omittedKeyStr is the string returned in place of a key when keys aren't
-	// permitted in responses.
-	omittedKeyStr = "omitted (due to the 'server.remote_debugging.mode' setting)"
 )
 
 var (
 	// Pattern for local used when determining the node ID.
 	localRE = regexp.MustCompile(`(?i)local`)
-
-	// Error used to convey that remote debugging is needs to be enabled for an
-	// endpoint to be usable.
-	remoteDebuggingErr = status.Error(
-		codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
 
 	// Counter to count accesses to the prometheus vars endpoint /_status/vars .
 	telemetryPrometheusVars = telemetry.GetCounterOnce("monitoring.prometheus.vars")
@@ -470,10 +461,6 @@ func (s *statusServer) Gossip(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -539,12 +526,6 @@ func (s *statusServer) Allocator(
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
-	}
-
-	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
-	// logging range start/end keys in the simulated allocator runs.
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -650,12 +631,6 @@ func (s *statusServer) AllocatorRange(
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
-	}
-
-	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
-	// logging range start/end keys in the simulated allocator runs.
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
@@ -905,10 +880,6 @@ func (s *statusServer) GetFiles(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1011,10 +982,6 @@ func (s *statusServer) LogFile(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1095,10 +1062,6 @@ func (s *statusServer) Logs(
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
-	}
-
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -1618,8 +1581,6 @@ func (s *statusServer) rangesHelper(
 		return state
 	}
 
-	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
-
 	constructRangeInfo := func(
 		desc roachpb.RangeDescriptor, rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
@@ -1627,18 +1588,9 @@ func (s *statusServer) rangesHelper(
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
 		var span serverpb.PrettySpan
-		if includeRawKeys {
-			span.StartKey = desc.StartKey.String()
-			span.EndKey = desc.EndKey.String()
-		} else {
-			span.StartKey = omittedKeyStr
-			span.EndKey = omittedKeyStr
-		}
+		span.StartKey = desc.StartKey.String()
+		span.EndKey = desc.EndKey.String()
 		state := rep.State()
-		if !includeRawKeys {
-			state.ReplicaState.Desc.StartKey = nil
-			state.ReplicaState.Desc.EndKey = nil
-		}
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1803,7 +1755,6 @@ func (s *statusServer) HotRanges(
 
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
-	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
 	err := s.stores.VisitStores(func(store *kvserver.Store) error {
 		ranges := store.HottestReplicas()
 		storeResp := &serverpb.HotRangesResponse_StoreResponse{
@@ -1812,10 +1763,6 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 		}
 		for i, r := range ranges {
 			storeResp.HotRanges[i].Desc = *r.Desc
-			if !includeRawKeys {
-				storeResp.HotRanges[i].Desc.StartKey = nil
-				storeResp.HotRanges[i].Desc.EndKey = nil
-			}
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
 		}
 		resp.Stores = append(resp.Stores, storeResp)
