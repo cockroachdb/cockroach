@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -428,6 +429,7 @@ StateChanged:
 				op.inMemMainOp.Init()
 				op.partitionIdxOffset += op.numBuckets
 				op.state = hbpProcessNewPartitionUsingMain
+				log.VEventf(ctx, 1, "%s consumed its input", op.name)
 				continue
 			}
 			if !op.testingKnobs.delegateFDAcquisitions && op.fdState.acquiredFDs == 0 {
@@ -443,8 +445,8 @@ StateChanged:
 
 		case hbpRecursivePartitioning:
 			op.numRepartitions++
-			if log.V(2) && op.numRepartitions%10 == 0 {
-				log.Infof(ctx,
+			if op.numRepartitions%10 == 0 {
+				log.VEventf(ctx, 2,
 					"%s is performing %d'th repartition", op.name, op.numRepartitions,
 				)
 			}
@@ -529,6 +531,10 @@ StateChanged:
 			// recursively repartition.
 			for partitionIdx, partitionInfo := range op.partitionsToProcessUsingMain {
 				if partitionInfo.memSize <= op.maxPartitionSizeToProcessUsingMain {
+					log.VEventf(ctx, 2,
+						`%s processes partition with idx %d of size %s using the "main" strategy`,
+						op.name, partitionIdx, humanizeutil.IBytes(partitionInfo.memSize),
+					)
 					for i := range op.partitionedInputs {
 						op.partitionedInputs[i].partitionIdx = partitionIdx
 					}
@@ -545,12 +551,10 @@ StateChanged:
 					// But there are still some partitions to process using the
 					// "fallback" strategy.
 					op.diskBackedFallbackOp.Init()
-					if log.V(2) {
-						log.Infof(ctx,
-							`%s will process %d partitions using the "fallback" strategy`,
-							op.name, len(op.partitionsToProcessUsingFallback),
-						)
-					}
+					log.VEventf(ctx, 1,
+						`%s will process %d partitions using the "fallback" strategy`,
+						op.name, len(op.partitionsToProcessUsingFallback),
+					)
 					op.state = hbpProcessNewPartitionUsingFallback
 					continue
 				}
@@ -626,6 +630,7 @@ func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
+	log.VEventf(ctx, 1, "%s is closed", op.name)
 	var retErr error
 	for i := range op.inputs {
 		if err := op.partitioners[i].Close(ctx); err != nil {
