@@ -647,7 +647,7 @@ const tpchVecNodeCount = 3
 func registerTPCHVec(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "tpchvec/perf",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v19.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -657,7 +657,7 @@ func registerTPCHVec(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    "tpchvec/disk",
-		Owner:   OwnerSQLExec,
+		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(tpchVecNodeCount),
 		// 19.2 version doesn't have disk spilling nor memory monitoring, so
 		// there is no point in running this config on that version.
@@ -669,7 +669,7 @@ func registerTPCHVec(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "tpchvec/smithcmp",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -679,7 +679,7 @@ func registerTPCHVec(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "tpchvec/perf_no_stats",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -689,7 +689,7 @@ func registerTPCHVec(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "tpchvec/bench",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(tpchVecNodeCount),
 		MinVersion: "v20.2.0",
 		Skip: "This config can be used to perform some benchmarking and is not " +

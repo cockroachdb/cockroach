@@ -140,6 +140,7 @@ go_library(
         "//pkg/ts/tspb",
         "//pkg/util",
         "//pkg/util/binfetcher",
+        "//pkg/util/cancelchecker",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
