@@ -421,7 +421,9 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	raft := &testProposerRaft{}
 	var p testProposer
+	p.raftGroup = raft
 	var b propBuf
 	var pc proposalCreator
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
