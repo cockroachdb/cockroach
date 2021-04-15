@@ -7,7 +7,7 @@ go_library(
     visibility = ["//pkg:__subpackages__"],
     deps = [
         "//pkg/internal/rsg/yacc",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/syncutil",

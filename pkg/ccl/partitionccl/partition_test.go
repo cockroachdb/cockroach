@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -872,9 +873,9 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			// Not indexable.
 			continue
 		case types.CollatedStringFamily:
-			typ = types.MakeCollatedString(types.String, *rowenc.RandCollationLocale(rng))
+			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 		}
-		datum := rowenc.RandDatum(rng, typ, false /* nullOk */)
+		datum := randgen.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
 			// DNull is returned by RandDatum for types.UNKNOWN or if the
 			// column type is unimplemented in RandDatum. In either case, the

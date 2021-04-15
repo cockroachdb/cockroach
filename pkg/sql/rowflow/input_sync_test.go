@@ -110,7 +110,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []execinfra.RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := distsqlutils.NewRowBuffer(rowenc.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
+			rowBuf := distsqlutils.NewRowBuffer(types.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -131,8 +131,8 @@ func TestOrderedSync(t *testing.T) {
 			}
 			retRows = append(retRows, row)
 		}
-		expStr := c.expected.String(rowenc.ThreeIntCols)
-		retStr := retRows.String(rowenc.ThreeIntCols)
+		expStr := c.expected.String(types.ThreeIntCols)
+		retStr := retRows.String(types.ThreeIntCols)
 		if expStr != retStr {
 			t.Errorf("invalid results for case %d; expected:\n   %s\ngot:\n   %s",
 				testIdx, expStr, retStr)
@@ -147,7 +147,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 
 	var sources []execinfra.RowSource
 	for i := 0; i < 4; i++ {
-		rowBuf := distsqlutils.NewRowBuffer(rowenc.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
+		rowBuf := distsqlutils.NewRowBuffer(types.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 		sources = append(sources, rowBuf)
 		rowBuf.Push(nil, expectedMeta)
 	}
@@ -218,7 +218,7 @@ func TestUnorderedSync(t *testing.T) {
 		for _, row := range retRows {
 			if int(tree.MustBeDInt(row[0].Datum)) == i {
 				if int(tree.MustBeDInt(row[1].Datum)) != j {
-					t.Errorf("Expected [%d %d], got %s", i, j, row.String(rowenc.TwoIntCols))
+					t.Errorf("Expected [%d %d], got %s", i, j, row.String(types.TwoIntCols))
 				}
 				j++
 			}

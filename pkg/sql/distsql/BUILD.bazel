@@ -70,6 +70,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
+        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sem/tree",

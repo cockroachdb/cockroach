@@ -139,7 +139,7 @@ func TestClusterFlow(t *testing.T) {
 						{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
-				ResultTypes: rowenc.TwoIntCols,
+				ResultTypes: types.TwoIntCols,
 			}},
 		},
 	}
@@ -162,7 +162,7 @@ func TestClusterFlow(t *testing.T) {
 						{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tc.Server(2).NodeID()},
 					},
 				}},
-				ResultTypes: rowenc.TwoIntCols,
+				ResultTypes: types.TwoIntCols,
 			}},
 		},
 	}
@@ -186,7 +186,7 @@ func TestClusterFlow(t *testing.T) {
 							{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
 					}},
-					ResultTypes: rowenc.TwoIntCols,
+					ResultTypes: types.TwoIntCols,
 				},
 				{
 					ProcessorID: 4,
@@ -199,7 +199,7 @@ func TestClusterFlow(t *testing.T) {
 							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1},
 							{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
-						ColumnTypes: rowenc.TwoIntCols,
+						ColumnTypes: types.TwoIntCols,
 					}},
 					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc(), MaintainOrdering: true}},
 					Post: execinfrapb.PostProcessSpec{
@@ -596,7 +596,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					valSpecs := make([]execinfrapb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
 						se := flowinfra.StreamEncoder{}
-						se.Init(rowenc.ThreeIntCols)
+						se.Init(types.ThreeIntCols)
 						for j := 0; j < numRows; j++ {
 							row := make(rowenc.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
@@ -666,7 +666,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 											{Type: streamType(i), StreamID: execinfrapb.StreamID(i), TargetNodeID: tc.Server(0).NodeID()},
 										},
 									}},
-									ResultTypes: rowenc.ThreeIntCols,
+									ResultTypes: types.ThreeIntCols,
 								}},
 							},
 						}
@@ -688,14 +688,14 @@ func BenchmarkInfrastructure(b *testing.B) {
 							Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{
 								{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}}},
 							Streams:     inStreams,
-							ColumnTypes: rowenc.ThreeIntCols,
+							ColumnTypes: types.ThreeIntCols,
 						}},
 						Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 						Output: []execinfrapb.OutputRouterSpec{{
 							Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 							Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 						}},
-						ResultTypes: rowenc.ThreeIntCols,
+						ResultTypes: types.ThreeIntCols,
 					}
 					if numNodes == 1 {
 						lastProc.Input[0].Type = execinfrapb.InputSyncSpec_UNORDERED

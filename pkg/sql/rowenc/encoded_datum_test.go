@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowenc
+package rowenc_test
 
 import (
 	"context"
@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,21 +32,21 @@ import (
 func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	v := EncDatum{}
+	v := rowenc.EncDatum{}
 	if !v.IsUnset() {
-		t.Errorf("empty EncDatum should be unset")
+		t.Errorf("empty rowenc.EncDatum should be unset")
 	}
 
 	if _, ok := v.Encoding(); ok {
-		t.Errorf("empty EncDatum has an encoding")
+		t.Errorf("empty rowenc.EncDatum has an encoding")
 	}
 
-	x := DatumToEncDatum(types.Int, tree.NewDInt(5))
+	x := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(5))
 
-	check := func(x EncDatum) {
+	check := func(x rowenc.EncDatum) {
 		if x.IsUnset() {
 			t.Errorf("unset after DatumToEncDatum()")
 		}
@@ -64,11 +66,11 @@ func TestEncDatum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	y := EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	y := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
 	check(y)
 
 	if enc, ok := y.Encoding(); !ok {
-		t.Error("no encoding after EncDatumFromEncoded")
+		t.Error("no encoding after rowenc.EncDatumFromEncoded")
 	} else if enc != descpb.DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
@@ -90,7 +92,7 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != descpb.DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	z := EncDatumFromEncoded(descpb.DatumEncoding_DESCENDING_KEY, enc2)
+	z := rowenc.EncDatumFromEncoded(descpb.DatumEncoding_DESCENDING_KEY, enc2)
 	if enc, ok := z.Encoding(); !ok {
 		t.Error("no encoding")
 	} else if enc != descpb.DatumEncoding_DESCENDING_KEY {
@@ -119,18 +121,18 @@ func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Verify DNull is null.
-	n := DatumToEncDatum(types.Int, tree.DNull)
+	n := rowenc.DatumToEncDatum(types.Int, tree.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
 
-	var alloc DatumAlloc
+	var alloc rowenc.DatumAlloc
 	rng, _ := randutil.NewPseudoRand()
 
 	// Generate random EncDatums (some of which are null), and verify that a datum
 	// created from its encoding has the same IsNull() value.
 	for cases := 0; cases < 100; cases++ {
-		a, typ := RandEncDatum(rng)
+		a, typ := randgen.RandEncDatum(rng)
 		for enc := range descpb.DatumEncoding_name {
 			if !columnTypeCompatibleWithEncoding(typ, descpb.DatumEncoding(enc)) {
 				continue
@@ -139,7 +141,7 @@ func TestEncDatumNull(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			b := EncDatumFromEncoded(descpb.DatumEncoding(enc), encoded)
+			b := rowenc.EncDatumFromEncoded(descpb.DatumEncoding(enc), encoded)
 			if a.IsNull() != b.IsNull() {
 				t.Errorf("before: %s (null=%t) after: %s (null=%t)",
 					a.String(types.Int), a.IsNull(), b.String(types.Int), b.IsNull())
@@ -154,9 +156,9 @@ func TestEncDatumNull(t *testing.T) {
 // those encodings. It also checks if the Compare resulted in decoding or not.
 func checkEncDatumCmp(
 	t *testing.T,
-	a *DatumAlloc,
+	a *rowenc.DatumAlloc,
 	typ *types.T,
-	v1, v2 *EncDatum,
+	v1, v2 *rowenc.EncDatum,
 	enc1, enc2 descpb.DatumEncoding,
 	expectedCmp int,
 	requiresDecode bool,
@@ -169,9 +171,9 @@ func checkEncDatumCmp(
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec1 := EncDatumFromEncoded(enc1, buf1)
+	dec1 := rowenc.EncDatumFromEncoded(enc1, buf1)
 
-	dec2 := EncDatumFromEncoded(enc2, buf2)
+	dec2 := rowenc.EncDatumFromEncoded(enc2, buf2)
 
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
@@ -203,7 +205,7 @@ func checkEncDatumCmp(
 func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
@@ -213,20 +215,20 @@ func TestEncDatumCompare(t *testing.T) {
 		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily:
 			continue
 		case types.CollatedStringFamily:
-			typ = types.MakeCollatedString(types.String, *RandCollationLocale(rng))
+			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 		}
 
 		// Generate two datums d1 < d2
 		var d1, d2 tree.Datum
 		for {
-			d1 = RandDatum(rng, typ, false)
-			d2 = RandDatum(rng, typ, false)
+			d1 = randgen.RandDatum(rng, typ, false)
+			d2 = randgen.RandDatum(rng, typ, false)
 			if cmp := d1.Compare(evalCtx, d2); cmp < 0 {
 				break
 			}
 		}
-		v1 := DatumToEncDatum(typ, d1)
-		v2 := DatumToEncDatum(typ, d2)
+		v1 := rowenc.DatumToEncDatum(typ, d1)
+		v2 := rowenc.DatumToEncDatum(typ, d2)
 
 		if val, err := v1.Compare(typ, a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
@@ -262,17 +264,17 @@ func TestEncDatumCompare(t *testing.T) {
 func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var alloc DatumAlloc
+	var alloc rowenc.DatumAlloc
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 20; test++ {
 		var err error
 		// Generate a set of random datums.
-		ed := make([]EncDatum, 1+rng.Intn(10))
+		ed := make([]rowenc.EncDatum, 1+rng.Intn(10))
 		typs := make([]*types.T, len(ed))
 		for i := range ed {
-			d, t := RandEncDatum(rng)
+			d, t := randgen.RandEncDatum(rng)
 			ed[i], typs[i] = d, t
 		}
 		// Encode them in a single buffer.
@@ -284,9 +286,9 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				// encoding.
 				enc[i] = descpb.DatumEncoding_VALUE
 			} else {
-				enc[i] = RandDatumEncoding(rng)
+				enc[i] = randgen.RandDatumEncoding(rng)
 				for !columnTypeCompatibleWithEncoding(typs[i], enc[i]) {
-					enc[i] = RandDatumEncoding(rng)
+					enc[i] = randgen.RandDatumEncoding(rng)
 				}
 			}
 			buf, err = ed[i].Encode(typs[i], &alloc, enc[i], buf)
@@ -300,8 +302,8 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			if len(b) == 0 {
 				t.Fatal("buffer ended early")
 			}
-			var decoded EncDatum
-			decoded, b, err = EncDatumFromBuffer(typs[i], enc[i], b)
+			var decoded rowenc.EncDatum
+			decoded, b, err = rowenc.EncDatumFromBuffer(typs[i], enc[i], b)
 			if err != nil {
 				t.Fatalf("%+v: encdatum from %+v: %+v (%+v)", ed[i].Datum, enc[i], err, typs[i])
 			}
@@ -322,34 +324,34 @@ func TestEncDatumFromBuffer(t *testing.T) {
 func TestEncDatumRowCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [5]EncDatum{}
+	v := [5]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
 	desc := encoding.Descending
 
 	testCases := []struct {
-		row1, row2 EncDatumRow
+		row1, row2 rowenc.EncDatumRow
 		ord        colinfo.ColumnOrdering
 		cmp        int
 	}{
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord:  colinfo.ColumnOrdering{},
 			cmp:  0,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord:  colinfo.ColumnOrdering{{ColIdx: 1, Direction: desc}},
 			cmp:  0,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: asc},
 				{ColIdx: 1, Direction: desc},
@@ -357,20 +359,20 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: 0,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord:  colinfo.ColumnOrdering{{ColIdx: 2, Direction: asc}},
 			cmp:  -1,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[3]},
-			row2: EncDatumRow{v[0], v[1], v[2]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[3]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[2]},
 			ord:  colinfo.ColumnOrdering{{ColIdx: 2, Direction: asc}},
 			cmp:  1,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 2, Direction: asc},
 				{ColIdx: 0, Direction: asc},
@@ -379,8 +381,8 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: -1,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: asc},
 				{ColIdx: 2, Direction: desc},
@@ -388,8 +390,8 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: 1,
 		},
 		{
-			row1: EncDatumRow{v[0], v[1], v[2]},
-			row2: EncDatumRow{v[0], v[1], v[3]},
+			row1: rowenc.EncDatumRow{v[0], v[1], v[2]},
+			row2: rowenc.EncDatumRow{v[0], v[1], v[3]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 1, Direction: desc},
 				{ColIdx: 0, Direction: asc},
@@ -398,16 +400,16 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: 1,
 		},
 		{
-			row1: EncDatumRow{v[2], v[3], v[4]},
-			row2: EncDatumRow{v[1], v[3], v[0]},
+			row1: rowenc.EncDatumRow{v[2], v[3], v[4]},
+			row2: rowenc.EncDatumRow{v[1], v[3], v[0]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: asc},
 			},
 			cmp: 1,
 		},
 		{
-			row1: EncDatumRow{v[2], v[3], v[4]},
-			row2: EncDatumRow{v[1], v[3], v[0]},
+			row1: rowenc.EncDatumRow{v[2], v[3], v[4]},
+			row2: rowenc.EncDatumRow{v[1], v[3], v[0]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 1, Direction: desc},
 				{ColIdx: 0, Direction: asc},
@@ -415,8 +417,8 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: 1,
 		},
 		{
-			row1: EncDatumRow{v[2], v[3], v[4]},
-			row2: EncDatumRow{v[1], v[3], v[0]},
+			row1: rowenc.EncDatumRow{v[2], v[3], v[4]},
+			row2: rowenc.EncDatumRow{v[1], v[3], v[0]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 1, Direction: asc},
 				{ColIdx: 0, Direction: asc},
@@ -424,8 +426,8 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: 1,
 		},
 		{
-			row1: EncDatumRow{v[2], v[3], v[4]},
-			row2: EncDatumRow{v[1], v[3], v[0]},
+			row1: rowenc.EncDatumRow{v[2], v[3], v[4]},
+			row2: rowenc.EncDatumRow{v[1], v[3], v[0]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 1, Direction: asc},
 				{ColIdx: 0, Direction: desc},
@@ -433,8 +435,8 @@ func TestEncDatumRowCompare(t *testing.T) {
 			cmp: -1,
 		},
 		{
-			row1: EncDatumRow{v[2], v[3], v[4]},
-			row2: EncDatumRow{v[1], v[3], v[0]},
+			row1: rowenc.EncDatumRow{v[2], v[3], v[4]},
+			row2: rowenc.EncDatumRow{v[1], v[3], v[0]},
 			ord: colinfo.ColumnOrdering{
 				{ColIdx: 0, Direction: desc},
 				{ColIdx: 1, Direction: asc},
@@ -443,7 +445,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 		},
 	}
 
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
@@ -471,17 +473,17 @@ func TestEncDatumRowAlloc(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
-			colTypes := RandColumnTypes(rng, cols)
-			in := make(EncDatumRows, rows)
+			colTypes := randgen.RandColumnTypes(rng, cols)
+			in := make(rowenc.EncDatumRows, rows)
 			for i := 0; i < rows; i++ {
-				in[i] = make(EncDatumRow, cols)
+				in[i] = make(rowenc.EncDatumRow, cols)
 				for j := 0; j < cols; j++ {
-					datum := RandDatum(rng, colTypes[j], true /* nullOk */)
-					in[i][j] = DatumToEncDatum(colTypes[j], datum)
+					datum := randgen.RandDatum(rng, colTypes[j], true /* nullOk */)
+					in[i][j] = rowenc.DatumToEncDatum(colTypes[j], datum)
 				}
 			}
-			var alloc EncDatumRowAlloc
-			out := make(EncDatumRows, rows)
+			var alloc rowenc.EncDatumRowAlloc
+			out := make(rowenc.EncDatumRows, rows)
 			for i := 0; i < rows; i++ {
 				out[i] = alloc.CopyRow(in[i])
 				if len(out[i]) != cols {
@@ -516,10 +518,10 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		len := rng.Intn(5)
 		contents := make([]*types.T, len)
 		for j := range contents {
-			contents[j] = RandEncodableType(rng)
+			contents[j] = randgen.RandEncodableType(rng)
 		}
 		colTypes[i] = types.MakeTuple(contents)
-		tests[i] = RandDatum(rng, colTypes[i], true)
+		tests[i] = randgen.RandDatum(rng, colTypes[i], true)
 	}
 
 	for i, test := range tests {
@@ -527,7 +529,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		switch typedTest := test.(type) {
 		case *tree.DTuple:
 
-			buf, err := EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), typedTest, nil)
+			buf, err := rowenc.EncodeTableValue(nil, descpb.ColumnID(encoding.NoColumnID), typedTest, nil)
 			if err != nil {
 				t.Fatalf("seed %d: encoding tuple %v with types %v failed with error: %v",
 					seed, test, colTypes[i], err)
@@ -535,7 +537,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 			var decodedTuple tree.Datum
 			testTyp := test.ResolvedType()
 
-			decodedTuple, buf, err = DecodeTableValue(&DatumAlloc{}, testTyp, buf)
+			decodedTuple, buf, err = rowenc.DecodeTableValue(&rowenc.DatumAlloc{}, testTyp, buf)
 			if err != nil {
 				t.Fatalf("seed %d: decoding tuple %v with type (%+v, %+v) failed with error: %v",
 					seed, test, colTypes[i], testTyp, err)
@@ -574,100 +576,100 @@ func TestEncDatumSize(t *testing.T) {
 	decimalSize := dec12300.Size()
 
 	testCases := []struct {
-		encDatum     EncDatum
+		encDatum     rowenc.EncDatum
 		expectedSize uintptr
 	}{
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
-			expectedSize: EncDatumOverhead + 1, // 1 is encoded with length 1 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
+			expectedSize: rowenc.EncDatumOverhead + 1, // 1 is encoded with length 1 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, 123)),
-			expectedSize: EncDatumOverhead + 2, // 123 is encoded with length 2 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, 123)),
+			expectedSize: rowenc.EncDatumOverhead + 2, // 123 is encoded with length 2 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 12345)),
-			expectedSize: EncDatumOverhead + 3, // 12345 is encoded with length 3 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 12345)),
+			expectedSize: rowenc.EncDatumOverhead + 3, // 12345 is encoded with length 3 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.Int, tree.NewDInt(123)),
-			expectedSize: EncDatumOverhead + DIntSize,
+			encDatum:     rowenc.DatumToEncDatum(types.Int, tree.NewDInt(123)),
+			expectedSize: rowenc.EncDatumOverhead + DIntSize,
 		},
 		{
-			encDatum: EncDatum{
-				encoding: asc,
-				encoded:  encoding.EncodeVarintAscending(nil, 123),
-				Datum:    tree.NewDInt(123),
-			},
-			expectedSize: EncDatumOverhead + 2 + DIntSize, // 123 is encoded with length 2 byte array
+			encDatum: encDatumFromEncodedWithDatum(
+				asc,
+				encoding.EncodeVarintAscending(nil, 123),
+				tree.NewDInt(123),
+			),
+			expectedSize: rowenc.EncDatumOverhead + 2 + DIntSize, // 123 is encoded with length 2 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeFloatAscending(nil, 0)),
-			expectedSize: EncDatumOverhead + 1, // 0.0 is encoded with length 1 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeFloatAscending(nil, 0)),
+			expectedSize: rowenc.EncDatumOverhead + 1, // 0.0 is encoded with length 1 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeFloatDescending(nil, 123)),
-			expectedSize: EncDatumOverhead + 9, // 123.0 is encoded with length 9 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(desc, encoding.EncodeFloatDescending(nil, 123)),
+			expectedSize: rowenc.EncDatumOverhead + 9, // 123.0 is encoded with length 9 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.Float, tree.NewDFloat(123)),
-			expectedSize: EncDatumOverhead + DFloatSize,
+			encDatum:     rowenc.DatumToEncDatum(types.Float, tree.NewDFloat(123)),
+			expectedSize: rowenc.EncDatumOverhead + DFloatSize,
 		},
 		{
-			encDatum: EncDatum{
-				encoding: asc,
-				encoded:  encoding.EncodeFloatAscending(nil, 123),
-				Datum:    tree.NewDFloat(123),
-			},
-			expectedSize: EncDatumOverhead + 9 + DFloatSize, // 123.0 is encoded with length 9 byte array
+			encDatum: encDatumFromEncodedWithDatum(
+				asc,
+				encoding.EncodeFloatAscending(nil, 123),
+				tree.NewDFloat(123),
+			),
+			expectedSize: rowenc.EncDatumOverhead + 9 + DFloatSize, // 123.0 is encoded with length 9 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeDecimalAscending(nil, apd.New(0, 0))),
-			expectedSize: EncDatumOverhead + 1, // 0.0 is encoded with length 1 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeDecimalAscending(nil, apd.New(0, 0))),
+			expectedSize: rowenc.EncDatumOverhead + 1, // 0.0 is encoded with length 1 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeDecimalDescending(nil, apd.New(123, 2))),
-			expectedSize: EncDatumOverhead + 4, // 123.0 is encoded with length 4 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(desc, encoding.EncodeDecimalDescending(nil, apd.New(123, 2))),
+			expectedSize: rowenc.EncDatumOverhead + 4, // 123.0 is encoded with length 4 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.Decimal, dec12300),
-			expectedSize: EncDatumOverhead + decimalSize,
+			encDatum:     rowenc.DatumToEncDatum(types.Decimal, dec12300),
+			expectedSize: rowenc.EncDatumOverhead + decimalSize,
 		},
 		{
-			encDatum: EncDatum{
-				encoding: asc,
-				encoded:  encoding.EncodeDecimalAscending(nil, &dec12300.Decimal),
-				Datum:    dec12300,
-			},
-			expectedSize: EncDatumOverhead + 4 + decimalSize,
+			encDatum: encDatumFromEncodedWithDatum(
+				asc,
+				encoding.EncodeDecimalAscending(nil, &dec12300.Decimal),
+				dec12300,
+			),
+			expectedSize: rowenc.EncDatumOverhead + 4 + decimalSize,
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeStringAscending(nil, "")),
-			expectedSize: EncDatumOverhead + 3, // "" is encoded with length 3 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeStringAscending(nil, "")),
+			expectedSize: rowenc.EncDatumOverhead + 3, // "" is encoded with length 3 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(desc, encoding.EncodeStringDescending(nil, "123⌘")),
-			expectedSize: EncDatumOverhead + 9, // "123⌘" is encoded with length 9 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(desc, encoding.EncodeStringDescending(nil, "123⌘")),
+			expectedSize: rowenc.EncDatumOverhead + 9, // "123⌘" is encoded with length 9 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(types.String, tree.NewDString("12")),
-			expectedSize: EncDatumOverhead + DStringSize + 2,
+			encDatum:     rowenc.DatumToEncDatum(types.String, tree.NewDString("12")),
+			expectedSize: rowenc.EncDatumOverhead + DStringSize + 2,
 		},
 		{
-			encDatum: EncDatum{
-				encoding: asc,
-				encoded:  encoding.EncodeStringAscending(nil, "1234"),
-				Datum:    tree.NewDString("12345"),
-			},
-			expectedSize: EncDatumOverhead + 7 + DStringSize + 5, // "1234" is encoded with length 7 byte array
+			encDatum: encDatumFromEncodedWithDatum(
+				asc,
+				encoding.EncodeStringAscending(nil, "1234"),
+				tree.NewDString("12345"),
+			),
+			expectedSize: rowenc.EncDatumOverhead + 7 + DStringSize + 5, // "1234" is encoded with length 7 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 0, 0, time.FixedZone("EDT", 0)))),
-			expectedSize: EncDatumOverhead + 7, // This time is encoded with length 7 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 0, 0, time.FixedZone("EDT", 0)))),
+			expectedSize: rowenc.EncDatumOverhead + 7, // This time is encoded with length 7 byte array
 		},
 		{
-			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 12, 3456789, time.FixedZone("EDT", 0)))),
-			expectedSize: EncDatumOverhead + 10, // This time is encoded with length 10 byte array
+			encDatum:     rowenc.EncDatumFromEncoded(asc, encoding.EncodeTimeAscending(nil, time.Date(2018, time.June, 26, 11, 50, 12, 3456789, time.FixedZone("EDT", 0)))),
+			expectedSize: rowenc.EncDatumOverhead + 10, // This time is encoded with length 10 byte array
 		},
 	}
 
@@ -678,8 +680,8 @@ func TestEncDatumSize(t *testing.T) {
 		}
 	}
 
-	testRow := make(EncDatumRow, len(testCases))
-	expectedTotalSize := EncDatumRowOverhead
+	testRow := make(rowenc.EncDatumRow, len(testCases))
+	expectedTotalSize := rowenc.EncDatumRowOverhead
 	for idx, c := range testCases {
 		testRow[idx] = c.encDatum
 		expectedTotalSize += c.expectedSize
@@ -705,24 +707,24 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	)
 
 	testCases := []struct {
-		encDatum    EncDatum
+		encDatum    rowenc.EncDatum
 		typ         *types.T
 		newMemUsage int64
 	}{
 		{
-			encDatum: EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
+			encDatum: rowenc.EncDatumFromEncoded(asc, encoding.EncodeVarintAscending(nil, 0)),
 			typ:      types.Int,
 			// Fingerprint should reuse already existing encoded representation,
 			// so it shouldn't use any new memory.
 			newMemUsage: 0,
 		},
 		{
-			encDatum:    EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, i)),
+			encDatum:    rowenc.EncDatumFromEncoded(desc, encoding.EncodeVarintDescending(nil, i)),
 			typ:         types.Int,
 			newMemUsage: int64(unsafe.Sizeof(tree.DInt(i))),
 		},
 		{
-			encDatum:    EncDatumFromEncoded(value, encoding.EncodeBytesValue(nil, encoding.NoColumnID, []byte(s))),
+			encDatum:    rowenc.EncDatumFromEncoded(value, encoding.EncodeBytesValue(nil, encoding.NoColumnID, []byte(s))),
 			typ:         types.String,
 			newMemUsage: int64(tree.NewDString(s).Size()),
 		},
@@ -733,7 +735,7 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	memAcc := evalCtx.Mon.MakeBoundAccount()
 	defer memAcc.Close(ctx)
-	var da DatumAlloc
+	var da rowenc.DatumAlloc
 	for _, c := range testCases {
 		memAcc.Clear(ctx)
 		_, err := c.encDatum.Fingerprint(ctx, c.typ, &da, nil /* appendTo */, &memAcc)
@@ -744,4 +746,12 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 			t.Errorf("on %v\taccounted for %d, expected %d", c.encDatum, memAcc.Used(), c.newMemUsage)
 		}
 	}
+}
+
+func encDatumFromEncodedWithDatum(
+	enc descpb.DatumEncoding, encoded []byte, datum tree.Datum,
+) rowenc.EncDatum {
+	encDatum := rowenc.EncDatumFromEncoded(enc, encoded)
+	encDatum.Datum = datum
+	return encDatum
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -198,7 +199,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							aggFnInputTypes := make([]*types.T, len(aggregations[i].ColIdx))
 							for {
 								for j := range aggFnInputTypes {
-									aggFnInputTypes[j] = rowenc.RandType(rng)
+									aggFnInputTypes[j] = randgen.RandType(rng)
 								}
 								// There is a special case for some functions when at
 								// least one argument is a tuple.
@@ -235,7 +236,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							}
 							inputTypes = append(inputTypes, aggFnInputTypes...)
 						}
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 						groupIdx := 0
 						for _, row := range rows {
 							for i := 0; i < numGroupingCols; i++ {
@@ -368,10 +369,10 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 						)
 						if rng.Float64() < randTypesProbability {
 							inputTypes = generateRandomSupportedTypes(rng, nCols)
-							rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+							rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 						} else {
 							inputTypes = intTyps[:nCols]
-							rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							rows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 						}
 						distinctCols := make([]uint32, nDistinctCols)
 						for i, distinctCol := range rng.Perm(nCols)[:nDistinctCols] {
@@ -486,10 +487,10 @@ func TestSorterAgainstProcessor(t *testing.T) {
 					)
 					if rng.Float64() < randTypesProbability {
 						inputTypes = generateRandomSupportedTypes(rng, nCols)
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
-						rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						rows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 					}
 
 					// Note: we're only generating column orderings on all nCols columns since
@@ -559,10 +560,10 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					)
 					if rng.Float64() < randTypesProbability {
 						inputTypes = generateRandomSupportedTypes(rng, nCols)
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
-						rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						rows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 					}
 
 					// Note: we're only generating column orderings on all nCols columns since
@@ -687,14 +688,14 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
 								})
 								rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
-								lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
-								rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
+								lRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+								rRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 								usingRandomTypes = true
 							} else {
 								lInputTypes = intTyps[:nCols]
 								rInputTypes = lInputTypes
-								lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-								rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								lRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								rRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 							}
@@ -883,14 +884,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								rOrderingCols[i], rOrderingCols[j] = rOrderingCols[j], rOrderingCols[i]
 							})
 							rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
-							lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
-							rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
+							lRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+							rRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 							usingRandomTypes = true
 						} else {
 							lInputTypes = intTyps[:nCols]
 							rInputTypes = lInputTypes
-							lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							lRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							rRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 							lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 							rOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 						}
@@ -1039,7 +1040,7 @@ func generateFilterExpr(
 			// Use right side.
 			colIdx += nCols
 		}
-		constDatum := rowenc.RandDatum(rng, colTypes[colIdx], true /* nullOk */)
+		constDatum := randgen.RandDatum(rng, colTypes[colIdx], true /* nullOk */)
 		constDatumString := constDatum.String()
 		switch colTypes[colIdx].Family() {
 		case types.FloatFamily, types.DecimalFamily:
@@ -1086,7 +1087,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						continue
 					}
 					inputTypes := typs[:nCols:nCols]
-					rows := rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+					rows := randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
 					windowerSpec := &execinfrapb.WindowerSpec{
 						PartitionBy: partitionBy,
@@ -1139,7 +1140,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
 	typs := make([]*types.T, 0, nCols)
 	for len(typs) < nCols {
-		typ := rowenc.RandType(rng)
+		typ := randgen.RandType(rng)
 		if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 			// At the moment, we disallow datum-backed types.
 			// TODO(yuzefovich): remove this.

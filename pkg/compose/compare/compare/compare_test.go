@@ -25,8 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/jackc/pgx/v4"
@@ -70,17 +69,17 @@ func TestCompare(t *testing.T) {
 	configs := map[string]testConfig{
 		"postgres": {
 			setup:           sqlsmith.Setups["rand-tables"],
-			setupMutators:   []rowenc.Mutator{mutations.PostgresCreateTableMutator},
+			setupMutators:   []randgen.Mutator{randgen.PostgresCreateTableMutator},
 			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []rowenc.Mutator{},
+					mutators: []randgen.Mutator{},
 				},
 				{
 					name:     "postgres",
-					mutators: []rowenc.Mutator{mutations.PostgresMutator},
+					mutators: []randgen.Mutator{randgen.PostgresMutator},
 				},
 			},
 		},
@@ -91,17 +90,17 @@ func TestCompare(t *testing.T) {
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []rowenc.Mutator{},
+					mutators: []randgen.Mutator{},
 				},
 				{
 					name: "cockroach2",
-					mutators: []rowenc.Mutator{
-						mutations.StatisticsMutator,
-						mutations.ForeignKeyMutator,
-						mutations.ColumnFamilyMutator,
-						mutations.StatisticsMutator,
-						mutations.IndexStoringMutator,
-						mutations.PartialIndexMutator,
+					mutators: []randgen.Mutator{
+						randgen.StatisticsMutator,
+						randgen.ForeignKeyMutator,
+						randgen.ColumnFamilyMutator,
+						randgen.StatisticsMutator,
+						randgen.IndexStoringMutator,
+						randgen.PartialIndexMutator,
 					},
 				},
 			},
@@ -126,7 +125,7 @@ func TestCompare(t *testing.T) {
 			t.Logf("starting test: %s", confName)
 			rng, _ := randutil.NewPseudoRand()
 			setup := config.setup(rng)
-			setup, _ = mutations.ApplyString(rng, setup, config.setupMutators...)
+			setup, _ = randgen.ApplyString(rng, setup, config.setupMutators...)
 
 			conns := map[string]cmpconn.Conn{}
 			for _, testCn := range config.conns {
@@ -145,7 +144,7 @@ func TestCompare(t *testing.T) {
 						t.Fatalf("%s: %v", testCn.name, err)
 					}
 				}
-				connSetup, _ := mutations.ApplyString(rng, setup, testCn.mutators...)
+				connSetup, _ := randgen.ApplyString(rng, setup, testCn.mutators...)
 				if err := conn.Exec(ctx, connSetup); err != nil {
 					t.Log(connSetup)
 					t.Fatalf("%s: %v", testCn.name, err)
@@ -192,11 +191,11 @@ type testConfig struct {
 	opts            []sqlsmith.SmitherOption
 	conns           []testConn
 	setup           sqlsmith.Setup
-	setupMutators   []rowenc.Mutator
+	setupMutators   []randgen.Mutator
 	ignoreSQLErrors bool
 }
 
 type testConn struct {
 	name     string
-	mutators []rowenc.Mutator
+	mutators []randgen.Mutator
 }

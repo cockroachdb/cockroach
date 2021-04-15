@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -178,7 +178,7 @@ func (r *RSG) GenerateRandomArg(typ *types.T) string {
 	}
 
 	r.lock.Lock()
-	datum := rowenc.RandDatumWithNullChance(r.Rnd, typ, 0)
+	datum := randgen.RandDatumWithNullChance(r.Rnd, typ, 0)
 	r.lock.Unlock()
 
 	return tree.Serialize(datum)

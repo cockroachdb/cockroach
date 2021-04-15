@@ -154,6 +154,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/flowinfra",
         "//pkg/sql/parser",
+        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

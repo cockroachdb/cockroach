@@ -13,7 +13,8 @@ package rowexec
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -26,7 +27,7 @@ func TestInputStatCollector(t *testing.T) {
 	const numRows = 100
 
 	isc := newInputStatCollector(
-		distsqlutils.NewRowBuffer(rowenc.OneIntCol, rowenc.MakeIntRows(numRows, 1), distsqlutils.RowBufferArgs{}),
+		distsqlutils.NewRowBuffer(types.OneIntCol, randgen.MakeIntRows(numRows, 1), distsqlutils.RowBufferArgs{}),
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {
 	}

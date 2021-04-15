@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmp-protocol/pgconnect"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -54,7 +54,7 @@ func main() {
 		go func() {
 			rng, _ := randutil.NewPseudoRand()
 			for {
-				typ := rowenc.RandType(rng)
+				typ := randgen.RandType(rng)
 				sem := typ.Family()
 				switch sem {
 				case types.DecimalFamily, // trailing zeros differ, ok
@@ -68,7 +68,7 @@ func main() {
 					types.TupleFamily:
 					continue
 				}
-				datum := rowenc.RandDatum(rng, typ, false /* null ok */)
+				datum := randgen.RandDatum(rng, typ, false /* null ok */)
 				if datum == tree.DNull {
 					continue
 				}

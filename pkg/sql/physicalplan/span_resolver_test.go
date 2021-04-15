@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -173,7 +173,7 @@ func splitRangeAtVal(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.AssertionFailedf("expected table with just a PK, got: %+v", tableDesc)
 	}
-	pik, err := rowenc.TestingMakePrimaryIndexKey(tableDesc, pk)
+	pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
@@ -453,7 +453,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 
 func makeSpan(tableDesc catalog.TableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
-		key, err := rowenc.TestingMakePrimaryIndexKey(tableDesc, val)
+		key, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {
 			panic(err)
 		}

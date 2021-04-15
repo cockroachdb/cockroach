@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package mutations
+package randgen
 
 import (
 	"bytes"
@@ -38,15 +38,15 @@ var (
 
 	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 	// definitions to have random FAMILY definitions.
-	ColumnFamilyMutator StatementMutator = rowenc.ColumnFamilyMutator
+	ColumnFamilyMutator StatementMutator = columnFamilyMutator
 
 	// IndexStoringMutator modifies the STORING clause of CREATE INDEX and
 	// indexes in CREATE TABLE.
-	IndexStoringMutator MultiStatementMutation = rowenc.IndexStoringMutator
+	IndexStoringMutator MultiStatementMutation = indexStoringMutator
 
 	// PartialIndexMutator adds random partial index predicate expressions to
 	// indexes.
-	PartialIndexMutator MultiStatementMutation = rowenc.PartialIndexMutator
+	PartialIndexMutator MultiStatementMutation = partialIndexMutator
 
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach (however this mutator does not remove
@@ -74,6 +74,11 @@ type StatementMutator func(rng *rand.Rand, stmt tree.Statement) (changed bool)
 // MultiStatementMutation defines a func that can return a list of new and/or mutated statements.
 type MultiStatementMutation func(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
 
+// Mutator defines a method that can mutate or add SQL statements.
+type Mutator interface {
+	Mutate(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool)
+}
+
 // Mutate implements the Mutator interface.
 func (sm StatementMutator) Mutate(
 	rng *rand.Rand, stmts []tree.Statement,
@@ -96,7 +101,7 @@ func (msm MultiStatementMutation) Mutate(
 // changed in place) statements and a boolean indicating whether any changes
 // were made.
 func Apply(
-	rng *rand.Rand, stmts []tree.Statement, mutators ...rowenc.Mutator,
+	rng *rand.Rand, stmts []tree.Statement, mutators ...Mutator,
 ) (mutated []tree.Statement, changed bool) {
 	var mc bool
 	for _, m := range mutators {
@@ -131,9 +136,7 @@ func (sm StatementStringMutator) MutateString(
 
 // ApplyString executes all mutators on input. A mutator can also be a
 // StringMutator which will operate after all other mutators.
-func ApplyString(
-	rng *rand.Rand, input string, mutators ...rowenc.Mutator,
-) (output string, changed bool) {
+func ApplyString(rng *rand.Rand, input string, mutators ...Mutator) (output string, changed bool) {
 	parsed, err := parser.Parse(input)
 	if err != nil {
 		return input, false
@@ -144,7 +147,7 @@ func ApplyString(
 		stmts[i] = p.AST
 	}
 
-	var normalMutators []rowenc.Mutator
+	var normalMutators []Mutator
 	var stringMutators []StringMutator
 	for _, m := range mutators {
 		if sm, ok := m.(StringMutator); ok {
@@ -293,7 +296,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	// Generate random values for histogram bucket upper bounds.
 	var encodedUpperBounds [][]byte
 	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
-		upper := rowenc.RandDatum(rng, colType, false /* nullOk */)
+		upper := RandDatum(rng, colType, false /* nullOk */)
 		if colinfo.ColumnTypeIsInvertedIndexable(colType) {
 			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
 			encodedUpperBounds = append(encodedUpperBounds, encs...)
@@ -828,10 +831,10 @@ func postgresCreateTableMutator(
 													Cond: &tree.IsNullExpr{
 														Expr: castExpr.Expr,
 													},
-													Val: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+													Val: RandDatum(rng, types.String, true /* nullOK */),
 												},
 											},
-											Else: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+											Else: RandDatum(rng, types.String, true /* nullOK */),
 										}
 										changed = true
 									}
@@ -848,4 +851,276 @@ func postgresCreateTableMutator(
 		}
 	}
 	return mutated, changed
+}
+
+// columnFamilyMutator is mutations.StatementMutator, but lives here to prevent
+// dependency cycles with RandCreateTable.
+func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
+	ast, ok := stmt.(*tree.CreateTable)
+	if !ok {
+		return false
+	}
+
+	var columns []tree.Name
+	for _, def := range ast.Defs {
+		switch def := def.(type) {
+		case *tree.FamilyTableDef:
+			return false
+		case *tree.ColumnTableDef:
+			if def.HasColumnFamily() {
+				return false
+			}
+			if !def.Computed.Virtual {
+				columns = append(columns, def.Name)
+			}
+		}
+	}
+
+	if len(columns) <= 1 {
+		return false
+	}
+
+	// Any columns not specified in column families
+	// are auto assigned to the first family, so
+	// there's no requirement to exhaust columns here.
+
+	rng.Shuffle(len(columns), func(i, j int) {
+		columns[i], columns[j] = columns[j], columns[i]
+	})
+	fd := &tree.FamilyTableDef{}
+	for {
+		if len(columns) == 0 {
+			if len(fd.Columns) > 0 {
+				ast.Defs = append(ast.Defs, fd)
+			}
+			break
+		}
+		fd.Columns = append(fd.Columns, columns[0])
+		columns = columns[1:]
+		// 50% chance to make a new column family.
+		if rng.Intn(2) != 0 {
+			ast.Defs = append(ast.Defs, fd)
+			fd = &tree.FamilyTableDef{}
+		}
+	}
+	return true
+}
+
+// tableInfo is a helper struct that contains information necessary for mutating
+// indexes. It is used by IndexStoringMutator and PartialIndexMutator.
+type tableInfo struct {
+	columnNames      []tree.Name
+	columnsTableDefs []*tree.ColumnTableDef
+	pkCols           []tree.Name
+	refColsLists     [][]tree.Name
+}
+
+// getTableInfoFromDDLStatements collects tableInfo from every CreateTable
+// and AlterTable statement in the given list of statements.
+func getTableInfoFromDDLStatements(stmts []tree.Statement) map[tree.Name]tableInfo {
+	tables := make(map[tree.Name]tableInfo)
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateTable:
+			info := tableInfo{}
+			for _, def := range ast.Defs {
+				switch ast := def.(type) {
+				case *tree.ColumnTableDef:
+					info.columnNames = append(info.columnNames, ast.Name)
+					info.columnsTableDefs = append(info.columnsTableDefs, ast)
+					if ast.PrimaryKey.IsPrimaryKey {
+						info.pkCols = []tree.Name{ast.Name}
+					}
+				case *tree.UniqueConstraintTableDef:
+					if ast.PrimaryKey {
+						for _, elem := range ast.Columns {
+							info.pkCols = append(info.pkCols, elem.Column)
+						}
+					}
+				case *tree.ForeignKeyConstraintTableDef:
+					// The tableInfo must have already been created, since FK constraints
+					// can only reference tables that already exist.
+					if refTableInfo, ok := tables[ast.Table.ObjectName]; ok {
+						refTableInfo.refColsLists = append(refTableInfo.refColsLists, ast.ToCols)
+						tables[ast.Table.ObjectName] = refTableInfo
+					}
+				}
+			}
+			tables[ast.Table.ObjectName] = info
+		case *tree.AlterTable:
+			for _, cmd := range ast.Cmds {
+				switch alterCmd := cmd.(type) {
+				case *tree.AlterTableAddConstraint:
+					switch constraintDef := alterCmd.ConstraintDef.(type) {
+					case *tree.ForeignKeyConstraintTableDef:
+						// The tableInfo must have already been created, since ALTER
+						// statements come after CREATE statements.
+						if info, ok := tables[constraintDef.Table.ObjectName]; ok {
+							info.refColsLists = append(info.refColsLists, constraintDef.ToCols)
+							tables[constraintDef.Table.ObjectName] = info
+						}
+					}
+				}
+			}
+		}
+	}
+	return tables
+}
+
+// indexStoringMutator is a mutations.MultiStatementMutator, but lives here to
+// prevent dependency cycles with RandCreateTable.
+func indexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := getTableInfoFromDDLStatements(stmts)
+	mapFromIndexCols := func(cols []tree.Name) map[tree.Name]struct{} {
+		colMap := map[tree.Name]struct{}{}
+		for _, col := range cols {
+			colMap[col] = struct{}{}
+		}
+		return colMap
+	}
+	generateStoringCols := func(rng *rand.Rand, tableInfo tableInfo, indexCols map[tree.Name]struct{}) []tree.Name {
+		var storingCols []tree.Name
+		for colOrdinal, col := range tableInfo.columnNames {
+			if _, ok := indexCols[col]; ok {
+				// Skip PK columns and columns already in the index.
+				continue
+			}
+			if tableInfo.columnsTableDefs[colOrdinal].Computed.Virtual {
+				// Virtual columns can't be stored.
+				continue
+			}
+			if rng.Intn(2) == 0 {
+				storingCols = append(storingCols, col)
+			}
+		}
+		return storingCols
+	}
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateIndex:
+			if ast.Inverted {
+				continue
+			}
+			info, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				continue
+			}
+			// If we don't have a storing list, make one with 50% chance.
+			if ast.Storing == nil && rng.Intn(2) == 0 {
+				indexCols := mapFromIndexCols(info.pkCols)
+				for _, elem := range ast.Columns {
+					indexCols[elem.Column] = struct{}{}
+				}
+				ast.Storing = generateStoringCols(rng, info, indexCols)
+				changed = true
+			}
+		case *tree.CreateTable:
+			info, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				panic("table info could not be found")
+			}
+			for _, def := range ast.Defs {
+				var idx *tree.IndexTableDef
+				switch defType := def.(type) {
+				case *tree.IndexTableDef:
+					idx = defType
+				case *tree.UniqueConstraintTableDef:
+					if !defType.PrimaryKey && !defType.WithoutIndex {
+						idx = &defType.IndexTableDef
+					}
+				}
+				if idx == nil || idx.Inverted {
+					continue
+				}
+				// If we don't have a storing list, make one with 50% chance.
+				if idx.Storing == nil && rng.Intn(2) == 0 {
+					indexCols := mapFromIndexCols(info.pkCols)
+					for _, elem := range idx.Columns {
+						indexCols[elem.Column] = struct{}{}
+					}
+					idx.Storing = generateStoringCols(rng, info, indexCols)
+					changed = true
+				}
+			}
+		}
+	}
+	return stmts, changed
+}
+
+// partialIndexMutator is a mutations.MultiStatementMutator, but lives here to
+// prevent dependency cycles with RandCreateTable. This mutator adds random
+// partial index predicate expressions to indexes.
+func partialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
+	changed := false
+	tables := getTableInfoFromDDLStatements(stmts)
+	for _, stmt := range stmts {
+		switch ast := stmt.(type) {
+		case *tree.CreateIndex:
+			info, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				continue
+			}
+
+			// If the index is not already a partial index, make it a partial index
+			// with a 50% chance. Do not mutate an index that was created to satisfy a
+			// FK constraint.
+			if ast.Predicate == nil &&
+				!hasReferencingConstraint(info, ast.Columns) &&
+				rng.Intn(2) == 0 {
+				tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
+				ast.Predicate = randPartialIndexPredicateFromCols(rng, info.columnsTableDefs, &tn)
+				changed = true
+			}
+		case *tree.CreateTable:
+			info, ok := tables[ast.Table.ObjectName]
+			if !ok {
+				panic("table info could not be found")
+			}
+			for _, def := range ast.Defs {
+				var idx *tree.IndexTableDef
+				switch defType := def.(type) {
+				case *tree.IndexTableDef:
+					idx = defType
+				case *tree.UniqueConstraintTableDef:
+					if !defType.PrimaryKey && !defType.WithoutIndex {
+						idx = &defType.IndexTableDef
+					}
+				}
+
+				if idx == nil {
+					continue
+				}
+
+				// If the index is not already a partial index, make it a partial
+				// index with a 50% chance.
+				if idx.Predicate == nil &&
+					!hasReferencingConstraint(info, idx.Columns) &&
+					rng.Intn(2) == 0 {
+					tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
+					idx.Predicate = randPartialIndexPredicateFromCols(rng, info.columnsTableDefs, &tn)
+					changed = true
+				}
+			}
+		}
+	}
+	return stmts, changed
+}
+
+// hasReferencingConstraint returns true if the tableInfo has any referencing
+// columns that match idxColumns.
+func hasReferencingConstraint(info tableInfo, idxColumns tree.IndexElemList) bool {
+RefColsLoop:
+	for _, refCols := range info.refColsLists {
+		if len(refCols) != len(idxColumns) {
+			continue RefColsLoop
+		}
+		for i := range refCols {
+			if refCols[i] != idxColumns[i].Column {
+				continue RefColsLoop
+			}
+		}
+		return true
+	}
+	return false
 }

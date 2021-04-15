@@ -3150,7 +3150,7 @@ func (r *Replica) adminScatter(
 	// range. Note that we disable lease transfers until the final step as
 	// transferring the lease prevents any further action on this node.
 	var allowLeaseTransfer bool
-	canTransferLease := func() bool { return allowLeaseTransfer }
+	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		requeue, err := rq.processOneChange(ctx, r, canTransferLease, false /* dryRun */)
 		if err != nil {
