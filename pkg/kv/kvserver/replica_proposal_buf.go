@@ -595,17 +595,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// Exit the tracker.
 		p.tok.doneIfNotMovedLocked(ctx)
 
-		// Potentially drop the proposal before passing it to etcd/raft, but
-		// only after performing necessary bookkeeping.
-		if filter := b.testing.submitProposalFilter; filter != nil {
-			if drop, err := filter(p); drop || err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				continue
-			}
-		}
-
 		// If we don't have a raft group or if the raft group has rejected one
 		// of the proposals, we don't try to propose any more proposals. The
 		// rest of the proposals will still be registered with the proposer, so
@@ -624,6 +613,17 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			err := b.assignClosedTimestampToProposalLocked(ctx, p, closedTSTarget)
 			if err != nil {
 				firstErr = err
+				continue
+			}
+		}
+
+		// Potentially drop the proposal before passing it to etcd/raft, but
+		// only after performing necessary bookkeeping.
+		if filter := b.testing.submitProposalFilter; filter != nil {
+			if drop, err := filter(p); drop || err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
 				continue
 			}
 		}
