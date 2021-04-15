@@ -28,7 +28,6 @@ go_library(
         "@com_github_rcrowley_go_metrics//:go-metrics",
         "@com_github_rcrowley_go_metrics//exp",
         "@com_github_spf13_cobra//:cobra",
-        "@org_golang_google_grpc//metadata",
         "@org_golang_x_net//trace",
     ],
 )
