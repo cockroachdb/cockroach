@@ -27,7 +27,6 @@ require (
 	github.com/aws/aws-sdk-go v1.36.33
 	github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
-	github.com/benesch/cgosymbolizer v0.0.0-20180702220239-70e1ee2b39d3
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/cenkalti/backoff v2.1.1+incompatible
 	github.com/client9/misspell v0.3.4
@@ -85,7 +84,6 @@ require (
 	github.com/goware/modvendor v0.3.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
-	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20201002210021-dda951febc36 // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.8.0
 	github.com/jackc/pgproto3/v2 v2.0.7
