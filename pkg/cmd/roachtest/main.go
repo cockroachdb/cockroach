@@ -225,7 +225,7 @@ the test tags.
 		cmd.Flags().IntVar(
 			&httpPort, "port", 8080, "the port on which to serve the HTTP interface")
 		cmd.Flags().BoolVar(
-			&localSSD, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
+			&localSSDArg, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
 		cmd.Flags().StringSliceVar(
 			&createArgs, "create-args", []string{}, "extra args to pass onto the roachprod create command")
 	}
