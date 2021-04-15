@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -96,6 +97,7 @@ func TestAggregateFuncToNumArguments(t *testing.T) {
 }
 
 func TestAggregatorAgainstProcessor(t *testing.T) {
+	defer log.Scope(t).Close(t)
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()

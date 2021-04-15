@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,6 +109,16 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctIntervalOp{
+				OneInputNode:   colexecop.NewOneInputNode(input),
+				distinctColIdx: distinctColIdx,
+				outputCol:      outputCol,
+			}, nil
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &distinctJSONOp{
 				OneInputNode:   colexecop.NewOneInputNode(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
@@ -2467,6 +2478,306 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
 						lastVal = v
+						{
+							__retval_0 = lastVal
+						}
+					}
+					lastVal = __retval_0
+				}
+			}
+		}
+	}
+
+	p.lastVal = lastVal
+	p.lastValNull = lastValNull
+
+	return batch
+}
+
+// distinctJSONOp runs a distinct on the column in distinctColIdx, writing
+// true to the resultant bool column for every value that differs from the
+// previous one.
+type distinctJSONOp struct {
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
+
+	// lastVal is the last value seen by the operator, so that the distincting
+	// still works across batch boundaries.
+	lastVal json.JSON
+
+	colexecop.OneInputNode
+
+	// distinctColIdx is the index of the column to distinct upon.
+	distinctColIdx int
+
+	// Set to true at runtime when we've seen the first row. Distinct always
+	// outputs the first row that it sees.
+	foundFirstRow bool
+
+	lastValNull bool
+}
+
+var _ colexecop.ResettableOperator = &distinctJSONOp{}
+
+func (p *distinctJSONOp) Init() {
+	p.Input.Init()
+}
+
+func (p *distinctJSONOp) Reset(ctx context.Context) {
+	p.foundFirstRow = false
+	p.lastValNull = false
+	if resetter, ok := p.Input.(colexecop.Resetter); ok {
+		resetter.Reset(ctx)
+	}
+}
+
+func (p *distinctJSONOp) Next(ctx context.Context) coldata.Batch {
+	batch := p.Input.Next(ctx)
+	if batch.Length() == 0 {
+		return batch
+	}
+	outputCol := p.outputCol
+	vec := batch.ColVec(p.distinctColIdx)
+	var nulls *coldata.Nulls
+	if vec.MaybeHasNulls() {
+		nulls = vec.Nulls()
+	}
+	col := vec.JSON()
+
+	// We always output the first row.
+	lastVal := p.lastVal
+	lastValNull := p.lastValNull
+	sel := batch.Selection()
+	firstIdx := 0
+	if sel != nil {
+		firstIdx = sel[0]
+	}
+	if !p.foundFirstRow {
+		outputCol[firstIdx] = true
+		p.foundFirstRow = true
+	} else if nulls == nil && lastValNull {
+		// The last value of the previous batch was null, so the first value of this
+		// non-null batch is distinct.
+		outputCol[firstIdx] = true
+		lastValNull = false
+	}
+
+	n := batch.Length()
+	if sel != nil {
+		sel = sel[:n]
+		if nulls != nil {
+			for _, idx := range sel {
+				{
+					var (
+						__retval_lastVal     json.JSON
+						__retval_lastValNull bool
+					)
+					{
+						var (
+							checkIdx  int = idx
+							outputIdx int = idx
+						)
+						null := nulls.NullAt(checkIdx)
+						if null {
+							if !lastValNull {
+								// The current value is null while the previous was not.
+								outputCol[outputIdx] = true
+							}
+						} else {
+							v := col.Get(checkIdx)
+							if lastValNull {
+								// The previous value was null while the current is not.
+								outputCol[outputIdx] = true
+							} else {
+								// Neither value is null, so we must compare.
+								var unique bool
+
+								{
+									var cmpResult int
+
+									var err error
+									cmpResult, err = v.Compare(lastVal)
+									if err != nil {
+										panic(err)
+									}
+
+									unique = cmpResult != 0
+								}
+
+								outputCol[outputIdx] = outputCol[outputIdx] || unique
+							}
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, v)
+							if _err != nil {
+								panic(_err)
+							}
+							lastVal, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								panic(_err)
+							}
+
+						}
+						{
+							__retval_lastVal = lastVal
+							__retval_lastValNull = null
+						}
+					}
+					lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+				}
+			}
+		} else {
+			for _, idx := range sel {
+				{
+					var __retval_0 json.JSON
+					{
+						var (
+							checkIdx  int = idx
+							outputIdx int = idx
+						)
+						v := col.Get(checkIdx)
+						var unique bool
+
+						{
+							var cmpResult int
+
+							var err error
+							cmpResult, err = v.Compare(lastVal)
+							if err != nil {
+								panic(err)
+							}
+
+							unique = cmpResult != 0
+						}
+
+						outputCol[outputIdx] = outputCol[outputIdx] || unique
+
+						var _err error
+						var _bytes []byte
+						_bytes, _err = json.EncodeJSON(nil, v)
+						if _err != nil {
+							panic(_err)
+						}
+						lastVal, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							panic(_err)
+						}
+
+						{
+							__retval_0 = lastVal
+						}
+					}
+					lastVal = __retval_0
+				}
+			}
+		}
+	} else {
+		// Eliminate bounds checks for outputCol[idx].
+		_ = outputCol[n-1]
+		// Eliminate bounds checks for col[idx].
+		_ = col.Get(n - 1)
+		// TODO(yuzefovich): add BCE assertions for these.
+		if nulls != nil {
+			for idx := 0; idx < n; idx++ {
+				{
+					var (
+						__retval_lastVal     json.JSON
+						__retval_lastValNull bool
+					)
+					{
+						var (
+							checkIdx  int = idx
+							outputIdx int = idx
+						)
+						null := nulls.NullAt(checkIdx)
+						if null {
+							if !lastValNull {
+								// The current value is null while the previous was not.
+								outputCol[outputIdx] = true
+							}
+						} else {
+							v := col.Get(checkIdx)
+							if lastValNull {
+								// The previous value was null while the current is not.
+								outputCol[outputIdx] = true
+							} else {
+								// Neither value is null, so we must compare.
+								var unique bool
+
+								{
+									var cmpResult int
+
+									var err error
+									cmpResult, err = v.Compare(lastVal)
+									if err != nil {
+										panic(err)
+									}
+
+									unique = cmpResult != 0
+								}
+
+								outputCol[outputIdx] = outputCol[outputIdx] || unique
+							}
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, v)
+							if _err != nil {
+								panic(_err)
+							}
+							lastVal, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								panic(_err)
+							}
+
+						}
+						{
+							__retval_lastVal = lastVal
+							__retval_lastValNull = null
+						}
+					}
+					lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+				}
+			}
+		} else {
+			for idx := 0; idx < n; idx++ {
+				{
+					var __retval_0 json.JSON
+					{
+						var (
+							checkIdx  int = idx
+							outputIdx int = idx
+						)
+						v := col.Get(checkIdx)
+						var unique bool
+
+						{
+							var cmpResult int
+
+							var err error
+							cmpResult, err = v.Compare(lastVal)
+							if err != nil {
+								panic(err)
+							}
+
+							unique = cmpResult != 0
+						}
+
+						outputCol[outputIdx] = outputCol[outputIdx] || unique
+
+						var _err error
+						var _bytes []byte
+						_bytes, _err = json.EncodeJSON(nil, v)
+						if _err != nil {
+							panic(_err)
+						}
+						lastVal, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							panic(_err)
+						}
+
 						{
 							__retval_0 = lastVal
 						}

@@ -67,7 +67,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				execgen.APPENDSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				// {{if eq .VecMethod "Bytes"}}
+				// {{if .IsBytesLike }}
 				// We need to truncate toCol before appending to it, so in case of Bytes,
 				// we append an empty slice.
 				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)

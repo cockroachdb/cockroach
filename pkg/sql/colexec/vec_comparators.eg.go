@@ -453,6 +453,54 @@ func (c *IntervalVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int
 	}
 }
 
+type JSONVecComparator struct {
+	vecs  []*coldata.JSONs
+	nulls []*coldata.Nulls
+}
+
+func (c *JSONVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) int {
+	n1 := c.nulls[vecIdx1].MaybeHasNulls() && c.nulls[vecIdx1].NullAt(valIdx1)
+	n2 := c.nulls[vecIdx2].MaybeHasNulls() && c.nulls[vecIdx2].NullAt(valIdx2)
+	if n1 && n2 {
+		return 0
+	} else if n1 {
+		return -1
+	} else if n2 {
+		return 1
+	}
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
+	var cmp int
+
+	var err error
+	cmp, err = left.Compare(right)
+	if err != nil {
+		panic(err)
+	}
+
+	return cmp
+}
+
+func (c *JSONVecComparator) setVec(idx int, vec coldata.Vec) {
+	c.vecs[idx] = vec.JSON()
+	c.nulls[idx] = vec.Nulls()
+}
+
+func (c *JSONVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
+	if c.nulls[srcVecIdx].MaybeHasNulls() && c.nulls[srcVecIdx].NullAt(srcIdx) {
+		c.nulls[dstVecIdx].SetNull(dstIdx)
+	} else {
+		c.nulls[dstVecIdx].UnsetNull(dstIdx)
+		// Since flat Bytes cannot be set at arbitrary indices (data needs to be
+		// moved around), we use CopySlice to accept the performance hit.
+		// Specifically, this is a performance hit because we are overwriting the
+		// variable number of bytes in `dstVecIdx`, so we will have to either shift
+		// the bytes after that element left or right, depending on how long the
+		// source bytes slice is. Refer to the CopySlice comment for an example.
+		c.vecs[dstVecIdx].CopySlice(c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
+	}
+}
+
 type DatumVecComparator struct {
 	vecs  []coldata.DatumVec
 	nulls []*coldata.Nulls
@@ -564,6 +612,15 @@ func GetVecComparator(t *types.T, numVecs int) vecComparator {
 		default:
 			return &IntervalVecComparator{
 				vecs:  make([]coldata.Durations, numVecs),
+				nulls: make([]*coldata.Nulls, numVecs),
+			}
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &JSONVecComparator{
+				vecs:  make([]*coldata.JSONs, numVecs),
 				nulls: make([]*coldata.Nulls, numVecs),
 			}
 		}

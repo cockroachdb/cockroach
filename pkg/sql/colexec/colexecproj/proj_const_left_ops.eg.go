@@ -13,6 +13,7 @@ import (
 	"context"
 	"math"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27957,12 +27959,12 @@ func (p projRShiftDatumConstInt64Op) Init() {
 	p.Input.Init()
 }
 
-type projJSONFetchValDatumConstBytesOp struct {
+type projJSONFetchValJSONConstBytesOp struct {
 	projConstOpBase
-	constArg interface{}
+	constArg json.JSON
 }
 
-func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONConstBytesOp) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -27987,7 +27989,7 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 			// output vector.
 			projVec.Nulls().UnsetNulls()
 		}
-		projCol := projVec.Datum()
+		projCol := projVec.JSON()
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
@@ -28002,18 +28004,15 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DString(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValKey(*(*string)(unsafe.Pointer(&arg)))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28025,18 +28024,15 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DString(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValKey(*(*string)(unsafe.Pointer(&arg)))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28053,18 +28049,15 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 				for _, i := range sel {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DString(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValKey(*(*string)(unsafe.Pointer(&arg)))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			} else {
@@ -28073,18 +28066,15 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DString(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValKey(*(*string)(unsafe.Pointer(&arg)))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			}
@@ -28101,16 +28091,16 @@ func (p projJSONFetchValDatumConstBytesOp) Next(ctx context.Context) coldata.Bat
 	return batch
 }
 
-func (p projJSONFetchValDatumConstBytesOp) Init() {
+func (p projJSONFetchValJSONConstBytesOp) Init() {
 	p.Input.Init()
 }
 
-type projJSONFetchValDatumConstInt16Op struct {
+type projJSONFetchValJSONConstInt16Op struct {
 	projConstOpBase
-	constArg interface{}
+	constArg json.JSON
 }
 
-func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONConstInt16Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -28135,7 +28125,7 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 			// output vector.
 			projVec.Nulls().UnsetNulls()
 		}
-		projCol := projVec.Datum()
+		projCol := projVec.JSON()
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
@@ -28150,18 +28140,15 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DInt(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValIdx(int(arg))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28173,18 +28160,15 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DInt(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValIdx(int(arg))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28201,18 +28185,15 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 				for _, i := range sel {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DInt(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValIdx(int(arg))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			} else {
@@ -28221,18 +28202,15 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DInt(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValIdx(int(arg))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			}
@@ -28249,16 +28227,16 @@ func (p projJSONFetchValDatumConstInt16Op) Next(ctx context.Context) coldata.Bat
 	return batch
 }
 
-func (p projJSONFetchValDatumConstInt16Op) Init() {
+func (p projJSONFetchValJSONConstInt16Op) Init() {
 	p.Input.Init()
 }
 
-type projJSONFetchValDatumConstInt32Op struct {
+type projJSONFetchValJSONConstInt32Op struct {
 	projConstOpBase
-	constArg interface{}
+	constArg json.JSON
 }
 
-func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONConstInt32Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -28283,7 +28261,7 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 			// output vector.
 			projVec.Nulls().UnsetNulls()
 		}
-		projCol := projVec.Datum()
+		projCol := projVec.JSON()
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
@@ -28298,18 +28276,15 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DInt(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValIdx(int(arg))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28321,18 +28296,15 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DInt(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValIdx(int(arg))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28349,18 +28321,15 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 				for _, i := range sel {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DInt(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValIdx(int(arg))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			} else {
@@ -28369,18 +28338,15 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DInt(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValIdx(int(arg))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			}
@@ -28397,16 +28363,16 @@ func (p projJSONFetchValDatumConstInt32Op) Next(ctx context.Context) coldata.Bat
 	return batch
 }
 
-func (p projJSONFetchValDatumConstInt32Op) Init() {
+func (p projJSONFetchValJSONConstInt32Op) Init() {
 	p.Input.Init()
 }
 
-type projJSONFetchValDatumConstInt64Op struct {
+type projJSONFetchValJSONConstInt64Op struct {
 	projConstOpBase
-	constArg interface{}
+	constArg json.JSON
 }
 
-func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONConstInt64Op) Next(ctx context.Context) coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -28431,7 +28397,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 			// output vector.
 			projVec.Nulls().UnsetNulls()
 		}
-		projCol := projVec.Datum()
+		projCol := projVec.JSON()
 		// Some operators can result in NULL with non-NULL inputs, like the JSON
 		// fetch value operator, ->. Therefore, _outNulls is defined to allow
 		// updating the output Nulls from within _ASSIGN functions when the result
@@ -28446,18 +28412,15 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DInt(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValIdx(int(arg))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28469,18 +28432,15 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
-						_convertedNativeElem := tree.DInt(arg)
-						var _nonDatumArgAsDatum tree.Datum
-						_nonDatumArgAsDatum = &_convertedNativeElem
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-						if err != nil {
-							colexecerror.ExpectedError(err)
+						_j, _err := p.constArg.FetchValIdx(int(arg))
+						if _err != nil {
+							panic(_err)
 						}
-						if _res == tree.DNull {
+						if _j == nil {
 							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _j)
 						}
-						projCol.Set(i, _res)
 
 					}
 				}
@@ -28497,18 +28457,15 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 				for _, i := range sel {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DInt(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValIdx(int(arg))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			} else {
@@ -28517,18 +28474,15 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
-					_convertedNativeElem := tree.DInt(arg)
-					var _nonDatumArgAsDatum tree.Datum
-					_nonDatumArgAsDatum = &_convertedNativeElem
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, _nonDatumArgAsDatum)
-					if err != nil {
-						colexecerror.ExpectedError(err)
+					_j, _err := p.constArg.FetchValIdx(int(arg))
+					if _err != nil {
+						panic(_err)
 					}
-					if _res == tree.DNull {
+					if _j == nil {
 						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _j)
 					}
-					projCol.Set(i, _res)
 
 				}
 			}
@@ -28545,139 +28499,7 @@ func (p projJSONFetchValDatumConstInt64Op) Next(ctx context.Context) coldata.Bat
 	return batch
 }
 
-func (p projJSONFetchValDatumConstInt64Op) Init() {
-	p.Input.Init()
-}
-
-type projJSONFetchValPathDatumConstDatumOp struct {
-	projConstOpBase
-	constArg interface{}
-}
-
-func (p projJSONFetchValPathDatumConstDatumOp) Next(ctx context.Context) coldata.Batch {
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
-	_overloadHelper := p.overloadHelper
-	// However, the scratch is not used in all of the projection operators, so
-	// we add this to go around "unused" error.
-	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
-	n := batch.Length()
-	if n == 0 {
-		return coldata.ZeroBatch
-	}
-	vec := batch.ColVec(p.colIdx)
-	var col coldata.DatumVec
-	col = vec.Datum()
-	projVec := batch.ColVec(p.outputIdx)
-	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
-		// Capture col to force bounds check to work. See
-		// https://github.com/golang/go/issues/39756
-		col := col
-		if projVec.MaybeHasNulls() {
-			// We need to make sure that there are no left over null values in the
-			// output vector.
-			projVec.Nulls().UnsetNulls()
-		}
-		projCol := projVec.Datum()
-		// Some operators can result in NULL with non-NULL inputs, like the JSON
-		// fetch value operator, ->. Therefore, _outNulls is defined to allow
-		// updating the output Nulls from within _ASSIGN functions when the result
-		// of a projection is Null.
-		_outNulls := projVec.Nulls()
-		if vec.Nulls().MaybeHasNulls() {
-			colNulls := vec.Nulls()
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg)
-						if err != nil {
-							colexecerror.ExpectedError(err)
-						}
-						if _res == tree.DNull {
-							_outNulls.SetNull(i)
-						}
-						projCol.Set(i, _res)
-
-					}
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
-						// We only want to perform the projection operation if the value is not null.
-						arg := col.Get(i)
-
-						_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg)
-						if err != nil {
-							colexecerror.ExpectedError(err)
-						}
-						if _res == tree.DNull {
-							_outNulls.SetNull(i)
-						}
-						projCol.Set(i, _res)
-
-					}
-				}
-			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-			projVec.SetNulls(_outNulls.Or(colNulls))
-		} else {
-			if sel := batch.Selection(); sel != nil {
-				sel = sel[:n]
-				for _, i := range sel {
-					arg := col.Get(i)
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg)
-					if err != nil {
-						colexecerror.ExpectedError(err)
-					}
-					if _res == tree.DNull {
-						_outNulls.SetNull(i)
-					}
-					projCol.Set(i, _res)
-
-				}
-			} else {
-				_ = projCol.Get(n - 1)
-				_ = col.Get(n - 1)
-				for i := 0; i < n; i++ {
-					arg := col.Get(i)
-
-					_res, err := p.constArg.(*coldataext.Datum).BinFn(_overloadHelper.BinFn, _overloadHelper.EvalCtx, arg)
-					if err != nil {
-						colexecerror.ExpectedError(err)
-					}
-					if _res == tree.DNull {
-						_outNulls.SetNull(i)
-					}
-					projCol.Set(i, _res)
-
-				}
-			}
-			// _outNulls has been updated from within the _ASSIGN function to include
-			// any NULLs that resulted from the projection.
-			// If $hasNulls is true, union _outNulls with the set of input Nulls.
-			// If $hasNulls is false, then there are no input Nulls. _outNulls is
-			// projVec.Nulls() so there is no need to call projVec.SetNulls().
-		}
-		// Although we didn't change the length of the batch, it is necessary to set
-		// the length anyway (this helps maintaining the invariant of flat bytes).
-		batch.SetLength(n)
-	})
-	return batch
-}
-
-func (p projJSONFetchValPathDatumConstDatumOp) Init() {
+func (p projJSONFetchValJSONConstInt64Op) Init() {
 	p.Input.Init()
 }
 
@@ -30625,7 +30447,7 @@ func GetProjectionLConstOperator(
 			}
 		case tree.JSONFetchVal:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case typeconv.DatumVecCanonicalTypeFamily:
+			case types.JsonFamily:
 				switch leftType.Width() {
 				case -1:
 				default:
@@ -30634,47 +30456,28 @@ func GetProjectionLConstOperator(
 						switch rightType.Width() {
 						case -1:
 						default:
-							return &projJSONFetchValDatumConstBytesOp{
+							return &projJSONFetchValJSONConstBytesOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
+								constArg:        c.(json.JSON),
 							}, nil
 						}
 					case types.IntFamily:
 						switch rightType.Width() {
 						case 16:
-							return &projJSONFetchValDatumConstInt16Op{
+							return &projJSONFetchValJSONConstInt16Op{
 								projConstOpBase: projConstOpBase,
-								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
+								constArg:        c.(json.JSON),
 							}, nil
 						case 32:
-							return &projJSONFetchValDatumConstInt32Op{
+							return &projJSONFetchValJSONConstInt32Op{
 								projConstOpBase: projConstOpBase,
-								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
+								constArg:        c.(json.JSON),
 							}, nil
 						case -1:
 						default:
-							return &projJSONFetchValDatumConstInt64Op{
+							return &projJSONFetchValJSONConstInt64Op{
 								projConstOpBase: projConstOpBase,
-								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
-							}, nil
-						}
-					}
-				}
-			}
-		case tree.JSONFetchValPath:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projJSONFetchValPathDatumConstDatumOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
+								constArg:        c.(json.JSON),
 							}, nil
 						}
 					}

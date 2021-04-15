@@ -572,7 +572,11 @@ func (j *jsonEncoded) AsDecimal() (*apd.Decimal, bool) {
 }
 
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
-	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {
+	typ := j.Type()
+	if other == nil {
+		return -1, nil
+	}
+	if cmp := cmpJSONTypes(typ, other.Type()); cmp != 0 {
 		return cmp, nil
 	}
 	// TODO(justin): this can be optimized in some cases. We don't necessarily

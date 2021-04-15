@@ -84,6 +84,11 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 		types.IntervalFamily,
 		typeconv.DatumVecCanonicalTypeFamily,
 	),
+	types.JsonFamily: append([]types.Family{},
+		types.BytesFamily,
+		types.IntFamily,
+		types.JsonFamily,
+	),
 	typeconv.DatumVecCanonicalTypeFamily: append(
 		[]types.Family{
 			typeconv.DatumVecCanonicalTypeFamily,
@@ -198,14 +203,14 @@ func registerBinOpOutputTypes() {
 	}
 
 	binOpOutputTypes[tree.JSONFetchVal] = map[typePair]*types.T{
-		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.BytesFamily, anyWidth}: types.Any,
+		{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}: types.Jsonb,
 	}
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-		binOpOutputTypes[tree.JSONFetchVal][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
+		binOpOutputTypes[tree.JSONFetchVal][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.Jsonb
 	}
 
 	binOpOutputTypes[tree.JSONFetchValPath] = map[typePair]*types.T{
-		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
+		{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
 	}
 }
 
@@ -603,6 +608,77 @@ func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
 		case tree.Minus:
 			return fmt.Sprintf(`%[1]s = %[2]s.Sub(%[3]s)`,
 				targetElem, leftElem, rightElem)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
+func (c jsonCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		switch op.overloadBase.BinOp {
+		case tree.JSONFetchVal:
+			return fmt.Sprintf(`%[1]s = %[2]s.Sub(%[3]s)`,
+				targetElem, leftElem, rightElem)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
+func (j jsonBytesCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
+		}
+		switch op.overloadBase.BinOp {
+		case tree.JSONFetchVal:
+			return fmt.Sprintf(`
+
+_j, _err := %[3]s.FetchValKey(*(*string)(unsafe.Pointer(&%[4]s)))
+if _err != nil {
+   panic(_err)
+}
+if _j == nil {
+	_outNulls.SetNull(%[2]s)
+} else {
+  %[1]s.Set(%[2]s, _j)
+}
+`,
+				vecVariable, idxVariable, leftElem, rightElem)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
+func (j jsonIntCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
+		}
+		switch op.overloadBase.BinOp {
+		case tree.JSONFetchVal:
+			return fmt.Sprintf(`
+_j, _err := %[3]s.FetchValIdx(int(%[4]s))
+if _err != nil {
+    panic(_err)
+}
+if _j == nil {
+	_outNulls.SetNull(%[2]s)
+} else {
+  %[1]s.Set(%[2]s, _j)
+}
+`,
+				vecVariable, idxVariable, leftElem, rightElem)
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}

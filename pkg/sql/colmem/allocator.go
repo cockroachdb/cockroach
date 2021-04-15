@@ -54,6 +54,8 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 		return int64(vec.Bytes().Size())
 	case types.DecimalFamily:
 		return int64(sizeOfDecimals(vec.Decimal()))
+	case types.JsonFamily:
+		return int64(vec.JSON().Size())
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return int64(vec.Datum().Size())
 	}
@@ -99,8 +101,8 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 		proportionalBatchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
 	}
 	for _, vec := range b.ColVecs() {
-		if vec.CanonicalTypeFamily() == types.BytesFamily {
-			proportionalBatchMemSize += int64(vec.Bytes().ProportionalSize(length))
+		if vec.IsBytesLike() {
+			proportionalBatchMemSize += int64(vec.ProportionalSize(length))
 		} else {
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
@@ -261,10 +263,10 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				b.ReplaceCol(a.NewMemColumn(t, desiredCapacity), colIdx)
 				return
 			}
-			if presentVec.CanonicalTypeFamily() == types.BytesFamily {
+			if presentVec.IsBytesLike() {
 				// Flat bytes vector needs to be reset before the vector can be
 				// reused.
-				presentVec.Bytes().Reset()
+				presentVec.Reset()
 			}
 			return
 		}
@@ -410,6 +412,8 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			acc += sizeOfTime
 		case types.IntervalFamily:
 			acc += sizeOfDuration
+		case types.JsonFamily:
+			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
 			// In datum vec we need to account for memory underlying the struct
 			// that is the implementation of tree.Datum interface (for example,

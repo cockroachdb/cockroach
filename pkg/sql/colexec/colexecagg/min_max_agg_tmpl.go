@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -84,6 +83,8 @@ func newMin_AGGKINDAggAlloc(
 		return &minTimestamp_AGGKINDAggAlloc{aggAllocBase: allocBase}
 	case types.IntervalFamily:
 		return &minInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.JsonFamily:
+		return &minJSON_AGGKINDAggAlloc{aggAllocBase: allocBase}
 	default:
 		return &minDatum_AGGKINDAggAlloc{aggAllocBase: allocBase}
 	}
@@ -115,6 +116,8 @@ func newMax_AGGKINDAggAlloc(
 		return &maxTimestamp_AGGKINDAggAlloc{aggAllocBase: allocBase}
 	case types.IntervalFamily:
 		return &maxInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.JsonFamily:
+		return &minJSON_AGGKINDAggAlloc{aggAllocBase: allocBase}
 	default:
 		return &maxDatum_AGGKINDAggAlloc{aggAllocBase: allocBase}
 	}
@@ -220,15 +223,10 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	} else {
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// Release the reference to curAgg eagerly.
-	// {{if eq .VecMethod "Bytes"}}
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
-	// {{else}}
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
-	}
-	// {{end}}
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 	// {{end}}
 }

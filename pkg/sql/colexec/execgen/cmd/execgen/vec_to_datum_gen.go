@@ -78,6 +78,19 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 	types.BytesFamily: `// Note that there is no need for a copy since DBytes uses a string
 						// as underlying storage, which will perform the copy for us.
 						%[1]s := %[3]s.NewDBytes(tree.DBytes(%[2]s))`,
+	types.JsonFamily: `
+						var _err error
+						var _bytes []byte
+						_bytes, _err = json.EncodeJSON(nil, %[2]s)
+						if _err != nil {
+								panic(_err)
+						}
+            var _j json.JSON
+						_j, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+								panic(_err)
+						}
+						%[1]s := %[3]s.NewDJSON(tree.DJSON{JSON: _j})`,
 	types.UuidFamily: ` // Note that there is no need for a copy because uuid.FromBytes
 						// will perform a copy.
 						id, err := uuid.FromBytes(%[2]s)
@@ -124,7 +137,7 @@ func genVecToDatum(inputFileContents string, wr io.Writer) error {
 	// the template explicitly, so it is omitted from this slice.
 	optimizedTypeFamilies := []types.Family{
 		types.BoolFamily, types.IntFamily, types.FloatFamily, types.DecimalFamily,
-		types.DateFamily, types.BytesFamily, types.UuidFamily,
+		types.DateFamily, types.BytesFamily, types.JsonFamily, types.UuidFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.IntervalFamily,
 	}
 	for _, typeFamily := range optimizedTypeFamilies {

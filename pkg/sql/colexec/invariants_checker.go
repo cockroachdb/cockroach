@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,8 +80,8 @@ func (i *InvariantsChecker) Next(ctx context.Context) coldata.Batch {
 	}
 	for colIdx := 0; colIdx < b.Width(); colIdx++ {
 		v := b.ColVec(colIdx)
-		if v.CanonicalTypeFamily() == types.BytesFamily {
-			v.Bytes().AssertOffsetsAreNonDecreasing(n)
+		if v.IsBytesLike() {
+			v.UpdateOffsetsToBeNonDecreasing(n)
 		}
 	}
 	if sel := b.Selection(); sel != nil {
