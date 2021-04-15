@@ -1556,6 +1556,20 @@ Only csv is supported at the moment.
 
 	ExportCSVNullas = FlagInfo{
 		Name:        "nullas",
-		Description: `The string that should be used to represent NULL values. `,
+		Description: `The string that should be used to represent NULL values.`,
+	}
+
+	StartKey = FlagInfo{
+		Name: "start-key",
+		Description: `
+Start key and format as [<format>:]<key>. Supported formats: raw, hex, bytekey. 
+The raw format supports escaped text. For example, "raw:\x01k" is
+the prefix for range local keys. 
+The bytekey format does not require table-key prefix.`,
+	}
+
+	MaxRows = FlagInfo{
+		Name:        "max-rows",
+		Description: `Maximum number of rows to return (Default 0 is unlimited).`,
 	}
 )
