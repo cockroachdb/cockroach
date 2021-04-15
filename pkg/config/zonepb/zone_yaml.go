@@ -235,7 +235,11 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	if c.NumVoters != nil && *c.NumVoters != 0 {
 		m.NumVoters = proto.Int32(*c.NumVoters)
 	}
-	m.VoterConstraints = ConstraintsList{c.VoterConstraints, c.InheritedVoterConstraints()}
+	// NB: In order to preserve round-trippability, we're directly using
+	// `NullVoterConstraintsIsEmpty` as opposed to calling
+	// `c.InheritedVoterConstraints()`. This is copacetic as long as the value is
+	// unmarshalled correctly in zoneConfigFromMarshalable().
+	m.VoterConstraints = ConstraintsList{c.VoterConstraints, !c.NullVoterConstraintsIsEmpty}
 	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
