@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -7398,4 +7399,39 @@ COMMIT;
 		}
 	})
 
+}
+
+// Ensures that errors coming from hlc due to clocks being out of sync are not
+// treated as permanent failures.
+func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc serverutils.TestClusterInterface
+	ctx := context.Background()
+	var updatedClock int64 // updated with atomics
+	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+						if atomic.AddInt64(&updatedClock, 1) > 1 {
+							return nil
+						}
+						clock := tc.Server(0).Clock()
+						now := clock.Now()
+						farInTheFuture := now.Add(time.Hour.Nanoseconds(), 0)
+
+						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY)`)
+	// Before the commit which added this test, the below command would fail
+	// due to a permanent error.
+	tdb.Exec(t, `ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
 }
