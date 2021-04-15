@@ -64,19 +64,17 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) ([]f
 	// Only 2D distance is considered for determining number of segments.
 	distanceBetweenPoints := math.Sqrt(math.Pow(a.X()-b.X(), 2) + math.Pow(b.Y()-a.Y(), 2))
 
+	doubleNumberOfSegmentsToCreate := math.Ceil(distanceBetweenPoints / maxSegmentLength)
+	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
+	if err := geosegmentize.CheckSegmentizeTooManyPoints(doubleNumPoints, a, b); err != nil {
+		return nil, err
+	}
+
 	// numberOfSegmentsToCreate represent the total number of segments
 	// in which given two coordinates will be divided.
-	numberOfSegmentsToCreate := int(math.Ceil(distanceBetweenPoints / maxSegmentLength))
-	numPoints := len(a) * (1 + numberOfSegmentsToCreate)
-	if numPoints > geo.MaxAllowedSplitPoints {
-		return nil, errors.Newf(
-			"attempting to segmentize into too many coordinates; need %d points between %v and %v, max %d",
-			numPoints,
-			a,
-			b,
-			geo.MaxAllowedSplitPoints,
-		)
-	} // segmentFraction represent the fraction of length each segment
+	numberOfSegmentsToCreate := int(doubleNumberOfSegmentsToCreate)
+	numPoints := int(doubleNumPoints)
+	// segmentFraction represent the fraction of length each segment
 	// has with respect to total length between two coordinates.
 	allSegmentizedCoordinates := make([]float64, 0, numPoints)
 	allSegmentizedCoordinates = append(allSegmentizedCoordinates, a.Clone()...)
