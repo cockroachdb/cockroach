@@ -1647,6 +1647,9 @@ func ValidateInvertedIndexes(
 // any index fails validation as this usually means the schema change should
 // rollback. However, if gatherAllInvalid is true, it instead accumulates all
 // the indexes which fail and returns them together.
+// withFirstMutationPublic should be set to true if we are validating and assuming
+// the first mutation is made public. This should be used when finalizing a schema
+// change after a backfill.
 func ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
@@ -1671,6 +1674,36 @@ func ValidateForwardIndexes(
 
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
+
+			// If we are doing a REGIONAL BY ROW locality change, we can bypass
+			// the uniqueness check below as we are only adding or removing
+			// an implicit partitioning column.
+			// Scan the mutations if we're assuming the first mutation to be public
+			// to see if we have a locality config swap.
+			skipUniquenessChecks := false
+			if withFirstMutationPublic {
+				mutations := tableDesc.AllMutations()
+				if len(mutations) > 0 {
+					mutationID := mutations[0].MutationID()
+					for _, mut := range tableDesc.AllMutations() {
+						// We only want to check the first mutation, so break
+						// if we detect a new one.
+						if mut.MutationID() != mutationID {
+							break
+						}
+						if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+							if lcSwap := pkSwap.PrimaryKeySwapDesc().LocalityConfigSwap; lcSwap != nil {
+								if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil ||
+									lcSwap.NewLocalityConfig.GetRegionalByRow() != nil {
+									skipUniquenessChecks = true
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+
 			var desc catalog.TableDescriptor = tableDesc
 			if withFirstMutationPublic {
 				// Make the mutations public in an in-memory copy of the descriptor and
@@ -1705,7 +1738,7 @@ func ValidateForwardIndexes(
 
 					// For implicitly partitioned unique indexes, we need to independently
 					// validate that the non-implicitly partitioned columns are unique.
-					if idx.Unique && idx.Partitioning.NumImplicitColumns > 0 {
+					if idx.Unique && idx.Partitioning.NumImplicitColumns > 0 && !skipUniquenessChecks {
 						if err := validateUniqueConstraint(
 							ctx,
 							tableDesc,
