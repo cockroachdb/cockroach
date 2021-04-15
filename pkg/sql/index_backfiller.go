@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -124,20 +125,27 @@ func (ib *IndexBackfillPlanner) plan(
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
-	if err := ib.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory)
-		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
-			true /* distribute */)
-		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
-		// batch size. Also plumb in a testing knob.
-		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
-		spec, err := initIndexBackfillerSpec(*td.TableDesc(), readAsOf, chunkSize, indexesToBackfill)
-		if err != nil {
+	if err := descs.Txn(ctx,
+		ib.execCfg.Settings,
+		ib.execCfg.LeaseManager,
+		ib.execCfg.InternalExecutor,
+		ib.execCfg.DB,
+		func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory, descriptors)
+			planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
+				true /* distribute */)
+			// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
+			// batch size. Also plumb in a testing knob.
+			chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
+			spec, err := initIndexBackfillerSpec(*td.TableDesc(), readAsOf, chunkSize, indexesToBackfill)
+			if err != nil {
+				return err
+			}
+			p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
 			return err
-		}
-		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(planCtx, spec, sourceSpans)
-		return err
-	}); err != nil {
+		}); err != nil {
 		return nil, err
 	}
 

@@ -134,9 +134,11 @@ type historicalTxnRunner func(ctx context.Context, fn scTxnFn) error
 // makeFixedTimestampRunner creates a historicalTxnRunner suitable for use by the helpers.
 func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) historicalTxnRunner {
 	runner := func(ctx context.Context, retryable scTxnFn) error {
-		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+		return sc.fixedTimestampTxn(ctx, readAsOf, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory)
+			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors)
 			return retryable(ctx, txn, &evalCtx)
 		})
 	}
@@ -156,9 +158,13 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
 ) HistoricalInternalExecTxnRunner {
 	runner := func(ctx context.Context, retryable InternalExecFn) error {
-		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+		return sc.fixedTimestampTxn(ctx, readAsOf, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			ie := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory).InternalExecutor.(*InternalExecutor)
+			ie := createSchemaChangeEvalCtx(
+				ctx, sc.execCfg, readAsOf, sc.ieFactory, descriptors,
+			).InternalExecutor.(*InternalExecutor)
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -168,11 +174,11 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 func (sc *SchemaChanger) fixedTimestampTxn(
 	ctx context.Context,
 	readAsOf hlc.Timestamp,
-	retryable func(ctx context.Context, txn *kv.Txn) error,
+	retryable func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
-		return retryable(ctx, txn)
+		return retryable(ctx, txn, descriptors)
 	})
 }
 
@@ -672,8 +678,12 @@ func (sc *SchemaChanger) validateConstraints(
 	readAsOf := sc.clock.Now()
 	var tableDesc catalog.TableDescriptor
 
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		flags := tree.ObjectLookupFlagsWithRequired()
+		flags.AvoidCached = true
+		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
 		return err
 	}); err != nil {
 		return err
@@ -707,7 +717,7 @@ func (sc *SchemaChanger) validateConstraints(
 				evalCtx.Txn = txn
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				semaCtx := tree.MakeSemaContext()
-				collection := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				collection := evalCtx.Descs
 				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
@@ -993,7 +1003,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 	// cheap scan.
 	const pageSize = 10000
 	noop := func(_ []kv.KeyValue) error { return nil }
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
+		ctx context.Context, txn *kv.Txn, _ *descs.Collection,
+	) error {
 		for _, span := range targetSpans {
 			// TODO(dt): a Count() request would be nice here if the target isn't
 			// empty, since we don't need to drag all the results back just to
@@ -1030,8 +1042,10 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var planCtx *PlanningCtx
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+
 		// It is okay to release the lease on the descriptor before running the
 		// index backfill flow because any schema change that would invalidate the
 		// index being backfilled, would be queued behind the backfill in the
@@ -1043,12 +1057,11 @@ func (sc *SchemaChanger) distIndexBackfill(
 		// clear what this buys us in terms of checking the descriptors validity.
 		// Thus, in favor of simpler code and no correctness concerns we release
 		// the lease once the flow is planned.
-		defer tc.ReleaseAll(ctx)
-		tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
+		tableDesc, err := sc.getTableVersion(ctx, txn, descriptors, version)
 		if err != nil {
 			return err
 		}
-		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
+		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory, descriptors)
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			true /* distribute */)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
@@ -1277,7 +1290,9 @@ func (sc *SchemaChanger) distBackfill(
 		// may not commit. Instead write the updated value for todoSpans to this
 		// variable and assign to todoSpans after committing.
 		var updatedTodoSpans []roachpb.Span
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := sc.txn(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
 			updatedTodoSpans = todoSpans
 			// Report schema change progress. We define progress at this point
 			// as the fraction of fully-backfilled ranges of the primary index of
@@ -1302,10 +1317,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
-			// Use a leased table descriptor for the backfill.
-			defer tc.ReleaseAll(ctx)
-			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
+			tableDesc, err := sc.getTableVersion(ctx, txn, descriptors, version)
 			if err != nil {
 				return err
 			}
@@ -1317,7 +1329,7 @@ func (sc *SchemaChanger) distBackfill(
 				return nil
 			}
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
-			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
+			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory, descriptors)
 			recv := MakeDistSQLReceiver(
 				ctx,
 				&cbw,
@@ -1439,8 +1451,12 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 
 	readAsOf := sc.clock.Now()
 	var tableDesc catalog.TableDescriptor
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) (err error) {
-		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) (err error) {
+		flags := tree.ObjectLookupFlagsWithRequired()
+		flags.AvoidCached = true
+		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
 		return err
 	}); err != nil {
 		return err

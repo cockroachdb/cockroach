@@ -6339,7 +6339,7 @@ func TestDropTableWhileSchemaChangeReverting(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeOnFailOrCancel: func(_ jobspb.JobID) error {
+			RunBeforeOnFailOrCancel: func(id jobspb.JobID) error {
 				close(beforeOnFailOrCancelNotification)
 				<-continueNotification
 				// Return a retry error, so that we can be sure to test the path where
