@@ -3016,11 +3016,12 @@ func TestImportIntoCSV(t *testing.T) {
 
 		var unused interface{}
 
+		var jobID int
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(importBodyFinished)
-			_, err := sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[1]))
-			return err
+			return sqlDB.DB.QueryRowContext(ctx, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`,
+				testFiles.files[1])).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
 		})
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(delayImportFinish)
@@ -3035,7 +3036,7 @@ func TestImportIntoCSV(t *testing.T) {
 		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
-		skip.WithIssue(t, 51812)
+		waitForJobResult(t, tc, jobspb.JobID(jobID), jobs.StatusSucceeded)
 
 		// Expect it to succeed on re-attempt.
 		sqlDB.QueryRow(t, `SELECT 1 FROM t`).Scan(&unused)
