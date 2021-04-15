@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "certmgr",
+    srcs = [
+        "cert.go",
+        "cert_manager.go",
+        "file_cert.go",
+        "mocks_generated.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/certmgr",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",
+    ],
+)
+
+go_test(
+    name = "certmgr_test",
+    srcs = [
+        "cert_manager_test.go",
+        "file_cert_test.go",
+    ],
+    embed = [":certmgr"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/timeutil",
+        "@com_github_golang_mock//gomock",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sys//unix",
+    ],
+)
