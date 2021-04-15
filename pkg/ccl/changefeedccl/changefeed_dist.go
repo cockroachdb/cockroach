@@ -16,10 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -105,7 +108,10 @@ func distChangefeedFlow(
 			spansTS = spansTS.Next()
 		}
 		var err error
-		trackedSpans, err = fetchSpansForTargets(ctx, execCfg.DB, execCfg.Codec, details.Targets, spansTS)
+		trackedSpans, err = fetchSpansForTargets(
+			ctx, execCfg.Codec, execCfg.Settings, execCfg.DB, execCfg.InternalExecutor,
+			execCfg.LeaseManager, details.Targets, spansTS,
+		)
 		if err != nil {
 			return err
 		}
@@ -117,18 +123,25 @@ func distChangefeedFlow(
 
 func fetchSpansForTargets(
 	ctx context.Context,
-	db *kv.DB,
 	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	lm *lease.Manager,
 	targets jobspb.ChangefeedTargets,
 	ts hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := descs.Txn(ctx, settings, lm, ie, db, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
 		spans = nil
 		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range targets {
-			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.AvoidCached = true
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
 			if err != nil {
 				return err
 			}
