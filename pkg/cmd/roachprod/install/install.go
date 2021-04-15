@@ -43,7 +43,7 @@ sudo service cassandra stop;
     sudo ./configure --prefix=/usr
     sudo make -j$(nproc)
     sudo make install
-    (cd "${thrift_dir}/lib/py" && sudo python setup.py install)
+    (cd "${thrift_dir}/lib/py" && sudo python2 setup.py install)
   fi
 
   charybde_dir="/opt/charybdefs"
