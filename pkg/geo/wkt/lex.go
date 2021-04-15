@@ -301,7 +301,7 @@ func (l *wktLex) validateAndPopLayoutStackFrame() bool {
 
 // validateLayoutStackAtEnd returns whether the layout stack is in the expected state at the end of parsing.
 func (l *wktLex) validateLayoutStackAtEnd() bool {
-	l.lytStack.checkNoGeometryCollectionFramesLeft()
+	l.lytStack.assertNoGeometryCollectionFramesLeft()
 	return true
 }
 
