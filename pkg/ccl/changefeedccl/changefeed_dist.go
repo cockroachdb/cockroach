@@ -13,11 +13,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -105,7 +104,7 @@ func distChangefeedFlow(
 			spansTS = spansTS.Next()
 		}
 		var err error
-		trackedSpans, err = fetchSpansForTargets(ctx, execCfg.DB, execCfg.Codec, details.Targets, spansTS)
+		trackedSpans, err = fetchSpansForTargets(ctx, execCfg, details.Targets, spansTS)
 		if err != nil {
 			return err
 		}
@@ -117,24 +116,31 @@ func distChangefeedFlow(
 
 func fetchSpansForTargets(
 	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
+	execCfg *sql.ExecutorConfig,
 	targets jobspb.ChangefeedTargets,
 	ts hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	fetchSpans := func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
 		spans = nil
 		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range targets {
-			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.AvoidCached = true
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
 			if err != nil {
 				return err
 			}
-			spans = append(spans, tableDesc.PrimaryIndexSpan(codec))
+			spans = append(spans, tableDesc.PrimaryIndexSpan(execCfg.Codec))
 		}
 		return nil
-	})
+	}
+	err := descs.Txn(
+		ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
+		execCfg.DB, fetchSpans,
+	)
 	return spans, err
 }

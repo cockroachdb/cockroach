@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -245,10 +247,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
-	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
-	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
-		spans, withDiff, buf, ca.metrics)
+	schemaFeed := newSchemaFeed(ctx, ca.flowCtx.Cfg, ca.spec)
+	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, ca.kvFeedMemMon, ca.spec,
+		spans, buf, ca.metrics, schemaFeed)
 	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
@@ -284,20 +285,67 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 	}
 }
 
+func newSchemaFeed(
+	ctx context.Context, cfg *execinfra.ServerConfig, spec execinfrapb.ChangeAggregatorSpec,
+) kvfeed.SchemaFeed {
+	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
+		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
+		return doNothingSchemaFeed{}
+	}
+	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
+		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
+	initialHighWater, _ := getKVFeedInitialParameters(spec)
+	return schemafeed.New(schemafeed.Config{
+		DB:                 cfg.DB,
+		Clock:              cfg.DB.Clock(),
+		Settings:           cfg.Settings,
+		Targets:            spec.Feed.Targets,
+		LeaseManager:       cfg.LeaseManager.(*lease.Manager),
+		InternalExecutor:   cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
+		SchemaChangeEvents: schemaChangeEvents,
+		InitialHighWater:   initialHighWater,
+	})
+}
+
+type doNothingSchemaFeed struct{}
+
+var _ kvfeed.SchemaFeed = doNothingSchemaFeed{}
+
+// Run does nothing until the context is canceled.
+func (f doNothingSchemaFeed) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Peek implements SchemaFeed
+func (f doNothingSchemaFeed) Peek(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return nil, nil
+}
+
+// Pop implements SchemaFeed
+func (f doNothingSchemaFeed) Pop(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return nil, nil
+}
+
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
-	leaseMgr *lease.Manager,
 	mm *mon.BytesMonitor,
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
-	withDiff bool,
 	buf kvfeed.EventBuffer,
 	metrics *Metrics,
+	sf kvfeed.SchemaFeed,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	_, withDiff := spec.Feed.Opts[changefeedbase.OptDiff]
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
 	kvfeedCfg := kvfeed.Config{
 		Sink:               buf,
@@ -308,7 +356,6 @@ func makeKVFeedCfg(
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
 		Targets:            spec.Feed.Targets,
-		LeaseMgr:           leaseMgr,
 		Metrics:            &metrics.KVFeedMetrics,
 		MM:                 mm,
 		InitialHighWater:   initialHighWater,
@@ -316,6 +363,7 @@ func makeKVFeedCfg(
 		NeedsInitialScan:   needsInitialScan,
 		SchemaChangeEvents: schemaChangeEvents,
 		SchemaChangePolicy: schemaChangePolicy,
+		SchemaFeed:         sf,
 	}
 	return kvfeedCfg
 }

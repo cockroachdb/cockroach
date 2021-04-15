@@ -23,8 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -76,6 +79,10 @@ type Config struct {
 	// Should there be another function to decide whether to update the
 	// lease manager?
 	LeaseManager *lease.Manager
+
+	// InternalExecutor is required to properly resolve descriptors using the
+	// descs API.
+	InternalExecutor sqlutil.InternalExecutor
 }
 
 // SchemaFeed tracks changes to a set of tables and exports them as a queue of
@@ -95,6 +102,7 @@ type SchemaFeed struct {
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
 	leaseMgr *lease.Manager
+	ie       sqlutil.InternalExecutor
 	mu       struct {
 		syncutil.Mutex
 
@@ -197,6 +205,7 @@ func New(cfg Config) *SchemaFeed {
 		settings: cfg.Settings,
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
+		ie:       cfg.InternalExecutor,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = cfg.InitialHighWater
@@ -247,12 +256,16 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescTs := tf.mu.highWater
 	tf.mu.Unlock()
 	var initialDescs []catalog.Descriptor
-	initialTableDescsFn := func(ctx context.Context, txn *kv.Txn) error {
+	initialTableDescsFn := func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
 		initialDescs = initialDescs[:0]
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range tf.targets {
-			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, tf.leaseMgr.Codec(), tableID)
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.AvoidCached = true
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
 			if err != nil {
 				return err
 			}
@@ -260,7 +273,9 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := tf.db.Txn(ctx, initialTableDescsFn); err != nil {
+	if err := descs.Txn(
+		ctx, tf.settings, tf.leaseMgr, tf.ie, tf.db, initialTableDescsFn,
+	); err != nil {
 		return err
 	}
 
