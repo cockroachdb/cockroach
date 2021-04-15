@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/github-post",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/cmd/internal/issues",
+        "//pkg/cmd/issues",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

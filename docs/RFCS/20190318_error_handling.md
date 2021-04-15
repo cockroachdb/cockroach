@@ -3627,7 +3627,7 @@ pkg/cli/sql_util.go:                    err = errors.Wrapf(rowsErr, "error after
 pkg/cmd/uptodate/uptodate.go:   fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err)
 pkg/cmd/urlcheck/lib/urlcheck/urlcheck.go:                              fmt.Fprintf(&buf, "%s : %s\n", url, err)
 
-pkg/cmd/internal/issues/issues.go:              message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
+pkg/cmd/issues/issues.go:              message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
 
 pkg/cmd/prereqs/prereqs.go:             fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err)
 

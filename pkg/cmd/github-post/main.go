@@ -33,7 +33,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/issues"
 	"github.com/cockroachdb/errors"
 )
 
