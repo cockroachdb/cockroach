@@ -230,8 +230,11 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
-	// We need to perform a deep copy for the next iteration.
-	execgen.COPYVAL(p.lastVal, lastVal)
+	if !lastValNull {
+		// We need to perform a deep copy for the next iteration if we didn't have
+		// a null value.
+		execgen.COPYVAL(p.lastVal, lastVal)
+	}
 	p.lastValNull = lastValNull
 
 	return batch

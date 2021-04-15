@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -165,25 +166,37 @@ var distinctTestCases = []distinctTestCase{
 		distinctCols: []uint32{0},
 		typs:         []*types.T{types.Jsonb, types.String},
 		tuples: colexectestutils.Tuples{
-			{`'{"id": 1}'`, "a"},
-			{`'{"id": 2}'`, "b"},
-			{`'{"id": 3}'`, "c"},
-			{`'{"id": 1}'`, "1"},
-			{`'{"id": null}'`, "d"},
-			{`'{"id": 2}'`, "2"},
-			{`'{"id": 5}'`, "e"},
-			{`'{"id": 6}'`, "f"},
-			{`'{"id": 3}'`, "3"},
+			{`{"id": 1}`, "a"},
+			{`{"id": 2}`, "b"},
+			{`{"id": 3}`, "c"},
+			{`{"id": 1}`, "1"},
+			{`{"id": null}`, "d"},
+			{`{"id": 2}`, "2"},
+			{`{"id": 5}`, "e"},
+			{`{"id": 6}`, "f"},
+			{`{"id": 3}`, "3"},
 		},
+		// We need to pass in "actual JSON" to our expected output tuples, or else
+		// the tests will fail because the sort order of stringified JSON is not the
+		// same as the sort order of JSON. Specifically, NULL sorts before integers
+		// in JSON, but after integers in strings.
 		expected: colexectestutils.Tuples{
-			{`'{"id": 1}'`, "a"},
-			{`'{"id": 2}'`, "b"},
-			{`'{"id": 3}'`, "c"},
-			{`'{"id": null}'`, "d"},
-			{`'{"id": 5}'`, "e"},
-			{`'{"id": 6}'`, "f"},
+			{mustParseJSON(`{"id": 1}`), "a"},
+			{mustParseJSON(`{"id": 2}`), "b"},
+			{mustParseJSON(`{"id": 3}`), "c"},
+			{mustParseJSON(`{"id": null}`), "d"},
+			{mustParseJSON(`{"id": 5}`), "e"},
+			{mustParseJSON(`{"id": 6}`), "f"},
 		},
 	},
+}
+
+func mustParseJSON(s string) json.JSON {
+	j, err := json.ParseJSON(s)
+	if err != nil {
+		colexecerror.ExpectedError(err)
+	}
+	return j
 }
 
 func TestDistinct(t *testing.T) {

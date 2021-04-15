@@ -559,7 +559,7 @@ func (ht *HashTable) ComputeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, ht.overloadHelper, &ht.datumAlloc)
+		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.overloadHelper, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)

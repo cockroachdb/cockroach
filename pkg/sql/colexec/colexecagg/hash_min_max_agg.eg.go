@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,6 +89,12 @@ func newMinHashAggAlloc(
 		case -1:
 		default:
 			return &minIntervalHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &minJSONHashAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -344,8 +351,9 @@ func (a *minBytesHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -1381,6 +1389,202 @@ func (a *minIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+type minJSONHashAgg struct {
+	// col points to the output vector we are updating.
+	col *coldata.JSONs
+	hashAggregateFuncBase
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	curAgg json.JSON
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &minJSONHashAgg{}
+
+func (a *minJSONHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
+	a.col = vec.JSON()
+}
+
+func (a *minJSONHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.JSON(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult < 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.Size()
+	}
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *minJSONHashAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
+	}
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *minJSONHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
+type minJSONHashAggAlloc struct {
+	aggAllocBase
+	aggFuncs []minJSONHashAgg
+}
+
+var _ aggregateFuncAlloc = &minJSONHashAggAlloc{}
+
+const sizeOfminJSONHashAgg = int64(unsafe.Sizeof(minJSONHashAgg{}))
+const minJSONHashAggSliceOverhead = int64(unsafe.Sizeof([]minJSONHashAgg{}))
+
+func (a *minJSONHashAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(minJSONHashAggSliceOverhead + sizeOfminJSONHashAgg*a.allocSize)
+		a.aggFuncs = make([]minJSONHashAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
 type minDatumHashAgg struct {
 	// col points to the output vector we are updating.
 	col coldata.DatumVec
@@ -1493,10 +1697,13 @@ func (a *minDatumHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -1575,6 +1782,12 @@ func newMaxHashAggAlloc(
 		case -1:
 		default:
 			return &maxIntervalHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxJSONHashAggAlloc{aggAllocBase: allocBase}
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -1831,8 +2044,9 @@ func (a *maxBytesHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
+	oldCurAggSize := len(a.curAgg)
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -2868,6 +3082,202 @@ func (a *maxIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+type maxJSONHashAgg struct {
+	// col points to the output vector we are updating.
+	col *coldata.JSONs
+	hashAggregateFuncBase
+	// curAgg holds the running min/max, so we can index into the slice once per
+	// group, instead of on each iteration.
+	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
+	curAgg json.JSON
+	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
+	// for the group that is currently being aggregated.
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &maxJSONHashAgg{}
+
+func (a *maxJSONHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
+	a.col = vec.JSON()
+}
+
+func (a *maxJSONHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.JSON(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = false
+					if !isNull {
+						if !a.foundNonNullForCurrentGroup {
+							val := col.Get(i)
+
+							var _err error
+							var _bytes []byte
+							_bytes, _err = json.EncodeJSON(nil, val)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							a.curAgg, _err = json.FromEncoding(_bytes)
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+
+							a.foundNonNullForCurrentGroup = true
+						} else {
+							var cmp bool
+							candidate := col.Get(i)
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = candidate.Compare(a.curAgg)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								cmp = cmpResult > 0
+							}
+
+							if cmp {
+
+								var _err error
+								var _bytes []byte
+								_bytes, _err = json.EncodeJSON(nil, candidate)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+								a.curAgg, _err = json.FromEncoding(_bytes)
+								if _err != nil {
+									colexecerror.ExpectedError(_err)
+								}
+
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.Size()
+	}
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *maxJSONHashAgg) Flush(outputIdx int) {
+	// The aggregation is finished. Flush the last value. If we haven't found
+	// any non-nulls for this group so far, the output for this group should
+	// be null.
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
+	}
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *maxJSONHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
+type maxJSONHashAggAlloc struct {
+	aggAllocBase
+	aggFuncs []maxJSONHashAgg
+}
+
+var _ aggregateFuncAlloc = &maxJSONHashAggAlloc{}
+
+const sizeOfmaxJSONHashAgg = int64(unsafe.Sizeof(maxJSONHashAgg{}))
+const maxJSONHashAggSliceOverhead = int64(unsafe.Sizeof([]maxJSONHashAgg{}))
+
+func (a *maxJSONHashAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(maxJSONHashAggSliceOverhead + sizeOfmaxJSONHashAgg*a.allocSize)
+		a.aggFuncs = make([]maxJSONHashAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
 type maxDatumHashAgg struct {
 	// col points to the output vector we are updating.
 	col coldata.DatumVec
@@ -2980,10 +3390,13 @@ func (a *maxDatumHashAgg) Flush(outputIdx int) {
 	} else {
 		a.col.Set(outputIdx, a.curAgg)
 	}
-	// Release the reference to curAgg eagerly.
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
+	// Release the reference to curAgg eagerly.
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 

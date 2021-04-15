@@ -292,6 +292,7 @@ func GetProjection_CONST_SIDEConstOperator(
 				case _LEFT_TYPE_WIDTH:
 					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
 					// {{range .RightFamilies}}
+					// {{$rightFamilyStr := .RightCanonicalFamilyStr}}
 					case _RIGHT_CANONICAL_TYPE_FAMILY:
 						switch rightType.Width() {
 						// {{range .RightWidths}}
@@ -304,17 +305,23 @@ func GetProjection_CONST_SIDEConstOperator(
 								//     Binary operations are evaluated using coldataext.Datum.BinFn
 								//     method which requires that we have *coldataext.Datum on the
 								//     left, so we create that at the operator construction time to
-								//     avoid runtime conversion. Note that when the constant is on
-								//     the right side, then the left element necessarily comes from
-								//     the vector and will be of the desired type, so no additional
-								//     work is needed.
+								//     avoid runtime conversion.
 								// */}}
 								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
 								// {{else}}
 								constArg: c.(_L_GO_TYPE),
 								// {{end}}
 								// {{else}}
+								// {{if eq $rightFamilyStr "typeconv.DatumVecCanonicalTypeFamily"}}
+								// {{/*
+								//     Binary operations with a datum-backed value on the right side
+								//     require that we have *coldataext.Datum on the right (this is
+								//     what we get in non-constant case).
+								// */}}
+								constArg: &coldataext.Datum{Datum: c.(tree.Datum)},
+								// {{else}}
 								constArg: c.(_R_GO_TYPE),
+								// {{end}}
 								// {{end}}
 							}, nil
 							// {{end}}
