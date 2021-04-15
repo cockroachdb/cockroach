@@ -380,23 +380,36 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 		)
 	case *lang.LetExpr:
 		var docs []pretty.Doc
-		docs = append(docs, pretty.Text("(Let "))
-		docs = append(docs, pretty.Text("("))
-		for i, x := range e.Labels {
-			d := pretty.Text(fmt.Sprintf("$%s", x))
-			if i == len(e.Labels)-1 {
-				d = pretty.Concat(d, pretty.Text("):"))
-			} else {
-				d = pretty.Concat(d, pretty.Text(" "))
-			}
-			docs = append(docs, d)
-		}
 		docs = append(docs, pretty.SoftBreak)
-		docs = append(docs, p.docExpr(e.Target))
-		docs = append(docs, pretty.Line)
-		docs = append(docs, p.docExpr(e.Result))
+		for i, l := range e.Labels {
+			docs = append(docs, pretty.Text(fmt.Sprintf("$%s", l)))
+			if i < len(e.Labels)-1 {
+				docs = append(docs, pretty.Line)
+			}
+		}
+
+		labels := pretty.Group(pretty.Fold(pretty.Concat,
+			pretty.Text("("),
+			pretty.NestT(pretty.Fold(pretty.Concat, docs...)),
+			pretty.SoftBreak,
+		))
+
+		binding := pretty.Group(pretty.Fold(pretty.Concat,
+			pretty.Line,
+			labels,
+			pretty.Text("):"),
+			p.docExpr(e.Target),
+		))
+
+		inner := pretty.Group(pretty.Fold(pretty.Concat,
+			binding,
+			pretty.Line,
+			p.docExpr(e.Result),
+		))
+
 		return pretty.Group(pretty.Fold(pretty.Concat,
-			pretty.NestT(pretty.FillwordsWithSeparator(pretty.Nil, docs...)),
+			pretty.Text("(Let"),
+			pretty.NestT(inner),
 			pretty.SoftBreak,
 			pretty.Text(")"),
 		))
