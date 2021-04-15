@@ -62,6 +62,7 @@ func TestShowSummary(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts2.AsOfSystemTime(), backupPath)
 
 	t.Run("show-summary-without-types-or-tables", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", dbOnlyBackupPath, dir))
 		require.NoError(t, err)
 		expectedOutput := fmt.Sprintf(
@@ -91,6 +92,7 @@ func TestShowSummary(t *testing.T) {
 	})
 
 	t.Run("show-summary-with-full-information", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
@@ -172,6 +174,7 @@ func TestListBackups(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
 	t.Run("show-backups-with-backups-in-collection", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
@@ -264,6 +267,10 @@ func TestExportData(t *testing.T) {
 	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupTestSchemaPath)
 
+	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable(id) SELECT * FROM generate_series(4,10)`)
+	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts2.AsOfSystemTime()), backupTestSchemaPath)
+
 	testCasesOnError := []struct {
 		name           string
 		tableName      string
@@ -294,6 +301,7 @@ func TestExportData(t *testing.T) {
 	}
 	for _, tc := range testCasesOnError {
 		t.Run(tc.name, func(t *testing.T) {
+			setDebugContextDefault()
 			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
 				strings.Join(tc.backupPaths, " "),
 				tc.tableName,
@@ -308,32 +316,56 @@ func TestExportData(t *testing.T) {
 		tableName      string
 		backupPaths    []string
 		expectedDatums string
+		flags          string
 	}{
 		{
 			"show-data-with-qualified-table-name-of-user-defined-schema",
 			"testDB.testschema.fooTable",
 			[]string{backupTestSchemaPath},
 			"2,223,'dog'\n",
+			"",
 		},
 		{
 			"show-data-with-qualified-table-name-of-public-schema",
 			"testDB.public.fooTable",
 			[]string{backupPublicSchemaPath},
 			"1,123,'cat'\n",
+			"",
 		}, {
 			"show-data-of-incremental-backup",
 			"testDB.testschema.fooTable",
 			[]string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
 			"2,223,'dog'\n3,333,'mickey mouse'\n",
+			"",
+		}, {
+			"show-data-of-incremental-backup-with-maxRows-flag",
+			"testDB.testschema.fooTable",
+			[]string{backupTestSchemaPath,
+				backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			"2,223,'dog'\n3,333,'mickey mouse'\n4,null,null\n",
+			"--max-rows=3",
+		}, {
+			"show-data-of-incremental-backup-with-start-key-specified",
+			"testDB.testschema.fooTable",
+			[]string{backupTestSchemaPath,
+				backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupTestSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			"5,null,null\n6,null,null\n7,null,null\n8,null,null\n9,null,null\n10,null,null\n",
+			"--start-key=raw:\\xBF\\x89\\x8c\\x8c",
 		},
 	}
 
 	for _, tc := range testCasesDatumOutput {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
+			setDebugContextDefault()
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s %s",
 				strings.Join(tc.backupPaths, " "),
 				tc.tableName,
-				dir))
+				dir,
+				tc.flags))
 			require.NoError(t, err)
 			checkExpectedOutput(t, tc.expectedDatums, out)
 		})
@@ -380,6 +412,7 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	require.Equal(t, 8, rangeNum)
 
 	t.Run("export-data-with-multiple-ranges", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=testDB.public.fooTable  --external-io-dir=%s",
 			backupPath,
 			dir))
@@ -392,6 +425,7 @@ func TestExportDataWithMultipleRanges(t *testing.T) {
 	})
 
 	t.Run("export-data-with-multiple-ranges-in-incremental-backups", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s %s --table=testDB.public.fooTable  --external-io-dir=%s",
 			backupPath, backupPath+ts.GoTime().Format(backupccl.DateBasedIncFolderName),
 			dir))
@@ -454,6 +488,7 @@ func TestExportDataAOST(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s' WITH revision_history`, ts3.AsOfSystemTime()), backupPathWithRev)
 
 	t.Run("show-data-as-of-a-uncovered-timestamp", func(t *testing.T) {
+		setDebugContextDefault()
 		tsNotCovered := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s",
 			backupPath,
@@ -468,6 +503,7 @@ func TestExportDataAOST(t *testing.T) {
 	})
 
 	t.Run("show-data-as-of-non-backup-ts-should-return-error", func(t *testing.T) {
+		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --as-of=%s --external-io-dir=%s",
 			backupPath,
 			"testDB.public.fooTable",
@@ -631,6 +667,7 @@ func TestExportDataAOST(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			setDebugContextDefault()
 			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s ",
 				strings.Join(tc.backupPaths, " "),
 				tc.tableName,

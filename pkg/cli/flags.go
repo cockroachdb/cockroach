@@ -825,8 +825,8 @@ func init() {
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
-		varFlag(f, (*mvccKey)(&debugCtx.startKey), cliflags.From)
-		varFlag(f, (*mvccKey)(&debugCtx.endKey), cliflags.To)
+		varFlag(f, (*MVCCKey)(&debugCtx.startKey), cliflags.From)
+		varFlag(f, (*MVCCKey)(&debugCtx.endKey), cliflags.To)
 		intFlag(f, &debugCtx.maxResults, cliflags.Limit)
 		boolFlag(f, &debugCtx.values, cliflags.Values)
 		boolFlag(f, &debugCtx.sizes, cliflags.Sizes)

@@ -1558,4 +1558,14 @@ Only csv is supported at the moment.
 		Name:        "nullas",
 		Description: `The string that should be used to represent NULL values. `,
 	}
+
+	StartKey = FlagInfo{
+		Name:        "start-key",
+		Description: From.Description,
+	}
+
+	MaxRows = FlagInfo{
+		Name:        "max-rows",
+		Description: `Maximum number of rows to return. `,
+	}
 )

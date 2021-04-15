@@ -61,6 +61,25 @@ var debugBackupArgs struct {
 	destination     string
 	format          string
 	nullas          string
+	maxRows         int
+	startKey        cli.MVCCKey
+
+	rowCount int
+}
+
+// setDebugBackupArgsDefault set the default values in debugBackupArgs.
+// This function is called in every test that exercises debug backup
+// command-line parsing.
+func setDebugContextDefault() {
+	debugBackupArgs.externalIODir = ""
+	debugBackupArgs.exportTableName = ""
+	debugBackupArgs.readTime = ""
+	debugBackupArgs.destination = ""
+	debugBackupArgs.format = "csv"
+	debugBackupArgs.nullas = "null"
+	debugBackupArgs.maxRows = 0
+	debugBackupArgs.startKey = cli.MVCCKey{}
+	debugBackupArgs.rowCount = 0
 }
 
 func init() {
@@ -149,6 +168,17 @@ func init() {
 		cliflags.ExportCSVNullas.Shorthand,
 		"null", /*value*/
 		cliflags.ExportCSVNullas.Usage())
+
+	exportDataCmd.Flags().IntVar(
+		&debugBackupArgs.maxRows,
+		cliflags.MaxRows.Name,
+		0,
+		cliflags.MaxRows.Usage())
+
+	exportDataCmd.Flags().Var(
+		&debugBackupArgs.startKey,
+		cliflags.StartKey.Name,
+		cliflags.StartKey.Usage())
 
 	cli.DebugCmd.AddCommand(backupCmds)
 
@@ -305,7 +335,6 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 }
 
 func runExportDataCmd(cmd *cobra.Command, args []string) error {
-
 	if debugBackupArgs.exportTableName == "" {
 		return errors.New("export data requires table name specified by --table flag")
 	}
@@ -390,6 +419,9 @@ func showData(
 	for _, files := range entry.Files {
 		if err := processEntryFiles(ctx, rf, files, entry.Span, endTime, writer); err != nil {
 			return err
+		}
+		if debugBackupArgs.maxRows != 0 && debugBackupArgs.rowCount >= debugBackupArgs.maxRows {
+			break
 		}
 	}
 
@@ -501,6 +533,9 @@ func processEntryFiles(
 	defer iter.Close()
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: span.Key}, storage.MVCCKey{Key: span.EndKey}
+	if len(debugBackupArgs.startKey.Key) != 0 {
+		startKeyMVCC.Key = debugBackupArgs.startKey.Key
+	}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
 
 	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
@@ -527,6 +562,13 @@ func processEntryFiles(
 			return err
 		}
 		writer.Flush()
+
+		if debugBackupArgs.maxRows != 0 {
+			debugBackupArgs.rowCount++
+			if debugBackupArgs.rowCount >= debugBackupArgs.maxRows {
+				break
+			}
+		}
 	}
 	return nil
 }

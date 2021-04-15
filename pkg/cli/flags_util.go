@@ -168,18 +168,19 @@ func (m *dumpMode) Set(s string) error {
 	return nil
 }
 
-type mvccKey storage.MVCCKey
+// MVCCKey implements the pflag.Value interface.
+type MVCCKey storage.MVCCKey
 
 // Type implements the pflag.Value interface.
-func (k *mvccKey) Type() string { return "engine.MVCCKey" }
+func (k *MVCCKey) Type() string { return "engine.MVCCKey" }
 
 // String implements the pflag.Value interface.
-func (k *mvccKey) String() string {
+func (k *MVCCKey) String() string {
 	return storage.MVCCKey(*k).String()
 }
 
 // Set implements the pflag.Value interface.
-func (k *mvccKey) Set(value string) error {
+func (k *MVCCKey) Set(value string) error {
 	var typ keyType
 	var keyStr string
 	i := strings.IndexByte(value, ':')
@@ -207,26 +208,26 @@ func (k *mvccKey) Set(value string) error {
 				"encoded MVCCKey (i.e. with a timestamp component); here's one with a zero timestamp: %s",
 				encoded)
 		}
-		*k = mvccKey(newK)
+		*k = MVCCKey(newK)
 	case raw:
 		unquoted, err := unquoteArg(keyStr)
 		if err != nil {
 			return err
 		}
-		*k = mvccKey(storage.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
+		*k = MVCCKey(storage.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
 	case human:
 		scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 		key, err := scanner.Scan(keyStr)
 		if err != nil {
 			return err
 		}
-		*k = mvccKey(storage.MakeMVCCMetadataKey(key))
+		*k = MVCCKey(storage.MakeMVCCMetadataKey(key))
 	case rangeID:
 		fromID, err := parseRangeID(keyStr)
 		if err != nil {
 			return err
 		}
-		*k = mvccKey(storage.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
+		*k = MVCCKey(storage.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
 	default:
 		return fmt.Errorf("unknown key type %s", typ)
 	}
