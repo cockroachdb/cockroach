@@ -127,3 +127,16 @@ func ConfigFromSettings(st *cluster.Settings) Config {
 	c.WriteUnitsPerByte = writeCostPerMB.Get(&st.SV) * perMBToPerByte
 	return c
 }
+
+// DefaultConfig returns the configuration that corresponds to the default
+// setting values.
+func DefaultConfig() Config {
+	return Config{
+		Rate:              kvcuRateLimit.Default(),
+		Burst:             kvcuRateLimit.Default() * kvcuBurstLimitSeconds.Default(),
+		ReadRequestUnits:  readRequestCost.Default(),
+		ReadUnitsPerByte:  readCostPerMB.Default() / (1024 * 1024),
+		WriteRequestUnits: writeRequestCost.Default(),
+		WriteUnitsPerByte: writeCostPerMB.Default() / (1024 * 1024),
+	}
+}
