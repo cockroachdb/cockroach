@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -36,6 +38,14 @@ func (p *planner) logEvent(
 	return p.logEventWithSystemEventLogOption(ctx, descID, event, true /* writeToEventLog */)
 }
 
+// batchLogEvents is like logEvent, except it takes in slice of events
+// to batch write.
+func (p *planner) batchLogEvents(
+	ctx context.Context, descIDs descpb.IDs, events []eventpb.EventPayload,
+) error {
+	return p.batchLogEventsWithSystemEventLogOption(ctx, descIDs, events, true /* writeToEventLog */)
+}
+
 func (p *planner) logEventOnlyExternally(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 ) {
@@ -53,13 +63,26 @@ func (p *planner) logEventOnlyExternally(
 func (p *planner) logEventWithSystemEventLogOption(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload, writeToEventLog bool,
 ) error {
-	// Compute the common fields from data already known to the planner.
+	user, stmt, pl, appName := computeCommonFields(p)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, appName, stmt, pl, event, writeToEventLog)
+}
+
+// batchLogEventsWithSystemEventLogOption is like logEventWithSystemEventLogOption
+// except it takes a slice of events to batch write.
+func (p *planner) batchLogEventsWithSystemEventLogOption(
+	ctx context.Context, descIDs descpb.IDs, events []eventpb.EventPayload, writeToEventLog bool,
+) error {
+	user, stmt, pl, appName := computeCommonFields(p)
+	return batchLogEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descIDs, user, appName, stmt, pl, events, writeToEventLog)
+}
+
+// computeCommonFields computes the common fields from data already known to the planner.
+func computeCommonFields(p *planner) (security.SQLUsername, string, tree.QueryArguments, string) {
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
 	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
 	appName := p.SessionData().ApplicationName
-
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descID, user, appName, stmt, pl, event, writeToEventLog)
+	return user, stmt, pl, appName
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -115,7 +138,67 @@ func logEventInternalForSQLStatements(
 	event eventpb.EventPayload,
 	writeToEventLog bool,
 ) error {
+	if err := injectCommonFields(
+		txn, descID, user, appName, stmt, placeholders, event,
+	); err != nil {
+		return err
+	}
+
+	// Delegate the storing of the event to the regular event logic.
+	return InsertEventRecord(ctx, execCfg.InternalExecutor,
+		txn,
+		int32(descID),
+		int32(execCfg.NodeID.SQLInstanceID()),
+		false, /* skipExternalLog */
+		event,
+		!writeToEventLog,
+	)
+}
+
+// batchLogEventInternalForSQLStatements is like logEventInternalForSQLStatements
+// except it takes a slice of events to batch write.
+func batchLogEventInternalForSQLStatements(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	descIDs descpb.IDs,
+	user security.SQLUsername,
+	appName string,
+	stmt string,
+	placeholders tree.QueryArguments,
+	events []eventpb.EventPayload,
+	writeToEventLog bool,
+) error {
 	// Inject the common fields into the payload provided by the caller.
+	for i := range events {
+		if err := injectCommonFields(
+			txn, descIDs[i], user, appName, stmt, placeholders, events[i],
+		); err != nil {
+			return err
+		}
+	}
+
+	// Delegate the storing of the event to the regular event logic.
+	return BatchInsertEventRecord(ctx, execCfg.InternalExecutor,
+		txn,
+		descIDs,
+		int32(execCfg.NodeID.SQLInstanceID()),
+		false, /* skipExternalLog */
+		events,
+		!writeToEventLog,
+	)
+}
+
+// injectCommonFields injects the common fields into the event payload provided by the caller.
+func injectCommonFields(
+	txn *kv.Txn,
+	descID descpb.ID,
+	user security.SQLUsername,
+	appName string,
+	stmt string,
+	placeholders tree.QueryArguments,
+	event eventpb.EventPayload,
+) error {
 	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
 	sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 	if !ok {
@@ -132,16 +215,7 @@ func logEventInternalForSQLStatements(
 			m.PlaceholderValues[idx] = val.String()
 		}
 	}
-
-	// Delegate the storing of the event to the regular event logic.
-	return InsertEventRecord(ctx, execCfg.InternalExecutor,
-		txn,
-		int32(descID),
-		int32(execCfg.NodeID.SQLInstanceID()),
-		false, /* skipExternalLog */
-		event,
-		!writeToEventLog,
-	)
+	return nil
 }
 
 // LogEventForJobs emits a cluster event in the context of a job.
@@ -213,29 +287,11 @@ func InsertEventRecord(
 	onlyLog bool,
 ) error {
 	eventType := eventpb.GetEventTypeName(info)
-
-	// Ensure the type field is populated.
-	info.CommonDetails().EventType = eventType
-
-	// The caller is responsible for the timestamp field.
-	if info.CommonDetails().Timestamp == 0 {
-		return errors.AssertionFailedf("programming error: timestamp field in event not populated: %T", info)
-	}
-
-	if onlyLog {
-		log.StructuredEvent(ctx, info)
-		return nil
-	}
-
-	// Ensure that the external logging sees the event when the
-	// transaction commits.
-	txn.AddCommitTrigger(func(ctx context.Context) {
-		log.StructuredEvent(ctx, info)
-	})
-
-	// If writes to the event log table are disabled, take a shortcut.
-	if !eventLogEnabled.Get(&ex.s.cfg.Settings.SV) {
-		return nil
+	if earlyRet, err := setupEventLog(
+		ctx, ex, txn, info, eventType, onlyLog,
+	); earlyRet || err != nil {
+		// If earlyRet is true, err is always nil, so returning err is fine.
+		return err
 	}
 
 	const insertEventTableStmt = `
@@ -268,4 +324,103 @@ VALUES(
 		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
 	}
 	return nil
+}
+
+// BatchInsertEventRecord is like InsertEventRecord except it takes
+// a slice of events to batch write.
+func BatchInsertEventRecord(
+	ctx context.Context,
+	ex *InternalExecutor,
+	txn *kv.Txn,
+	descIDs descpb.IDs,
+	reportingID int32,
+	skipExternalLog bool,
+	events []eventpb.EventPayload,
+	onlyLog bool,
+) error {
+	var query strings.Builder
+	query.WriteString(`
+INSERT INTO system.eventlog (
+  timestamp, "eventType", "targetID", "reportingID", info
+)
+VALUES`)
+	var args []interface{}
+	placeholderNum := 1
+
+	for i := range events {
+		eventType := eventpb.GetEventTypeName(events[i])
+		if earlyRet, err := setupEventLog(
+			ctx, ex, txn, events[i], eventType, onlyLog,
+		); earlyRet || err != nil {
+			// If earlyRet is true, err is always nil, so returning err is fine.
+			return err
+		}
+
+		query.WriteString(fmt.Sprintf(" ($%d, $%d, $%d, $%d, $%d)",
+			placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3, placeholderNum+4))
+		placeholderNum += 5
+		if i != len(events)-1 {
+			query.WriteString(",")
+		}
+
+		args = append(
+			args,
+			timeutil.Unix(0, events[i].CommonDetails().Timestamp),
+			eventType, int32(descIDs[i]),
+			reportingID,
+			nil,
+		)
+		if events[i] != nil {
+			infoBytes, err := json.Marshal(events[i])
+			if err != nil {
+				return err
+			}
+			args[len(args)-1] = string(infoBytes)
+		}
+	}
+
+	rows, err := ex.Exec(ctx, "log-event", txn, query.String(), args...)
+	if err != nil {
+		return err
+	}
+	if rows != len(events) {
+		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(events))
+	}
+	return nil
+}
+
+// setupEventLog prepares the event log to be written. It also checks
+// if we can early exit, and returns a bool representing if they're met.
+func setupEventLog(
+	ctx context.Context,
+	ex *InternalExecutor,
+	txn *kv.Txn,
+	info eventpb.EventPayload,
+	eventType string,
+	onlyLog bool,
+) (bool, error) {
+	// Ensure the type field is populated.
+	info.CommonDetails().EventType = eventType
+
+	// The caller is responsible for the timestamp field.
+	if info.CommonDetails().Timestamp == 0 {
+		return false, errors.AssertionFailedf("programming error: timestamp field in event not populated: %T", info)
+	}
+
+	if onlyLog {
+		log.StructuredEvent(ctx, info)
+		return true, nil
+	}
+
+	// Ensure that the external logging sees the event when the
+	// transaction commits.
+	txn.AddCommitTrigger(func(ctx context.Context) {
+		log.StructuredEvent(ctx, info)
+	})
+
+	// If writes to the event log table are disabled, take a shortcut.
+	if !eventLogEnabled.Get(&ex.s.cfg.Settings.SV) {
+		return true, nil
+	}
+	return false, nil
 }
