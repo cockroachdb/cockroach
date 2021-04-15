@@ -16,7 +16,6 @@ package hlc
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -410,17 +409,32 @@ func (c *Clock) Update(rt ClockTimestamp) {
 	c.enforceWallTimeWithinBoundLocked()
 }
 
+// NB: don't change the string here; this will cause cross-version issues
+// since this singleton is used as a marker.
+var errUntrustworthyRemoteWallTimeErr = errors.New("remote wall time is too far ahead to be trustworthy")
+
+// IsUntrustworthyRemoteWallTimeError returns true if the error came resulted
+// from a call to Clock.UpdateAndCheckMaxOffset due to the passed ClockTimestamp
+// being too far in the future.
+func IsUntrustworthyRemoteWallTimeError(err error) bool {
+	return errors.Is(err, errUntrustworthyRemoteWallTimeErr)
+}
+
 // UpdateAndCheckMaxOffset is like Update, but also takes the wall time into account and
 // returns an error in the event that the supplied remote timestamp exceeds
 // the wall clock time by more than the maximum clock offset.
+//
+// If an error is returned, it will be detectable with
+// IsUntrustworthyRemoteWallTimeError.
 func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt ClockTimestamp) error {
-	var err error
 	physicalClock := c.getPhysicalClockAndCheck(ctx)
 
 	offset := time.Duration(rt.WallTime - physicalClock)
 	if c.maxOffset > 0 && offset > c.maxOffset {
-		err = fmt.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset)
-		return err
+		return errors.Mark(
+			errors.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset),
+			errUntrustworthyRemoteWallTimeErr,
+		)
 	}
 
 	if physicalClock > rt.WallTime {
