@@ -57,6 +57,9 @@ func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geograph
 // segments is the power of 2, and all the segments are of the same length.
 // Note: List of points does not consist of end point.
 func segmentizeCoords(a geom.Coord, b geom.Coord, segmentMaxAngle float64) ([]float64, error) {
+	if segmentMaxAngle <= 0 {
+		return nil, errors.Newf("maximum segment angle must be positive")
+	}
 	// Converted geom.Coord into s2.Point so we can segmentize the coordinates.
 	pointA := s2.PointFromLatLng(s2.LatLngFromDegrees(a.Y(), a.X()))
 	pointB := s2.PointFromLatLng(s2.LatLngFromDegrees(b.Y(), b.X()))
@@ -69,24 +72,20 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, segmentMaxAngle float64) ([]fl
 	// 2 coordinates, ensuring that the segments are divided into parts divisible by
 	// a power of 2.
 	//
-	// For that fraction by segment must be less than or equal to
-	// the fraction of max segment length to distance between point, since the
-	// total number of segment must be power of 2 therefore we can write as
-	// 1 / (2^n)[numberOfSegmentsToCreate] <= segmentMaxLength / distanceBetweenPoints < 1 / (2^(n-1))
-	// (2^n)[numberOfSegmentsToCreate] >= distanceBetweenPoints / segmentMaxLength > 2^(n-1)
-	// therefore n = ceil(log2(segmentMaxLength/distanceBetweenPoints)). Hence
-	// numberOfSegmentsToCreate = 2^(ceil(log2(segmentMaxLength/distanceBetweenPoints))).
-	numberOfSegmentsToCreate := int(math.Pow(2, math.Ceil(math.Log2(chordAngleBetweenPoints/segmentMaxAngle))))
-	numPoints := 2 * (1 + numberOfSegmentsToCreate)
-	if numPoints > geo.MaxAllowedSplitPoints {
-		return nil, errors.Newf(
-			"attempting to segmentize into too many coordinates; need %d points between %v and %v, max %d",
-			numPoints,
-			a,
-			b,
-			geo.MaxAllowedSplitPoints,
-		)
+	// We can write that power as 2^n in the following inequality
+	// 2^n >= ceil(chordAngleBetweenPoints/segmentMaxAngle) > 2^(n-1).
+	// We can drop the ceil since 2^n must be an int
+	// 2^n >= chordAngleBetweenPoints/segmentMaxAngle > 2^(n-1).
+	// Then n = ceil(log2(chordAngleBetweenPoints/segmentMaxAngle)).
+	// Hence numberOfSegmentsToCreate = 2^(ceil(log2(chordAngleBetweenPoints/segmentMaxAngle))).
+	doubleNumberOfSegmentsToCreate := math.Pow(2, math.Ceil(math.Log2(chordAngleBetweenPoints/segmentMaxAngle)))
+	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
+	if err := geosegmentize.CheckSegmentizeTooManyPoints(doubleNumPoints, a, b); err != nil {
+		return nil, err
 	}
+	numberOfSegmentsToCreate := int(doubleNumberOfSegmentsToCreate)
+	numPoints := int(doubleNumPoints)
+
 	allSegmentizedCoordinates := make([]float64, 0, numPoints)
 	allSegmentizedCoordinates = append(allSegmentizedCoordinates, a.X(), a.Y())
 	for pointInserted := 1; pointInserted < numberOfSegmentsToCreate; pointInserted++ {

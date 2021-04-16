@@ -156,13 +156,6 @@ func TestSegmentizeCoords(t *testing.T) {
 			resultantCoordinates: []float64{0, 0, 0.3333333333333333, 0, 0.6666666666666666, 0},
 		},
 		{
-			desc:                 `Coordinate(1, 1) to Coordinate(0, 0), -1`,
-			a:                    geom.Coord{1, 1},
-			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     -1,
-			resultantCoordinates: []float64{1, 1},
-		},
-		{
 			desc:                 `Coordinate(1, 1) to Coordinate(0, 0), 2`,
 			a:                    geom.Coord{1, 1},
 			b:                    geom.Coord{0, 0},
@@ -182,6 +175,35 @@ func TestSegmentizeCoords(t *testing.T) {
 			convertedPoints, err := segmentizeCoords(test.a, test.b, test.segmentMaxLength)
 			require.NoError(t, err)
 			require.Equal(t, test.resultantCoordinates, convertedPoints)
+		})
+	}
+
+	errorTestCases := []struct {
+		desc             string
+		a                geom.Coord
+		b                geom.Coord
+		segmentMaxLength float64
+		expectedErr      string
+	}{
+		{
+			desc:             "too many segments required",
+			a:                geom.Coord{0, 0},
+			b:                geom.Coord{100, 100},
+			segmentMaxLength: 0.001,
+			expectedErr:      fmt.Sprintf("attempting to segmentize into too many coordinates; need 282846 points between [0 0] and [100 100], max %d", geo.MaxAllowedSplitPoints),
+		},
+		{
+			desc:             "negative max segment length",
+			a:                geom.Coord{1, 1},
+			b:                geom.Coord{2, 2},
+			segmentMaxLength: -1,
+			expectedErr:      "maximum segment length must be positive",
+		},
+	}
+	for _, test := range errorTestCases {
+		t.Run(test.desc, func(t *testing.T) {
+			_, err := segmentizeCoords(test.a, test.b, test.segmentMaxLength)
+			require.EqualError(t, err, test.expectedErr)
 		})
 	}
 
