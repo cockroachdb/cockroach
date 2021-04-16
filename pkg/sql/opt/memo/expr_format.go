@@ -202,7 +202,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
+	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
@@ -328,10 +328,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatColList(e, tp, "right columns:", private.RightCols)
 		}
 
-	case *ScanExpr:
-		if t.IsCanonical() {
+	case *ScanExpr, *PlaceholderScanExpr:
+		private := t.Private().(*ScanPrivate)
+		if t.Op() == opt.ScanOp && private.IsCanonical() {
 			// For the canonical scan, show the expressions attached to the TableMeta.
-			tab := md.TableMeta(t.Table)
+			tab := md.TableMeta(private.Table)
 			if tab.Constraints != nil {
 				c := tp.Childf("check constraint expressions")
 				for i := 0; i < tab.Constraints.ChildCount(); i++ {
@@ -367,7 +368,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if c := t.Constraint; c != nil {
+		if c := private.Constraint; c != nil {
 			if c.IsContradiction() {
 				tp.Childf("constraint: contradiction")
 			} else if c.Spans.Count() == 1 {
@@ -379,26 +380,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if ic := t.InvertedConstraint; ic != nil {
-			idx := md.Table(t.Table).Index(t.Index)
+		if ic := private.InvertedConstraint; ic != nil {
+			idx := md.Table(private.Table).Index(private.Index)
 			var b strings.Builder
 			for i := idx.NonInvertedPrefixColumnCount(); i < idx.KeyColumnCount(); i++ {
 				b.WriteRune('/')
-				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal())))
+				b.WriteString(fmt.Sprintf("%d", private.Table.ColumnID(idx.Column(i).Ordinal())))
 			}
 			n := tp.Childf("inverted constraint: %s", b.String())
 			ic.Format(n, "spans")
 		}
-		if t.HardLimit.IsSet() {
-			tp.Childf("limit: %s", t.HardLimit)
+		if private.HardLimit.IsSet() {
+			tp.Childf("limit: %s", private.HardLimit)
 		}
-		if !t.Flags.Empty() {
-			if t.Flags.NoIndexJoin {
+		if !private.Flags.Empty() {
+			if private.Flags.NoIndexJoin {
 				tp.Childf("flags: no-index-join")
-			} else if t.Flags.ForceIndex {
-				idx := md.Table(t.Table).Index(t.Flags.Index)
+			} else if private.Flags.ForceIndex {
+				idx := md.Table(private.Table).Index(private.Flags.Index)
 				dir := ""
-				switch t.Flags.Direction {
+				switch private.Flags.Direction {
 				case tree.DefaultDirection:
 				case tree.Ascending:
 					dir = ",fwd"
@@ -408,9 +409,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				tp.Childf("flags: force-index=%s%s", idx.Name(), dir)
 			}
 		}
-		if t.Locking != nil {
+		if private.Locking != nil {
 			strength := ""
-			switch t.Locking.Strength {
+			switch private.Locking.Strength {
 			case tree.ForNone:
 			case tree.ForKeyShare:
 				strength = "for-key-share"
@@ -424,7 +425,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				panic(errors.AssertionFailedf("unexpected strength"))
 			}
 			wait := ""
-			switch t.Locking.WaitPolicy {
+			switch private.Locking.WaitPolicy {
 			case tree.LockWaitBlock:
 			case tree.LockWaitSkip:
 				wait = ",skip-locked"
@@ -791,6 +792,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if !t.Syntax.As() {
 			return
 		}
+
+	case *PlaceholderScanExpr:
+		// Show the child scalar expressions under a "span" heading.
+		tp = tp.Childf("span")
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {

@@ -15,6 +15,7 @@ go_library(
         "memo_format.go",
         "optimizer.go",
         "physical_props.go",
+        "placeholder_fast_path.go",
         "scan_funcs.go",
         "scan_index_iter.go",
         "select_funcs.go",
