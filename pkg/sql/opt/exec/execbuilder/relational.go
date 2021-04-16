@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -191,6 +192,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.ScanExpr:
 		ep, err = b.buildScan(t)
+
+	case *memo.PlaceholderScanExpr:
+		ep, err = b.buildPlaceholderScan(t)
 
 	case *memo.SelectExpr:
 		ep, err = b.buildSelect(t)
@@ -468,7 +472,9 @@ func (b *Builder) getColumns(
 // indexConstraintMaxResults returns the maximum number of results for a scan;
 // if successful (ok=true), the scan is guaranteed never to return more results
 // than maxRows.
-func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64, ok bool) {
+func (b *Builder) indexConstraintMaxResults(
+	scan *memo.ScanPrivate, expr memo.RelExpr,
+) (maxRows uint64, ok bool) {
 	c := scan.Constraint
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
 		return 0, false
@@ -479,7 +485,7 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64
 	for i := 0; i < numCols; i++ {
 		indexCols.Add(c.Columns.Get(i).ID())
 	}
-	rel := scan.Relational()
+	rel := expr.Relational()
 	if !rel.FuncDeps.ColsAreLaxKey(indexCols) {
 		return 0, false
 	}
@@ -488,7 +494,7 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64
 }
 
 func (b *Builder) scanParams(
-	tab cat.Table, scan *memo.ScanExpr,
+	tab cat.Table, scan *memo.ScanPrivate, relExpr memo.RelExpr,
 ) (exec.ScanParams, opt.ColMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
@@ -535,28 +541,29 @@ func (b *Builder) scanParams(
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
 
-	// Get the estimated row count from the statistics.
+	// Get the estimated row count from the statistics. When there are no
+	// statistics available, we construct a scan node with
+	// the estimated row count of zero rows.
+	//
 	// Note: if this memo was originally created as part of a PREPARE
 	// statement or was stored in the query cache, the column stats would have
 	// been removed by DetachMemo. Update that function if the column stats are
 	// needed here in the future.
-	rowCount := scan.Relational().Stats.RowCount
-	if !scan.Relational().Stats.Available {
-		// When there are no statistics available, we construct a scan node with
-		// the estimated row count of zero rows.
-		rowCount = 0
+	var rowCount float64
+	if relProps := relExpr.Relational(); relProps.Stats.Available {
+		rowCount = relProps.Stats.RowCount
 	}
 
 	if scan.PartitionConstrainedScan {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
-	softLimit := int64(math.Ceil(scan.RequiredPhysical().LimitHint))
+	softLimit := int64(math.Ceil(relExpr.RequiredPhysical().LimitHint))
 	hardLimit := scan.HardLimit.RowCount()
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
-		maxResults, ok := b.indexConstraintMaxResults(scan)
+		maxResults, ok := b.indexConstraintMaxResults(scan, relExpr)
 		if ok && maxResults < ParallelScanResultThreshold {
 			// Don't set the flag when we have a single span which returns a single
 			// row: it does nothing in this case except litter EXPLAINs.
@@ -568,18 +575,28 @@ func (b *Builder) scanParams(
 		}
 	}
 
+	// Figure out if we need to scan in reverse (ScanPrivateCanProvide takes
+	// HardLimit.Reverse() into account).
+	ok, reverse := ordering.ScanPrivateCanProvide(
+		b.mem.Metadata(),
+		scan,
+		&relExpr.RequiredPhysical().Ordering,
+	)
+	if !ok {
+		return exec.ScanParams{}, opt.ColMap{}, errors.AssertionFailedf("scan can't provide required ordering")
+	}
+
 	return exec.ScanParams{
 		NeededCols:         needed,
 		IndexConstraint:    scan.Constraint,
 		InvertedConstraint: scan.InvertedConstraint,
 		HardLimit:          hardLimit,
 		SoftLimit:          softLimit,
-		// HardLimit.Reverse() is taken into account by ScanIsReverse.
-		Reverse:           ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
-		Parallelize:       parallelize,
-		Locking:           locking,
-		EstimatedRowCount: rowCount,
-		LocalityOptimized: scan.LocalityOptimized,
+		Reverse:            reverse,
+		Parallelize:        parallelize,
+		Locking:            locking,
+		EstimatedRowCount:  rowCount,
+		LocalityOptimized:  scan.LocalityOptimized,
 	}, outputMap, nil
 }
 
@@ -591,7 +608,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
-	params, outputCols, err := b.scanParams(tab, scan)
+	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -614,6 +631,72 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		} else {
 			b.ContainsFullIndexScan = true
 		}
+	}
+
+	res.root = root
+	return res, nil
+}
+
+func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan, error) {
+	if scan.Constraint != nil || scan.InvertedConstraint != nil {
+		return execPlan{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(scan.Table)
+	idx := tab.Index(scan.Index)
+
+	// Build the index constraint.
+	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
+	for i := range spanColumns {
+		col := idx.Column(i)
+		ordinal := col.Ordinal()
+		colID := scan.Table.ColumnID(ordinal)
+		spanColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+	}
+	var columns constraint.Columns
+	columns.Init(spanColumns)
+	keyCtx := constraint.MakeKeyContext(&columns, b.evalCtx)
+
+	values := make([]tree.Datum, len(scan.Span))
+	for i, expr := range scan.Span {
+		// The expression is either a placeholder or a constant.
+		if p, ok := expr.(*memo.PlaceholderExpr); ok {
+			val, err := p.Value.(*tree.Placeholder).Eval(b.evalCtx)
+			if err != nil {
+				return execPlan{}, err
+			}
+			values[i] = val
+		} else {
+			values[i] = memo.ExtractConstDatum(expr)
+		}
+	}
+
+	key := constraint.MakeCompositeKey(values...)
+	var span constraint.Span
+	span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+	var spans constraint.Spans
+	spans.InitSingleSpan(&span)
+
+	var c constraint.Constraint
+	c.Init(&keyCtx, &spans)
+
+	private := scan.ScanPrivate
+	private.Constraint = &c
+
+	params, outputCols, err := b.scanParams(tab, &private, scan)
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{outputCols: outputCols}
+	root, err := b.factory.ConstructScan(
+		tab,
+		tab.Index(scan.Index),
+		params,
+		res.reqOrdering(scan),
+	)
+	if err != nil {
+		return execPlan{}, err
 	}
 
 	res.root = root
