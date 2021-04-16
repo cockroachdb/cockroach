@@ -176,7 +176,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			privs,
 			&params.p.semaCtx,
 			params.p.EvalContext(),
-			n.persistence,
+			persistence,
 		)
 		if err != nil {
 			return err

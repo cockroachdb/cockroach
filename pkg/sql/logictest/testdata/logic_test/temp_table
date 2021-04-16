@@ -285,3 +285,42 @@ grant testuser to root
 
 statement ok
 ALTER TABLE second_db.pg_temp.a OWNER TO testuser
+
+
+# Below is a regression test to deal ensure that views which are "upgraded" to
+# temporary because they reference temporary tables are indeed marked as
+# temporary.
+subtest upgraded_view_marked_temporary
+
+statement ok
+CREATE DATABASE upgraded_view_marked_temporary;
+USE upgraded_view_marked_temporary;
+CREATE TEMPORARY TABLE t (i INT PRIMARY KEY);
+CREATE VIEW v AS SELECT i FROM t;
+
+# Confirm at a low-level that the descriptor for v is marked temporary.
+
+query T
+SELECT crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor
+       )->'table'->>'temporary'
+  FROM system.descriptor
+ WHERE id = 'v'::REGCLASS;
+----
+true
+
+statement ok
+USE test
+
+# Switch to a different user and thus different connection and attempt to
+# drop the database which contains the promoted temporary view. If the view
+# were not properly marked as temporary, this would fail with an opaque error
+# about not being able to find the descriptor.
+
+user root
+
+statement ok
+DROP DATABASE upgraded_view_marked_temporary CASCADE;
+
+user testuser
