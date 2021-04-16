@@ -287,6 +287,9 @@ func ShowCreateSequence(
 	if opts.Virtual {
 		f.Printf(" VIRTUAL")
 	}
+	if opts.CacheSize > 1 {
+		f.Printf(" CACHE %d", opts.CacheSize)
+	}
 	return f.CloseAndGetString(), nil
 }
 
