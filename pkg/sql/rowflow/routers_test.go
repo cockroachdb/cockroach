@@ -69,7 +69,7 @@ func setupRouter(
 	}
 	r.init(ctx, &flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.Start(ctx, wg, nil /* ctxCancel */)
+	r.Start(ctx, wg, nil /* flowCtxCancel */)
 	return r, wg
 }
 
@@ -678,7 +678,7 @@ func TestRouterBlocks(t *testing.T) {
 			}
 			router.init(ctx, &flowCtx, colTypes)
 			var wg sync.WaitGroup
-			router.Start(ctx, &wg, nil /* ctxCancel */)
+			router.Start(ctx, &wg, nil /* flowCtxCancel */)
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.
