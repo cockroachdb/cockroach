@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -171,6 +172,21 @@ func TestSimplify(t *testing.T) {
 			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
 			tolerance: 3,
 			expected:  "POLYGON ((5 7, 16 11, 18 7, 2 5, 5 7))",
+		},
+		{
+			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
+			tolerance: math.NaN(),
+			expected:  "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
+		},
+		{
+			wkt:       "MULTIPOINT (1 1, 1 1)",
+			tolerance: 2,
+			expected:  "MULTIPOINT (1 1, 1 1)",
+		},
+		{
+			wkt:       "POINT (1 1)",
+			tolerance: 2,
+			expected:  "POINT (1 1)",
 		},
 	}
 
