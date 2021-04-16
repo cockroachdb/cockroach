@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -191,7 +189,7 @@ type TypeSchemaChangerTestingKnobs struct {
 	RunBeforeExec func() error
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
-	RunBeforeEnumMemberPromotion func()
+	RunBeforeEnumMemberPromotion func() error
 	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
 	// OnFailOrCancel is triggered.
 	RunAfterOnFailOrCancel func() error
@@ -283,7 +281,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
-			fn()
+			if err := fn(); err != nil {
+				return err
+			}
 		}
 
 		// First, we check if any of the enum values that are being removed are in
@@ -310,10 +310,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			return err
 		}
 
-		// A list of multi-region tables that were repartitioned as a result of
-		// promotion/demotion of enum values. This is used to track tables whose
-		// leases need to be invalidated.
-		var repartitionedTables []descpb.ID
+		var regionChangeFinalizer *databaseRegionChangeFinalizer
 
 		// Now that we've ascertained that the enum values can be removed, we can
 		// actually go about modifying the type descriptor.
@@ -365,23 +362,13 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// REGIONAL BY ROW tables must be updated to reflect the new region values
 			// available.
 			if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-				immut, err := descsCol.GetImmutableTypeByID(ctx, txn, t.typeID, tree.ObjectLookupFlags{})
-				if err != nil {
-					return err
-				}
 				if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeMultiRegionUpdates; fn != nil {
 					if err := fn(); err != nil {
 						return err
 					}
 				}
-				repartitionedTables, err = performMultiRegionFinalization(
-					ctx,
-					immut,
-					txn,
-					t.execCfg,
-					descsCol,
-				)
-				if err != nil {
+				regionChangeFinalizer = newDatabaseRegionChangeFinalizer(typeDesc.GetParentID(), typeDesc.GetID())
+				if err := regionChangeFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
 					return err
 				}
 			}
@@ -397,17 +384,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 		// If any tables were repartitioned, make sure their leases are updated as
 		// well.
-		for _, tbID := range repartitionedTables {
-			if err := WaitToUpdateLeases(ctx, leaseMgr, tbID); err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					// Swallow.
-					log.Infof(ctx,
-						"could not find table %d to be repartitioned when adding/removing regions on "+
-							"enum %d, assuming it was dropped and moving on",
-						tbID,
-						t.typeID,
-					)
-				}
+		if regionChangeFinalizer != nil {
+			if err := regionChangeFinalizer.waitToUpdateLeases(ctx, leaseMgr); err != nil {
 				return err
 			}
 		}
@@ -429,178 +407,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// performMultiRegionFinalization updates the zone configurations on the
-// database and re-partitions all REGIONAL BY ROW tables after REGION ADD/DROP
-// has completed. A list of re-partitioned tables, if any, is returned.
-func performMultiRegionFinalization(
-	ctx context.Context,
-	typeDesc catalog.TypeDescriptor,
-	txn *kv.Txn,
-	execCfg *ExecutorConfig,
-	descsCol *descs.Collection,
-) ([]descpb.ID, error) {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.GetParentID(), descsCol)
-	if err != nil {
-		return nil, err
-	}
-	// Once the region promotion/demotion is complete, we update the
-	// zone configuration on the database.
-	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		ctx,
-		typeDesc.GetParentID(),
-		regionConfig,
-		txn,
-		execCfg,
-	); err != nil {
-		return nil, err
-	}
-
-	return repartitionRegionalByRowTables(ctx, typeDesc, txn, execCfg, descsCol, regionConfig)
-}
-
-// repartitionRegionalByRowTables takes a multi-region enum and re-partitions
-// all REGIONAL BY ROW tables in the enclosing database such that there is a
-// partition and corresponding zone configuration for all PUBLIC enum members
-// (regions).
-func repartitionRegionalByRowTables(
-	ctx context.Context,
-	typeDesc catalog.TypeDescriptor,
-	txn *kv.Txn,
-	execCfg *ExecutorConfig,
-	descsCol *descs.Collection,
-	regionConfig multiregion.RegionConfig,
-) ([]descpb.ID, error) {
-	var repartitionedTableIDs []descpb.ID
-	if typeDesc.GetKind() != descpb.TypeDescriptor_MULTIREGION_ENUM {
-		return repartitionedTableIDs, errors.AssertionFailedf(
-			"expected multi-region enum, but found type descriptor of kind: %v", typeDesc.GetKind(),
-		)
-	}
-	p, cleanup := NewInternalPlanner(
-		"repartition-regional-by-row-tables",
-		txn,
-		security.RootUserName(),
-		&MemoryMetrics{},
-		execCfg,
-		sessiondatapb.SessionData{},
-		WithDescCollection(descsCol),
-	)
-	defer cleanup()
-	localPlanner := p.(*planner)
-
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx, txn, typeDesc.GetParentID(), tree.DatabaseLookupFlags{
-			Required: true,
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	b := txn.NewBatch()
-	err = localPlanner.forEachMutableTableInDatabase(ctx, dbDesc,
-		func(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-			if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
-				// We only need to re-partition REGIONAL BY ROW tables. Even then, we
-				// don't need to (can't) repartition a REGIONAL BY ROW table if it has
-				// been dropped.
-				return nil
-			}
-
-			colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
-			if err != nil {
-				return err
-			}
-			partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
-
-			// oldPartitioningDescs saves the old partitioning descriptors for each
-			// index that is repartitioned. This is later used to remove zone
-			// configurations from any partitions that are removed.
-			oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
-
-			// Update the partitioning on all indexes of the table that aren't being
-			// dropped.
-			for _, index := range tableDesc.NonDropIndexes() {
-				newIdx, err := CreatePartitioning(
-					ctx,
-					localPlanner.extendedEvalCtx.Settings,
-					localPlanner.EvalContext(),
-					tableDesc,
-					*index.IndexDesc(),
-					partitionAllBy,
-					nil,  /* allowedNewColumnName*/
-					true, /* allowImplicitPartitioning */
-				)
-				if err != nil {
-					return err
-				}
-
-				oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
-
-				// Update the index descriptor proto's partitioning.
-				index.IndexDesc().Partitioning = newIdx.Partitioning
-			}
-
-			// Remove zone configurations that applied to partitions that were removed
-			// in the previous step. This requires all indexes to have been
-			// repartitioned such that there is no partitioning on the removed enum
-			// value. This is because `deleteRemovedPartitionZoneConfigs` generates
-			// subzone spans for the entire table (all indexes) downstream for each
-			// index. Spans can only be generated if partitioning values are present on
-			// the type descriptor (removed enum values obviously aren't), so we must
-			// remove the partition from all indexes before trying to delete zone
-			// configurations.
-			for _, index := range tableDesc.NonDropIndexes() {
-				oldPartitioning := oldPartitioningDescs[index.GetID()]
-
-				// Remove zone configurations that reference partition values we removed
-				// in the previous step.
-				if err = deleteRemovedPartitionZoneConfigs(
-					ctx,
-					txn,
-					tableDesc,
-					index.IndexDesc(),
-					&oldPartitioning,
-					&index.IndexDesc().Partitioning,
-					execCfg,
-				); err != nil {
-					return err
-				}
-			}
-
-			// Update the zone configurations now that the partition's been added.
-			regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.GetParentID(), descsCol)
-			if err != nil {
-				return err
-			}
-			if err := ApplyZoneConfigForMultiRegionTable(
-				ctx,
-				txn,
-				localPlanner.ExecCfg(),
-				regionConfig,
-				tableDesc,
-				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
-			); err != nil {
-				return err
-			}
-
-			if err := localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
-				return err
-			}
-
-			repartitionedTableIDs = append(repartitionedTableIDs, tableDesc.GetID())
-			return nil
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	if err := txn.Run(ctx, b); err != nil {
-		return nil, err
-	}
-
-	return repartitionedTableIDs, nil
 }
 
 // isTransitioningInCurrentJob returns true if the given member is either being
@@ -641,13 +447,13 @@ func applyFilterOnEnumMembers(
 // 2. If an enum value was being removed as part of this txn, we promote
 // it back to writable.
 func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
+	var regionChangeFinalizer *databaseRegionChangeFinalizer
 	// Cleanup:
 	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
 		if err != nil {
 			return err
 		}
-		b := txn.NewBatch()
 		// No cleanup required.
 		if !enumHasNonPublic(typeDesc) {
 			return nil
@@ -668,12 +474,19 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 			return t.isTransitioningInCurrentJob(member) && enumMemberIsAdding(member)
 		})
 
-		if err := descsCol.WriteDescToBatch(
-			ctx, true /* kvTrace */, typeDesc, b,
-		); err != nil {
+		if err := descsCol.WriteDesc(ctx, true /* kvTrace */, typeDesc, txn); err != nil {
 			return err
 		}
-		return txn.Run(ctx, b)
+
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			regionChangeFinalizer = newDatabaseRegionChangeFinalizer(typeDesc.GetParentID(), typeDesc.GetID())
+
+			if err := regionChangeFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 	if err := descs.Txn(ctx, t.execCfg.Settings, t.execCfg.LeaseManager, t.execCfg.InternalExecutor,
 		t.execCfg.DB, cleanup); err != nil {
@@ -687,6 +500,13 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		}
 		return err
 	}
+
+	if regionChangeFinalizer != nil {
+		if err := regionChangeFinalizer.waitToUpdateLeases(ctx, t.execCfg.LeaseManager); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
