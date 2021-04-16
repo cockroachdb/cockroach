@@ -218,6 +218,17 @@ func TestExternal(t *testing.T) {
 	)
 }
 
+func TestPlaceholderFastPath(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	runDataDrivenTest(
+		t,
+		"testdata/placeholder-fast-path",
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
+	)
+}
+
 // runDataDrivenTest runs data-driven testcases of the form
 //   <command>
 //   <SQL statement>
