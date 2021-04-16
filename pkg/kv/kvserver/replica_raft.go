@@ -1236,8 +1236,12 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		if !ok {
 			destReplDesc = roachpb.ReplicaDescriptor{ReplicaID: roachpb.ReplicaID(msg.To)}
 		}
-		log.Infof(ctx, "RaftSnap requested by %s", &destReplDesc)
-		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
+		if destReplDesc.GetType() != roachpb.LEARNER {
+			log.Infof(ctx, "RaftSnap requested by %s", &destReplDesc)
+			r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
+		} else {
+			log.Infof(ctx, "RaftSnap for learner suppressed %s", &destReplDesc)
+		}
 		return
 	}
 
