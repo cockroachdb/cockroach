@@ -620,11 +620,28 @@ func (tc *TestCluster) addReplica(
 		return roachpb.RangeDescriptor{}, err
 	}
 
-	if err := tc.waitForNewReplicas(startKey, false /* waitForVoter */, targets...); err != nil {
+	wait := typ == roachpb.ADD_VOTER && tc.shouldWaitForVoter(targets)
+	if err := tc.waitForNewReplicas(startKey, wait, targets...); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 
 	return rangeDesc, nil
+}
+
+// shouldWaitForVoter determines whether addReplica should wait when adding the
+// specified voters until the respective replicas become VOTER_FULL. We
+// generally want to wait, except when testing knobs would make us wait in vain.
+func (tc *TestCluster) shouldWaitForVoter(targets []roachpb.ReplicationTarget) bool {
+	for _, s := range tc.serverArgs {
+		sk := s.Knobs.Store.(*kvserver.StoreTestingKnobs)
+		if fn := sk.VoterAddStopAfterJointConfig; fn != nil && fn() {
+			return false
+		}
+		if fn := sk.VoterAddStopAfterLearnerSnapshot; fn != nil && fn(targets) {
+			return false
+		}
+	}
+	return true
 }
 
 // AddVoters is part of TestClusterInterface.
