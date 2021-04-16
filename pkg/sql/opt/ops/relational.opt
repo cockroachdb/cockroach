@@ -94,6 +94,21 @@ define ScanPrivate {
     PartitionConstrainedScan bool
 }
 
+# PlaceholderScan is a special variant of Scan. It scans exactly one span of a
+# non-inverted index, and the span has the same start and end key. The values
+# for the span key are child scalar operators which are either constants or
+# placeholders. This operator evaluates the placeholders at execbuild time.
+#
+# PlaceholderScan cannot have a Constraint or InvertedConstraint.
+[Relational]
+define PlaceholderScan {
+    # Span contains the values for a constraint span key; they map 1-1 to a
+    # prefix of the index columns. They are either constant values or
+    # placeholders.
+    Span ScalarListExpr
+    _ ScanPrivate
+}
+
 # SequenceSelect represents a read from a sequence as a data source. It always returns
 # three columns, last_value, log_cnt, and is_called, with a single row. last_value is
 # the most recent value returned from the sequence and log_cnt and is_called are

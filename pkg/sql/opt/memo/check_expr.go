@@ -40,7 +40,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		// If the expression was added to an existing group, cross-check its
 		// properties against the properties of the group. Skip this check if the
 		// operator is known to not have code for building logical props.
-		if t != t.FirstExpr() && t.Op() != opt.MergeJoinOp {
+		if t != t.FirstExpr() && t.Op() != opt.MergeJoinOp && t.Op() != opt.PlaceholderScanOp {
 			var relProps props.Relational
 			// Don't build stats when verifying logical props - unintentionally
 			// building stats for non-normalized expressions could add extra colStats
