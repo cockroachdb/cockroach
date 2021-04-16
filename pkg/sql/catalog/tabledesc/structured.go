@@ -2053,31 +2053,6 @@ func (desc *wrapper) MakePublic() catalog.TableDescriptor {
 	return table
 }
 
-// ColumnNeedsBackfill returns true if adding or dropping (according to
-// the direction) the given column requires backfill.
-func ColumnNeedsBackfill(
-	direction descpb.DescriptorMutation_Direction, desc *descpb.ColumnDescriptor,
-) bool {
-	if desc.Virtual {
-		// Virtual columns are not stored in the primary index, so they do not need
-		// backfill.
-		return false
-	}
-	if direction == descpb.DescriptorMutation_DROP {
-		// In all other cases, DROP requires backfill.
-		return true
-	}
-	// ADD requires backfill for:
-	//  - columns with non-NULL default value
-	//  - computed columns
-	//  - non-nullable columns (note: if a non-nullable column doesn't have a
-	//    default value, the backfill will fail unless the table is empty).
-	if desc.HasNullDefault() {
-		return false
-	}
-	return desc.HasDefault() || !desc.Nullable || desc.IsComputed()
-}
-
 // HasPrimaryKey returns true if the table has a primary key.
 func (desc *wrapper) HasPrimaryKey() bool {
 	return !desc.PrimaryIndex.Disabled
@@ -2086,14 +2061,11 @@ func (desc *wrapper) HasPrimaryKey() bool {
 // HasColumnBackfillMutation returns whether the table has any queued column
 // mutations that require a backfill.
 func (desc *wrapper) HasColumnBackfillMutation() bool {
-	for _, m := range desc.Mutations {
-		col := m.GetColumn()
-		if col == nil {
-			// Index backfills don't affect changefeeds.
-			continue
-		}
-		if ColumnNeedsBackfill(m.Direction, col) {
-			return true
+	for _, m := range desc.AllMutations() {
+		if col := m.AsColumn(); col != nil {
+			if catalog.ColumnNeedsBackfill(col) {
+				return true
+			}
 		}
 	}
 	return false

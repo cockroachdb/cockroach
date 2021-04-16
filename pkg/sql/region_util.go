@@ -1481,12 +1481,11 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	regionalByRowNewIndexes := make(map[uint32]struct{})
 	for _, mut := range desc.AllMutations() {
 		if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
-			swapDesc := pkSwap.PrimaryKeySwapDesc()
-			if swapDesc.LocalityConfigSwap != nil {
-				for _, id := range swapDesc.NewIndexes {
+			if pkSwap.HasLocalityConfig() {
+				_ = pkSwap.ForEachNewIndexIDs(func(id descpb.IndexID) error {
 					regionalByRowNewIndexes[uint32(id)] = struct{}{}
-				}
-				regionalByRowNewIndexes[uint32(swapDesc.NewPrimaryIndexId)] = struct{}{}
+					return nil
+				})
 			}
 			// There can only be one pkSwap at a time, so break now.
 			break
