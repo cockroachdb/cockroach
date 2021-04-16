@@ -18,13 +18,44 @@ var hibernateBlocklists = blocklistsForVersion{
 	{"v19.2", "hibernateBlockList19_2", hibernateBlockList19_2, "", nil},
 	{"v20.1", "hibernateBlockList20_1", hibernateBlockList20_1, "", nil},
 	{"v20.2", "hibernateBlockList20_2", hibernateBlockList20_2, "", nil},
-	{"v21.1", "hibernateBlockList21_1", hibernateBlockList21_1, "", nil},
+	{"v21.1", "hibernateBlockList21_1", hibernateBlockList21_1, "", hibernateIgnoreList21_1},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
 var hibernateBlockList21_1 = blocklist{}
+
+var hibernateIgnoreList21_1 = blocklist{
+	"org.hibernate.userguide.hql.HQLTest.test_collection_index_operator_example_1":           "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_abs_function_example":                      "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_aggregate_functions_example_1":             "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_aggregate_functions_example_2":             "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_aggregate_functions_example_3":             "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_all_subquery_comparison_qualifier_example": "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_basic_usage_example":                   "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_example":                               "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_list_example":                          "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_named_query_example":                   "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_parameter_example":                     "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_parameter_inferred_type_example":       "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_parameter_short_form_example":          "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_positional_parameter_example":          "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_scroll_open_example":                   "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_scroll_projection_example":             "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_stream_example":                        "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_stream_projection_example":             "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_api_unique_result_example":                 "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_between_predicate_example_1":               "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_between_predicate_example_3":               "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_between_predicate_example_4":               "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_cast_function_example":                     "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_collection_expressions_example_1":          "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_collection_expressions_example_10":         "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_collection_expressions_example_2":          "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_collection_expressions_example_3":          "unknown",
+	"org.hibernate.userguide.hql.HQLTest.test_hql_collection_expressions_example_4":          "unknown",
+}
 
 var hibernateBlockList20_2 = blocklist{}
 
