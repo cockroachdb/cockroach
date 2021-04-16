@@ -1232,6 +1232,11 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
+		destReplDesc, ok := r.Desc().GetReplicaDescriptorByID(roachpb.ReplicaID(msg.To))
+		if !ok {
+			destReplDesc = roachpb.ReplicaDescriptor{ReplicaID: roachpb.ReplicaID(msg.To)}
+		}
+		log.Infof(ctx, "RaftSnap requested by %s", &destReplDesc)
 		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
 		return
 	}
