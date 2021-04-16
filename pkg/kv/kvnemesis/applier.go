@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -86,8 +87,19 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		err := db.AdminTransferLease(ctx, o.Key, o.Target)
 		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
+		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
+		// epochs of the same transaction to avoid waiting while holding locks.
+		retryOnAbort := retry.StartWithCtx(ctx, retry.Options{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     250 * time.Millisecond,
+		})
 		var savedTxn *kv.Txn
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if savedTxn != nil && txn.TestingCloneTxn().Epoch == 0 {
+				// If the txn's current epoch is 0 and we've run at least one prior
+				// iteration, we were just aborted.
+				retryOnAbort.Next()
+			}
 			savedTxn = txn
 			for i := range o.Ops {
 				op := &o.Ops[i]
@@ -116,7 +128,7 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		})
 		o.Result = resultError(ctx, txnErr)
 		if txnErr == nil {
-			o.Txn = savedTxn.Sender().TestingCloneTxn()
+			o.Txn = savedTxn.TestingCloneTxn()
 		}
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, o, o))
