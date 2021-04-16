@@ -304,3 +304,17 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 
 	return regionConfig, nil
 }
+
+// GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
+func (p *planner) GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error) {
+	desc, err := p.Descriptors().GetImmutableTableByID(
+		ctx,
+		p.txn,
+		descpb.ID(id),
+		tree.ObjectLookupFlagsWithRequired(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
