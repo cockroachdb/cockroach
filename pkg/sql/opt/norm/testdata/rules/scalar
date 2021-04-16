@@ -239,7 +239,7 @@ project
  ├── scan a
  │    └── columns: s:4
  └── projections
-      └── s:4 NOT IN ('foo',) [as=r:7, outer=(4)]
+      └── s:4 != 'foo' [as=r:7, outer=(4)]
 
 # Don't sort, since the list is not constant.
 norm expect-not=NormalizeInConst
@@ -274,6 +274,111 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (true IN (NULL, NULL, ('201.249.149.90/18' & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61') << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82'),)
+
+# --------------------------------------------------
+# SimplifyInSingleElement
+# --------------------------------------------------
+norm expect=SimplifyInSingleElement
+SELECT * FROM a WHERE k IN (1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect=SimplifyInSingleElement
+SELECT 1 IN (k) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 = 1 [as="?column?":7, outer=(1)]
+
+norm expect=SimplifyInSingleElement
+SELECT k+1 IN (i*2) FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── (k:1 + 1) = (i:2 * 2) [as="?column?":7, outer=(1,2), immutable]
+
+norm expect-not=SimplifyInSingleElement
+SELECT k IN (1,2) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 IN (1, 2) [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# SimplifyNotInSingleElement
+# --------------------------------------------------
+norm expect=SimplifyNotInSingleElement
+SELECT * FROM a WHERE k NOT IN (1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 != 1 [outer=(1), constraints=(/1: (/NULL - /0] [/2 - ]; tight)]
+
+norm expect=SimplifyNotInSingleElement
+SELECT 1 NOT IN (k) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 != 1 [as="?column?":7, outer=(1)]
+
+norm expect=SimplifyNotInSingleElement
+SELECT k+1 NOT IN (i*2) FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── (k:1 + 1) != (i:2 * 2) [as="?column?":7, outer=(1,2), immutable]
+
+norm expect-not=SimplifyNotInSingleElement
+SELECT k NOT IN (1,2) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 NOT IN (1, 2) [as="?column?":7, outer=(1)]
 
 # --------------------------------------------------
 # EliminateExistsZeroRows
