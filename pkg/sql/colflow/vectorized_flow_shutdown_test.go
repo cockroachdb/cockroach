@@ -234,8 +234,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}{}
 				idToClosed.mapping = make(map[int]bool)
 				runOutboxInbox := func(
-					ctx context.Context,
-					cancelFn context.CancelFunc,
+					outboxCtx context.Context,
+					flowCtxCancel context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
 					outboxInput colexecbase.Operator,
 					inbox *colrpc.Inbox,
@@ -246,7 +246,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
-						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
+						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
 						[]colexec.Closer{callbackCloser{closeCb: func() error {
 							idToClosed.Lock()
 							idToClosed.mapping[id] = true
@@ -259,12 +259,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					wg.Add(1)
 					go func(id int) {
 						outbox.Run(
-							ctx,
+							outboxCtx,
 							dialer,
 							execinfra.StaticNodeID,
 							flowID,
 							execinfrapb.StreamID(id),
-							cancelFn,
+							flowCtxCancel,
 							0, /* connectionTimeout */
 						)
 						wg.Done()

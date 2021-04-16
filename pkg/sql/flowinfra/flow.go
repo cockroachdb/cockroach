@@ -36,7 +36,7 @@ const (
 
 // Startable is any component that can be started (a router or an outbox).
 type Startable interface {
-	Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc)
+	Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc)
 }
 
 // StartableFn is an adapter when a customer function (i.e. a custom goroutine)
@@ -44,8 +44,10 @@ type Startable interface {
 type StartableFn func(context.Context, *sync.WaitGroup, context.CancelFunc)
 
 // Start is a part of the Startable interface.
-func (f StartableFn) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
-	f(ctx, wg, ctxCancel)
+func (f StartableFn) Start(
+	ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc,
+) {
+	f(ctx, wg, flowCtxCancel)
 }
 
 // FuseOpt specifies options for processor fusing at Flow.Setup() time.
