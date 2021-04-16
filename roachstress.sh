@@ -24,5 +24,5 @@ if [ ! -f "${cr}" ]; then
 fi
 
 TEST=restore2TB/nodes=10
-time caffeinate -- "${rt}" run "${TEST}" --port 8081 --debug --count 1 --cpu-quota 1200 --roachprod "${rp}" --workload "${wl}" --cockroach "${cr}" --artifacts "${a}"
+time caffeinate -- "${rt}" run "${TEST}" --port 8081 --count 1 --cpu-quota 1200 --roachprod "${rp}" --workload "${wl}" --cockroach "${cr}" --artifacts "${a}"
 
