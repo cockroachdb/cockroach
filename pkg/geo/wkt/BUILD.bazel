@@ -4,6 +4,9 @@ go_library(
     name = "wkt",
     srcs = [
         "lex.go",
+        "lex_errors.go",
+        "lex_stack.go",
+        "lex_types.go",
         "wkt.go",
         ":wkt-generated",  # keep
     ],
