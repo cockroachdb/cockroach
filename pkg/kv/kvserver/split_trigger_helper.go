@@ -127,6 +127,7 @@ func maybeDropMsgApp(
 	// executing all pending split triggers).
 
 	verbose := verboseRaftLoggingEnabled()
+	verbose = verbose || ticks > maxDelaySplitTriggerTicks/10
 
 	// NB: the caller is likely holding r.raftMu, but that's OK according to
 	// the lock order. We're not allowed to hold r.mu, but we don't.
@@ -137,6 +138,9 @@ func maybeDropMsgApp(
 
 	if verbose {
 		log.Infof(ctx, "start key is contained in replica %v", lhsRepl)
+	}
+	if verbose {
+		log.Infof(ctx, "dropping MsgApp at index %d to wait for split trigger", msg.Index)
 	}
 	if ticks > maxDelaySplitTriggerTicks {
 		// This is an escape hatch in case there are other scenarios (missed in
@@ -149,9 +153,6 @@ func maybeDropMsgApp(
 				"but allowing due to %d (>%d) ticks",
 			ticks, maxDelaySplitTriggerTicks)
 		return false
-	}
-	if verbose {
-		log.Infof(ctx, "dropping MsgApp at index %d to wait for split trigger", msg.Index)
 	}
 	return true
 }
