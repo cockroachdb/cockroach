@@ -16,11 +16,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"golang.org/x/time/rate"
@@ -133,6 +136,13 @@ func (ss *diskSideloadStorage) Dir() string {
 
 // Put implements SideloadStorage.
 func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
+	defer func(tBegin time.Time) {
+		if dur := timeutil.Since(tBegin); dur > 10*time.Millisecond {
+			log.Infof(ctx, "ingesting idx=%d (%s) took %.2fs",
+				index, humanizeutil.IBytes(int64(len(contents))), dur.Seconds(),
+			)
+		}
+	}(timeutil.Now())
 	filename := ss.filename(ctx, index, term)
 	// There's a chance the whole path is missing (for example after Clear()),
 	// in which case handle that transparently.

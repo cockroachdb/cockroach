@@ -72,7 +72,7 @@ const (
 	splitTxnName         = "split"
 	mergeTxnName         = "merge"
 
-	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
+	defaultReplicaRaftMuWarnThreshold = 50 * time.Millisecond
 )
 
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -89,7 +90,7 @@ func (r *Replica) Metrics(
 }
 
 func calcReplicaMetrics(
-	_ context.Context,
+	ctx context.Context,
 	_ hlc.Timestamp,
 	raftCfg *base.RaftConfig,
 	zone *zonepb.ZoneConfig,
@@ -127,6 +128,7 @@ func calcReplicaMetrics(
 	// behind.
 	if m.Leader {
 		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
+		log.Infof(ctx, "TBG behindCount=%d raftStatus=%+v", m.BehindCount, raftStatus.Progress)
 	}
 
 	m.LatchInfoLocal = latchInfoLocal
