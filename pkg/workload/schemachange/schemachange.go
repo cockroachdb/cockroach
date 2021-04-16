@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	pgxv3 "github.com/jackc/pgx"
 	"io"
 	"math/rand"
 	"os"
@@ -30,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 )
 
@@ -153,12 +154,12 @@ func (s *schemaChange) Ops(
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: s.concurrency * 2, //TODO(spaskob): pick a sensible default.
 	}
-	pool, err := workload.NewMultiConnPool(cfg, urls...)
+	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
-	seqNum, err := s.initSeqNum(pool)
+	seqNum, err := s.initSeqNum(ctx, pool)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
@@ -227,7 +228,10 @@ func (s *schemaChange) Ops(
 // TODO(spaskob): Do we need to protect from workloads running concurrently.
 // It's not obvious how the workloads will behave when accessing the same
 // cluster.
-func (s *schemaChange) initSeqNum(pool *workload.MultiConnPool) (*int64, error) {
+func (s *schemaChange) initSeqNum(
+	ctx context.Context,
+	pool *workload.MultiConnPool,
+) (*int64, error) {
 	seqNum := new(int64)
 
 	const q = `
@@ -247,7 +251,7 @@ SELECT max(regexp_extract(name, '[0-9]+$')::INT8)
     OR name ~ '^(col|index)[0-9]+_[0-9]+$';
 `
 	var max gosql.NullInt64
-	if err := pool.Get().QueryRow(q).Scan(&max); err != nil {
+	if err := pool.Get().QueryRow(ctx, q).Scan(&max); err != nil {
 		return nil, err
 	}
 	if max.Valid {
@@ -286,7 +290,7 @@ type LogEntry struct {
 	TxStatus TxStatus `json:"txStatus"`
 }
 
-// TxStatus mirrors pgx.TxStatus for printing.
+// TxStatus mirrors pgxv3.TxStatus for printing.
 type TxStatus int
 
 //go:generate stringer -type TxStatus
@@ -301,12 +305,12 @@ const (
 
 // Workaround to do compile-time asserts that values are equal.
 const (
-	_ = uint((TxStatusInFailure - pgx.TxStatusInFailure) * (pgx.TxStatusInFailure - TxStatusInFailure))
-	_ = uint((TxStatusRollbackFailure - pgx.TxStatusRollbackFailure) * (pgx.TxStatusRollbackFailure - TxStatusRollbackFailure))
-	_ = uint((TxStatusCommitFailure - pgx.TxStatusCommitFailure) * (pgx.TxStatusCommitFailure - TxStatusCommitFailure))
-	_ = uint((TxStatusInProgress - pgx.TxStatusInProgress) * (pgx.TxStatusInProgress - TxStatusInProgress))
-	_ = uint((TxStatusCommitSuccess - pgx.TxStatusCommitSuccess) * (pgx.TxStatusCommitSuccess - TxStatusCommitSuccess))
-	_ = uint((TxStatusRollbackSuccess - pgx.TxStatusRollbackSuccess) * (pgx.TxStatusRollbackSuccess - TxStatusRollbackSuccess))
+	_ = uint((TxStatusInFailure - pgxv3.TxStatusInFailure) * (pgxv3.TxStatusInFailure - TxStatusInFailure))
+	_ = uint((TxStatusRollbackFailure - pgxv3.TxStatusRollbackFailure) * (pgxv3.TxStatusRollbackFailure - TxStatusRollbackFailure))
+	_ = uint((TxStatusCommitFailure - pgxv3.TxStatusCommitFailure) * (pgxv3.TxStatusCommitFailure - TxStatusCommitFailure))
+	_ = uint((TxStatusInProgress - pgxv3.TxStatusInProgress) * (pgxv3.TxStatusInProgress - TxStatusInProgress))
+	_ = uint((TxStatusCommitSuccess - pgxv3.TxStatusCommitSuccess) * (pgxv3.TxStatusCommitSuccess - TxStatusCommitSuccess))
+	_ = uint((TxStatusRollbackSuccess - pgxv3.TxStatusRollbackSuccess) * (pgxv3.TxStatusRollbackSuccess - TxStatusRollbackSuccess))
 )
 
 // MarshalJSON encodes a TxStatus to a string.
@@ -333,7 +337,7 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 	w.hists.Get(bin.String()).Record(elapsed)
 }
 
-func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
+func (w *schemaChangeWorker) runInTxn(tx pgx.Tx) error {
 	w.logger.startLog()
 	w.logger.writeLog("BEGIN")
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
@@ -352,7 +356,7 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 
 		op, err := w.opGen.randOp(tx)
 
-		if pgErr := (pgx.PgError{}); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+		if pgErr := (pgxv3.PgError{}); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
@@ -366,9 +370,9 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 		if !w.dryRun {
 			start := timeutil.Now()
 
-			if _, err = tx.Exec(op); err != nil {
+			if _, err = tx.Exec(context.TODO(), op); err != nil {
 				// If the error not an instance of pgx.PgError, then it is unexpected.
-				pgErr := pgx.PgError{}
+				pgErr := pgxv3.PgError{}
 				if !errors.As(err, &pgErr) {
 					return errors.Mark(
 						errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error"),
@@ -411,8 +415,8 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 	return nil
 }
 
-func (w *schemaChangeWorker) run(_ context.Context) error {
-	tx, err := w.pool.Get().Begin()
+func (w *schemaChangeWorker) run(ctx context.Context) error {
+	tx, err := w.pool.Get().Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
@@ -428,7 +432,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
 		// error with a rollback error if necessary.
-		if rbkErr := tx.Rollback(); rbkErr != nil {
+		if rbkErr := tx.Rollback(ctx); rbkErr != nil {
 			err = errors.Mark(
 				errors.Wrap(rbkErr, "***UNEXPECTED ERROR DURING ROLLBACK;"),
 				errRunInTxnFatalSentinel,
@@ -451,9 +455,9 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	}
 
 	w.logger.writeLog("COMMIT")
-	if err = tx.Commit(); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		// If the error not an instance of pgx.PgError, then it is unexpected.
-		pgErr := pgx.PgError{}
+		pgErr := pgxv3.PgError{}
 		if !errors.As(err, &pgErr) {
 			err = errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received a non pg error"),
@@ -585,7 +589,7 @@ func (l *logger) addExpectedErrors(execErrors errorCodeSet, commitErrors errorCo
 
 // flushLog outputs the currentLogEntry of the schemaChangeWorker.
 // It is a noop if l.verbose < 0.
-func (l *logger) flushLog(tx *pgx.Tx, message string) {
+func (l *logger) flushLog(tx pgx.Tx, message string) {
 	if l.verbose < 1 {
 		return
 	}
@@ -595,7 +599,7 @@ func (l *logger) flushLog(tx *pgx.Tx, message string) {
 
 // flushLogAndLock prints the currentLogEntry of the schemaChangeWorker and does not release
 // the lock for w.currentLogEntry upon returning. The lock will not be acquired if l.verbose < 1.
-func (l *logger) flushLogAndLock(tx *pgx.Tx, message string, stdout bool) {
+func (l *logger) flushLogAndLock(tx pgx.Tx, message string, stdout bool) {
 	if l.verbose < 1 {
 		return
 	}
@@ -608,9 +612,6 @@ func (l *logger) flushLogAndLock(tx *pgx.Tx, message string, stdout bool) {
 
 	if message != "" {
 		l.currentLogEntry.mu.entry.Message = message
-	}
-	if tx != nil {
-		l.currentLogEntry.mu.entry.TxStatus = TxStatus(tx.Status())
 	}
 	jsonBytes, err := json.MarshalIndent(l.currentLogEntry.mu.entry, "", " ")
 	if err != nil {
