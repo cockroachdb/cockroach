@@ -484,7 +484,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// Create a new primary index, identical to the existing one except for its
 	// ID and name.
 	idxID = b.nextIndexID(table)
-	newIdx := protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)
+	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
 	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
 		"new_primary_key",
 		func(name string) bool {
@@ -513,7 +513,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 
 	b.addNode(scpb.Target_ADD, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
-		Index:               *newIdx,
+		Index:               newIdx,
 		OtherPrimaryIndexID: table.GetPrimaryIndexID(),
 		StoreColumnIDs:      append(storeColIDs, colID),
 		StoreColumnNames:    append(storeColNames, colName),
@@ -522,7 +522,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// Drop the existing primary index.
 	b.addNode(scpb.Target_DROP, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
-		Index:               *(protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)),
+		Index:               table.GetPrimaryIndex().IndexDescDeepCopy(),
 		OtherPrimaryIndexID: newIdx.ID,
 		StoreColumnIDs:      storeColIDs,
 		StoreColumnNames:    storeColNames,

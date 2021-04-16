@@ -29,11 +29,11 @@ var _ checkOperation = &physicalCheckOperation{}
 type physicalCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc catalog.TableDescriptor
-	indexDesc *descpb.IndexDescriptor
+	index     catalog.Index
 
 	// columns is a list of the columns returned in the query result
 	// tree.Datums.
-	columns []*descpb.ColumnDescriptor
+	columns []catalog.Column
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -50,12 +50,12 @@ type physicalCheckRun struct {
 }
 
 func newPhysicalCheckOperation(
-	tableName *tree.TableName, tableDesc catalog.TableDescriptor, indexDesc *descpb.IndexDescriptor,
+	tableName *tree.TableName, tableDesc catalog.TableDescriptor, index catalog.Index,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,
 		tableDesc: tableDesc,
-		indexDesc: indexDesc,
+		index:     index,
 	}
 }
 
@@ -67,28 +67,31 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	// Collect all of the columns, their types, and their IDs.
 	var columnIDs []tree.ColumnID
 	colIDToIdx := catalog.ColumnIDToOrdinalMap(o.tableDesc.PublicColumns())
-	columns := make([]*descpb.ColumnDescriptor, len(columnIDs))
+	columns := make([]catalog.Column, len(columnIDs))
 
 	// Collect all of the columns being scanned.
-	if o.indexDesc.ID == o.tableDesc.GetPrimaryIndexID() {
+	if o.index.GetID() == o.tableDesc.GetPrimaryIndexID() {
 		for _, c := range o.tableDesc.PublicColumns() {
 			columnIDs = append(columnIDs, tree.ColumnID(c.GetID()))
 		}
 	} else {
-		for _, id := range o.indexDesc.ColumnIDs {
+		for i := 0; i < o.index.NumColumns(); i++ {
+			id := o.index.GetColumnID(i)
 			columnIDs = append(columnIDs, tree.ColumnID(id))
 		}
-		for _, id := range o.indexDesc.ExtraColumnIDs {
+		for i := 0; i < o.index.NumExtraColumns(); i++ {
+			id := o.index.GetExtraColumnID(i)
 			columnIDs = append(columnIDs, tree.ColumnID(id))
 		}
-		for _, id := range o.indexDesc.StoreColumnIDs {
+		for i := 0; i < o.index.NumStoredColumns(); i++ {
+			id := o.index.GetStoredColumnID(i)
 			columnIDs = append(columnIDs, tree.ColumnID(id))
 		}
 	}
 
 	for i := range columnIDs {
 		idx := colIDToIdx.GetDefault(descpb.ColumnID(columnIDs[i]))
-		columns = append(columns, o.tableDesc.PublicColumns()[idx].ColumnDesc())
+		columns = append(columns, o.tableDesc.PublicColumns()[idx])
 	}
 
 	// Find the row indexes for all of the primary index columns.
@@ -98,7 +101,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 
 	indexFlags := &tree.IndexFlags{
-		IndexID:     tree.IndexID(o.indexDesc.ID),
+		IndexID:     tree.IndexID(o.index.GetID()),
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
@@ -108,7 +111,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 	scan.index = scan.specifiedIndex
-	sb := span.MakeBuilder(params.EvalContext(), params.ExecCfg().Codec, o.tableDesc, o.indexDesc)
+	sb := span.MakeBuilder(params.EvalContext(), params.ExecCfg().Codec, o.tableDesc, o.index)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return err

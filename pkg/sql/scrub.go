@@ -284,13 +284,13 @@ func (n *scrubNode) startScrubTable(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc catalog.TableDescriptor, columns []*descpb.ColumnDescriptor,
+	tableDesc catalog.TableDescriptor, columns []catalog.Column,
 ) (primaryColIdxs []int, err error) {
 	for i := 0; i < tableDesc.GetPrimaryIndex().NumColumns(); i++ {
 		colID := tableDesc.GetPrimaryIndex().GetColumnID(i)
 		rowIdx := -1
 		for idx, col := range columns {
-			if col.ID == colID {
+			if col.GetID() == colID {
 				rowIdx = idx
 				break
 			}
@@ -347,7 +347,7 @@ func createPhysicalCheckOperations(
 	tableDesc catalog.TableDescriptor, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	for _, idx := range tableDesc.ActiveIndexes() {
-		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, idx.IndexDesc()))
+		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, idx))
 	}
 	return checks
 }
@@ -371,7 +371,7 @@ func createIndexCheckOperations(
 			results = append(results, newIndexCheckOperation(
 				tableName,
 				tableDesc,
-				idx.IndexDesc(),
+				idx,
 				asOf,
 			))
 		}
@@ -388,7 +388,7 @@ func createIndexCheckOperations(
 			results = append(results, newIndexCheckOperation(
 				tableName,
 				tableDesc,
-				idx.IndexDesc(),
+				idx,
 				asOf,
 			))
 			delete(names, idx.GetName())

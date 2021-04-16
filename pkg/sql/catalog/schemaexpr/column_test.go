@@ -62,7 +62,10 @@ func TestDequalifyColumnRefs(t *testing.T) {
 			source := colinfo.NewSourceInfoForSingleTable(
 				tn, colinfo.ResultColumnsFromColDescs(
 					descpb.ID(1),
-					cols,
+					len(cols),
+					func(i int) *descpb.ColumnDescriptor {
+						return &cols[i]
+					},
 				),
 			)
 

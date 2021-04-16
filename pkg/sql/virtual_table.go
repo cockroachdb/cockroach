@@ -206,7 +206,7 @@ type vTableLookupJoinNode struct {
 	dbName string
 	db     catalog.DatabaseDescriptor
 	table  catalog.TableDescriptor
-	index  *descpb.IndexDescriptor
+	index  catalog.Index
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int

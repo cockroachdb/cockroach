@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -89,7 +90,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 func (p *planner) setupFamilyAndConstraintForShard(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	shardCol *descpb.ColumnDescriptor,
+	shardCol catalog.Column,
 	idxColumns []string,
 	buckets int32,
 ) error {
@@ -99,7 +100,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 	}
 	// Assign shard column to the family of the first column in its index set, and do it
 	// before `AllocateIDs()` assigns it to the primary column family.
-	if err := tableDesc.AddColumnToFamilyMaybeCreate(shardCol.Name, family, false, false); err != nil {
+	if err := tableDesc.AddColumnToFamilyMaybeCreate(shardCol.GetName(), family, false, false); err != nil {
 		return err
 	}
 	// Assign an ID to the newly-added shard column, which is needed for the creation
@@ -108,7 +109,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 		return err
 	}
 
-	ckDef, err := makeShardCheckConstraintDef(tableDesc, int(buckets), shardCol)
+	ckDef, err := makeShardCheckConstraintDef(int(buckets), shardCol)
 	if err != nil {
 		return err
 	}
@@ -319,7 +320,7 @@ func setupShardedIndex(
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
-) (shard *descpb.ColumnDescriptor, newColumns tree.IndexElemList, newColumn bool, err error) {
+) (shard catalog.Column, newColumns tree.IndexElemList, newColumn bool, err error) {
 	if !shardedIndexEnabled {
 		return nil, nil, false, hashShardedIndexesDisabledError
 	}
@@ -338,13 +339,13 @@ func setupShardedIndex(
 		return nil, nil, false, err
 	}
 	shardIdxElem := tree.IndexElem{
-		Column:    tree.Name(shardCol.Name),
+		Column:    tree.Name(shardCol.GetName()),
 		Direction: tree.Ascending,
 	}
 	newColumns = append(tree.IndexElemList{shardIdxElem}, columns...)
 	indexDesc.Sharded = descpb.ShardedDescriptor{
 		IsSharded:    true,
-		Name:         shardCol.Name,
+		Name:         shardCol.GetName(),
 		ShardBuckets: buckets,
 		ColumnNames:  colNames,
 	}
@@ -356,12 +357,12 @@ func setupShardedIndex(
 // buckets.
 func maybeCreateAndAddShardCol(
 	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable bool,
-) (col *descpb.ColumnDescriptor, created bool, err error) {
-	shardCol, err := makeShardColumnDesc(colNames, shardBuckets)
+) (col catalog.Column, created bool, err error) {
+	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {
 		return nil, false, err
 	}
-	existingShardCol, err := desc.FindColumnWithName(tree.Name(shardCol.Name))
+	existingShardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
 	if err == nil && !existingShardCol.Dropped() {
 		// TODO(ajwerner): In what ways is existingShardCol allowed to differ from
 		// the newly made shardCol? Should there be some validation of
@@ -370,9 +371,9 @@ func maybeCreateAndAddShardCol(
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
 			return nil, false, pgerror.Newf(pgcode.DuplicateColumn,
-				"column %s already specified; can't be used for sharding", shardCol.Name)
+				"column %s already specified; can't be used for sharding", shardColDesc.Name)
 		}
-		return existingShardCol.ColumnDesc(), false, nil
+		return existingShardCol, false, nil
 	}
 	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
 	if err != nil && !columnIsUndefined {
@@ -380,13 +381,14 @@ func maybeCreateAndAddShardCol(
 	}
 	if columnIsUndefined || existingShardCol.Dropped() {
 		if isNewTable {
-			desc.AddColumn(shardCol)
+			desc.AddColumn(shardColDesc)
 		} else {
-			desc.AddColumnMutation(shardCol, descpb.DescriptorMutation_ADD)
+			desc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_ADD)
 		}
 		created = true
 	}
-	return shardCol, created, nil
+	shardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
+	return shardCol, created, err
 }
 
 var interleavedTableDeprecationError = errors.WithIssueLink(

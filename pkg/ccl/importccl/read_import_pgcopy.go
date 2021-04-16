@@ -333,7 +333,7 @@ func (p *pgCopyConsumer) FillDatums(
 				col := conv.VisibleCols[i]
 				return newImportRowError(fmt.Errorf(
 					"encountered error %s when attempting to parse %q as %s",
-					err.Error(), col.Name, col.Type.SQLString()), data.String(), rowNum)
+					err.Error(), col.GetName(), col.GetType().SQLString()), data.String(), rowNum)
 			}
 		}
 	}

@@ -74,7 +74,7 @@ type joinReader struct {
 	diskMonitor *mon.BytesMonitor
 
 	desc             catalog.TableDescriptor
-	index            *descpb.IndexDescriptor
+	index            catalog.Index
 	colIdxMap        catalog.TableColMap
 	maintainOrdering bool
 
@@ -220,9 +220,8 @@ func newJoinReader(
 	if indexIdx >= len(jr.desc.ActiveIndexes()) {
 		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	indexI := jr.desc.ActiveIndexes()[indexIdx]
-	jr.index = indexI.IndexDesc()
-	isSecondary = !indexI.Primary()
+	jr.index = jr.desc.ActiveIndexes()[indexIdx]
+	isSecondary = !jr.index.Primary()
 	cols := jr.desc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = jr.desc.DeletableColumns()
@@ -230,7 +229,7 @@ func newJoinReader(
 	jr.colIdxMap = catalog.ColumnIDToOrdinalMap(cols)
 	columnTypes := catalog.ColumnTypes(cols)
 
-	columnIDs, _ := jr.index.FullColumnIDs()
+	columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
 	indexCols := make([]uint32, len(columnIDs))
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
@@ -369,7 +368,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		// Since jr.lookupExpr is set, we need to use multiSpanGenerator, which
 		// supports looking up multiple spans per input row.
 		tableOrdToIndexOrd := util.FastIntMap{}
-		columnIDs, _ := jr.index.FullColumnIDs()
+		columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
 		for i, colID := range columnIDs {
 			tabOrd := jr.colIdxMap.GetDefault(colID)
 			tableOrdToIndexOrd.Set(tabOrd, i)
@@ -439,11 +438,9 @@ func (jr *joinReader) initJoinReaderStrategy(
 }
 
 // getIndexColSet returns a set of all column indices for the given index.
-func getIndexColSet(
-	index *descpb.IndexDescriptor, colIdxMap catalog.TableColMap,
-) (util.FastIntSet, error) {
+func getIndexColSet(index catalog.Index, colIdxMap catalog.TableColMap) (util.FastIntSet, error) {
 	cols := util.MakeFastIntSet()
-	err := index.RunOverAllColumns(func(id descpb.ColumnID) error {
+	err := index.ForEachColumnID(func(id descpb.ColumnID) error {
 		cols.Add(colIdxMap.GetDefault(id))
 		return nil
 	})

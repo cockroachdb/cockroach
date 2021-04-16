@@ -29,7 +29,7 @@ type rowHelper struct {
 
 	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
-	Indexes      []descpb.IndexDescriptor
+	Indexes      []catalog.Index
 	indexEntries []rowenc.IndexEntry
 
 	// Computed during initialization for pretty-printing.
@@ -43,17 +43,17 @@ type rowHelper struct {
 }
 
 func newRowHelper(
-	codec keys.SQLCodec, desc catalog.TableDescriptor, indexes []descpb.IndexDescriptor,
+	codec keys.SQLCodec, desc catalog.TableDescriptor, indexes []catalog.Index,
 ) rowHelper {
 	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex().IndexDesc())
+	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
-		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(&rh.Indexes[i])
+		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
 	}
 
 	return rh
@@ -89,7 +89,7 @@ func (rh *rowHelper) encodePrimaryIndex(
 			rh.TableDesc.GetPrimaryIndexID())
 	}
 	primaryIndexKey, _, err = rowenc.EncodeIndexKey(
-		rh.TableDesc, rh.TableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	return primaryIndexKey, err
 }
 
@@ -117,8 +117,8 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 	rh.indexEntries = rh.indexEntries[:0]
 
 	for i := range rh.Indexes {
-		index := &rh.Indexes[i]
-		if !ignoreIndexes.Contains(int(index.ID)) {
+		index := rh.Indexes[i]
+		if !ignoreIndexes.Contains(int(index.GetID())) {
 			entries, err := rowenc.EncodeSecondaryIndex(rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
 			if err != nil {
 				return nil, err

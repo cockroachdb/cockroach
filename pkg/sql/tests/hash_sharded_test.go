@@ -118,7 +118,8 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 		foundShardColumn := false
-		for _, colID := range foo.IndexDesc().ExtraColumnIDs {
+		for i := 0; i < foo.NumExtraColumns(); i++ {
+			colID := foo.GetExtraColumnID(i)
 			if colID == shardColID {
 				foundShardColumn = true
 				break

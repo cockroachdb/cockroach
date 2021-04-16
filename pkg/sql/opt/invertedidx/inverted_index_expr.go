@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -32,10 +32,11 @@ import (
 // NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr. Currently there
 // is only one possible implementation returned, geoDatumsToInvertedExpr.
 func NewDatumsToInvertedExpr(
-	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, desc *descpb.IndexDescriptor,
+	evalCtx *tree.EvalContext, colTypes []*types.T, expr tree.TypedExpr, idx catalog.Index,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
-	if !geoindex.IsEmptyConfig(&desc.GeoConfig) {
-		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, &desc.GeoConfig)
+	geoConfig := idx.GetGeoConfig()
+	if !geoindex.IsEmptyConfig(&geoConfig) {
+		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, &geoConfig)
 	}
 
 	return NewJSONOrArrayDatumsToInvertedExpr(evalCtx, colTypes, expr)

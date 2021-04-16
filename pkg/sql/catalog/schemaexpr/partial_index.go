@@ -87,8 +87,8 @@ func (v *IndexPredicateValidator) Validate(e tree.Expr) (string, error) {
 // that are added previously in the same transaction.
 func MakePartialIndexExprs(
 	ctx context.Context,
-	indexes []*descpb.IndexDescriptor,
-	cols []descpb.ColumnDescriptor,
+	indexes []catalog.Index,
+	cols []catalog.Column,
 	tableDesc catalog.TableDescriptor,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
@@ -107,13 +107,13 @@ func MakePartialIndexExprs(
 	exprs := make(map[descpb.IndexID]tree.TypedExpr, partialIndexCount)
 
 	tn := tree.NewUnqualifiedTableName(tree.Name(tableDesc.GetName()))
-	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(cols))
+	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, cols)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
 	for _, idx := range indexes {
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.Predicate)
+			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return nil, refColIDs, err
 			}
@@ -140,7 +140,7 @@ func MakePartialIndexExprs(
 				return nil, refColIDs, err
 			}
 
-			exprs[idx.ID] = typedExpr
+			exprs[idx.GetID()] = typedExpr
 		}
 	}
 
