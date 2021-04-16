@@ -566,3 +566,21 @@ ALTER INDEX i59011 SPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::U
 
 statement error excessive number of values provided: expected 1, got 2
 ALTER INDEX i59011 UNSPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::UUID);
+
+# Regression for #63646
+
+statement ok
+CREATE TYPE e63646 AS ENUM ('a', 'b');
+CREATE TABLE t63646 (e e63646 PRIMARY KEY);
+INSERT INTO t63646 VALUES ('a'), ('b');
+ALTER TABLE t63646 SPLIT AT VALUES ('a'), ('b')
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('a')]
+----
+/"@"  /"\x80"
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('b')]
+----
+/"\x80"  NULL
