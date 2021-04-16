@@ -332,28 +332,41 @@ func findLogFiles(
 	paths []string, filePattern, programFilter *regexp.Regexp, programGroup int, to time.Time,
 ) ([]fileInfo, error) {
 	to = to.Truncate(time.Second) // log files only have second resolution
-	fileChan := make(chan fileInfo, len(paths))
+	fileChan := make(chan fileInfo, 1000+len(paths))
 	var wg sync.WaitGroup
-	wg.Add(len(paths))
 	for _, p := range paths {
-		go func(p string) {
-			defer wg.Done()
-			fi, ok := getLogFileInfo(p, filePattern)
-			if !ok {
-				return
+		filepath.Walk(p, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
-			if programGroup > 0 {
-				program := fi.path[fi.matches[2*programGroup]:fi.matches[2*programGroup+1]]
-				if !programFilter.MatchString(program) {
+			if info.IsDir() {
+				// Don't act on the directory itself, Walk will visit it for us.
+				return nil
+			}
+			// We're looking at a file.
+			wg.Add(1)
+			go func(p string) {
+				defer wg.Done()
+				fi, ok := getLogFileInfo(p, filePattern)
+				if !ok {
 					return
 				}
-			}
-			fileChan <- fi
-		}(p)
+				if programGroup > 0 {
+					program := fi.path[fi.matches[2*programGroup]:fi.matches[2*programGroup+1]]
+					if !programFilter.MatchString(program) {
+						return
+					}
+				}
+				fileChan <- fi
+			}(p)
+			return nil
+		})
 	}
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(fileChan)
+	}()
 	files := make([]fileInfo, 0, len(fileChan))
-	close(fileChan)
 	for f := range fileChan {
 		files = append(files, f)
 	}
