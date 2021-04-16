@@ -211,23 +211,23 @@ vectorized: true
 │ distinct on: a
 │ order key: a
 │
-└── • sort
-    │ order: +a
+└── • union all
     │
-    └── • union all
-        │
-        ├── • index join
-        │   │ table: json_tab@primary
-        │   │
-        │   └── • scan
-        │         missing stats
-        │         table: json_tab@foo_inv
-        │         spans: 1 span
-        │
-        └── • scan
-              missing stats
-              table: json_tab@primary
-              spans: [/44 - /44]
+    ├── • index join
+    │   │ table: json_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: json_tab@foo_inv
+    │             spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: [/44 - /44]
 
 # We cannot use the index for this query.
 query error pq: index "foo_inv" is inverted and cannot be used for this query
@@ -295,23 +295,23 @@ vectorized: true
 │ distinct on: a
 │ order key: a
 │
-└── • sort
-    │ order: +a
+└── • union all
     │
-    └── • union all
-        │
-        ├── • index join
-        │   │ table: array_tab@primary
-        │   │
-        │   └── • scan
-        │         missing stats
-        │         table: array_tab@foo_inv
-        │         spans: 1 span
-        │
-        └── • scan
-              missing stats
-              table: array_tab@primary
-              spans: [/1 - /1]
+    ├── • index join
+    │   │ table: array_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: array_tab@foo_inv
+    │             spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: [/1 - /1]
 
 # We cannot use the index for this query.
 query error pq: index "foo_inv" is inverted and cannot be used for this query
