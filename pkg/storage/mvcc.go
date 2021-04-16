@@ -2676,8 +2676,8 @@ func MVCCIterate(
 	return intents, nil
 }
 
-// MVCCResolveWriteIntent either commits or aborts (rolls back) an
-// extant write intent for a given txn according to commit parameter.
+// MVCCResolveWriteIntent either commits, aborts (rolls back), or moves forward
+// in time an extant write intent for a given txn according to commit parameter.
 // ResolveWriteIntent will skip write intents of other txns. It returns
 // whether or not an intent was found to resolve.
 //
