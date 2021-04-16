@@ -198,21 +198,27 @@ limit
  ├── columns: column1:3!null
  ├── internal-ordering: -3
  ├── ordering: -3
- ├── sort
+ ├── union-all
  │    ├── columns: column1:3!null
+ │    ├── left columns: column1:1
+ │    ├── right columns: column1:2
  │    ├── ordering: -3
  │    ├── limit hint: 2.00
- │    └── union-all
- │         ├── columns: column1:3!null
- │         ├── left columns: column1:1
- │         ├── right columns: column1:2
- │         ├── values
- │         │    ├── columns: column1:1!null
- │         │    ├── (1,)
- │         │    ├── (1,)
- │         │    ├── (1,)
- │         │    ├── (2,)
- │         │    └── (2,)
+ │    ├── sort
+ │    │    ├── columns: column1:1!null
+ │    │    ├── ordering: -1
+ │    │    ├── limit hint: 2.00
+ │    │    └── values
+ │    │         ├── columns: column1:1!null
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (2,)
+ │    │         └── (2,)
+ │    └── sort
+ │         ├── columns: column1:2!null
+ │         ├── ordering: -2
+ │         ├── limit hint: 2.00
  │         └── values
  │              ├── columns: column1:2!null
  │              ├── (1,)
@@ -228,21 +234,27 @@ limit
  ├── columns: column1:3!null
  ├── internal-ordering: -3
  ├── ordering: -3
- ├── sort
+ ├── union-all
  │    ├── columns: column1:3!null
+ │    ├── left columns: column1:1
+ │    ├── right columns: column1:2
  │    ├── ordering: -3
  │    ├── limit hint: 2.00
- │    └── union-all
- │         ├── columns: column1:3!null
- │         ├── left columns: column1:1
- │         ├── right columns: column1:2
- │         ├── values
- │         │    ├── columns: column1:1!null
- │         │    ├── (1,)
- │         │    ├── (1,)
- │         │    ├── (1,)
- │         │    ├── (2,)
- │         │    └── (2,)
+ │    ├── sort
+ │    │    ├── columns: column1:1!null
+ │    │    ├── ordering: -1
+ │    │    ├── limit hint: 2.00
+ │    │    └── values
+ │    │         ├── columns: column1:1!null
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (1,)
+ │    │         ├── (2,)
+ │    │         └── (2,)
+ │    └── sort
+ │         ├── columns: column1:2!null
+ │         ├── ordering: -2
+ │         ├── limit hint: 2.00
  │         └── values
  │              ├── columns: column1:2!null
  │              ├── (1,)
