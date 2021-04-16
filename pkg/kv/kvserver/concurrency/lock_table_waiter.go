@@ -581,28 +581,43 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 		// transaction's uncertainty interval. This allows us to not have to
 		// restart for uncertainty if the push succeeds and we come back and
 		// read.
-		//
-		// However, because we intend to read on the same node, we can limit
-		// this to a clock reading from the local clock, relying on the fact
-		// that an observed timestamp from this node will limit our local
-		// uncertainty limit when we return to read.
-		//
-		// We intentionally do not use an observed timestamp directly to limit
-		// the push timestamp, because observed timestamps are not applicable in
-		// some cases (e.g. across lease changes). So to avoid an infinite loop
-		// where we continue to push to an unusable observed timestamp and
-		// continue to find the pushee in our uncertainty interval, we instead
-		// use the present time to limit the push timestamp, which is less
-		// optimal but is guaranteed to progress.
-		//
-		// There is some inherent raciness here, because the lease may move
-		// between when we push and when we later read. In such cases, we may
-		// need to push again, but expect to eventually succeed in reading,
-		// either after lease movement subsides or after the reader's read
-		// timestamp surpasses its global uncertainty limit.
-		localUncertaintyLimit := req.Txn.GlobalUncertaintyLimit
-		localUncertaintyLimit.Backward(w.clock.Now())
-		h.Timestamp.Forward(localUncertaintyLimit)
+		uncertaintyLimit := req.Txn.GlobalUncertaintyLimit
+		if !h.Timestamp.Synthetic {
+			// Because we intend to read on the same node, we can limit this to a
+			// clock reading from the local clock, relying on the fact that an
+			// observed timestamp from this node will limit our local uncertainty
+			// limit when we return to read.
+			//
+			// We intentionally do not use an observed timestamp directly to limit
+			// the push timestamp, because observed timestamps are not applicable in
+			// some cases (e.g. across lease changes). So to avoid an infinite loop
+			// where we continue to push to an unusable observed timestamp and
+			// continue to find the pushee in our uncertainty interval, we instead
+			// use the present time to limit the push timestamp, which is less
+			// optimal but is guaranteed to progress.
+			//
+			// There is some inherent raciness here, because the lease may move
+			// between when we push and when we later read. In such cases, we may
+			// need to push again, but expect to eventually succeed in reading,
+			// either after lease movement subsides or after the reader's read
+			// timestamp surpasses its global uncertainty limit.
+			uncertaintyLimit.Backward(w.clock.Now())
+		} else {
+			// However, this argument only holds if we expect to be able to use a
+			// local uncertainty limit when we return to read the pushed intent.
+			// Notably, local uncertainty limits can not be used to ignore intents
+			// with synthetic timestamps that would otherwise be in a reader's
+			// uncertainty interval. This is because observed timestamps do not
+			// apply to intents/values with synthetic timestamps. So if we know that
+			// we will be pushing an intent to a synthetic timestamp, we don't limit
+			// the value to a clock reading from the local clock.
+
+			// NOTE: GlobalUncertaintyLimit is effectively synthetic because it does
+			// not come from an HLC clock, but it does not currently get marked as
+			// so. See the TODO in roachpb.MakeTransaction.
+			uncertaintyLimit = uncertaintyLimit.WithSynthetic(true)
+		}
+		h.Timestamp.Forward(uncertaintyLimit)
 	}
 	return h
 }

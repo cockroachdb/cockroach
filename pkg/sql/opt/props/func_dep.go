@@ -324,7 +324,7 @@ import (
 // to have redundant columns that can be functionally determined from other
 // columns in the key. Of more value is the set of "candidate keys", which are
 // keys that contain no redundant columns. Removing any column from such a key
-// causes it to longer be a key. It is possible to enumerate the set of
+// causes it to no longer be a key. It is possible to enumerate the set of
 // candidate keys in polynomial rather than exponential time (see Wikipedia
 // "Candidate key" entry).
 //
