@@ -34,7 +34,7 @@ import (
 func isCloudStorageSink(u *url.URL) bool {
 	switch u.Scheme {
 	case `experimental-s3`, `experimental-gs`, `experimental-nodelocal`, `experimental-http`,
-		`experimental-https`, `experimental-azure`:
+		`experimental-https`, `experimental-azure`, `experimental-userfile`:
 		return true
 	default:
 		return false
