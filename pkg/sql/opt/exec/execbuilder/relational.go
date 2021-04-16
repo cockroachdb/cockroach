@@ -1441,13 +1441,22 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 			))
 		}
 	}
-	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root, hardLimit)
-	if err != nil {
-		return execPlan{}, err
-	}
-	ep := execPlan{root: node}
+
+	ep := execPlan{}
 	for i, col := range private.OutCols {
 		ep.outputCols.Set(int(col), i)
+	}
+	// TODO(rytaft): This ordering may be stronger than the required output
+	// ordering in order to guarantee the use of a streaming (merge join or
+	// distinct) operation. We should probably pass both orderings to
+	// ConstructSetOp, similar to ConstructGroupBy.
+	reqOrdering := exec.OutputOrdering(
+		ep.sqlOrdering(ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering)),
+	)
+
+	ep.root, err = b.factory.ConstructSetOp(typ, all, left.root, right.root, reqOrdering, hardLimit)
+	if err != nil {
+		return execPlan{}, err
 	}
 	return ep, nil
 }

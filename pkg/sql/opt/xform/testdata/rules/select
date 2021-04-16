@@ -6740,9 +6740,10 @@ project
       ├── columns: d.k:1!null d.u:2 d.v:3
       ├── key: (1)
       ├── fd: (1)-->(2,3)
-      └── inner-join (hash)
+      └── inner-join (merge)
            ├── columns: d.k:1!null d.u:2!null d.v:3 a.u:7!null
-           ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           ├── left ordering: +2
+           ├── right ordering: +7
            ├── key: (1)
            ├── fd: (1)-->(2,3), (2)==(7), (7)==(2)
            ├── distinct-on
@@ -6750,10 +6751,12 @@ project
            │    ├── grouping columns: d.k:1!null
            │    ├── key: (1)
            │    ├── fd: (1)-->(2,3)
+           │    ├── ordering: +2
            │    ├── union-all
            │    │    ├── columns: d.k:1!null d.u:2 d.v:3
            │    │    ├── left columns: d.k:10 d.u:11 d.v:12
            │    │    ├── right columns: d.k:15 d.u:16 d.v:17
+           │    │    ├── ordering: +2
            │    │    ├── index-join d
            │    │    │    ├── columns: d.k:10!null d.u:11!null d.v:12
            │    │    │    ├── key: (10)
@@ -6763,15 +6766,20 @@ project
            │    │    │         ├── constraint: /11/10: [/1 - /1]
            │    │    │         ├── key: (10)
            │    │    │         └── fd: ()-->(11)
-           │    │    └── index-join d
+           │    │    └── sort
            │    │         ├── columns: d.k:15!null d.u:16 d.v:17!null
            │    │         ├── key: (15)
            │    │         ├── fd: ()-->(17), (15)-->(16)
-           │    │         └── scan d@v
-           │    │              ├── columns: d.k:15!null d.v:17!null
-           │    │              ├── constraint: /17/15: [/1 - /1]
+           │    │         ├── ordering: +16 opt(17) [actual: +16]
+           │    │         └── index-join d
+           │    │              ├── columns: d.k:15!null d.u:16 d.v:17!null
            │    │              ├── key: (15)
-           │    │              └── fd: ()-->(17)
+           │    │              ├── fd: ()-->(17), (15)-->(16)
+           │    │              └── scan d@v
+           │    │                   ├── columns: d.k:15!null d.v:17!null
+           │    │                   ├── constraint: /17/15: [/1 - /1]
+           │    │                   ├── key: (15)
+           │    │                   └── fd: ()-->(17)
            │    └── aggregations
            │         ├── const-agg [as=d.u:2, outer=(2)]
            │         │    └── d.u:2
@@ -6780,13 +6788,12 @@ project
            ├── distinct-on
            │    ├── columns: a.u:7
            │    ├── grouping columns: a.u:7
-           │    ├── internal-ordering: +7
            │    ├── key: (7)
+           │    ├── ordering: +7
            │    └── scan a@u
            │         ├── columns: a.u:7
            │         └── ordering: +7
-           └── filters
-                └── a.u:7 = d.u:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           └── filters (true)
 
 # Correlated subquery with references to outer columns not in the scan columns.
 opt expect=SplitDisjunction
@@ -7548,8 +7555,8 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G7: (filters G10)
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
- │    │    ├── best: (sort G8)
- │    │    └── cost: 1089.85
+ │    │    ├── best: (union-all G13 G14="[ordering: +(14|15)]")
+ │    │    └── cost: 1089.79
  │    └── []
  │         ├── best: (union-all G13 G14)
  │         └── cost: 1089.76
@@ -7568,6 +7575,9 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  │         ├── best: (select G25 G26)
  │         └── cost: 5.10
  ├── G14: (select G28 G29) (select G30 G31)
+ │    ├── [ordering: +(14|15)]
+ │    │    ├── best: (sort G14)
+ │    │    └── cost: 1084.67
  │    └── []
  │         ├── best: (select G28 G29)
  │         └── cost: 1084.64
@@ -7600,11 +7610,17 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  │         ├── best: (index-join G37 t61795,cols=(9-11))
  │         └── cost: 1049.59
  ├── G28: (scan t61795 [as=t1],cols=(13-15))
+ │    ├── [ordering: +14]
+ │    │    ├── best: (sort G28)
+ │    │    └── cost: 1323.94
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(13-15))
  │         └── cost: 1074.61
  ├── G29: (filters G38 G39)
  ├── G30: (index-join G40 t61795,cols=(13-15))
+ │    ├── [ordering: +14]
+ │    │    ├── best: (index-join G40="[ordering: +14]" t61795,cols=(13-15))
+ │    │    └── cost: 3040.04
  │    └── []
  │         ├── best: (index-join G40 t61795,cols=(13-15))
  │         └── cost: 3040.04
@@ -7621,6 +7637,9 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G38: (eq G47 G48)
  ├── G39: (ne G48 G49)
  ├── G40: (select G50 G51)
+ │    ├── [ordering: +14]
+ │    │    ├── best: (select G50="[ordering: +14]" G51)
+ │    │    └── cost: 1043.53
  │    └── []
  │         ├── best: (select G50 G51)
  │         └── cost: 1043.53
@@ -7637,6 +7656,9 @@ memo (optimized, ~28KB, required=[presentation: a:1] [ordering: +2])
  ├── G48: (variable t1.b)
  ├── G49: (function G52 abs)
  ├── G50: (scan t61795@secondary [as=t1],cols=(13,14),constrained)
+ │    ├── [ordering: +14]
+ │    │    ├── best: (scan t61795@secondary [as=t1],cols=(13,14),constrained)
+ │    │    └── cost: 1033.61
  │    └── []
  │         ├── best: (scan t61795@secondary [as=t1],cols=(13,14),constrained)
  │         └── cost: 1033.61

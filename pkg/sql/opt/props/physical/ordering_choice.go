@@ -776,6 +776,22 @@ func (oc OrderingChoice) Format(buf *bytes.Buffer) {
 	}
 }
 
+// RemapColumns returns a copy of oc with all columns in from mapped to columns
+// in to.
+func (oc *OrderingChoice) RemapColumns(from, to opt.ColList) OrderingChoice {
+	var other OrderingChoice
+	other.Optional = opt.TranslateColSet(oc.Optional, from, to)
+	other.Columns = make([]OrderingColumnChoice, len(oc.Columns))
+	for i := range oc.Columns {
+		col := &oc.Columns[i]
+		other.Columns[i] = OrderingColumnChoice{
+			Group:      opt.TranslateColSet(col.Group, from, to),
+			Descending: col.Descending,
+		}
+	}
+	return other
+}
+
 // AnyID returns the ID of an arbitrary member of the group of equivalent
 // columns.
 func (oc *OrderingColumnChoice) AnyID() opt.ColumnID {

@@ -110,6 +110,36 @@ func init() {
 		buildChildReqOrdering: projectBuildChildReqOrdering,
 		buildProvidedOrdering: projectBuildProvided,
 	}
+	funcMap[opt.UnionOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.UnionAllOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.IntersectOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.IntersectAllOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.ExceptOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
+	funcMap[opt.ExceptAllOp] = funcs{
+		canProvideOrdering:    setOpCanProvideOrdering,
+		buildChildReqOrdering: setOpBuildChildReqOrdering,
+		buildProvidedOrdering: setOpBuildProvided,
+	}
 	funcMap[opt.IndexJoinOp] = funcs{
 		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
