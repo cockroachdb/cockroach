@@ -1485,6 +1485,11 @@ CREATE SEQUENCE cache_test CACHE 0
 statement ok
 CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
 
+query TT
+SHOW CREATE SEQUENCE cache_test
+----
+cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 10
+
 # Verify cache invalidation with schema changes.
 
 # 10 values (1,2,...,10) are cached, and the underlying sequence is incremented to 10.
