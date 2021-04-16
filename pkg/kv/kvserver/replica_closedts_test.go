@@ -475,18 +475,19 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	writeKey2.Store(roachpb.Key{})
 	var blockedRangeID int64
 	var trappedLeaseAcquisition int64
-	var trapLeaseAcquisitionOnce sync.Once
 
 	blockLeaseAcquisition := func(args kvserverbase.FilterArgs) {
 		blockedRID := roachpb.RangeID(atomic.LoadInt64(&blockedRangeID))
 		if _, ok := args.Req.(*roachpb.RequestLeaseRequest); !ok || args.Hdr.RangeID != blockedRID {
 			return
 		}
-		trapLeaseAcquisitionOnce.Do(func() {
+		if atomic.CompareAndSwapInt64(&trappedLeaseAcquisition, 0, 1) {
+			log.Infof(ctx, "!!! lease acq blocked: %s", args.Req)
 			atomic.StoreInt64(&trappedLeaseAcquisition, 1)
 			leaseAcqCh <- struct{}{}
 			<-leaseAcqCh
-		})
+			log.Infof(ctx, "!!! lease acq unblocked")
+		}
 	}
 
 	blockWrites := func(args kvserverbase.FilterArgs) {
@@ -510,6 +511,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 		}
 		leaseTransferCh <- struct{}{}
 		<-leaseTransferCh
+		log.Infof(ctx, "!!! lease transfer unblocked")
 	}
 
 	manual := hlc.NewHybridManualClock()
@@ -538,6 +540,8 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 		}})
 	defer tc.Stopper().Stop(ctx)
 
+	manual.Pause()
+	log.Infof(ctx, "!!! test 1")
 	// Upreplicate a range.
 	n1, n2 := tc.Servers[0], tc.Servers[1]
 	key := tc.ScratchRangeWithExpirationLease(t)
@@ -554,7 +558,8 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 
 	// Advance the time a bit. We'll then initiate a transfer, and we want the
 	// transferred lease to be valid for a while after the original lease expires.
-	manual.Pause()
+	log.Infof(ctx, "!!! test stopping time")
+	// !!!manual.Pause()
 	remainingNanos := lease.GetExpiration().WallTime - manual.UnixNano()
 	// NOTE: We don't advance the clock past the mid-point of the lease, otherwise
 	// it gets extended.

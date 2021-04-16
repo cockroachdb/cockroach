@@ -1255,7 +1255,12 @@ func (r *Replica) shouldExtendLeaseRLocked(st kvserverpb.LeaseStatus) bool {
 		return false
 	}
 	renewal := st.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
-	return renewal.LessEq(st.Now.ToTimestamp())
+	ok := renewal.LessEq(st.Now.ToTimestamp())
+	if ok && r.RangeID == 38 {
+		log.Infof(context.TODO(), "!!! will extend lease. r: %s, st: %s. now: %s", r, st, st.Now)
+		//panic("!!! extension for 38")
+	}
+	return ok
 }
 
 // maybeExtendLeaseAsync attempts to extend the expiration-based lease
