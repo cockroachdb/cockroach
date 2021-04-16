@@ -2161,6 +2161,21 @@ func planProjectionExpr(
 			}
 			right = tupleDatum
 		}
+		// We have a special case behavior for Is{Not}DistinctFrom before
+		// checking whether the right expression is constant below in order to
+		// extract NULL from the cast expression.
+		//
+		// Normally, the optimizer folds all constants; however, for nulls it
+		// creates a cast expression from tree.DNull to the desired type in
+		// order to propagate the type of the null. We need to extract the
+		// constant NULL so that the optimized operator was planned below.
+		if projOp == tree.IsDistinctFrom || projOp == tree.IsNotDistinctFrom {
+			if cast, ok := right.(*tree.CastExpr); ok {
+				if cast.Expr == tree.DNull {
+					right = tree.DNull
+				}
+			}
+		}
 		if rConstArg, rConst := right.(tree.Datum); rConst {
 			// Case 2: The right is constant.
 			// The projection result will be outputted to a new column which is

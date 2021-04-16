@@ -347,3 +347,27 @@ EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
   └ *colexec.orderedAggregator
     └ *colexecbase.distinctChainOps
       └ *colfetcher.ColBatchScan
+
+statement ok
+CREATE TABLE t63792 (c INT);
+INSERT INTO t63792 VALUES (NULL), (1), (2)
+
+# Check that casts of constants are pre-evaluated (which allows us to use
+# colexec.isNullProjOp instead of colexecproj.defaultCmpProjOp).
+query T
+EXPLAIN (VEC) SELECT c = c FROM t63792
+----
+│
+└ Node 1
+  └ *colexec.orProjOp
+    ├ *colfetcher.ColBatchScan
+    ├ *colexec.isNullProjOp
+    └ *colexecbase.castOpNullAny
+      └ *colexecbase.constNullOp
+
+query IB rowsort
+SELECT c, c = c FROM t63792
+----
+NULL  NULL
+1     true
+2     true
