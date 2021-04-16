@@ -1201,7 +1201,7 @@ vectorized: true
 • filter
 │ columns: (c0)
 │ estimated row count: 333 (missing stats)
-│ filter: CASE WHEN c0 IN (c0,) THEN ARRAY[NULL] ELSE ARRAY[] END IS NULL
+│ filter: CASE WHEN (c0 IS DISTINCT FROM CAST(NULL AS DECIMAL)) OR CAST(NULL AS BOOL) THEN ARRAY[NULL] ELSE ARRAY[] END IS NULL
 │
 └── • scan
       columns: (c0)

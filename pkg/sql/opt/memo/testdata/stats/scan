@@ -537,18 +537,20 @@ project
  │    ├── project
  │    │    ├── columns: col1:27(bool)
  │    │    ├── immutable
- │    │    ├── stats: [rows=333333.333, distinct(27)=333333.333, null(27)=0]
- │    │    ├── inner-join (cross)
+ │    │    ├── stats: [rows=10000, distinct(27)=10000, null(27)=0]
+ │    │    ├── inner-join (hash)
  │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null) tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
- │    │    │    ├── stats: [rows=333333.333, distinct(5,6,8,17,18)=333333.333, null(5,6,8,17,18)=3.33333333e-05]
+ │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+ │    │    │    ├── stats: [rows=10000, distinct(10)=100, null(10)=0, distinct(22)=100, null(22)=0, distinct(5,6,8,17,18)=10000, null(5,6,8,17,18)=1e-06]
+ │    │    │    ├── fd: (10)==(22), (22)==(10)
  │    │    │    ├── scan t37953 [as=tab0]
  │    │    │    │    ├── columns: tab0.e:5(varchar) tab0.f:6("char") tab0.h:8(varchar) tab0.j:10(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(5,6,8)=1000, null(5,6,8)=0.001]
+ │    │    │    │    └── stats: [rows=1000, distinct(10)=100, null(10)=0, distinct(5,6,8)=1000, null(5,6,8)=0.001]
  │    │    │    ├── scan t37953 [as=tab1]
  │    │    │    │    ├── columns: tab1.e:17(varchar) tab1.f:18("char") tab1.j:22(float!null)
- │    │    │    │    └── stats: [rows=1000, distinct(17,18)=1000, null(17,18)=0.1]
+ │    │    │    │    └── stats: [rows=1000, distinct(22)=100, null(22)=0, distinct(17,18)=1000, null(17,18)=0.1]
  │    │    │    └── filters
- │    │    │         └── tab0.j:10 IN (tab1.j:22,) [type=bool, outer=(10,22)]
+ │    │    │         └── tab0.j:10 = tab1.j:22 [type=bool, outer=(10,22), constraints=(/10: (/NULL - ]; /22: (/NULL - ]), fd=(10)==(22), (22)==(10)]
  │    │    └── projections
  │    │         └── CASE WHEN ilike_escape(regexp_replace(tab0.h:8, tab1.e:17, tab0.f:6, tab0.e:5::STRING), tab1.f:18, '') THEN true ELSE false END [as=col1:27, type=bool, outer=(5,6,8,17,18), immutable]
  │    └── filters
