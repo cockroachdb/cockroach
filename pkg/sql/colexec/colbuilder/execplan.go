@@ -2101,6 +2101,19 @@ func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) e
 	return nil
 }
 
+// preEvaluateConstCast checks whether t is a cast expression from a constant
+// datum and evaluates the cast if so.
+func preEvaluateConstCast(evalCtx *tree.EvalContext, t tree.TypedExpr) (tree.TypedExpr, error) {
+	cast, ok := t.(*tree.CastExpr)
+	if !ok {
+		return t, nil
+	}
+	if _, isConst := cast.Expr.(tree.Datum); !isConst {
+		return t, nil
+	}
+	return cast.Eval(evalCtx)
+}
+
 func planProjectionExpr(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
@@ -2115,6 +2128,18 @@ func planProjectionExpr(
 	cmpExpr *tree.ComparisonExpr,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	if err := checkSupportedProjectionExpr(left, right); err != nil {
+		return nil, resultIdx, typs, err
+	}
+	// Normally, the optimizer folds all constants; however, for nulls it
+	// creates a cast expression from tree.DNull to the desired type in order to
+	// propagate the type of the null. Pre-evaluate constant casts so that the
+	// optimized projection operators below could be planned.
+	left, err = preEvaluateConstCast(evalCtx, left)
+	if err != nil {
+		return nil, resultIdx, typs, err
+	}
+	right, err = preEvaluateConstCast(evalCtx, right)
+	if err != nil {
 		return nil, resultIdx, typs, err
 	}
 	allocator := colmem.NewAllocator(ctx, acc, factory)
