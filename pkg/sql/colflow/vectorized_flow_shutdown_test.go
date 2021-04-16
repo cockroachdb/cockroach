@@ -234,7 +234,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				idToClosed.mapping = make(map[int]bool)
 				runOutboxInbox := func(
 					outboxCtx context.Context,
-					cancelFn context.CancelFunc,
+					flowCtxCancel context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
 					outboxInput colexecop.Operator,
 					inbox *colrpc.Inbox,
@@ -267,7 +267,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							execinfra.StaticNodeID,
 							flowID,
 							execinfrapb.StreamID(id),
-							cancelFn,
+							flowCtxCancel,
 							0, /* connectionTimeout */
 						)
 						wg.Done()
