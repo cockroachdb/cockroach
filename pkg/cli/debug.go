@@ -1183,7 +1183,7 @@ var debugMergeLogsOpts = struct {
 	keepRedactable bool
 	redactInput    bool
 }{
-	program:        regexp.MustCompile("^cockroach.*$"),
+	program:        regexp.MustCompile(``), // match everything
 	file:           regexp.MustCompile(log.FilePattern),
 	keepRedactable: true,
 	redactInput:    false,
