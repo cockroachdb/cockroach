@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -181,6 +182,7 @@ func calcRangeCounter(
 		neededNonVoters := GetNeededNonVoters(int(numVoters), int(numReplicas-numVoters), clusterNodes)
 		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
 		if neededVoters > liveVoters || neededNonVoters > liveNonVoters {
+			log.Infof(context.Background(), "%s: underreplicated because want %d voters > %d live voters", desc, neededVoters, liveVoters)
 			underreplicated = true
 		} else if neededVoters < liveVoters || neededNonVoters < liveNonVoters {
 			overreplicated = true
