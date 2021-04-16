@@ -719,7 +719,7 @@ func (b *Builder) buildDeleteRange(
 		// We can't calculate the maximum number of keys if there are interleaved
 		// children, as we don't know how many children rows may be in range.
 		if len(interleavedTables) == 0 {
-			if maxRows, ok := b.indexConstraintMaxResults(scan); ok {
+			if maxRows, ok := b.indexConstraintMaxResults(&scan.ScanPrivate, scan); ok {
 				if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= row.TableTruncateChunkSize {
 					// Other mutations only allow auto-commit if there are no FK checks or
 					// cascades. In this case, we won't actually execute anything for the
