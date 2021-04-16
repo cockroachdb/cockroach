@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -3573,12 +3574,14 @@ may increase either contention or retry errors, or both.`,
 				}
 
 				// Get the referenced table and index.
-				// TODO(ajwerner): This is awful, we should be able to resolve this
-				// thing using the usual tools rather than going through the DB.
-				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
+				tableDescIntf, err := ctx.Planner.GetImmutableTableInterfaceByID(
+					ctx.Context,
+					tableID,
+				)
 				if err != nil {
 					return nil, err
 				}
+				tableDesc := tableDescIntf.(*tabledesc.Immutable)
 				indexDesc, err := tableDesc.FindIndexByID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
