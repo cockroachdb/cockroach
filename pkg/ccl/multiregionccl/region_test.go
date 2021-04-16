@@ -117,7 +117,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 
 			knobs := base.TestingKnobs{
 				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() {
+					RunBeforeEnumMemberPromotion: func() error {
 						mu.Lock()
 						if firstOp {
 							firstOp = false
@@ -129,6 +129,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 						} else {
 							mu.Unlock()
 						}
+						return nil
 					},
 				},
 			}
@@ -201,6 +202,152 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 	}
 }
 
+// TestRegionAddDropEnclosingRegionalByRowAlters tests adding/dropping regions
+// (expected to fail) with a concurrent alter to a regional by row table. The
+// sketch of the test is as follows:
+// - Client 1 performs an ALTER ADD / DROP REGION. Let the user txn commit.
+// - Block in the type schema changer.
+// - Client 2 alters a REGIONAL / GLOBAL table to a REGIONAL BY ROW table. Let
+// this operation finish.
+// - Force a rollback on the REGION ADD / DROP by injecting an error.
+// - Ensure the partitions on the REGIONAL BY ROW table are sane.
+func TestRegionAddDropFailureEnclosingRegionalByRowAlters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	regionAlterCmds := []struct {
+		name string
+		cmd  string
+	}{
+		{
+			name: "drop-region",
+			cmd:  `ALTER DATABASE db DROP REGION "us-east3"`,
+		},
+		{
+			name: "add-region",
+			cmd:  `ALTER DATABASE db ADD REGION "us-east4"`,
+		},
+	}
+
+	testCases := []struct {
+		name  string
+		setup string
+	}{
+		{
+			name:  "alter-from-global",
+			setup: `CREATE TABLE db.t () LOCALITY GLOBAL`,
+		},
+		{
+			name:  "alter-from-explicit-regional",
+			setup: `CREATE TABLE db.t () LOCALITY REGIONAL IN "us-east2"`,
+		},
+		{
+			name:  "alter-from-regional",
+			setup: `CREATE TABLE db.t () LOCALITY REGIONAL IN PRIMARY REGION`,
+		},
+		{
+			name:  "alter-from-rbr",
+			setup: `CREATE TABLE db.t (reg db.crdb_internal_region) LOCALITY REGIONAL BY ROW AS reg`,
+		},
+	}
+
+	var mu syncutil.Mutex
+	typeChangeStarted := make(chan struct{}, 1)
+	typeChangeFinished := make(chan struct{}, 1)
+	rbrOpFinished := make(chan struct{}, 1)
+
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeEnumMemberPromotion: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				typeChangeStarted <- struct{}{}
+				<-rbrOpFinished
+				// Trigger a roll-back.
+				return errors.New("boom")
+			},
+		},
+	}
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 4 /* numServers */, knobs, nil, /* baseDir */
+	)
+	defer cleanup()
+
+	for _, tc := range testCases {
+		for _, regionAlterCmd := range regionAlterCmds {
+			t.Run(regionAlterCmd.name+tc.name, func(t *testing.T) {
+
+				_, err := sqlDB.Exec(`
+DROP DATABASE IF EXISTS db;
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+`)
+				require.NoError(t, err)
+
+				_, err = sqlDB.Exec(tc.setup)
+				require.NoError(t, err)
+
+				go func() {
+					_, err := sqlDB.Exec(regionAlterCmd.cmd)
+					if !testutils.IsError(err, "boom") {
+						t.Errorf("expected error boom, found %v", err)
+					}
+					typeChangeFinished <- struct{}{}
+				}()
+
+				<-typeChangeStarted
+
+				_, err = sqlDB.Exec(`BEGIN; SET TRANSACTION PRIORITY HIGH; ALTER TABLE db.t SET LOCALITY REGIONAL BY ROW; COMMIT;`)
+				rbrOpFinished <- struct{}{}
+				require.NoError(t, err)
+
+				testutils.SucceedsSoon(t, func() error {
+					rows, err := sqlDB.Query("SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE db.t] ORDER BY partition_name")
+					if err != nil {
+						return err
+					}
+					defer rows.Close()
+
+					var partitionNames []string
+					for rows.Next() {
+						var partitionName string
+						if err := rows.Scan(&partitionName); err != nil {
+							return err
+						}
+
+						partitionNames = append(partitionNames, partitionName)
+					}
+
+					expectedPartitions := []string{"us-east1", "us-east2", "us-east3"}
+					if len(partitionNames) != len(expectedPartitions) {
+						return errors.AssertionFailedf(
+							"unexpected number of partitions; expected %d, found %d",
+							len(expectedPartitions),
+							len(partitionNames),
+						)
+					}
+					for i := range expectedPartitions {
+						if expectedPartitions[i] != partitionNames[i] {
+							return errors.AssertionFailedf(
+								"unexpected partitions; expected %v, found %v",
+								expectedPartitions,
+								partitionNames,
+							)
+						}
+					}
+					return nil
+				})
+				<-typeChangeFinished
+			})
+		}
+	}
+}
+
 func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -211,7 +358,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	dropRegionFinished := make(chan struct{})
 	knobs := base.TestingKnobs{
 		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-			RunBeforeEnumMemberPromotion: func() {
+			RunBeforeEnumMemberPromotion: func() error {
 				mu.Lock()
 				defer mu.Unlock()
 				if dropRegionStarted != nil {
@@ -219,6 +366,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 					<-waitForPrimaryRegionSwitch
 					dropRegionStarted = nil
 				}
+				return nil
 			},
 		},
 	}
