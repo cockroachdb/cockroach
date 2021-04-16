@@ -131,7 +131,7 @@ func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.Rang
 		if replicaID == 0 {
 			w.SafeString("?:")
 		} else {
-			w.Printf("%d:", replicaID)
+			w.Printf("%dg%d:", replicaID, desc.Generation)
 		}
 
 		if !desc.IsInitialized() {

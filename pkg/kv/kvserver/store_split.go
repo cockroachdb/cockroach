@@ -13,6 +13,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -35,6 +37,11 @@ func splitPreApply(
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) {
+	log.Infof(ctx, "TBG splitPreApplyStart rhs=r%d", split.RightDesc.RangeID)
+	defer func(tBegin time.Time) {
+		dur := timeutil.Since(tBegin)
+		log.Infof(ctx, "TBG splitPreApplyStart rhs=r%d done after %.2fs", split.RightDesc.RangeID, dur.Seconds())
+	}(timeutil.Now())
 	// Sanity check that the store is in the split.
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
@@ -166,6 +173,11 @@ func splitPreApply(
 func splitPostApply(
 	ctx context.Context, deltaMS enginepb.MVCCStats, split *roachpb.SplitTrigger, r *Replica,
 ) {
+	log.Infof(ctx, "TBG splitPostApplyStart rhs=r%d", split.RightDesc.RangeID)
+	defer func(tBegin time.Time) {
+		log.Infof(ctx, "TBG splitPostApplyStart rhs=r%d done after %.2fs", split.RightDesc.RangeID, timeutil.Since(tBegin).Seconds())
+	}(timeutil.Now())
+
 	// rightReplOrNil will be nil if the RHS replica at the ID of the split is
 	// already known to be removed, generally because we know that this store has
 	// been re-added at a higher replica ID.
