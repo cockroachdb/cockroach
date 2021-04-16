@@ -147,7 +147,7 @@ func TestOutboxInbox(t *testing.T) {
 		// flow.
 		streamCtxCancel
 		// readerCtxCancel models a scenario in which the Inbox host cancels the
-		// flow.
+		// flow. This is considered a graceful termination.
 		readerCtxCancel
 		// transportBreaks models a scenario in which the transport breaks.
 		transportBreaks
@@ -245,7 +245,7 @@ func TestOutboxInbox(t *testing.T) {
 		)
 		wg.Add(1)
 		go func() {
-			outbox.runWithStream(streamCtx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+			outbox.runWithStream(streamCtx, clientStream, nil /* flowCtxCancel */, func() { atomic.StoreUint32(&canceled, 1) })
 			wg.Done()
 		}()
 
@@ -360,10 +360,11 @@ func TestOutboxInbox(t *testing.T) {
 			// cancellation (which is redundant) in the Outbox.
 			require.True(t, atomic.LoadUint32(&canceled) == 1)
 		case readerCtxCancel:
-			// If the reader context gets canceled, the Inbox should have returned
-			// from the stream handler.
-			require.Regexp(t, "context canceled", streamHandlerErr)
-			// The Inbox should propagate this error upwards.
+			// If the reader context gets canceled, it is treated as a graceful
+			// termination of the stream, so we expect no error from the stream
+			// handler.
+			require.Nil(t, streamHandlerErr)
+			// The Inbox should still propagate this error upwards.
 			require.True(t, testutils.IsError(readerErr, "context canceled"), readerErr)
 
 			// The cancellation should have been communicated to the Outbox, resulting
@@ -525,7 +526,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			)
 			wg.Add(1)
 			go func() {
-				outbox.runWithStream(ctx, clientStream, func() { atomic.StoreUint32(&canceled, 1) })
+				outbox.runWithStream(ctx, clientStream, nil /* flowCtxCancel */, func() { atomic.StoreUint32(&canceled, 1) })
 				wg.Done()
 			}()
 
@@ -598,7 +599,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		outbox.runWithStream(ctx, clientStream, nil /* cancelFn */)
+		outbox.runWithStream(ctx, clientStream, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 		wg.Done()
 	}()
 
@@ -662,7 +663,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 			roachpb.NodeID(0),
 			execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			outboxStreamID,
-			nil, /* cancelFn */
+			nil, /* flowCtxCancel */
 			0,   /* connectionTimeout */
 		)
 		outboxDone <- struct{}{}

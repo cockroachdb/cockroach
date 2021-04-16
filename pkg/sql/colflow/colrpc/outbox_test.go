@@ -50,7 +50,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* cancelFn */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 		wg.Done()
 	}()
 
@@ -121,7 +121,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		// Close the csChan to unblock the Recv goroutine (we don't need it for this
 		// test).
 		close(rpcLayer.client.csChan)
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* cancelFn */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 
 		require.True(t, atomic.LoadUint32(sourceDrained) == 1)
 	})
@@ -138,7 +138,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		require.NoError(t, err)
 
 		close(rpcLayer.client.csChan)
-		outbox.runWithStream(ctx, rpcLayer.client, nil /* cancelFn */)
+		outbox.runWithStream(ctx, rpcLayer.client, nil /* flowCtxCancel */, nil /* outboxCtxCancel */)
 
 		require.True(t, atomic.LoadUint32(sourceDrained) == 1)
 	})
