@@ -3968,25 +3968,30 @@ may increase either contention or retry errors, or both.`,
 				if err != nil {
 					return nil, err
 				}
-				indexDesc := index.IndexDesc()
 				// Collect the index columns. If the index is a non-unique secondary
 				// index, it might have some extra key columns.
-				indexColIDs := indexDesc.ColumnIDs
-				if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique {
-					indexColIDs = append(indexColIDs, indexDesc.ExtraColumnIDs...)
+				indexColIDs := make([]descpb.ColumnID, index.NumColumns(), index.NumColumns()+index.NumExtraColumns())
+				for i := 0; i < index.NumColumns(); i++ {
+					indexColIDs[i] = index.GetColumnID(i)
+				}
+				if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() {
+					for i := 0; i < index.NumExtraColumns(); i++ {
+						indexColIDs = append(indexColIDs, index.GetExtraColumnID(i))
+					}
 				}
 
 				// Ensure that the input tuple length equals the number of index cols.
 				if len(rowDatums.D) != len(indexColIDs) {
 					err := errors.Newf(
 						"number of values must equal number of columns in index %q",
-						indexDesc.Name,
+						index.GetName(),
 					)
 					// If the index has some extra key columns, then output an error
 					// message with some extra information to explain the subtlety.
-					if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique && len(indexDesc.ExtraColumnIDs) > 0 {
+					if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() && index.NumExtraColumns() > 0 {
 						var extraColNames []string
-						for _, id := range indexDesc.ExtraColumnIDs {
+						for i := 0; i < index.NumExtraColumns(); i++ {
+							id := index.GetExtraColumnID(i)
 							col, colErr := tableDesc.FindColumnWithID(id)
 							if colErr != nil {
 								return nil, errors.CombineErrors(err, colErr)
@@ -4005,7 +4010,7 @@ may increase either contention or retry errors, or both.`,
 							err,
 							"columns %v are implicitly part of index %q's key, include columns %v in this order",
 							extraColNames,
-							indexDesc.Name,
+							index.GetName(),
 							allColNames,
 						)
 					}
@@ -4047,8 +4052,8 @@ may increase either contention or retry errors, or both.`,
 					colMap.Set(id, i)
 				}
 				// Finally, encode the index key using the provided datums.
-				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)
-				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, indexDesc, len(datums), colMap, datums, keyPrefix)
+				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, index.GetID())
+				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, index, len(datums), colMap, datums, keyPrefix)
 				if err != nil {
 					return nil, err
 				}
@@ -4460,7 +4465,7 @@ may increase either contention or retry errors, or both.`,
 				if index.GetGeoConfig().S2Geography == nil {
 					return nil, errors.Errorf("index_id %d is not a geography inverted index", indexID)
 				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.IndexDesc())
+				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
 				if err != nil {
 					return nil, err
 				}
@@ -4494,7 +4499,7 @@ may increase either contention or retry errors, or both.`,
 				if index.GetGeoConfig().S2Geometry == nil {
 					return nil, errors.Errorf("index_id %d is not a geometry inverted index", indexID)
 				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.IndexDesc())
+				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
 				if err != nil {
 					return nil, err
 				}

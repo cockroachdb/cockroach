@@ -752,7 +752,7 @@ func expandIndexName(
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
-) (*tabledesc.Mutable, *descpb.IndexDescriptor, error) {
+) (*tabledesc.Mutable, catalog.Index, error) {
 	var catalog optCatalog
 	catalog.init(p)
 	catalog.reset()
@@ -774,7 +774,7 @@ func (p *planner) getTableAndIndex(
 		tableWithIndex.Table = tree.MakeTableNameFromPrefix(qualifiedName.ObjectNamePrefix, qualifiedName.ObjectName)
 	}
 
-	return tabledesc.NewBuilder(optIdx.tab.desc.TableDesc()).BuildExistingMutableTable(), optIdx.desc, nil
+	return tabledesc.NewBuilder(optIdx.tab.desc.TableDesc()).BuildExistingMutableTable(), optIdx.idx, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented

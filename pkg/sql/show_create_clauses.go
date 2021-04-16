@@ -332,12 +332,12 @@ func showCreateLocality(desc catalog.TableDescriptor, f *tree.FmtCtx) error {
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
 func showCreateInterleave(
-	idx *descpb.IndexDescriptor, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
+	idx catalog.Index, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
 ) error {
-	if len(idx.Interleave.Ancestors) == 0 {
+	if idx.NumInterleaveAncestors() == 0 {
 		return nil
 	}
-	intl := idx.Interleave
+	intl := idx.IndexDesc().Interleave
 	parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
 	var err error
 	var parentName tree.TableName
@@ -360,7 +360,7 @@ func showCreateInterleave(
 	fmtCtx.FormatNode(&parentName)
 	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
-	formatQuoteNames(buf, idx.ColumnNames[:sharedPrefixLen]...)
+	formatQuoteNames(buf, idx.IndexDesc().ColumnNames[:sharedPrefixLen]...)
 	buf.WriteString(")")
 	return nil
 }
@@ -371,21 +371,21 @@ func ShowCreatePartitioning(
 	a *rowenc.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	idxDesc *descpb.IndexDescriptor,
+	idx catalog.Index,
 	partDesc *descpb.PartitioningDescriptor,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
 ) error {
 	isPrimaryKeyOfPartitionAllByTable :=
-		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idxDesc.ID && colOffset == 0
+		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idx.GetID() && colOffset == 0
 
 	if partDesc.NumColumns == 0 && !isPrimaryKeyOfPartitionAllByTable {
 		return nil
 	}
 	// Do not print PARTITION BY clauses of non-primary indexes belonging to a table
 	// that is PARTITION BY ALL. The ALL will be printed for the PRIMARY INDEX clause.
-	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() != idxDesc.ID {
+	if tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() != idx.GetID() {
 		return nil
 	}
 	// Do not print PARTITION ALL BY if we are a REGIONAL BY ROW table.
@@ -424,7 +424,7 @@ func ShowCreatePartitioning(
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idxDesc.ColumnNames[colOffset+i])
+		buf.WriteString(idx.GetColumnName(colOffset + i))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
@@ -444,7 +444,7 @@ func ShowCreatePartitioning(
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := rowenc.DecodePartitionTuple(
-				a, codec, tableDesc, idxDesc, partDesc, values, fakePrefixDatums)
+				a, codec, tableDesc, idx, partDesc, values, fakePrefixDatums)
 			if err != nil {
 				return err
 			}
@@ -452,7 +452,7 @@ func ShowCreatePartitioning(
 		}
 		buf.WriteString(`)`)
 		if err := ShowCreatePartitioning(
-			a, codec, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
+			a, codec, tableDesc, idx, &part.Subpartitioning, buf, indent+1,
 			colOffset+int(partDesc.NumColumns),
 		); err != nil {
 			return err
@@ -468,14 +468,14 @@ func ShowCreatePartitioning(
 		buf.WriteString(part.Name)
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idxDesc, partDesc, part.FromInclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, partDesc, part.FromInclusive, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idxDesc, partDesc, part.ToExclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, partDesc, part.ToExclusive, fakePrefixDatums)
 		if err != nil {
 			return err
 		}

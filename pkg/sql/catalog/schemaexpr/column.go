@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -79,39 +78,37 @@ func dequalifyColumnRefs(
 // converts user defined types in default and computed expressions to a
 // human-readable form.
 func FormatColumnForDisplay(
-	ctx context.Context,
-	tbl catalog.TableDescriptor,
-	desc *descpb.ColumnDescriptor,
-	semaCtx *tree.SemaContext,
+	ctx context.Context, tbl catalog.TableDescriptor, col catalog.Column, semaCtx *tree.SemaContext,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.FormatNameP(&desc.Name)
+	name := col.GetName()
+	f.FormatNameP(&name)
 	f.WriteByte(' ')
-	f.WriteString(desc.Type.SQLString())
-	if desc.Hidden {
+	f.WriteString(col.GetType().SQLString())
+	if col.IsHidden() {
 		f.WriteString(" NOT VISIBLE")
 	}
-	if desc.Nullable {
+	if col.IsNullable() {
 		f.WriteString(" NULL")
 	} else {
 		f.WriteString(" NOT NULL")
 	}
-	if desc.DefaultExpr != nil {
+	if col.HasDefault() {
 		f.WriteString(" DEFAULT ")
-		defExpr, err := FormatExprForDisplay(ctx, tbl, *desc.DefaultExpr, semaCtx, tree.FmtParsable)
+		defExpr, err := FormatExprForDisplay(ctx, tbl, col.GetDefaultExpr(), semaCtx, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
 		f.WriteString(defExpr)
 	}
-	if desc.IsComputed() {
+	if col.IsComputed() {
 		f.WriteString(" AS (")
-		compExpr, err := FormatExprForDisplay(ctx, tbl, *desc.ComputeExpr, semaCtx, tree.FmtParsable)
+		compExpr, err := FormatExprForDisplay(ctx, tbl, col.GetComputeExpr(), semaCtx, tree.FmtParsable)
 		if err != nil {
 			return "", err
 		}
 		f.WriteString(compExpr)
-		if desc.Virtual {
+		if col.IsVirtual() {
 			f.WriteString(") VIRTUAL")
 		} else {
 			f.WriteString(") STORED")
@@ -158,7 +155,7 @@ func RenameColumn(expr string, from tree.Name, to tree.Name) (string, error) {
 // If the expression references a column that does not exist in the table
 // descriptor, iterColDescriptors errs with pgcode.UndefinedColumn.
 func iterColDescriptors(
-	desc catalog.TableDescriptor, rootExpr tree.Expr, f func(*descpb.ColumnDescriptor) error,
+	desc catalog.TableDescriptor, rootExpr tree.Expr, f func(column catalog.Column) error,
 ) error {
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
@@ -183,7 +180,7 @@ func iterColDescriptors(
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
 
-		if err := f(col.ColumnDesc()); err != nil {
+		if err := f(col); err != nil {
 			return false, nil, err
 		}
 		return false, expr, err
@@ -274,16 +271,6 @@ func replaceColumnVars(
 	})
 
 	return newExpr, colIDs, err
-}
-
-// columnDescriptorsToPtrs returns a list of references to the input
-// ColumnDescriptors.
-func columnDescriptorsToPtrs(cols []descpb.ColumnDescriptor) []*descpb.ColumnDescriptor {
-	ptrs := make([]*descpb.ColumnDescriptor, len(cols))
-	for i := range cols {
-		ptrs[i] = &cols[i]
-	}
-	return ptrs
 }
 
 // ReplaceIDsWithFQNames walks the given expr and replaces occurrences

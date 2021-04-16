@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -136,9 +137,10 @@ func TestGetZoneConfig(t *testing.T) {
 			}
 
 			// Verify sql.GetZoneConfigInTxn.
+			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
-					ctx, txn, config.SystemTenantObjectID(tc.objectID), &descpb.IndexDescriptor{}, tc.partitionName, false,
+					ctx, txn, config.SystemTenantObjectID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
 					return err
@@ -259,8 +261,8 @@ func TestGetZoneConfig(t *testing.T) {
 	tb21Cfg.NumReplicas = proto.Int32(1)
 	tb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
 	tb21Cfg.Subzones = []zonepb.Subzone{
-		{PartitionName: "p0", Config: p211Cfg},
-		{PartitionName: "p1", Config: p212Cfg},
+		{IndexID: 1, PartitionName: "p0", Config: p211Cfg},
+		{IndexID: 1, PartitionName: "p1", Config: p212Cfg},
 	}
 	tb21Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}},
@@ -275,7 +277,7 @@ func TestGetZoneConfig(t *testing.T) {
 	// Subzone Placeholder
 	tb22Cfg := *zonepb.NewZoneConfig()
 	tb22Cfg.NumReplicas = proto.Int32(0)
-	tb22Cfg.Subzones = []zonepb.Subzone{{PartitionName: "p0", Config: p221Cfg}}
+	tb22Cfg.Subzones = []zonepb.Subzone{{IndexID: 1, PartitionName: "p0", Config: p221Cfg}}
 	tb22Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}, EndKey: []byte{255}},
 	}
@@ -374,9 +376,10 @@ func TestCascadingZoneConfig(t *testing.T) {
 			}
 
 			// Verify sql.GetZoneConfigInTxn.
+			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
-					ctx, txn, config.SystemTenantObjectID(tc.objectID), &descpb.IndexDescriptor{}, tc.partitionName, false,
+					ctx, txn, config.SystemTenantObjectID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
 					return err
@@ -516,8 +519,8 @@ func TestCascadingZoneConfig(t *testing.T) {
 	tb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
 	tb21Cfg.InheritedConstraints = false
 	tb21Cfg.Subzones = []zonepb.Subzone{
-		{PartitionName: "p0", Config: p211Cfg},
-		{PartitionName: "p1", Config: p212Cfg},
+		{IndexID: 1, PartitionName: "p0", Config: p211Cfg},
+		{IndexID: 1, PartitionName: "p1", Config: p212Cfg},
 	}
 	tb21Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}},
@@ -529,8 +532,8 @@ func TestCascadingZoneConfig(t *testing.T) {
 	expectedTb21Cfg := defaultZoneConfig
 	expectedTb21Cfg.Constraints = []zonepb.ConstraintsConjunction{{Constraints: []zonepb.Constraint{{Value: "db2.tb1"}}}}
 	expectedTb21Cfg.Subzones = []zonepb.Subzone{
-		{PartitionName: "p0", Config: p211Cfg},
-		{PartitionName: "p1", Config: p212Cfg},
+		{IndexID: 1, PartitionName: "p0", Config: p211Cfg},
+		{IndexID: 1, PartitionName: "p1", Config: p212Cfg},
 	}
 	expectedTb21Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}},
@@ -549,7 +552,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	// Subzone Placeholder
 	tb22Cfg := *zonepb.NewZoneConfig()
 	tb22Cfg.NumReplicas = proto.Int32(0)
-	tb22Cfg.Subzones = []zonepb.Subzone{{PartitionName: "p0", Config: p221Cfg}}
+	tb22Cfg.Subzones = []zonepb.Subzone{{IndexID: 1, PartitionName: "p0", Config: p221Cfg}}
 	tb22Cfg.SubzoneSpans = []zonepb.SubzoneSpan{
 		{SubzoneIndex: 0, Key: []byte{1}, EndKey: []byte{255}},
 	}
