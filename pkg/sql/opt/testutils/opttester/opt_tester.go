@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder" // for ExprFmtHideScalars.
@@ -220,6 +221,9 @@ type Flags struct {
 	// MemoGroupLimit is used by the check-size command to check whether
 	// more than MemoGroupLimit memo groups are constructed during optimization.
 	MemoGroupLimit int64
+
+	// QueryArgs are values for placeholders, used for assign-placeholders-*.
+	QueryArgs []string
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -275,6 +279,16 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the lowest cost tree.
+//
+//  - assign-placeholders-norm query-args=(...)
+//
+//    Builds a query that has placeholders (with normalization enabled), then
+//    assigns placeholders to the given query arguments.
+//
+//  - assign-placeholders-opt query-args=(...)
+//
+//    Builds a query that has placeholders (with normalization enabled), then
+//    assigns placeholders to the given query arguments and fully optimizes it.
 //
 //  - build-cascades [flags]
 //
@@ -441,14 +455,17 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 	}
+	ot.Flags.Verbose = datadriven.Verbose()
+
+	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
 	ot.evalCtx.SessionData.ReorderJoinsLimit = ot.Flags.JoinLimit
 	ot.evalCtx.SessionData.PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 
-	ot.Flags.Verbose = datadriven.Verbose()
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
 	ot.evalCtx.SessionData.SaveTablesPrefix = ot.Flags.SaveTablesPrefix
+	ot.evalCtx.Placeholders = nil
 
 	switch d.Cmd {
 	case "exec-ddl":
@@ -504,6 +521,15 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "opt":
 		e, err := ot.Optimize()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		ot.postProcess(tb, d, e)
+		return ot.FormatExpr(e)
+
+	case "assign-placeholders-norm", "assign-placeholders-opt":
+		explore := d.Cmd == "assign-placeholders-opt"
+		e, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, explore)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
@@ -926,6 +952,9 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		}
 		f.MemoGroupLimit = limit
 
+	case "query-args":
+		f.QueryArgs = arg.Vals
+
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
 	}
@@ -981,6 +1010,73 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 	})
 	o.Factory().FoldingControl().AllowStableFolds()
 	return ot.optimizeExpr(o)
+}
+
+// AssignPlaceholders builds the given query with placeholders, then assigns the
+// placeholders to the given argument values, and optionally runs exploration.
+//
+// The arguments are parsed as SQL expressions.
+func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.Expr, error) {
+	o := ot.makeOptimizer()
+
+	// Build the prepared memo. Note that placeholders don't have values yet, so
+	// they won't be replaced.
+	err := ot.buildExpr(o.Factory())
+	if err != nil {
+		return nil, err
+	}
+	prepMemo := o.DetachMemo()
+
+	// Construct placeholder values.
+	if exp := len(ot.semaCtx.Placeholders.Types); len(queryArgs) != exp {
+		return nil, errors.Errorf("expected %d arguments, got %d", exp, len(queryArgs))
+	}
+	ot.semaCtx.Placeholders.Values = make(tree.QueryArguments, len(queryArgs))
+	for i, arg := range queryArgs {
+		var parg tree.Expr
+		parg, err := parser.ParseExpr(fmt.Sprintf("%v", arg))
+		if err != nil {
+			return nil, err
+		}
+
+		id := tree.PlaceholderIdx(i)
+		typ, _ := ot.semaCtx.Placeholders.ValueType(id)
+		texpr, err := schemaexpr.SanitizeVarFreeExpr(
+			context.Background(),
+			parg,
+			typ,
+			"", /* context */
+			&ot.semaCtx,
+			tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		ot.semaCtx.Placeholders.Values[i] = texpr
+	}
+	ot.evalCtx.Placeholders = &ot.semaCtx.Placeholders
+
+	// Now assign placeholders.
+	o = ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if !explore && !ruleName.IsNormalize() {
+			return false
+		}
+		if ot.Flags.DisableRules.Contains(int(ruleName)) {
+			return false
+		}
+		return true
+	})
+	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
+		ot.appliedRules.Add(int(ruleName))
+	})
+
+	o.Factory().FoldingControl().AllowStableFolds()
+	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
+		return nil, err
+	}
+	return o.Optimize()
 }
 
 // Memo returns a string that shows the memo data structure that is constructed

@@ -1,0 +1,135 @@
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY (a,b,c))
+----
+
+assign-placeholders-norm query-args=(1)
+SELECT v FROM kv WHERE k = $1
+----
+project
+ ├── columns: v:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── select
+      ├── columns: k:1!null v:2
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan kv
+      │    ├── columns: k:1!null v:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+assign-placeholders-opt query-args=(1)
+SELECT v FROM kv WHERE k = $1
+----
+project
+ ├── columns: v:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── scan kv
+      ├── columns: k:1!null v:2
+      ├── constraint: /1: [/1 - /1]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+# This is what we ideally want to obtain after assigning placeholders in the
+# test below.
+norm
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest('{1}'::INT[]),
+         unnest('{2}'::INT[])
+)
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── key: (3)
+ ├── fd: ()-->(1,2), (3)-->(4)
+ ├── scan abcd
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── key: (1-3)
+ │    └── fd: (1-3)-->(4)
+ └── filters
+      └── (a:1, b:2) IN ((1, 2),) [outer=(1,2), constraints=(/1/2: [/1/2 - /1/2]; /2: [/2 - /2]; tight), fd=()-->(1,2)]
+
+# TODO(radu): hoisting of the subquery results in projecting the tuple, which
+# gets in the way of simplifying the expression. In particular, we can't
+# convert this to a lookup join (see next testcase), which is unfortunate.
+assign-placeholders-norm query-args=('{1}','{2}')
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest($1:::STRING::INT[]),
+         unnest($2:::STRING::INT[])
+)
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── immutable
+ ├── key: (1-3)
+ ├── fd: (1-3)-->(4)
+ └── semi-join (hash)
+      ├── columns: a:1!null b:2!null c:3!null d:4 column9:9!null
+      ├── immutable
+      ├── key: (1-3)
+      ├── fd: (1-3)-->(4), (1,2)-->(9)
+      ├── project
+      │    ├── columns: column9:9!null a:1!null b:2!null c:3!null d:4
+      │    ├── key: (1-3)
+      │    ├── fd: (1-3)-->(4), (1,2)-->(9)
+      │    ├── scan abcd
+      │    │    ├── columns: a:1!null b:2!null c:3!null d:4
+      │    │    ├── key: (1-3)
+      │    │    └── fd: (1-3)-->(4)
+      │    └── projections
+      │         └── (a:1, b:2) [as=column9:9, outer=(1,2)]
+      ├── values
+      │    ├── columns: column8:8
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(8)
+      │    └── ((1, 2),)
+      └── filters
+           └── column9:9 = column8:8 [outer=(8,9), immutable, constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+
+# TODO(radu): tHe end result involves a full table scan.
+assign-placeholders-opt query-args=('{1}','{2}')
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest($1:::STRING::INT[]),
+         unnest($2:::STRING::INT[])
+)
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── immutable
+ ├── key: (1-3)
+ ├── fd: (1-3)-->(4)
+ └── semi-join (hash)
+      ├── columns: a:1!null b:2!null c:3!null d:4 column9:9!null
+      ├── immutable
+      ├── key: (1-3)
+      ├── fd: (1-3)-->(4), (1,2)-->(9)
+      ├── project
+      │    ├── columns: column9:9!null a:1!null b:2!null c:3!null d:4
+      │    ├── key: (1-3)
+      │    ├── fd: (1-3)-->(4), (1,2)-->(9)
+      │    ├── scan abcd
+      │    │    ├── columns: a:1!null b:2!null c:3!null d:4
+      │    │    ├── key: (1-3)
+      │    │    └── fd: (1-3)-->(4)
+      │    └── projections
+      │         └── (a:1, b:2) [as=column9:9, outer=(1,2)]
+      ├── values
+      │    ├── columns: column8:8
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(8)
+      │    └── ((1, 2),)
+      └── filters
+           └── column9:9 = column8:8 [outer=(8,9), immutable, constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]

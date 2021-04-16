@@ -109,9 +109,9 @@ func (g *memoGroups) depthFirstSearch(
 		return nil
 	}
 
-	// There are various scalar leaf singletons that won't be registered as
-	// groups; ignore them.
-	if scalar, ok := start.(opt.ScalarExpr); ok && scalar.ChildCount() == 0 {
+	// There are various scalars that won't be registered as groups (e.g.
+	// singletons). Ignore them (rather than panicing in firstInGroup).
+	if scalar, ok := start.(opt.ScalarExpr); ok {
 		if _, found := g.exprMap[scalar]; !found {
 			return nil
 		}
