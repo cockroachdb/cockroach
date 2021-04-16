@@ -1238,13 +1238,46 @@ func (ts *TestServer) SplitRange(
 	return ts.SplitRangeWithExpiration(splitKey, hlc.MaxTimestamp)
 }
 
-// GetRangeLease returns the current lease for the range containing key, and a
-// timestamp taken from the node.
+// LeaseInfo describes a range's current and potentially future lease.
+type LeaseInfo struct {
+	cur, next roachpb.Lease
+}
+
+// Current returns the range's current lease.
+func (l LeaseInfo) Current() roachpb.Lease {
+	return l.cur
+}
+
+// CurrentOrProspective returns the range's potential next lease, if a lease
+// request is in progress, or the current lease otherwise.
+func (l LeaseInfo) CurrentOrProspective() roachpb.Lease {
+	if !l.next.Empty() {
+		return l.next
+	}
+	return l.cur
+}
+
+// LeaseInfoOpt enumerates options for GetRangeLease.
+type LeaseInfoOpt int
+
+const (
+	// AllowQueryToBeForwardedToDifferentNode specifies that, if the current node
+	// doesn't have a voter replica, the lease info can come from a different
+	// node.
+	AllowQueryToBeForwardedToDifferentNode LeaseInfoOpt = iota
+	// QueryLocalNodeOnly specifies that an error should be returned if the node
+	// is not able to serve the lease query (because it doesn't have a voting
+	// replica).
+	QueryLocalNodeOnly
+)
+
+// GetRangeLease returns information on the lease for the range containing key, and a
+// timestamp taken from the node. The lease is returned regardless of its status.
 //
-// The lease is returned regardless of its status.
+// queryPolicy specifies if its OK to forward the request to a different node.
 func (ts *TestServer) GetRangeLease(
-	ctx context.Context, key roachpb.Key,
-) (_ roachpb.Lease, now hlc.ClockTimestamp, _ error) {
+	ctx context.Context, key roachpb.Key, queryPolicy LeaseInfoOpt,
+) (_ LeaseInfo, now hlc.ClockTimestamp, _ error) {
 	leaseReq := roachpb.LeaseInfoRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: key,
@@ -1262,10 +1295,25 @@ func (ts *TestServer) GetRangeLease(
 		&leaseReq,
 	)
 	if pErr != nil {
-		return roachpb.Lease{}, hlc.ClockTimestamp{}, pErr.GoError()
+		return LeaseInfo{}, hlc.ClockTimestamp{}, pErr.GoError()
 	}
-	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().NowAsClockTimestamp(), nil
-
+	// Adapt the LeaseInfoResponse format to LeaseInfo.
+	resp := leaseResp.(*roachpb.LeaseInfoResponse)
+	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
+		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
+		// This API API should permit addressing the query to a particular store.
+		return LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
+			"request not evaluated locally; evaluated by s%d instead of local s%d",
+			resp.EvaluatedBy, ts.GetFirstStoreID())
+	}
+	var l LeaseInfo
+	if resp.CurrentLease != nil {
+		l.cur = *resp.CurrentLease
+		l.next = resp.Lease
+	} else {
+		l.cur = resp.Lease
+	}
+	return l, ts.Clock().NowAsClockTimestamp(), nil
 }
 
 // ExecutorConfig is part of the TestServerInterface.
