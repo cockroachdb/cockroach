@@ -37,7 +37,15 @@ func splitPreApply(
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) {
-	log.Infof(ctx, "TBG splitPreApplyStart rhs=r%d", split.RightDesc.RangeID)
+	var age time.Duration
+	if split.RightDesc.StickyBit != nil {
+		// The wall time of the split processor when making this split. It adds an
+		// hour of grace period (see split_and_scatter_processor.go), so we subtract
+		// that to get the wall time back.
+		conceptionTS := time.Unix(0, split.RightDesc.StickyBit.WallTime).Add(-1 * time.Hour)
+		age = timeutil.Since(conceptionTS)
+	}
+	log.Infof(ctx, "TBG splitPreApplyStart rhs=r%d age=%.2fs", split.RightDesc.RangeID, age.Seconds())
 	defer func(tBegin time.Time) {
 		dur := timeutil.Since(tBegin)
 		log.Infof(ctx, "TBG splitPreApplyStart rhs=r%d done after %.2fs", split.RightDesc.RangeID, dur.Seconds())
