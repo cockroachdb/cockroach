@@ -132,6 +132,9 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 				extra += fmt.Sprintf("; replica r%d/%d not caught up: %+v", rangeID, replicaID, &pr)
 			}
 		}
+		if behindCount := calcBehindCount(raftStatus, (*Replica)(sdh.(*splitDelayHelper)).Desc(), nil); behindCount > 0 {
+			extra += fmt.Sprintf("; behindCount=%d", behindCount)
+		}
 		if done {
 			succeeded = true
 			break
