@@ -139,7 +139,7 @@ vectorized: true
         │ equality: (oid) = (connamespace)
         │
         ├── • filter
-        │   │ filter: nspname IN ('public',)
+        │   │ filter: nspname = 'public'
         │   │
         │   └── • virtual table
         │         table: pg_namespace@primary

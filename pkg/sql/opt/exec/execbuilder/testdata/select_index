@@ -823,7 +823,7 @@ vectorized: true
 └── • filter
     │ columns: (k, a, b)
     │ estimated row count: 333 (missing stats)
-    │ filter: ((a IN (6,)) AND (a > 6)) OR (b >= 4)
+    │ filter: ((a = 6) AND (a > 6)) OR (b >= 4)
     │
     └── • scan
           columns: (k, a, b)
