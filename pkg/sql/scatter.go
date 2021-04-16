@@ -45,24 +45,25 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 	var span roachpb.Span
 	if n.From == nil {
 		// No FROM/TO specified; the span is the entire table/index.
-		span = tableDesc.IndexSpan(p.ExecCfg().Codec, index.ID)
+		span = tableDesc.IndexSpan(p.ExecCfg().Codec, index.GetID())
 	} else {
 		switch {
 		case len(n.From) == 0:
 			return nil, errors.Errorf("no columns in SCATTER FROM expression")
-		case len(n.From) > len(index.ColumnIDs):
+		case len(n.From) > index.NumColumns():
 			return nil, errors.Errorf("too many columns in SCATTER FROM expression")
 		case len(n.To) == 0:
 			return nil, errors.Errorf("no columns in SCATTER TO expression")
-		case len(n.To) > len(index.ColumnIDs):
+		case len(n.To) > index.NumColumns():
 			return nil, errors.Errorf("too many columns in SCATTER TO expression")
 		}
 
 		// Calculate the desired types for the select statement:
 		//  - column values; it is OK if the select statement returns fewer columns
 		//  (the relevant prefix is used).
-		desiredTypes := make([]*types.T, len(index.ColumnIDs))
-		for i, colID := range index.ColumnIDs {
+		desiredTypes := make([]*types.T, index.NumColumns())
+		for i := 0; i < index.NumColumns(); i++ {
+			colID := index.GetColumnID(i)
 			c, err := tableDesc.FindColumnWithID(colID)
 			if err != nil {
 				return nil, err

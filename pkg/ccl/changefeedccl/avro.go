@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -145,18 +144,18 @@ type avroEnvelopeRecord struct {
 	before, after *avroDataRecord
 }
 
-// columnDescToAvroSchema converts a column descriptor into its corresponding
+// columnToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
-func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField, error) {
+func columnToAvroSchema(col catalog.Column) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
-		Name:     SQLNameToAvroName(colDesc.Name),
-		Metadata: colDesc.SQLStringNotHumanReadable(),
+		Name:     SQLNameToAvroName(col.GetName()),
+		Metadata: col.ColumnDesc().SQLStringNotHumanReadable(),
 		Default:  nil,
-		typ:      colDesc.Type,
+		typ:      col.GetType(),
 	}
 
 	var avroType avroSchemaType
-	switch colDesc.Type.Family() {
+	switch col.GetType().Family() {
 	case types.IntFamily:
 		avroType = avroSchemaLong
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
@@ -242,7 +241,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 			date := *d.(*tree.DDate)
 			if !date.IsFinite() {
 				return nil, errors.Errorf(
-					`column %s: infinite date not yet supported with avro`, colDesc.Name)
+					`column %s: infinite date not yet supported with avro`, col.GetName())
 			}
 			// The avro library requires us to return this as a time.Time.
 			return date.ToTime()
@@ -300,12 +299,12 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 			return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond)
 		}
 	case types.DecimalFamily:
-		if colDesc.Type.Precision() == 0 {
+		if col.GetType().Precision() == 0 {
 			return nil, errors.Errorf(
-				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
+				`column %s: decimal with no precision not yet supported with avro`, col.GetName())
 		}
-		width := int(colDesc.Type.Width())
-		prec := int(colDesc.Type.Precision())
+		width := int(col.GetType().Width())
+		prec := int(col.GetType().Precision())
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaBytes,
 			LogicalType: `decimal`,
@@ -317,7 +316,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 
 			// If the decimal happens to fit a smaller width than the
 			// column allows, add trailing zeroes so the scale is constant
-			if colDesc.Type.Width() > -dec.Exponent {
+			if col.GetType().Width() > -dec.Exponent {
 				_, err := tree.DecimalCtx.WithPrecision(uint32(prec)).Quantize(&dec, &dec, -int32(width))
 				if err != nil {
 					// This should always be possible without rounding since we're using the column def,
@@ -368,7 +367,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 		}
 	default:
 		return nil, errors.Errorf(`column %s: type %s not yet supported with avro`,
-			colDesc.Name, colDesc.Type.SQLString())
+			col.GetName(), col.GetType().SQLString())
 	}
 	schema.SchemaType = avroType
 
@@ -409,10 +408,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 // record schema. The fields are kept in the same order as columns in the index.
 // sqlName can be any string but should uniquely identify a schema.
 func indexToAvroSchema(
-	tableDesc catalog.TableDescriptor,
-	indexDesc *descpb.IndexDescriptor,
-	sqlName string,
-	namespace string,
+	tableDesc catalog.TableDescriptor, index catalog.Index, sqlName string, namespace string,
 ) (*avroDataRecord, error) {
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
@@ -424,13 +420,14 @@ func indexToAvroSchema(
 		colIdxByFieldIdx: make(map[int]int),
 	}
 	colIdxByID := catalog.ColumnIDToOrdinalMap(tableDesc.PublicColumns())
-	for _, colID := range indexDesc.ColumnIDs {
+	for i := 0; i < index.NumColumns(); i++ {
+		colID := index.GetColumnID(i)
 		colIdx, ok := colIdxByID.Get(colID)
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
 		col := tableDesc.PublicColumns()[colIdx]
-		field, err := columnDescToAvroSchema(col.ColumnDesc())
+		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
@@ -476,7 +473,7 @@ func tableToAvroSchema(
 		colIdxByFieldIdx: make(map[int]int),
 	}
 	for _, col := range tableDesc.PublicColumns() {
-		field, err := columnDescToAvroSchema(col.ColumnDesc())
+		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}

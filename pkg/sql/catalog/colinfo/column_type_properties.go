@@ -11,7 +11,7 @@
 package colinfo
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,14 +26,14 @@ import (
 // scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func CheckDatumTypeFitsColumnType(col *descpb.ColumnDescriptor, typ *types.T) error {
+func CheckDatumTypeFitsColumnType(col catalog.Column, typ *types.T) error {
 	if typ.Family() == types.UnknownFamily {
 		return nil
 	}
-	if !typ.Equivalent(col.Type) {
+	if !typ.Equivalent(col.GetType()) {
 		return pgerror.Newf(pgcode.DatatypeMismatch,
 			"value type %s doesn't match type %s of column %q",
-			typ.String(), col.Type.String(), tree.ErrNameString(col.Name))
+			typ.String(), col.GetType().String(), tree.ErrNameString(col.GetName()))
 	}
 	return nil
 }

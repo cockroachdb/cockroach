@@ -61,9 +61,8 @@ func gcIndexes(
 			continue
 		}
 
-		indexDesc := descpb.IndexDescriptor{ID: index.IndexID}
-		if err := clearIndex(ctx, execCfg, parentTable, indexDesc); err != nil {
-			return errors.Wrapf(err, "clearing index %d", indexDesc.ID)
+		if err := clearIndex(ctx, execCfg, parentTable, index.IndexID); err != nil {
+			return errors.Wrapf(err, "clearing index %d from table %d", index.IndexID, parentTable.GetID())
 		}
 
 		// All the data chunks have been removed. Now also removed the
@@ -83,16 +82,15 @@ func gcIndexes(
 			if err != nil {
 				return err
 			}
-			toRemove := []descpb.IndexDescriptor{indexDesc}
 			return sql.RemoveIndexZoneConfigs(
-				ctx, txn, execCfg, freshParentTableDesc, toRemove,
+				ctx, txn, execCfg, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
 		lm, ie, db := execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB
 		if err := descs.Txn(
 			ctx, execCfg.Settings, lm, ie, db, removeIndexZoneConfigs,
 		); err != nil {
-			return errors.Wrapf(err, "removing index %d zone configs", indexDesc.ID)
+			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
 		}
 
 		if err := completeDroppedIndex(
@@ -109,14 +107,11 @@ func clearIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	tableDesc catalog.TableDescriptor,
-	index descpb.IndexDescriptor,
+	indexID descpb.IndexID,
 ) error {
-	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.GetID())
-	if index.IsInterleaved() {
-		return errors.Errorf("unexpected interleaved index %d", index.ID)
-	}
+	log.Infof(ctx, "clearing index %d from table %d", indexID, tableDesc.GetID())
 
-	sp := tableDesc.IndexSpan(execCfg.Codec, index.ID)
+	sp := tableDesc.IndexSpan(execCfg.Codec, indexID)
 	start, err := keys.Addr(sp.Key)
 	if err != nil {
 		return errors.Errorf("failed to addr index start: %v", err)

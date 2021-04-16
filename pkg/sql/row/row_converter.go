@@ -90,8 +90,8 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
-	insertCols []descpb.ColumnDescriptor,
-	computedColsLookup []descpb.ColumnDescriptor,
+	insertCols []catalog.Column,
+	computedColsLookup []catalog.Column,
 	evalCtx *tree.EvalContext,
 	tableDesc catalog.TableDescriptor,
 	rowVals tree.Datums,
@@ -131,15 +131,16 @@ func GenerateInsertRow(
 			// columns, all the columns which could possibly be referenced *are*
 			// available.
 			col := computedColsLookup[i]
-			computeIdx := rowContainerForComputedVals.Mapping.GetDefault(col.ID)
+			computeIdx := rowContainerForComputedVals.Mapping.GetDefault(col.GetID())
 			if !col.IsComputed() {
 				continue
 			}
 			d, err := computeExprs[computeIdx].Eval(evalCtx)
 			if err != nil {
+				name := col.GetName()
 				return nil, errors.Wrapf(err,
 					"computed column %s",
-					tree.ErrString((*tree.Name)(&col.Name)))
+					tree.ErrString((*tree.Name)(&name)))
 			}
 			rowVals[computeIdx] = d
 		}
@@ -172,7 +173,7 @@ func GenerateInsertRow(
 
 	// Ensure that the values honor the specified column widths.
 	for i := 0; i < len(insertCols); i++ {
-		outVal, err := tree.AdjustValueToType(insertCols[i].Type, rowVals[i])
+		outVal, err := tree.AdjustValueToType(insertCols[i].GetType(), rowVals[i])
 		if err != nil {
 			return nil, err
 		}
@@ -215,8 +216,8 @@ type DatumRowConverter struct {
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                    Inserter
 	EvalCtx               *tree.EvalContext
-	cols                  []descpb.ColumnDescriptor
-	VisibleCols           []descpb.ColumnDescriptor
+	cols                  []catalog.Column
+	VisibleCols           []catalog.Column
 	VisibleColTypes       []*types.T
 	computedExprs         []tree.TypedExpr
 	defaultCache          []tree.TypedExpr
@@ -247,12 +248,13 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // related to the sequence which will be used when evaluating the default
 // expression using the sequence.
 func (c *DatumRowConverter) getSequenceAnnotation(
-	evalCtx *tree.EvalContext, cols []descpb.ColumnDescriptor,
+	evalCtx *tree.EvalContext, cols []catalog.Column,
 ) (map[string]*SequenceMetadata, map[descpb.ID]*SequenceMetadata, error) {
 	// Identify the sequences used in all the columns.
 	sequenceIDs := make(map[descpb.ID]struct{})
 	for _, col := range cols {
-		for _, id := range col.UsesSequenceIds {
+		for i := 0; i < col.NumUsesSequences(); i++ {
+			id := col.GetUsesSequenceID(i)
 			sequenceIDs[id] = struct{}{}
 		}
 	}
@@ -319,21 +321,18 @@ func NewDatumRowConverter(
 		targetCols = tableDesc.VisibleColumns()
 	}
 
-	targetColDescriptors := make([]descpb.ColumnDescriptor, len(targetCols))
 	var targetColIDs catalog.TableColSet
 	for i, col := range targetCols {
 		c.TargetColOrds.Add(i)
 		targetColIDs.Add(col.GetID())
-		targetColDescriptors[i] = *col.ColumnDesc()
 	}
 
 	var txCtx transform.ExprTransformContext
 	semaCtx := tree.MakeSemaContext()
-	relevantColumns := func(col *descpb.ColumnDescriptor) bool {
+	relevantColumns := func(col catalog.Column) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
-	cols := schemaexpr.ProcessColumnSet(
-		targetColDescriptors, tableDesc, relevantColumns)
+	cols := schemaexpr.ProcessColumnSet(targetCols, tableDesc, relevantColumns)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
@@ -354,13 +353,13 @@ func NewDatumRowConverter(
 	c.ri = ri
 	c.cols = cols
 
-	c.VisibleCols = targetColDescriptors
+	c.VisibleCols = targetCols
 	c.VisibleColTypes = make([]*types.T, len(c.VisibleCols))
 	for i := range c.VisibleCols {
-		c.VisibleColTypes[i] = c.VisibleCols[i].Type
+		c.VisibleColTypes[i] = c.VisibleCols[i].GetType()
 	}
 
-	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
+	c.Datums = make([]tree.Datum, len(targetCols), len(cols))
 	c.defaultCache = make([]tree.TypedExpr, len(cols))
 
 	annot := make(tree.Annotations, 1)
@@ -383,12 +382,11 @@ func NewDatumRowConverter(
 	// In addition, check for non-targeted columns with non-null DEFAULT expressions.
 	// If the DEFAULT expression is immutable, we can store it in the cache so that it
 	// doesn't have to be reevaluated for every row.
-	for i := range cols {
-		col := &cols[i]
-		if col.DefaultExpr != nil {
+	for i, col := range cols {
+		if col.HasDefault() {
 			// Placeholder for columns with default values that will be evaluated when
 			// each import row is being created.
-			typedExpr, volatile, err := sanitizeExprsForImport(ctx, c.EvalCtx, defaultExprs[i], col.Type)
+			typedExpr, volatile, err := sanitizeExprsForImport(ctx, c.EvalCtx, defaultExprs[i], col.GetType())
 			if err != nil {
 				// This expression may not be safe for import but we don't want to
 				// call the user out at this stage: targeted columns may not have
@@ -409,11 +407,11 @@ func NewDatumRowConverter(
 					}
 				}
 			}
-			if !targetColIDs.Contains(col.ID) {
+			if !targetColIDs.Contains(col.GetID()) {
 				c.Datums = append(c.Datums, nil)
 			}
 		}
-		if col.IsComputed() && !targetColIDs.Contains(col.ID) {
+		if col.IsComputed() && !targetColIDs.Contains(col.GetID()) {
 			c.Datums = append(c.Datums, nil)
 		}
 	}
@@ -425,13 +423,11 @@ func NewDatumRowConverter(
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
-	colDescs := make([]descpb.ColumnDescriptor, len(c.tableDesc.PublicColumns()))
-	colsOrdered := make([]descpb.ColumnDescriptor, len(cols))
-	for i, col := range c.tableDesc.PublicColumns() {
-		colDescs[i] = *col.ColumnDesc()
+	colsOrdered := make([]catalog.Column, len(cols))
+	for _, col := range c.tableDesc.PublicColumns() {
 		// We prefer to have the order of columns that will be sent into
 		// MakeComputedExprs to map that of Datums.
-		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.GetID())] = colDescs[i]
+		colsOrdered[ri.InsertColIDtoRowIndex.GetDefault(col.GetID())] = col
 	}
 	// Here, computeExprs will be nil if there's no computed column, or
 	// the list of computed expressions (including nil, for those columns
@@ -439,7 +435,7 @@ func NewDatumRowConverter(
 	c.computedExprs, _, err = schemaexpr.MakeComputedExprs(
 		ctx,
 		colsOrdered,
-		colDescs,
+		c.tableDesc.PublicColumns(),
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
@@ -450,10 +446,7 @@ func NewDatumRowConverter(
 
 	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
-	}
-	for i, col := range tableDesc.PublicColumns() {
-		c.computedIVarContainer.Cols[i] = *col.ColumnDesc()
+		Cols:    tableDesc.PublicColumns(),
 	}
 	return c, nil
 }
@@ -464,9 +457,8 @@ const rowIDBits = 64 - builtins.NodeIDBits
 // if necessary.
 func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
 	getCellInfoAnnotation(c.EvalCtx.Annotations).reset(sourceID, rowIndex)
-	for i := range c.cols {
-		col := &c.cols[i]
-		if col.DefaultExpr != nil {
+	for i, col := range c.cols {
+		if col.HasDefault() {
 			// If this column is targeted, then the evaluation is a no-op except to
 			// make one evaluation just in case we have random() default expression
 			// to ensure that the positions we advance in a row is the same as the
@@ -477,20 +469,16 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			if !c.TargetColOrds.Contains(i) {
 				if err != nil {
 					return errors.Wrapf(
-						err, "error evaluating default expression %q", *col.DefaultExpr)
+						err, "error evaluating default expression %q", col.GetDefaultExpr())
 				}
 				c.Datums[i] = datum
 			}
 		}
 	}
 
-	var computedColsLookup []descpb.ColumnDescriptor
+	var computedColsLookup []catalog.Column
 	if len(c.computedExprs) > 0 {
-		cols := c.tableDesc.PublicColumns()
-		computedColsLookup = make([]descpb.ColumnDescriptor, len(cols))
-		for i, col := range cols {
-			computedColsLookup[i] = *col.ColumnDesc()
-		}
+		computedColsLookup = c.tableDesc.PublicColumns()
 	}
 
 	insertRow, err := GenerateInsertRow(

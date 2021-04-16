@@ -175,8 +175,8 @@ func emitExplain(
 			return "<virtual table spans>"
 		}
 		tabDesc := table.(*optTable).desc
-		idxDesc := index.(*optIndex).desc
-		spans, err := generateScanSpans(evalCtx, codec, tabDesc, idxDesc, scanParams)
+		idx := index.(*optIndex).idx
+		spans, err := generateScanSpans(evalCtx, codec, tabDesc, idx, scanParams)
 		if err != nil {
 			return err.Error()
 		}
@@ -192,7 +192,7 @@ func emitExplain(
 		if !codec.ForSystemTenant() {
 			skip = 4
 		}
-		return catalogkeys.PrettySpans(idxDesc, spans, skip)
+		return catalogkeys.PrettySpans(idx, spans, skip)
 	}
 
 	return explain.Emit(explainPlan, ob, spanFormatFn)
