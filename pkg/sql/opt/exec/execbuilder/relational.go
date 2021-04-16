@@ -1357,13 +1357,16 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 			))
 		}
 	}
-	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root, hardLimit)
-	if err != nil {
-		return execPlan{}, err
-	}
-	ep := execPlan{root: node}
+
+	ep := execPlan{}
 	for i, col := range private.OutCols {
 		ep.outputCols.Set(int(col), i)
+	}
+	reqOrdering := ep.reqOrdering(set)
+
+	ep.root, err = b.factory.ConstructSetOp(typ, all, left.root, right.root, reqOrdering, hardLimit)
+	if err != nil {
+		return execPlan{}, err
 	}
 	return ep, nil
 }
