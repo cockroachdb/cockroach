@@ -1424,10 +1424,11 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads. The test relies on the fact
 // that RequestLeaseRequest does not declare to touch the whole key span of the
-// range, and thus don't conflict through the command queue with other reads.
+// range, and thus don't conflict through latches with other reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	readBlocked := make(chan struct{})
 	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
@@ -1449,7 +1450,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if err != nil {
@@ -1465,7 +1466,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := kv.SendWrappedWith(context.Background(), s.DB().NonTransactionalSender(),
+		if _, pErr := kv.SendWrappedWith(ctx, s.DB().NonTransactionalSender(),
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -1502,21 +1503,21 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 
 		for {
-			curLease, _, err := s.GetRangeLease(context.Background(), key)
+			leaseInfo, _, err := s.GetRangeLease(ctx, key, server.AllowQueryToBeForwardedToDifferentNode)
 			if err != nil {
 				t.Fatal(err)
 			}
-			leaseReq.PrevLease = curLease
+			leaseReq.PrevLease = leaseInfo.CurrentOrProspective()
 
-			_, pErr := kv.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq)
+			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
-				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				log.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
 				// Lease rejected? Try again. The extension should work because
 				// extending is idempotent (assuming the PrevLease matches).
-				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				log.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if pErr != nil {

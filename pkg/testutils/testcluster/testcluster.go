@@ -696,7 +696,8 @@ func (tc *TestCluster) WaitForVoters(
 // startKey is start key of range.
 //
 // waitForVoter indicates that the method should wait until the targets are full
-// voters in the range.
+// voters in the range (and they also know that they're voters - i.e. the
+// respective replica has caught up with the config change).
 //
 // targets are replication target for change replica.
 func (tc *TestCluster) waitForNewReplicas(
@@ -953,29 +954,53 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
 // without verifying if the lease is still active. Instead, it returns a time-
 // stamp taken off the queried node's clock.
+//
+// DEPRECATED - use FindRangeLeaseEx instead.
 func (tc *TestCluster) FindRangeLease(
 	rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
 ) (_ roachpb.Lease, now hlc.ClockTimestamp, _ error) {
+	l, now, err := tc.FindRangeLeaseEx(context.TODO(), rangeDesc, hint)
+	if err != nil {
+		return roachpb.Lease{}, hlc.ClockTimestamp{}, err
+	}
+	return l.CurrentOrProspective(), now, err
+}
+
+// FindRangeLeaseEx returns information about a range's lease. As opposed to
+// FindRangeLeaseHolder, it doesn't check the validity of the lease; instead it
+// returns a timestamp from a node's clock.
+//
+// If hint is not nil, the respective node will be queried. If that node doesn't
+// have a replica able to serve a LeaseInfoRequest, an error will be returned.
+// If hint is nil, the first node is queried. In either case, if the returned
+// lease is not valid, it's possible that the returned lease information is
+// stale - i.e. there might be a newer lease unbeknownst to the queried node.
+func (tc *TestCluster) FindRangeLeaseEx(
+	ctx context.Context, rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
+) (_ server.LeaseInfo, now hlc.ClockTimestamp, _ error) {
+	var queryPolicy server.LeaseInfoOpt
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Errorf(
+			return server.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
+		queryPolicy = server.QueryLocalNodeOnly
 	} else {
 		hint = &roachpb.ReplicationTarget{
 			NodeID:  rangeDesc.Replicas().Descriptors()[0].NodeID,
 			StoreID: rangeDesc.Replicas().Descriptors()[0].StoreID}
+		queryPolicy = server.AllowQueryToBeForwardedToDifferentNode
 	}
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
 	// it.
 	hintServer, err := tc.findMemberServer(hint.StoreID)
 	if err != nil {
-		return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
+		return server.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
 	}
 
-	return hintServer.GetRangeLease(context.TODO(), rangeDesc.StartKey.AsRawKey())
+	return hintServer.GetRangeLease(ctx, rangeDesc.StartKey.AsRawKey(), queryPolicy)
 }
 
 // FindRangeLeaseHolder is part of TestClusterInterface.
