@@ -185,7 +185,7 @@ define FiltersItem {
                 $filtersE
                 $ok
             ):(SplitFilters $input $filters)
-            $ok
+        $ok
         ) &
         (Let
             ($a $b $c $ok):(SplitFilters
@@ -195,7 +195,7 @@ define FiltersItem {
                 $arg
                 $list
             )
-            $ok
+        $ok
         ) &
         (Let
             ($filtersA $filtersB $filtersC $ok):(SplitFilters
@@ -206,7 +206,7 @@ define FiltersItem {
                 $list
                 $longer
             )
-            $ok
+        $ok
         ) &
         (IsValid
             (Let
@@ -214,13 +214,13 @@ define FiltersItem {
                     $input
                     $filters
                 )
-                $filtersX
+            $filtersX
             )
         ) &
         (OuterFunc
             (InnerFunc
                 (Let ($foo $bar):(SplitFilters $input $filters)
-                    $foo
+                $foo
                 )
             )
         ) &
@@ -228,7 +228,7 @@ define FiltersItem {
             ($foo $bar $baz):(Split
                 (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)
             )
-            $foo
+        $foo
         )
 )
 =>
@@ -244,3 +244,29 @@ pretty
 (R)
 =>
 (O)
+
+# The closing ")" should not be printed on it's own line if the result, "$ok",
+# is not printed on it's own line.
+pretty
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result
+----
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let ($result $ok):(FoldBinary (OpName) $left $right)
+        $ok
+        )
+)
+=>
+$result
