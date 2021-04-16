@@ -1444,6 +1444,202 @@ distinct-on
            └── b:2
 
 # --------------------------------------------------
+# Set Operations.
+# --------------------------------------------------
+
+opt
+SELECT * FROM (SELECT a, b, c FROM abc UNION SELECT y, x, z FROM xyz) WHERE a = b ORDER BY a
+----
+union
+ ├── columns: a:9!null b:10!null c:11!null
+ ├── left columns: abc.a:1 abc.b:2 abc.c:3
+ ├── right columns: y:6 x:5 z:7
+ ├── key: (10,11)
+ ├── fd: (9)==(10), (10)==(9)
+ ├── ordering: +(9|10) [actual: +9]
+ ├── select
+ │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
+ │    ├── key: (2,3)
+ │    ├── fd: (1)==(2), (2)==(1)
+ │    ├── ordering: +(1|2) [actual: +1]
+ │    ├── scan abc
+ │    │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
+ │    │    ├── key: (1-3)
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── abc.a:1 = abc.b:2 [outer=(1,2), fd=(1)==(2), (2)==(1)]
+ └── select
+      ├── columns: x:5!null y:6!null z:7!null
+      ├── key: (6,7)
+      ├── fd: (5)==(6), (6)==(5)
+      ├── ordering: +(5|6) [actual: +5]
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5
+      └── filters
+           └── y:6 = x:5 [outer=(5,6), fd=(5)==(6), (6)==(5)]
+
+opt
+SELECT * FROM (SELECT a, b, c, d FROM abcd UNION ALL SELECT c, d, a, b FROM abcd) ORDER BY a, b
+----
+union-all
+ ├── columns: a:13 b:14 c:15 d:16
+ ├── left columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+ ├── right columns: abcd.c:9 abcd.d:10 abcd.a:7 abcd.b:8
+ ├── ordering: +13,+14
+ ├── scan abcd@ab
+ │    ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4
+ │    └── ordering: +1,+2
+ └── scan abcd@cd
+      ├── columns: abcd.a:7 abcd.b:8 abcd.c:9 abcd.d:10
+      └── ordering: +9,+10
+
+opt
+SELECT * FROM (SELECT a, b, c, d FROM abcd INTERSECT SELECT c, d, a, b FROM abcd) ORDER BY c, d
+----
+intersect
+ ├── columns: a:1 b:2 c:3 d:4
+ ├── left columns: a:1 b:2 c:3 d:4
+ ├── right columns: c:9 d:10 a:7 b:8
+ ├── key: (1-4)
+ ├── ordering: +3,+4
+ ├── scan abcd@cd
+ │    ├── columns: a:1 b:2 c:3 d:4
+ │    └── ordering: +3,+4
+ └── scan abcd@ab
+      ├── columns: a:7 b:8 c:9 d:10
+      └── ordering: +7,+8
+
+opt
+SELECT * FROM (SELECT a, b, c FROM abc INTERSECT ALL SELECT y, x, z FROM xyz) WHERE a = b ORDER BY b
+----
+intersect-all
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── left columns: a:1!null b:2!null c:3!null
+ ├── right columns: y:6 x:5 z:7
+ ├── fd: (1)==(2), (2)==(1)
+ ├── ordering: +(1|2) [actual: +1]
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (2,3)
+ │    ├── fd: (1)==(2), (2)==(1)
+ │    ├── ordering: +(1|2) [actual: +1]
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    └── ordering: +1
+ │    └── filters
+ │         └── a:1 = b:2 [outer=(1,2), fd=(1)==(2), (2)==(1)]
+ └── select
+      ├── columns: x:5!null y:6!null z:7!null
+      ├── key: (6,7)
+      ├── fd: (5)==(6), (6)==(5)
+      ├── ordering: +(5|6) [actual: +5]
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5
+      └── filters
+           └── y:6 = x:5 [outer=(5,6), fd=(5)==(6), (6)==(5)]
+
+opt
+SELECT * FROM (SELECT a, b, c FROM abc EXCEPT SELECT z, y, x FROM xyz) WHERE a = c ORDER BY a, b
+----
+except
+ ├── columns: a:1!null b:2!null c:3!null
+ ├── left columns: a:1!null b:2!null c:3!null
+ ├── right columns: z:7 y:6 x:5
+ ├── key: (2,3)
+ ├── fd: (1)==(3), (3)==(1)
+ ├── ordering: +(1|3),+2 [actual: +1,+2]
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (2,3)
+ │    ├── fd: (1)==(3), (3)==(1)
+ │    ├── ordering: +(1|3),+2 [actual: +1,+2]
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    └── ordering: +1,+2
+ │    └── filters
+ │         └── a:1 = c:3 [outer=(1,3), fd=(1)==(3), (3)==(1)]
+ └── select
+      ├── columns: x:5!null y:6!null z:7!null
+      ├── key: (6,7)
+      ├── fd: (5)==(7), (7)==(5)
+      ├── ordering: +(5|7),+6 [actual: +5,+6]
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5,+6
+      └── filters
+           └── z:7 = x:5 [outer=(5,7), fd=(5)==(7), (7)==(5)]
+
+opt
+SELECT * FROM (SELECT a, b, c, d FROM abcd EXCEPT ALL SELECT c, d, a, b FROM abcd) ORDER BY a, b
+----
+except-all
+ ├── columns: a:1 b:2 c:3 d:4
+ ├── left columns: a:1 b:2 c:3 d:4
+ ├── right columns: c:9 d:10 a:7 b:8
+ ├── ordering: +1,+2
+ ├── scan abcd@ab
+ │    ├── columns: a:1 b:2 c:3 d:4
+ │    └── ordering: +1,+2
+ └── scan abcd@cd
+      ├── columns: a:7 b:8 c:9 d:10
+      └── ordering: +9,+10
+
+opt
+VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
+----
+union-all
+ ├── columns: column1:3
+ ├── left columns: column1:1
+ ├── right columns: column1:2
+ ├── cardinality: [2 - 2]
+ ├── ordering: +3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,)
+ └── values
+      ├── columns: column1:2
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      └── (NULL,)
+
+# TODO(rytaft): We could remove the ordering from the INTERSECT operation
+# if we updated the FDs to show that column1 is constant (the cardinality
+# proves this to be true).
+opt
+VALUES (1) INTERSECT VALUES (1) ORDER BY 1
+----
+intersect
+ ├── columns: column1:1!null
+ ├── left columns: column1:1!null
+ ├── right columns: column1:2
+ ├── cardinality: [0 - 1]
+ ├── key: (1)
+ ├── ordering: +1
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,)
+ └── values
+      ├── columns: column1:2!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      └── (1,)
+
+# --------------------------------------------------
 # Insert operator.
 # --------------------------------------------------
 

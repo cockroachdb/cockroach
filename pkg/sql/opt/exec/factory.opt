@@ -166,7 +166,8 @@ define Distinct {
 
 # SetOp performs a UNION / INTERSECT / EXCEPT operation (either the ALL or the
 # DISTINCT version). The left and right nodes must have the same number of
-# columns.
+# columns. reqOrdering specifies the required output ordering, and if not empty,
+# both inputs are already ordered according to it.
 #
 # HardLimit can only be set for UNION ALL operations. It is used to implement
 # locality optimized search, and instructs the execution engine that it should
@@ -178,6 +179,7 @@ define SetOp {
     All bool
     Left exec.Node
     Right exec.Node
+    ReqOrdering exec.OutputOrdering
     HardLimit uint64
 }
 
