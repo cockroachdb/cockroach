@@ -44,7 +44,7 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker colexecutils.CancelChecker,
-	overloadHelper execgen.OverloadHelper,
+	overloadHelper *execgen.OverloadHelper,
 	datumAlloc *rowenc.DatumAlloc,
 ) {
 	// In order to inline the templated code of overloads, we need to have a
@@ -929,12 +929,16 @@ func rehash(
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						_b, _err := json.EncodeJSON(nil, v)
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
-						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
@@ -952,12 +956,16 @@ func rehash(
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						_b, _err := json.EncodeJSON(nil, v)
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
-						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
@@ -976,12 +984,16 @@ func rehash(
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						_b, _err := json.EncodeJSON(nil, v)
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
-						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
@@ -996,12 +1008,16 @@ func rehash(
 						//gcassert:bce
 						p := uintptr(buckets[i])
 
-						_b, _err := json.EncodeJSON(nil, v)
+						scratch := _overloadHelper.ByteScratch[:0]
+						_b, _err := json.EncodeJSON(scratch, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						_sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
-						p = memhash(unsafe.Pointer(_sh.Data), p, uintptr(len(_b)))
+						_overloadHelper.ByteScratch = _b
+
+						sh := (*reflect.SliceHeader)(unsafe.Pointer(&_b))
+						p = memhash(unsafe.Pointer(sh.Data), p, uintptr(len(_b)))
+
 						//gcassert:bce
 						buckets[i] = uint64(p)
 					}
