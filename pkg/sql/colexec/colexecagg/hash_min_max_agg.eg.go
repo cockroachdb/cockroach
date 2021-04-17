@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -43,60 +44,61 @@ func newMinHashAggAlloc(
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
-		return &minBoolHashAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minBoolHashAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.BytesFamily:
-		return &minBytesHashAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minBytesHashAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.DecimalFamily:
-		return &minDecimalHashAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minDecimalHashAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
 			return &minInt16HashAggAlloc{aggAllocBase: allocBase}
 		case 32:
 			return &minInt32HashAggAlloc{aggAllocBase: allocBase}
+		case -1:
 		default:
 			return &minInt64HashAggAlloc{aggAllocBase: allocBase}
 		}
 	case types.FloatFamily:
-		return &minFloat64HashAggAlloc{aggAllocBase: allocBase}
-	case types.TimestampTZFamily:
-		return &minTimestampHashAggAlloc{aggAllocBase: allocBase}
-	case types.IntervalFamily:
-		return &minIntervalHashAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &minDatumHashAggAlloc{aggAllocBase: allocBase}
-	}
-}
-
-func newMaxHashAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) aggregateFuncAlloc {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return &maxBoolHashAggAlloc{aggAllocBase: allocBase}
-	case types.BytesFamily:
-		return &maxBytesHashAggAlloc{aggAllocBase: allocBase}
-	case types.DecimalFamily:
-		return &maxDecimalHashAggAlloc{aggAllocBase: allocBase}
-	case types.IntFamily:
 		switch t.Width() {
-		case 16:
-			return &maxInt16HashAggAlloc{aggAllocBase: allocBase}
-		case 32:
-			return &maxInt32HashAggAlloc{aggAllocBase: allocBase}
+		case -1:
 		default:
-			return &maxInt64HashAggAlloc{aggAllocBase: allocBase}
+			return &minFloat64HashAggAlloc{aggAllocBase: allocBase}
 		}
-	case types.FloatFamily:
-		return &maxFloat64HashAggAlloc{aggAllocBase: allocBase}
 	case types.TimestampTZFamily:
-		return &maxTimestampHashAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minTimestampHashAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.IntervalFamily:
-		return &maxIntervalHashAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &maxDatumHashAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minIntervalHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &minDatumHashAggAlloc{aggAllocBase: allocBase}
+		}
 	}
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find min overload for %s type family", t.Name()))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 type minBoolHashAgg struct {
@@ -1521,6 +1523,69 @@ func (a *minDatumHashAggAlloc) newAggFunc() AggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+func newMaxHashAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxBoolHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.BytesFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxBytesHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.DecimalFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxDecimalHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &maxInt16HashAggAlloc{aggAllocBase: allocBase}
+		case 32:
+			return &maxInt32HashAggAlloc{aggAllocBase: allocBase}
+		case -1:
+		default:
+			return &maxInt64HashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.FloatFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxFloat64HashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.TimestampTZFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxTimestampHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.IntervalFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxIntervalHashAggAlloc{aggAllocBase: allocBase}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxDatumHashAggAlloc{aggAllocBase: allocBase}
+		}
+	}
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find max overload for %s type family", t.Name()))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 type maxBoolHashAgg struct {
