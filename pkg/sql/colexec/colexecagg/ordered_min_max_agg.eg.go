@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/errors"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -43,60 +44,61 @@ func newMinOrderedAggAlloc(
 	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
-		return &minBoolOrderedAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minBoolOrderedAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.BytesFamily:
-		return &minBytesOrderedAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minBytesOrderedAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.DecimalFamily:
-		return &minDecimalOrderedAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minDecimalOrderedAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
 			return &minInt16OrderedAggAlloc{aggAllocBase: allocBase}
 		case 32:
 			return &minInt32OrderedAggAlloc{aggAllocBase: allocBase}
+		case -1:
 		default:
 			return &minInt64OrderedAggAlloc{aggAllocBase: allocBase}
 		}
 	case types.FloatFamily:
-		return &minFloat64OrderedAggAlloc{aggAllocBase: allocBase}
-	case types.TimestampTZFamily:
-		return &minTimestampOrderedAggAlloc{aggAllocBase: allocBase}
-	case types.IntervalFamily:
-		return &minIntervalOrderedAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &minDatumOrderedAggAlloc{aggAllocBase: allocBase}
-	}
-}
-
-func newMaxOrderedAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) aggregateFuncAlloc {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return &maxBoolOrderedAggAlloc{aggAllocBase: allocBase}
-	case types.BytesFamily:
-		return &maxBytesOrderedAggAlloc{aggAllocBase: allocBase}
-	case types.DecimalFamily:
-		return &maxDecimalOrderedAggAlloc{aggAllocBase: allocBase}
-	case types.IntFamily:
 		switch t.Width() {
-		case 16:
-			return &maxInt16OrderedAggAlloc{aggAllocBase: allocBase}
-		case 32:
-			return &maxInt32OrderedAggAlloc{aggAllocBase: allocBase}
+		case -1:
 		default:
-			return &maxInt64OrderedAggAlloc{aggAllocBase: allocBase}
+			return &minFloat64OrderedAggAlloc{aggAllocBase: allocBase}
 		}
-	case types.FloatFamily:
-		return &maxFloat64OrderedAggAlloc{aggAllocBase: allocBase}
 	case types.TimestampTZFamily:
-		return &maxTimestampOrderedAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minTimestampOrderedAggAlloc{aggAllocBase: allocBase}
+		}
 	case types.IntervalFamily:
-		return &maxIntervalOrderedAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &maxDatumOrderedAggAlloc{aggAllocBase: allocBase}
+		switch t.Width() {
+		case -1:
+		default:
+			return &minIntervalOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &minDatumOrderedAggAlloc{aggAllocBase: allocBase}
+		}
 	}
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find min overload for %s type family", t.Name()))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 type minBoolOrderedAgg struct {
@@ -2929,6 +2931,69 @@ func (a *minDatumOrderedAggAlloc) newAggFunc() AggregateFunc {
 	f.allocator = a.allocator
 	a.aggFuncs = a.aggFuncs[1:]
 	return f
+}
+
+func newMaxOrderedAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxBoolOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.BytesFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxBytesOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.DecimalFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxDecimalOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &maxInt16OrderedAggAlloc{aggAllocBase: allocBase}
+		case 32:
+			return &maxInt32OrderedAggAlloc{aggAllocBase: allocBase}
+		case -1:
+		default:
+			return &maxInt64OrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.FloatFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxFloat64OrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.TimestampTZFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxTimestampOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.IntervalFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxIntervalOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	case typeconv.DatumVecCanonicalTypeFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &maxDatumOrderedAggAlloc{aggAllocBase: allocBase}
+		}
+	}
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find max overload for %s type family", t.Name()))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
 }
 
 type maxBoolOrderedAgg struct {
