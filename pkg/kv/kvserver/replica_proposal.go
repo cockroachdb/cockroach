@@ -348,6 +348,7 @@ func (r *Replica) leasePostApplyLocked(
 	priorReadSum *rspb.ReadSummary,
 	jumpOpt leaseJumpOption,
 ) {
+	log.Infof(ctx, "!!! leasePostApply: %s (old: %s)", newLease, prevLease)
 	// Note that we actually install the lease further down in this method.
 	// Everything we do before then doesn't need to worry about requests being
 	// evaluated under the new lease.

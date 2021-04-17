@@ -483,8 +483,10 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 			return
 		}
 		if atomic.CompareAndSwapInt64(&trappedLeaseAcquisition, 0, 1) {
+			log.Infof(ctx, "!!! lease acquisiton blocked")
 			leaseAcqCh <- struct{}{}
 			<-leaseAcqCh
+			log.Infof(ctx, "!!! lease acquisiton unblocked")
 		}
 	}
 
@@ -507,8 +509,10 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 		if !ok {
 			return
 		}
+		log.Infof(ctx, "!!! lease transfer blocked")
 		leaseTransferCh <- struct{}{}
 		<-leaseTransferCh
+		log.Infof(ctx, "!!! lease transfer unblocked")
 	}
 
 	manual := hlc.NewHybridManualClock()
