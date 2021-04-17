@@ -279,9 +279,8 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -374,9 +373,8 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -385,6 +383,7 @@ func (p *distinctBoolOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -498,7 +497,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
-							lastVal = append(lastVal[:0], v...)
+							lastVal = v
 						}
 						{
 							__retval_lastVal = lastVal
@@ -527,9 +526,8 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = append(lastVal[:0], v...)
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -577,7 +575,7 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
-							lastVal = append(lastVal[:0], v...)
+							lastVal = v
 						}
 						{
 							__retval_lastVal = lastVal
@@ -606,9 +604,8 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = append(lastVal[:0], v...)
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -617,7 +614,8 @@ func (p *distinctBytesOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
-	p.lastVal = lastVal
+	// We need to perform a deep copy for the next iteration.
+	p.lastVal = append(p.lastVal[:0], lastVal...)
 	p.lastValNull = lastValNull
 
 	return batch
@@ -730,7 +728,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
-							lastVal.Set(&v)
+							lastVal = v
 						}
 						{
 							__retval_lastVal = lastVal
@@ -759,9 +757,8 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal.Set(&v)
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -809,7 +806,7 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 
 								outputCol[outputIdx] = outputCol[outputIdx] || unique
 							}
-							lastVal.Set(&v)
+							lastVal = v
 						}
 						{
 							__retval_lastVal = lastVal
@@ -838,9 +835,8 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal.Set(&v)
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -849,7 +845,8 @@ func (p *distinctDecimalOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
-	p.lastVal = lastVal
+	// We need to perform a deep copy for the next iteration.
+	p.lastVal.Set(&lastVal)
 	p.lastValNull = lastValNull
 
 	return batch
@@ -1013,9 +1010,8 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1114,9 +1110,8 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1125,6 +1120,7 @@ func (p *distinctInt16Op) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -1289,9 +1285,8 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1390,9 +1385,8 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1401,6 +1395,7 @@ func (p *distinctInt32Op) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -1565,9 +1560,8 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1666,9 +1660,8 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1677,6 +1670,7 @@ func (p *distinctInt64Op) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -1857,9 +1851,8 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1974,9 +1967,8 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -1985,6 +1977,7 @@ func (p *distinctFloat64Op) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -2141,9 +2134,8 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -2234,9 +2226,8 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -2245,6 +2236,7 @@ func (p *distinctTimestampOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -2387,9 +2379,8 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -2466,9 +2457,8 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -2477,6 +2467,7 @@ func (p *distinctIntervalOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
@@ -2623,9 +2614,8 @@ func (p *distinctDatumOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -2706,9 +2696,8 @@ func (p *distinctDatumOp) Next(ctx context.Context) coldata.Batch {
 						}
 
 						outputCol[outputIdx] = outputCol[outputIdx] || unique
-						lastVal = v
 						{
-							__retval_0 = lastVal
+							__retval_0 = v
 						}
 					}
 					lastVal = __retval_0
@@ -2717,6 +2706,7 @@ func (p *distinctDatumOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
+	// We need to perform a deep copy for the next iteration.
 	p.lastVal = lastVal
 	p.lastValNull = lastValNull
 
