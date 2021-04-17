@@ -1036,14 +1036,18 @@ SELECT j FROM f@i WHERE j->'a' @> '"b"' AND '["c"]' <@ j->'a' ORDER BY k
 {"a": ["b", "c", "d", "e"]}
 {"a": ["b", "e", "c", "d"]}
 
-#TODO(angelazxu): Uncomment these tests once #63180 is fixed.
-# query T
-# SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' AND j->'a'->'b' @> '[1]' ORDER BY k
-# ----
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' AND j->'a'->'b' @> '[1]' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
 
-# query T
-# SELECT j FROM f@i WHERE j->'a' @> '"b"' AND j->'a' <@ '["b", "c", "d", "e"]' ORDER BY k
-# ----
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' AND j->'a' <@ '["b", "c", "d", "e"]' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
 
 query T
 SELECT j FROM f@i WHERE j->'a' @> '{"d": 2}' AND '[1, 2]' @> j->'a'->'b' ORDER BY k
@@ -1083,6 +1087,12 @@ SELECT j FROM f@i WHERE j->'a'->'b' <@ '{"c": [1, 2], "d": 2}' OR j->'a'->'b' <@
 {"a": {"b": "c", "d": "e"}}
 {"a": {"b": "c"}, "d": "e"}
 {"a": {"b": []}}
+
+# Regression test for #63180. This query should not cause an index out of range
+# error in the inverted filterer.
+query T
+SELECT j FROM f@i WHERE j @> '{"a": "c"}' AND (j @> '{"a": "b"}' OR j @> '{"a": "c"}')
+----
 
 subtest arrays
 
