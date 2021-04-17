@@ -116,7 +116,7 @@ const (
 		o_ol_cnt     integer,
 		o_all_local  integer,
 		primary key  (o_w_id, o_d_id, o_id DESC),
-		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id)
+		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC) storing (o_entry_d, o_carrier_id, o_ol_cnt, o_all_local)
 	)`
 	tpccOrderSchemaInterleaveSuffix = `
 		interleave in parent district (o_w_id, o_d_id)`
