@@ -717,8 +717,14 @@ func SetupIdleMonitor(
 func (ts *TestServer) StartTenant(
 	params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
-	ctx := context.Background()
+	return ts.StartTenantWithCtx(context.Background(), params)
+}
 
+// StartTenantWithCtx starts a SQL tenant communicating with this Testserver and
+// uses a client supplied context to allow cancellations.
+func (ts *TestServer) StartTenantWithCtx(
+	ctx context.Context, params base.TestTenantArgs,
+) (serverutils.TestTenantInterface, error) {
 	if !params.Existing {
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
@@ -727,12 +733,25 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
+	rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+		ctx, "testserver-check-tenant-active", nil,
+		"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
+		params.TenantID.ToUint64(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if rowCount == 0 {
+		return nil, errors.New("not found")
+	}
+
 	st := cluster.MakeTestingClusterSettings()
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
 	baseCfg := makeTestBaseConfig(st)
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.IdleExitAfter = params.IdleExitAfter
+	baseCfg.Insecure = params.ForceInsecure
 	if params.AllowSettingClusterSettings {
 		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: st.MakeUpdater(),

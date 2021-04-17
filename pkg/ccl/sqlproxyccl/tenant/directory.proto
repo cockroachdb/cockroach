@@ -1,0 +1,63 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.ccl.sqlproxyccl.tenant;
+option go_package="tenant";
+
+import "gogoproto/gogo.proto";
+
+message WatchEndpointsRequest {}
+
+enum EventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  ADDED = 0;
+  MODIFIED = 1;
+  DELETED = 2;
+}
+
+message WatchEndpointsResponse {
+  EventType typ = 1;
+  string ip = 2;
+  uint64 tenant_id = 3;
+}
+
+message ListEndpointsRequest {
+  uint64 tenant_id = 1;
+}
+
+message EnsureEndpointRequest {
+  uint64 tenant_id = 1;
+}
+
+message EnsureEndpointResponse {
+}
+
+message Endpoint {
+  string ip = 1;
+}
+
+message ListEndpointsResponse {
+  repeated Endpoint endpoints = 1;
+}
+
+message GetTenantRequest {
+  uint64 tenant_id = 1;
+}
+
+message GetTenantResponse {
+  string cluster_name = 1; // add more metadata if needed
+}
+
+service Directory {
+  rpc ListEndpoints(ListEndpointsRequest) returns (ListEndpointsResponse);
+  rpc WatchEndpoints(WatchEndpointsRequest) returns (stream WatchEndpointsResponse);
+  rpc EnsureEndpoint(EnsureEndpointRequest) returns (EnsureEndpointResponse);
+  rpc GetTenant(GetTenantRequest) returns (GetTenantResponse);
+}

@@ -369,7 +369,8 @@ func (c *Connector) getClient(ctx context.Context) (roachpb.InternalClient, erro
 		if err != nil {
 			return nil, err
 		}
-		// NB: read lock not needed.
+		c.mu.RLock()
+		defer c.mu.RUnlock()
 		return c.mu.client, nil
 	})
 	c.mu.RUnlock()

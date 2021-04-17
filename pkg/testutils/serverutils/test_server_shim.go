@@ -220,6 +220,10 @@ type TestServerInterface interface {
 	// StartTenant spawns off tenant process connecting to this TestServer.
 	StartTenant(params base.TestTenantArgs) (TestTenantInterface, error)
 
+	// StartTenant spawns off tenant process connecting to this TestServer with
+	// context
+	StartTenantWithCtx(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
+
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
 	//
