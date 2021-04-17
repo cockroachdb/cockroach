@@ -50,11 +50,16 @@ func (js *JSONs) Get(i int) json.JSON {
 // of the JSONs is not allowed since it complicates memory movement to make/take
 // away necessary space in the flat buffer.
 func (js *JSONs) Set(i int, j json.JSON) {
-	encoded, err := json.EncodeJSON(nil, j)
+	// TODO(yuzefovich): should we store Bytes as a pointer?
+	b := &js.Bytes
+	appendTo := b.getAppendTo(i)
+	var err error
+	b.data, err = json.EncodeJSON(appendTo, j)
 	if err != nil {
 		panic(err)
 	}
-	js.Bytes.Set(i, encoded)
+	b.offsets[i+1] = int32(len(b.data))
+	b.maxSetIndex = i
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to
@@ -87,11 +92,15 @@ func (js *JSONs) AppendVal(j json.JSON) {
 		js.Bytes.AppendVal(nil)
 		return
 	}
-	encoded, err := json.EncodeJSON(nil, j)
+	b := &js.Bytes
+	appendTo := b.getAppendTo(b.Len())
+	var err error
+	b.data, err = json.EncodeJSON(appendTo, j)
 	if err != nil {
 		panic(err)
 	}
-	js.Bytes.AppendVal(encoded)
+	b.maxSetIndex = b.Len()
+	b.offsets = append(b.offsets, int32(len(b.data)))
 }
 
 // String is used for debugging purposes.
