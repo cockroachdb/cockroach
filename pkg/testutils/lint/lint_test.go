@@ -818,6 +818,7 @@ func TestLint(t *testing.T) {
 			":!util/grpcutil/grpc_util_test.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
+			":!ccl/sqlproxyccl/tenant/test_directory_svr.go",
 		)
 		if err != nil {
 			t.Fatal(err)

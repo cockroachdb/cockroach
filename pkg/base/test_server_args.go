@@ -239,4 +239,8 @@ type TestTenantArgs struct {
 
 	// TestingKnobs for the test server.
 	TestingKnobs TestingKnobs
+
+	// Test server starts with secure mode by default. When this is set to true
+	// it will switch to insecure
+	ForceInsecure bool
 }
