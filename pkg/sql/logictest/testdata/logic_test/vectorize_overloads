@@ -18,6 +18,7 @@ CREATE TABLE many_types (
     _interval    INTERVAL,
     _inet        INet,
     _json        JSON,
+    _stringarray STRING[],
     _time        Time,
     _varbit      VARBIT
 )
@@ -26,6 +27,7 @@ statement ok
 INSERT
   INTO many_types
 VALUES (
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -62,6 +64,7 @@ VALUES (
        '12:34:56.123456',
        '127.0.0.1',
        '[1, "hello", {"a": ["foo", {"b": 3}]}]',
+       '{2,a}'::STRING[],
        '1:00:00.001',
        B'1'
        ),
@@ -82,6 +85,7 @@ VALUES (
        '01:23:45.012345',
        '192.168.0.0/16',
        '[2, "hi", {"b": ["bar", {"c": 4}]}]',
+       '{2,b}'::STRING[],
        '1:00:00.456',
        B'11'
        ),
@@ -102,6 +106,7 @@ VALUES (
         NULL,
         NULL,
         '[1, "hello", {"a": ["foo", {"b": 3}]}]',
+        '{1,a}'::STRING[],
         NULL,
         B'11010'
        )
@@ -574,34 +579,40 @@ NULL
 ["foo", {"b": 3}]
 
 query T
-EXPLAIN (VEC) SELECT _json #> '{a,b}' FROM many_types
+EXPLAIN (VEC) SELECT _json #> _stringarray, _json #> '{a,b}' FROM many_types
 ----
 │
 └ Node 1
-  └ *rowexec.tableReader
+  └ *colexecproj.projJSONFetchValPathJSONDatumConstOp
+    └ *colexecproj.projJSONFetchValPathJSONDatumOp
+      └ *colfetcher.ColBatchScan
 
 query T
-EXPLAIN (VEC) SELECT _json #> '{a,b}' #> '{c}' FROM many_types
+EXPLAIN (VEC) SELECT _json #> _stringarray #> '{c}', _json #> '{a,b}' #> '{c}' FROM many_types
 ----
 │
 └ Node 1
-  └ *rowexec.tableReader
+  └ *colexecproj.projJSONFetchValPathJSONDatumConstOp
+    └ *colexecproj.projJSONFetchValPathJSONDatumConstOp
+      └ *colexecproj.projJSONFetchValPathJSONDatumConstOp
+        └ *colexecproj.projJSONFetchValPathJSONDatumOp
+          └ *colfetcher.ColBatchScan
 
-query T
-SELECT _json #> '{2,a}' FROM many_types
+query TT
+SELECT _json #> _stringarray, _json #> '{2,a}' FROM many_types
 ----
-NULL
-["foo", {"b": 3}]
-NULL
-["foo", {"b": 3}]
+NULL               NULL
+["foo", {"b": 3}]  ["foo", {"b": 3}]
+["bar", {"c": 4}]  NULL
+NULL               ["foo", {"b": 3}]
 
-query T
-SELECT _json #> '{2,a}' #> '{1,b}' FROM many_types
+query TT
+SELECT _json #> _stringarray #> '{1,b}', _json #> '{2,a}' #> '{1,b}' FROM many_types
 ----
-NULL
-3
-NULL
-3
+NULL  NULL
+3     3
+NULL  NULL
+NULL  3
 
 query T
 SELECT _json #> '{}' FROM many_types
@@ -611,8 +622,58 @@ NULL
 [2, "hi", {"b": ["bar", {"c": 4}]}]
 [1, "hello", {"a": ["foo", {"b": 3}]}]
 
+query TT
+SELECT _json #> _stringarray #> '{d}', _json #> '{c}' #> '{d}' FROM many_types
+----
+NULL  NULL
+NULL  NULL
+NULL  NULL
+NULL  NULL
+
 query T
-SELECT _json #> '{c}' #> '{d}' FROM many_types
+EXPLAIN (VEC) SELECT _json #>> _stringarray, _json #>> '{a,b}' FROM many_types
+----
+│
+└ Node 1
+  └ *colexecproj.projJSONFetchTextPathJSONDatumConstOp
+    └ *colexecproj.projJSONFetchTextPathJSONDatumOp
+      └ *colfetcher.ColBatchScan
+
+query T
+EXPLAIN (VEC) SELECT _json #> '{a,b}' #>> '{c}' FROM many_types
+----
+│
+└ Node 1
+  └ *colexecproj.projJSONFetchTextPathJSONDatumConstOp
+    └ *colexecproj.projJSONFetchValPathJSONDatumConstOp
+      └ *colfetcher.ColBatchScan
+
+query TT
+SELECT _json #>> _stringarray, _json #>> '{2,a}' FROM many_types
+----
+NULL               NULL
+["foo", {"b": 3}]  ["foo", {"b": 3}]
+["bar", {"c": 4}]  NULL
+NULL               ["foo", {"b": 3}]
+
+query TT
+SELECT _json #> '{2,a}' #>> _stringarray, _json #> '{2,a}' #>> '{1,b}' FROM many_types
+----
+NULL  NULL
+NULL  3
+NULL  NULL
+NULL  3
+
+query T
+SELECT _json #>> '{}' FROM many_types
+----
+NULL
+[1, "hello", {"a": ["foo", {"b": 3}]}]
+[2, "hi", {"b": ["bar", {"c": 4}]}]
+[1, "hello", {"a": ["foo", {"b": 3}]}]
+
+query T
+SELECT _json #> '{c}' #>> '{d}' FROM many_types
 ----
 NULL
 NULL

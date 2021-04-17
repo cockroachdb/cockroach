@@ -797,6 +797,10 @@ type jsonBytesCustomizer struct{}
 // jsonIntCustomizer is necessary since json.JSON doesn't have infix operators.
 type jsonIntCustomizer struct{}
 
+// jsonDatumCustomizer supports mixed type expression with a JSON left-hand side
+// and datum right-hand side.
+type jsonDatumCustomizer struct{}
+
 // floatIntervalCustomizer supports mixed type expression with a float
 // left-hand side and an interval right-hand side.
 type floatIntervalCustomizer struct{}
@@ -834,6 +838,7 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}, intervalCustomizer{})
 	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}, jsonCustomizer{})
 	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}, jsonBytesCustomizer{})
+	registerTypeCustomizer(typePair{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, jsonDatumCustomizer{})
 	registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCustomizer{})
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {

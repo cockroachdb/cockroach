@@ -29775,6 +29775,310 @@ func (p projJSONFetchTextJSONInt64ConstOp) Init() {
 	p.Input.Init()
 }
 
+type projJSONFetchValPathJSONDatumConstOp struct {
+	projConstOpBase
+	constArg interface{}
+}
+
+func (p projJSONFetchValPathJSONDatumConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.Input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col *coldata.JSONs
+	col = vec.JSON()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.JSON()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						if _path == nil {
+							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _path)
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						if _path == nil {
+							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, _path)
+						}
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					if _path == nil {
+						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _path)
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					arg := col.Get(i)
+
+					_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					if _path == nil {
+						_outNulls.SetNull(i)
+					} else {
+						projCol.Set(i, _path)
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
+func (p projJSONFetchValPathJSONDatumConstOp) Init() {
+	p.Input.Init()
+}
+
+type projJSONFetchTextPathJSONDatumConstOp struct {
+	projConstOpBase
+	constArg interface{}
+}
+
+func (p projJSONFetchTextPathJSONDatumConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the projection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	batch := p.Input.Next(ctx)
+	n := batch.Length()
+	if n == 0 {
+		return coldata.ZeroBatch
+	}
+	vec := batch.ColVec(p.colIdx)
+	var col *coldata.JSONs
+	col = vec.JSON()
+	projVec := batch.ColVec(p.outputIdx)
+	p.allocator.PerformOperation([]coldata.Vec{projVec}, func() {
+		// Capture col to force bounds check to work. See
+		// https://github.com/golang/go/issues/39756
+		col := col
+		if projVec.MaybeHasNulls() {
+			// We need to make sure that there are no left over null values in the
+			// output vector.
+			projVec.Nulls().UnsetNulls()
+		}
+		projCol := projVec.Bytes()
+		// Some operators can result in NULL with non-NULL inputs, like the JSON
+		// fetch value operator, ->. Therefore, _outNulls is defined to allow
+		// updating the output Nulls from within _ASSIGN functions when the result
+		// of a projection is Null.
+		_outNulls := projVec.Nulls()
+		if vec.Nulls().MaybeHasNulls() {
+			colNulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						if _path == nil {
+							_outNulls.SetNull(i)
+						} else {
+
+							_text, _err := _path.AsText()
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							if _text == nil {
+								_outNulls.SetNull(i)
+							} else {
+								projCol.Set(i, []byte(*_text))
+							}
+
+						}
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					if !colNulls.NullAt(i) {
+						// We only want to perform the projection operation if the value is not null.
+						arg := col.Get(i)
+
+						_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						if _path == nil {
+							_outNulls.SetNull(i)
+						} else {
+
+							_text, _err := _path.AsText()
+							if _err != nil {
+								colexecerror.ExpectedError(_err)
+							}
+							if _text == nil {
+								_outNulls.SetNull(i)
+							} else {
+								projCol.Set(i, []byte(*_text))
+							}
+
+						}
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+			projVec.SetNulls(_outNulls.Or(colNulls))
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					arg := col.Get(i)
+
+					_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					if _path == nil {
+						_outNulls.SetNull(i)
+					} else {
+
+						_text, _err := _path.AsText()
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						if _text == nil {
+							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, []byte(*_text))
+						}
+
+					}
+				}
+			} else {
+				_ = projCol.Get(n - 1)
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					arg := col.Get(i)
+
+					_path, _err := tree.GetJSONPath(arg, *tree.MustBeDArray(p.constArg.(*coldataext.Datum).Datum))
+					if _err != nil {
+						colexecerror.ExpectedError(_err)
+					}
+					if _path == nil {
+						_outNulls.SetNull(i)
+					} else {
+
+						_text, _err := _path.AsText()
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						if _text == nil {
+							_outNulls.SetNull(i)
+						} else {
+							projCol.Set(i, []byte(*_text))
+						}
+
+					}
+				}
+			}
+			// _outNulls has been updated from within the _ASSIGN function to include
+			// any NULLs that resulted from the projection.
+			// If $hasNulls is true, union _outNulls with the set of input Nulls.
+			// If $hasNulls is false, then there are no input Nulls. _outNulls is
+			// projVec.Nulls() so there is no need to call projVec.SetNulls().
+		}
+		// Although we didn't change the length of the batch, it is necessary to set
+		// the length anyway (this helps maintaining the invariant of flat bytes).
+		batch.SetLength(n)
+	})
+	return batch
+}
+
+func (p projJSONFetchTextPathJSONDatumConstOp) Init() {
+	p.Input.Init()
+}
+
 type projEQBoolBoolConstOp struct {
 	projConstOpBase
 	constArg bool
@@ -59911,7 +60215,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projBitandDatumDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60000,7 +60304,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projBitorDatumDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60089,7 +60393,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projBitxorDatumDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60170,7 +60474,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projPlusInt16DatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60210,7 +60514,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projPlusInt32DatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60251,7 +60555,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projPlusInt64DatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60317,7 +60621,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projPlusIntervalDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60433,7 +60737,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projMinusInt16DatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60473,7 +60777,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projMinusInt32DatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60514,7 +60818,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projMinusInt64DatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60580,7 +60884,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projMinusIntervalDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -60631,7 +60935,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projMinusDatumDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					case types.IntervalFamily:
@@ -61588,7 +61892,7 @@ func GetProjectionRConstOperator(
 						default:
 							return &projConcatDatumDatumConstOp{
 								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}
@@ -61863,6 +62167,44 @@ func GetProjectionRConstOperator(
 							return &projJSONFetchTextJSONInt64ConstOp{
 								projConstOpBase: projConstOpBase,
 								constArg:        c.(int64),
+							}, nil
+						}
+					}
+				}
+			}
+		case tree.JSONFetchValPath:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case typeconv.DatumVecCanonicalTypeFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &projJSONFetchValPathJSONDatumConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
+							}, nil
+						}
+					}
+				}
+			}
+		case tree.JSONFetchTextPath:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case typeconv.DatumVecCanonicalTypeFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &projJSONFetchTextPathJSONDatumConstOp{
+								projConstOpBase: projConstOpBase,
+								constArg:        &coldataext.Datum{Datum: c.(tree.Datum)},
 							}, nil
 						}
 					}

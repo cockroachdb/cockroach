@@ -2095,8 +2095,8 @@ func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) e
 	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(left.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
 	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(right.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
 	outputDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(outputType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	if (leftDatumBacked || rightDatumBacked) && !outputDatumBacked {
-		return errors.New("datum-backed arguments and not datum-backed " +
+	if (leftDatumBacked && rightDatumBacked) && !outputDatumBacked {
+		return errors.New("datum-backed arguments on both sides and not datum-backed " +
 			"output of a binary expression is currently not supported")
 	}
 	return nil

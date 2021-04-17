@@ -88,6 +88,7 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 		types.BytesFamily,
 		types.IntFamily,
 		types.JsonFamily,
+		typeconv.DatumVecCanonicalTypeFamily,
 	),
 	typeconv.DatumVecCanonicalTypeFamily: append(
 		[]types.Family{
@@ -211,6 +212,12 @@ func registerBinOpOutputTypes() {
 	}
 	binOpOutputTypes[tree.JSONFetchText] = map[typePair]*types.T{
 		{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}: types.String,
+	}
+	binOpOutputTypes[tree.JSONFetchValPath] = map[typePair]*types.T{
+		{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Jsonb,
+	}
+	binOpOutputTypes[tree.JSONFetchTextPath] = map[typePair]*types.T{
+		{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.String,
 	}
 	binOpOutputTypes[tree.Minus][typePair{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}] = types.Jsonb
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -747,6 +754,51 @@ if _err != nil {
 	  colexecerror.ExpectedError(_err)
 }
 %[1]s.Set(%[2]s, _j)`, vecVariable, idxVariable, leftElem, rightElem)
+		default:
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
+		}
+		// This code is unreachable, but the compiler cannot infer that.
+		return ""
+	}
+}
+
+func (j jsonDatumCustomizer) getBinOpAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
+		vecVariable, idxVariable, err := parseNonIndexableTargetElem(targetElem)
+		if err != nil {
+			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
+		}
+		// getJSONFetchPath is a utility function that generates code for JSON
+		// fetch operation. It takes the code snippet that will be invoked when
+		// JSON path (stored at "_path") is non-nil.
+		getJSONFetchPath := func(handleNonNilPath string) string {
+			return fmt.Sprintf(`
+_path, _err := tree.GetJSONPath(%[3]s, *tree.MustBeDArray(%[4]s.(*coldataext.Datum).Datum))
+if _err != nil {
+    colexecerror.ExpectedError(_err)
+}
+if _path == nil {
+    _outNulls.SetNull(%[2]s)
+} else {
+    %[1]s
+}`,
+				handleNonNilPath, idxVariable, leftElem, rightElem)
+		}
+		switch op.overloadBase.BinOp {
+		case tree.JSONFetchValPath:
+			return getJSONFetchPath(fmt.Sprintf("%s.Set(%s, _path)", vecVariable, idxVariable))
+		case tree.JSONFetchTextPath:
+			return getJSONFetchPath(fmt.Sprintf(`
+    _text, _err := _path.AsText()
+    if _err != nil {
+        colexecerror.ExpectedError(_err)
+    }
+    if _text == nil {
+        _outNulls.SetNull(%[2]s)
+    } else {
+        %[1]s.Set(%[2]s, []byte(*_text))
+    }
+`, vecVariable, idxVariable))
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled binary operator %s", op.overloadBase.BinOp.String()))
 		}
