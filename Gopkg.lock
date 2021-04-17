@@ -1740,7 +1740,7 @@
   revision = "a457fd036447854c0c02e89ea439481bdcf941a2"
 
 [[projects]]
-  digest = "1:4de077368be8e07b66ac3f803454b4dc1138c135b5b0917edef59f6580e0bda5"
+  digest = "1:1b2318fb4f48c54fd45ab783776bbf05e65e05707f06931ed0eac8022308912f"
   name = "golang.org/x/text"
   packages = [
     "cases",
@@ -1749,6 +1749,8 @@
     "internal",
     "internal/colltab",
     "internal/gen",
+    "internal/language",
+    "internal/language/compact",
     "internal/tag",
     "internal/triegen",
     "internal/ucd",
@@ -1764,7 +1766,7 @@
     "width",
   ]
   pruneopts = "UT"
-  revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
+  revision = "75a595aef632b07c6eeaaa805adb6f0f66e4130e"
 
 [[projects]]
   branch = "master"
