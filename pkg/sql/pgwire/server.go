@@ -328,8 +328,13 @@ func Match(rd io.Reader) bool {
 }
 
 // Start makes the Server ready for serving connections.
-func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	s.SQLServer.Start(ctx, stopper)
+func (s *Server) Start(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	ie *sql.InternalExecutor,
+	trackFirstQueryTimestamp bool,
+) {
+	s.SQLServer.Start(ctx, stopper, ie, trackFirstQueryTimestamp)
 }
 
 // IsDraining returns true if the server is not currently accepting

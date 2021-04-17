@@ -69,6 +69,10 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// suitable storage.
 	serverCfg.Stores.Specs = nil
 
+	// Initialize first query tracking.
+	// TODO(knz): We may want a command-line flag to disable this functionality.
+	serverCfg.SQLConfig.EnableTrackFirstQueryTimestamp = true
+
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err

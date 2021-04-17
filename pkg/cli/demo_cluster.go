@@ -560,16 +560,17 @@ func testServerArgsForTransientCluster(
 	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
 
 	args := base.TestServerArgs{
-		SocketFile:              sock.filename(),
-		PartOfCluster:           true,
-		Stopper:                 stop.NewStopper(),
-		JoinAddr:                joinAddr,
-		DisableTLSForHTTP:       true,
-		StoreSpecs:              []base.StoreSpec{storeSpec},
-		SQLMemoryPoolSize:       demoCtx.sqlPoolMemorySize,
-		CacheSize:               demoCtx.cacheSize,
-		NoAutoInitializeCluster: true,
-		EnableDemoLoginEndpoint: true,
+		SocketFile:                     sock.filename(),
+		PartOfCluster:                  true,
+		Stopper:                        stop.NewStopper(),
+		JoinAddr:                       joinAddr,
+		DisableTLSForHTTP:              true,
+		StoreSpecs:                     []base.StoreSpec{storeSpec},
+		SQLMemoryPoolSize:              demoCtx.sqlPoolMemorySize,
+		CacheSize:                      demoCtx.cacheSize,
+		NoAutoInitializeCluster:        true,
+		EnableDemoLoginEndpoint:        true,
+		EnableTrackFirstQueryTimestamp: true,
 		// This disables the tenant server. We could enable it but would have to
 		// generate the suitable certs at the caller who wishes to do so.
 		TenantAddr: new(string),

@@ -124,6 +124,12 @@ type SQLServer struct {
 	// set to true when the server has started accepting client conns.
 	// Used by health checks.
 	acceptingClients syncutil.AtomicBool
+
+	// trackTimeOfFirstQuery is set when the server configuration
+	// has EnableTrackTimeToFirstQuery enabled. This is
+	// set for servers run from the command line but
+	// not test servers by default.
+	trackTimeOfFirstQuery bool
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -718,6 +724,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		metricsRegistry:         cfg.registry,
 		diagnosticsReporter:     reporter,
 		settingsWatcher:         settingsWatcher,
+		trackTimeOfFirstQuery:   cfg.SQLConfig.EnableTrackFirstQueryTimestamp,
 	}, nil
 }
 
@@ -744,7 +751,7 @@ func (s *SQLServer) preStart(
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
-	s.pgServer.Start(ctx, stopper)
+	s.pgServer.Start(ctx, stopper, s.internalExecutor, s.trackTimeOfFirstQuery)
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}

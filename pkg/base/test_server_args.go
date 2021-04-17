@@ -126,8 +126,11 @@ type TestServerArgs struct {
 	// is running in secure mode.
 	DisableWebSessionAuthentication bool
 
-	// IF set, the demo login endpoint will be enabled.
+	// If set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
+
+	// If set, nodes will keep track of the first query timestamp.
+	EnableTrackFirstQueryTimestamp bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test

@@ -337,6 +337,13 @@ type SQLConfig struct {
 	//
 	// Only applies when the SQL server is deployed individually.
 	TenantKVAddrs []string
+
+	// EnableTrackFirstQueryTimestamp, when set,
+	// cause the cluster to remember the timestamp
+	// of the first query. This is set for
+	// servers started from the command line
+	// but not for test servers by default.
+	EnableTrackFirstQueryTimestamp bool
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.

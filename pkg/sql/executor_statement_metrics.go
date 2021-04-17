@@ -12,8 +12,10 @@ package sql
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -199,6 +201,8 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
+	isInternal := strings.HasPrefix(planner.sessionDataMutator.data.ApplicationName, catconstants.ReportableAppNamePrefix)
+
 	stmtID := ex.statsCollector.recordStatement(
 		stmt, planner.instrumentation.PlanForStats(ctx),
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
@@ -206,6 +210,7 @@ func (ex *connExecutor) recordStatementSummary(
 		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
+		isInternal,
 	)
 
 	// Do some transaction level accounting for the transaction this statement is

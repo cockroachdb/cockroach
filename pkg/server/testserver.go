@@ -197,6 +197,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.CacheSize != 0 {
 		cfg.CacheSize = params.CacheSize
 	}
+	if params.EnableTrackFirstQueryTimestamp {
+		cfg.SQLConfig.EnableTrackFirstQueryTimestamp = true
+	}
 
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}

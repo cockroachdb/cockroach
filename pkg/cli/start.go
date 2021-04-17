@@ -384,6 +384,10 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		return err
 	}
 
+	// Initialize first query tracking.
+	// TODO(knz): We may want a command-line flag to disable this functionality.
+	serverCfg.SQLConfig.EnableTrackFirstQueryTimestamp = true
+
 	// Next we initialize the target directory for temporary storage.
 	// If encryption at rest is enabled in any fashion, we'll want temp
 	// storage to be encrypted too. To achieve this, we use

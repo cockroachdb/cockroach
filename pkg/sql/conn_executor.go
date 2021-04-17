@@ -333,7 +333,19 @@ func makeMetrics(internal bool) Metrics {
 }
 
 // Start starts the Server's background processing.
-func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
+func (s *Server) Start(
+	ctx context.Context, stopper *stop.Stopper, ie *InternalExecutor, trackFirstQueryTimestamp bool,
+) {
+	// We only enable first query timestamp tracking
+	// if enabled.
+	// The internal executor is not provided in unit tests
+	// that exercise a SQL server in isolation. In that
+	// case too, skip the asynchronous processing.
+	if ie != nil && trackFirstQueryTimestamp {
+		// Synchronize the first query timestamp across nodes.
+		s.startSynchronizeFirstQueryTimestamp(ctx, stopper, ie)
+	}
+
 	// Start a loop to clear SQL stats at the max reset interval. This is
 	// to ensure that we always have some worker clearing SQL stats to avoid
 	// continually allocating space for the SQL stats. Additionally, spawn

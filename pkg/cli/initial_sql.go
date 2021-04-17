@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,7 +56,23 @@ func runInitialSQL(
 		}
 	}
 
+	// Remember when the cluster was initialized.
+	if err := registerClusterInitTimestamp(ctx, s); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// registerClusterInitTimestamp saves the current time inside the
+// "init cluster timestamp" cluster setting.
+func registerClusterInitTimestamp(ctx context.Context, s *server.Server) error {
+	return s.RunLocalSQL(ctx,
+		func(ctx context.Context, ie *sql.InternalExecutor) error {
+			now := timeutil.Now().UnixNano()
+			_, err := ie.Exec(ctx, "admin-user", nil, "SET CLUSTER SETTING "+sql.ClusterInitTimestampSettingName+" = $1", now)
+			return err
+		})
 }
 
 // createAdminUser creates an admin user with the given name.

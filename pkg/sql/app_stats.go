@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -170,11 +172,99 @@ var logicalPlanCollectionPeriod = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 ).WithPublic()
 
+const (
+	// ClusterInitTimestampSettingName is the name of the cluster setting
+	// that holds the logical cluster initialization time.
+	ClusterInitTimestampSettingName = "sql.metrics.cluster_init.timestamp"
+	// firstQueryTimestampSettingName is the name of the cluster
+	// setting that holds the time of the first non-internal query.
+	firstQueryTimestampSettingName = "sql.metrics.first_query.timestamp"
+)
+
+// The cluster initialization timestamp, as seen from the SQL layer.
+// This is set by the node that's responsible for cluster initialization.
+//
+// As for every cluster setting, it is possible for this value to take
+// a while to propagate to the rest of this cluster. This is OK
+// since we only embark it in telemetry at this point.
+var clusterInitTimestamp = settings.RegisterIntSetting(
+	ClusterInitTimestampSettingName,
+	"the timestamp at which the cluster was logically initialized (nanoseconds since the Unix epoch)",
+	0).WithSystemOnly()
+
+var _ = clusterInitTimestamp // avoid unused error.
+
+// The timestamp of the first query that was not issued by
+// an "internal" client (as determined by application_name).
+//
+// This is set to non-zero by any node receiving a query if the
+// value is observed to still be zero.
+// Meanwhile, as for every cluster setting, it is possible for this
+// value to take a while to propagate to the rest of this cluster.
+// Therefore, it is possible for multiple nodes to concurrently
+// write to the cluster setting, when they receive their first
+// client query within a short time frame (the setting propagation
+// delay).
+// We find this acceptable because this propagation delay
+// is short (seconds) whereas the information we hope to extract
+// from this timestamp need only be at minutes/hours granularity.
+var firstQueryTimestamp = settings.RegisterIntSetting(
+	firstQueryTimestampSettingName,
+	"the approximate timestamp at which the first client query was executed (nanoseconds since the Unix epoch)",
+	0)
+
 func (s stmtKey) String() string {
 	if s.failed {
 		return "!" + s.anonymizedStmt
 	}
 	return s.anonymizedStmt
+}
+
+// startSynchronizeFirstQueryTimestamp starts a background process
+// to synchronize the in-memory "first query timestamp" with
+// a cluster setting which is persisted across restarts.
+//
+// We use an asynchronous algorithm in order to avoid processing
+// a cluster setting change on the hot path of recording statements
+// upon every execution.
+func (s *Server) startSynchronizeFirstQueryTimestamp(
+	ctx context.Context, stopper *stop.Stopper, ie *InternalExecutor,
+) {
+	_ = stopper.RunAsyncTask(ctx, "sql-first-query-ts", func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-time.After(1 * time.Second):
+				// Avoid a busy loop.
+			}
+
+			// Observe the local (in-memory) timetamp known already on this node.
+			curTs := atomic.LoadInt64(&s.sqlStats.firstQueryTimestamp)
+			// Is there a stored timestamp known already?
+			storedFts := firstQueryTimestamp.Get(&s.cfg.Settings.SV)
+			if storedFts != 0 && storedFts < curTs {
+				// Another node observed a query earlier. Remember that on
+				// this node.
+				atomic.StoreInt64(&s.sqlStats.firstQueryTimestamp, storedFts)
+			} else if (storedFts == 0 && curTs != 0) || curTs < storedFts {
+				// There is no stored value yet and we have observed a value
+				// locally; or
+				// our in-memory timestamp is older than the one in the
+				// cluster setting.
+				//
+				// In either case, store our value for the benefit of other
+				// nodes, or for reuse across node restarts.
+				_, err := ie.Exec(ctx, "set-first-query-ts", nil,
+					"SET CLUSTER SETTING "+firstQueryTimestampSettingName+" = $1", curTs)
+				if err != nil {
+					log.Warningf(ctx, "unable to persist first query timestamp: %v", err)
+				}
+			}
+		}
+	})
 }
 
 // recordStatement saves per-statement statistics.
@@ -511,6 +601,11 @@ type sqlStats struct {
 	lastReset time.Time
 	// apps is the container for all the per-application statistics objects.
 	apps map[string]*appStats
+	// firstQueryTimestamp is the timestamp at which this stats
+	// container observed a non-internal query for the first time.
+	// This is accessed atomically, without acquiring
+	// the mutex.
+	firstQueryTimestamp int64
 }
 
 func (s *sqlStats) getStatsForApplication(appName string) *appStats {
