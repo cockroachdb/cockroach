@@ -155,7 +155,7 @@ require (
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20201009025420-dfb3f7c4e634
-	golang.org/x/text v0.3.3
+	golang.org/x/text v0.3.5
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
 	google.golang.org/api v0.1.0
