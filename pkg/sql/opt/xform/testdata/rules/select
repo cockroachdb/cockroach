@@ -3903,7 +3903,8 @@ project
       │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["B\xfdL\x00\x00\x00\x00\x00\x00\x00", "B\xfdL\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         └── ["B\xfdN\x00\x00\x00\x00\x00\x00\x01", "B\xfdP\x00\x00\x00\x00\x00\x00\x01")
+      │              │         ├── ["B\xfdO\x00\x00\x00\x00\x00\x00\x00", "B\xfdO\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         └── ["B\xfdP\x00\x00\x00\x00\x00\x00\x00", "B\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
       │              └── fd: (1)-->(7)
       └── filters
@@ -5134,6 +5135,35 @@ select
  │    └── columns: c:1
  └── filters
       └── st_dfullywithin(c:1, '0101000000000000000000F03F000000000000F03F', CAST(NULL AS FLOAT8)) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+
+# Regression test for #63180. Ensure that we only scan spans needed by the
+# inverted filter.
+exec-ddl
+CREATE TABLE t63180 (
+  j JSON,
+  INVERTED INDEX j_idx (j)
+)
+----
+
+opt expect=GenerateInvertedIndexScans
+SELECT j FROM t63180@j_idx WHERE j @> '{"a": "c"}' AND (j @> '{"a": "b"}' OR j @> '{"a": "c"}');
+----
+index-join t63180
+ ├── columns: j:1!null
+ ├── immutable
+ └── inverted-filter
+      ├── columns: rowid:2!null
+      ├── inverted expression: /4
+      │    ├── tight: true, unique: false
+      │    └── union spans: ["7a\x00\x01\x12c\x00\x01", "7a\x00\x01\x12c\x00\x01"]
+      ├── key: (2)
+      └── scan t63180@j_idx
+           ├── columns: rowid:2!null j_inverted_key:4!null
+           ├── inverted constraint: /4/2
+           │    └── spans: ["7a\x00\x01\x12c\x00\x01", "7a\x00\x01\x12c\x00\x01"]
+           ├── flags: force-index=j_idx
+           ├── key: (2)
+           └── fd: (2)-->(4)
 
 # --------------------------------------------------
 # GenerateZigzagJoins
