@@ -230,7 +230,8 @@ func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		}
 	}
 
-	p.lastVal = lastVal
+	// We need to perform a deep copy for the next iteration.
+	execgen.COPYVAL(p.lastVal, lastVal)
 	p.lastValNull = lastValNull
 
 	return batch
@@ -315,8 +316,7 @@ func checkDistinct(
 	var unique bool
 	_ASSIGN_NE(unique, v, lastVal, _, col, _)
 	outputCol[outputIdx] = outputCol[outputIdx] || unique
-	execgen.COPYVAL(lastVal, v)
-	return lastVal
+	return v
 }
 
 // checkDistinctWithNulls behaves the same as checkDistinct, but it also
@@ -349,7 +349,7 @@ func checkDistinctWithNulls(
 			_ASSIGN_NE(unique, v, lastVal, _, col, _)
 			outputCol[outputIdx] = outputCol[outputIdx] || unique
 		}
-		execgen.COPYVAL(lastVal, v)
+		lastVal = v
 	}
 	return lastVal, null
 }
