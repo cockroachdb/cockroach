@@ -1,0 +1,246 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement ok
+CREATE DATABASE tpcc PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+USE tpcc
+
+# NB: This doesn't include the foreign key reference to warehouse since we
+# don't need the warehouse table for this test.
+statement ok
+CREATE TABLE district (
+        d_id INT8 NOT NULL,
+        d_w_id INT8 NOT NULL,
+        d_name VARCHAR(10) NOT NULL,
+        d_street_1 VARCHAR(20) NOT NULL,
+        d_street_2 VARCHAR(20) NOT NULL,
+        d_city VARCHAR(20) NOT NULL,
+        d_state CHAR(2) NOT NULL,
+        d_zip CHAR(9) NOT NULL,
+        d_tax DECIMAL(4,4) NOT NULL,
+        d_ytd DECIMAL(12,2) NOT NULL,
+        d_next_o_id INT8 NOT NULL,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN d_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN d_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN d_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        CONSTRAINT "primary" PRIMARY KEY (d_w_id ASC, d_id ASC),
+        FAMILY "primary" (d_id, d_w_id, d_name, d_street_1, d_street_2, d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE customer (
+        c_id INT8 NOT NULL,
+        c_d_id INT8 NOT NULL,
+        c_w_id INT8 NOT NULL,
+        c_first VARCHAR(16) NOT NULL,
+        c_middle CHAR(2) NOT NULL,
+        c_last VARCHAR(16) NOT NULL,
+        c_street_1 VARCHAR(20) NOT NULL,
+        c_street_2 VARCHAR(20) NOT NULL,
+        c_city VARCHAR(20) NOT NULL,
+        c_state CHAR(2) NOT NULL,
+        c_zip CHAR(9) NOT NULL,
+        c_phone CHAR(16) NOT NULL,
+        c_since TIMESTAMP NOT NULL,
+        c_credit CHAR(2) NOT NULL,
+        c_credit_lim DECIMAL(12,2) NOT NULL,
+        c_discount DECIMAL(4,4) NOT NULL,
+        c_balance DECIMAL(12,2) NOT NULL,
+        c_ytd_payment DECIMAL(12,2) NOT NULL,
+        c_payment_cnt INT8 NOT NULL,
+        c_delivery_cnt INT8 NOT NULL,
+        c_data VARCHAR(500) NOT NULL,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN c_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN c_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN c_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        CONSTRAINT "primary" PRIMARY KEY (c_w_id ASC, c_d_id ASC, c_id ASC),
+        CONSTRAINT fk_c_w_id_ref_district FOREIGN KEY (c_w_id, c_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
+        INDEX customer_idx (c_w_id ASC, c_d_id ASC, c_last ASC, c_first ASC),
+        FAMILY "primary" (c_id, c_d_id, c_w_id, c_first, c_middle, c_last, c_street_1, c_street_2, c_city, c_state, c_zip, c_phone, c_since, c_credit, c_credit_lim, c_discount, c_balance, c_ytd_payment, c_payment_cnt, c_delivery_cnt, c_data, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE history (
+        rowid UUID NOT NULL DEFAULT gen_random_uuid(),
+        h_c_id INT8 NOT NULL,
+        h_c_d_id INT8 NOT NULL,
+        h_c_w_id INT8 NOT NULL,
+        h_d_id INT8 NOT NULL,
+        h_w_id INT8 NOT NULL,
+        h_date TIMESTAMP NULL,
+        h_amount DECIMAL(6,2) NULL,
+        h_data VARCHAR(24) NULL,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN h_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN h_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN h_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        CONSTRAINT "primary" PRIMARY KEY (h_w_id ASC, rowid ASC),
+        CONSTRAINT fk_h_c_w_id_ref_customer FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES customer(c_w_id, c_d_id, c_id) NOT VALID,
+        CONSTRAINT fk_h_w_id_ref_district FOREIGN KEY (h_w_id, h_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
+        FAMILY "primary" (rowid, h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE district INJECT STATISTICS '[
+    {
+        "columns": [
+            "d_w_id"
+        ],
+        "created_at": "2021-04-13 19:54:56.008454",
+        "distinct_count": 5004,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 50000
+    },
+    {
+        "columns": [
+            "d_id"
+        ],
+        "created_at": "2021-04-13 19:54:56.008454",
+        "distinct_count": 10,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 50000
+    }
+]'
+
+statement ok
+ALTER TABLE customer INJECT STATISTICS '[
+    {
+        "columns": [
+            "c_d_id"
+        ],
+        "created_at": "2021-04-13 20:35:46.476858",
+        "distinct_count": 10,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    },
+    {
+        "columns": [
+            "c_w_id"
+        ],
+        "created_at": "2021-04-13 20:35:46.476858",
+        "distinct_count": 4998,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    },
+    {
+        "columns": [
+            "c_id"
+        ],
+        "created_at": "2021-04-13 20:35:46.476858",
+        "distinct_count": 2999,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    }
+]'
+
+statement ok
+ALTER TABLE history INJECT STATISTICS '[
+    {
+        "columns": [
+            "h_w_id"
+        ],
+        "created_at": "2021-04-13 20:58:06.757925",
+        "distinct_count": 4998,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    },
+    {
+        "columns": [
+            "h_c_id"
+        ],
+        "created_at": "2021-04-13 20:58:06.757925",
+        "distinct_count": 2999,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    },
+    {
+        "columns": [
+            "h_c_d_id"
+        ],
+        "created_at": "2021-04-13 20:58:06.757925",
+        "distinct_count": 10,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    },
+    {
+        "columns": [
+            "h_c_w_id"
+        ],
+        "created_at": "2021-04-13 20:58:06.757925",
+        "distinct_count": 4998,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    },
+    {
+        "columns": [
+            "h_d_id"
+        ],
+        "created_at": "2021-04-13 20:58:06.757925",
+        "distinct_count": 10,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 150000000
+    }
+]'
+
+# Regression test for #63735. Ensure that we choose locality optimized anti
+# joins for the foreign key checks.
+query T
+EXPLAIN INSERT
+INTO
+  history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
+VALUES
+  (2057, 4, 3, 4, 3, 2100.9, '2021-04-15 15:22:14', '9    zmssaF9m')
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: history(rowid, h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_date, h_amount, h_data, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 11 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (anti)
+│           │ estimated row count: 0
+│           │ table: customer@primary
+│           │ equality cols are key
+│           │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│           │
+│           └── • lookup join (anti)
+│               │ estimated row count: 1
+│               │ table: customer@primary
+│               │ equality cols are key
+│               │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region = 'ap-southeast-2')
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ estimated row count: 0
+            │ table: district@primary
+            │ equality cols are key
+            │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • lookup join (anti)
+                │ estimated row count: 1
+                │ table: district@primary
+                │ equality cols are key
+                │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region = 'ap-southeast-2')
+                │
+                └── • scan buffer
+                      label: buffer 1
