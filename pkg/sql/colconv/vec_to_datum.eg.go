@@ -426,6 +426,9 @@ func ColVecToDatumAndDeselect(
 					}
 					v := typedCol.Get(srcIdx)
 
+					// The following operation deliberately copies the input JSON
+					// bytes, since FromEncoding is lazy and keeps a handle on the bytes
+					// it is passed in.
 					_bytes, _err := json.EncodeJSON(nil, v)
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -705,6 +708,9 @@ func ColVecToDatumAndDeselect(
 					srcIdx = sel[idx]
 					v := typedCol.Get(srcIdx)
 
+					// The following operation deliberately copies the input JSON
+					// bytes, since FromEncoding is lazy and keeps a handle on the bytes
+					// it is passed in.
 					_bytes, _err := json.EncodeJSON(nil, v)
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -1018,6 +1024,9 @@ func ColVecToDatum(
 						}
 						v := typedCol.Get(srcIdx)
 
+						// The following operation deliberately copies the input JSON
+						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
+						// it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -1348,6 +1357,9 @@ func ColVecToDatum(
 						}
 						v := typedCol.Get(srcIdx)
 
+						// The following operation deliberately copies the input JSON
+						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
+						// it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -1630,6 +1642,9 @@ func ColVecToDatum(
 						srcIdx = sel[idx]
 						v := typedCol.Get(srcIdx)
 
+						// The following operation deliberately copies the input JSON
+						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
+						// it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -1885,6 +1900,9 @@ func ColVecToDatum(
 						srcIdx = idx
 						v := typedCol.Get(srcIdx)
 
+						// The following operation deliberately copies the input JSON
+						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
+						// it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)

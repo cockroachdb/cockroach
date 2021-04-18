@@ -79,6 +79,9 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 						// as underlying storage, which will perform the copy for us.
 						%[1]s := %[3]s.NewDBytes(tree.DBytes(%[2]s))`,
 	types.JsonFamily: `
+            // The following operation deliberately copies the input JSON
+            // bytes, since FromEncoding is lazy and keeps a handle on the bytes
+            // it is passed in.
             _bytes, _err := json.EncodeJSON(nil, %[2]s)
             if _err != nil {
                 colexecerror.ExpectedError(_err)

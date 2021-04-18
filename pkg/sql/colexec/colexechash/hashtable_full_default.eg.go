@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -7487,7 +7488,7 @@ func (ht *HashTable) checkCol(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -7529,7 +7530,7 @@ func (ht *HashTable) checkCol(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -7571,7 +7572,7 @@ func (ht *HashTable) checkCol(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -7614,7 +7615,7 @@ func (ht *HashTable) checkCol(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -7654,7 +7655,7 @@ func (ht *HashTable) checkCol(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -7714,7 +7715,7 @@ func (ht *HashTable) checkCol(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -7756,7 +7757,7 @@ func (ht *HashTable) checkCol(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -7798,7 +7799,7 @@ func (ht *HashTable) checkCol(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -7841,7 +7842,7 @@ func (ht *HashTable) checkCol(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -7881,7 +7882,7 @@ func (ht *HashTable) checkCol(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0

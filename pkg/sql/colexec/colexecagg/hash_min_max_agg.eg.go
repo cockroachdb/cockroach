@@ -1452,7 +1452,7 @@ func (a *minJSONHashAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult < 0
@@ -1506,7 +1506,7 @@ func (a *minJSONHashAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult < 0
@@ -3145,7 +3145,7 @@ func (a *maxJSONHashAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult > 0
@@ -3199,7 +3199,7 @@ func (a *maxJSONHashAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult > 0

@@ -9611,7 +9611,7 @@ func (p *selEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9637,7 +9637,7 @@ func (p *selEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9663,7 +9663,7 @@ func (p *selEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9689,7 +9689,7 @@ func (p *selEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9754,7 +9754,7 @@ func (p *selEQJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9782,7 +9782,7 @@ func (p *selEQJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9809,7 +9809,7 @@ func (p *selEQJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -9837,7 +9837,7 @@ func (p *selEQJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult == 0
@@ -19675,7 +19675,7 @@ func (p *selNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19701,7 +19701,7 @@ func (p *selNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19727,7 +19727,7 @@ func (p *selNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19753,7 +19753,7 @@ func (p *selNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19818,7 +19818,7 @@ func (p *selNEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19846,7 +19846,7 @@ func (p *selNEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19873,7 +19873,7 @@ func (p *selNEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -19901,7 +19901,7 @@ func (p *selNEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult != 0
@@ -29739,7 +29739,7 @@ func (p *selLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29765,7 +29765,7 @@ func (p *selLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29791,7 +29791,7 @@ func (p *selLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29817,7 +29817,7 @@ func (p *selLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29882,7 +29882,7 @@ func (p *selLTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29910,7 +29910,7 @@ func (p *selLTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29937,7 +29937,7 @@ func (p *selLTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -29965,7 +29965,7 @@ func (p *selLTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult < 0
@@ -39803,7 +39803,7 @@ func (p *selLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -39829,7 +39829,7 @@ func (p *selLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -39855,7 +39855,7 @@ func (p *selLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -39881,7 +39881,7 @@ func (p *selLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -39946,7 +39946,7 @@ func (p *selLEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -39974,7 +39974,7 @@ func (p *selLEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -40001,7 +40001,7 @@ func (p *selLEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -40029,7 +40029,7 @@ func (p *selLEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult <= 0
@@ -49867,7 +49867,7 @@ func (p *selGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -49893,7 +49893,7 @@ func (p *selGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -49919,7 +49919,7 @@ func (p *selGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -49945,7 +49945,7 @@ func (p *selGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -50010,7 +50010,7 @@ func (p *selGTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -50038,7 +50038,7 @@ func (p *selGTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -50065,7 +50065,7 @@ func (p *selGTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -50093,7 +50093,7 @@ func (p *selGTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult > 0
@@ -59931,7 +59931,7 @@ func (p *selGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -59957,7 +59957,7 @@ func (p *selGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -59983,7 +59983,7 @@ func (p *selGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -60009,7 +60009,7 @@ func (p *selGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -60074,7 +60074,7 @@ func (p *selGEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -60102,7 +60102,7 @@ func (p *selGEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -60129,7 +60129,7 @@ func (p *selGEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0
@@ -60157,7 +60157,7 @@ func (p *selGEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg1.Compare(arg2)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						cmp = cmpResult >= 0

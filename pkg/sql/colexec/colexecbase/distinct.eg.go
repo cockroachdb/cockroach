@@ -2600,7 +2600,7 @@ func (p *distinctJSONOp) Next(ctx context.Context) coldata.Batch {
 									var err error
 									cmpResult, err = v.Compare(lastVal)
 									if err != nil {
-										panic(err)
+										colexecerror.ExpectedError(err)
 									}
 
 									unique = cmpResult != 0
@@ -2647,7 +2647,7 @@ func (p *distinctJSONOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = v.Compare(lastVal)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							unique = cmpResult != 0
@@ -2713,7 +2713,7 @@ func (p *distinctJSONOp) Next(ctx context.Context) coldata.Batch {
 									var err error
 									cmpResult, err = v.Compare(lastVal)
 									if err != nil {
-										panic(err)
+										colexecerror.ExpectedError(err)
 									}
 
 									unique = cmpResult != 0
@@ -2760,7 +2760,7 @@ func (p *distinctJSONOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = v.Compare(lastVal)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							unique = cmpResult != 0

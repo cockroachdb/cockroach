@@ -2058,7 +2058,7 @@ func (p partitionerJSON) partitionWithOrder(
 								var err error
 								cmpResult, err = v.Compare(lastVal)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								unique = cmpResult != 0
@@ -2102,7 +2102,7 @@ func (p partitionerJSON) partitionWithOrder(
 						var err error
 						cmpResult, err = v.Compare(lastVal)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						unique = cmpResult != 0
@@ -2179,7 +2179,7 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 								var err error
 								cmpResult, err = v.Compare(lastVal)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								unique = cmpResult != 0
@@ -2226,7 +2226,7 @@ func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) 
 						var err error
 						cmpResult, err = v.Compare(lastVal)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						unique = cmpResult != 0

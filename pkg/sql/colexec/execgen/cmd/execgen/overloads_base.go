@@ -506,7 +506,7 @@ func (b *argWidthOverloadBase) Set(target, i, new string) string {
 func (b *argWidthOverloadBase) slice(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
 	case types.BytesFamily, types.JsonFamily:
-		// Bytes vector doesn't support slicing.
+		// Bytes-like vector doesn't support slicing.
 		colexecerror.InternalError(errors.AssertionFailedf("slice method is attempted to be generated on Bytes vector"))
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
@@ -791,10 +791,12 @@ type intIntervalCustomizer struct{}
 // left-hand side and a float right-hand side.
 type intervalFloatCustomizer struct{}
 
-// jsonBytesCustomizer is necessary since json.JSON doesn't have infix operators.
+// jsonBytesCustomizer supports mixed type expressions with a json left-hand
+// side and a bytes right-hand side.
 type jsonBytesCustomizer struct{}
 
-// jsonIntCustomizer is necessary since json.JSON doesn't have infix operators.
+// jsonBytesCustomizer supports mixed type expressions with a json left-hand
+// side and a int right-hand side.
 type jsonIntCustomizer struct{}
 
 // jsonDatumCustomizer supports mixed type expression with a JSON left-hand side

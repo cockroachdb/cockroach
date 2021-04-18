@@ -454,8 +454,8 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	return data, offsets
 }
 
-// AssertOffsetsAreNonDecreasing asserts that a bytes-like vec nas
-// non-decreasing offsets.
+// AssertOffsetsAreNonDecreasing calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
 func AssertOffsetsAreNonDecreasing(v Vec, n int) {
 	family := v.CanonicalTypeFamily()
 	switch family {
@@ -468,6 +468,8 @@ func AssertOffsetsAreNonDecreasing(v Vec, n int) {
 	}
 }
 
+// UpdateOffsetsToBeNonDecreasing calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
 func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
 	family := v.CanonicalTypeFamily()
 	switch family {
@@ -480,6 +482,8 @@ func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
 	}
 }
 
+// ProportionalSize calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
 func ProportionalSize(v Vec, length int64) uintptr {
 	family := v.CanonicalTypeFamily()
 	switch family {
@@ -493,6 +497,8 @@ func ProportionalSize(v Vec, length int64) uintptr {
 	return 0
 }
 
+// Reset calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
 func Reset(v Vec) {
 	family := v.CanonicalTypeFamily()
 	switch family {

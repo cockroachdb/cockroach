@@ -267,7 +267,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = types.Jsonb
+		typs[i] = randgen.RandType(rng)
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 

@@ -10264,6 +10264,9 @@ func (p projMinusJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
+						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+						// is safe since we know the bytes won't change out from under us during
+						// RemoveString.
 						_j, _, _err := arg.RemoveString(*(*string)(unsafe.Pointer(&p.constArg)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -10280,6 +10283,9 @@ func (p projMinusJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
+						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+						// is safe since we know the bytes won't change out from under us during
+						// RemoveString.
 						_j, _, _err := arg.RemoveString(*(*string)(unsafe.Pointer(&p.constArg)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -10301,6 +10307,9 @@ func (p projMinusJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				for _, i := range sel {
 					arg := col.Get(i)
 
+					// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+					// is safe since we know the bytes won't change out from under us during
+					// RemoveString.
 					_j, _, _err := arg.RemoveString(*(*string)(unsafe.Pointer(&p.constArg)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -10314,6 +10323,9 @@ func (p projMinusJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
+					// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+					// is safe since we know the bytes won't change out from under us during
+					// RemoveString.
 					_j, _, _err := arg.RemoveString(*(*string)(unsafe.Pointer(&p.constArg)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -28612,6 +28624,9 @@ func (p projJSONFetchValJSONBytesConstOp) Next(ctx context.Context) coldata.Batc
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
+						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+						// is safe since we know the bytes won't change out from under us during
+						// FetchValKey.
 						_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -28631,6 +28646,9 @@ func (p projJSONFetchValJSONBytesConstOp) Next(ctx context.Context) coldata.Batc
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
+						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+						// is safe since we know the bytes won't change out from under us during
+						// FetchValKey.
 						_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -28655,6 +28673,9 @@ func (p projJSONFetchValJSONBytesConstOp) Next(ctx context.Context) coldata.Batc
 				for _, i := range sel {
 					arg := col.Get(i)
 
+					// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+					// is safe since we know the bytes won't change out from under us during
+					// FetchValKey.
 					_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -28671,6 +28692,9 @@ func (p projJSONFetchValJSONBytesConstOp) Next(ctx context.Context) coldata.Batc
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
+					// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+					// is safe since we know the bytes won't change out from under us during
+					// FetchValKey.
 					_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -28753,7 +28777,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next(ctx context.Context) coldata.Batc
 						} else {
 							projCol.Set(i, _j)
 						}
-
 					}
 				}
 			} else {
@@ -28774,7 +28797,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next(ctx context.Context) coldata.Batc
 						} else {
 							projCol.Set(i, _j)
 						}
-
 					}
 				}
 			}
@@ -28799,7 +28821,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next(ctx context.Context) coldata.Batc
 					} else {
 						projCol.Set(i, _j)
 					}
-
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -28817,7 +28838,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next(ctx context.Context) coldata.Batc
 					} else {
 						projCol.Set(i, _j)
 					}
-
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -28891,7 +28911,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next(ctx context.Context) coldata.Batc
 						} else {
 							projCol.Set(i, _j)
 						}
-
 					}
 				}
 			} else {
@@ -28912,7 +28931,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next(ctx context.Context) coldata.Batc
 						} else {
 							projCol.Set(i, _j)
 						}
-
 					}
 				}
 			}
@@ -28937,7 +28955,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next(ctx context.Context) coldata.Batc
 					} else {
 						projCol.Set(i, _j)
 					}
-
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -28955,7 +28972,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next(ctx context.Context) coldata.Batc
 					} else {
 						projCol.Set(i, _j)
 					}
-
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -29029,7 +29045,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next(ctx context.Context) coldata.Batc
 						} else {
 							projCol.Set(i, _j)
 						}
-
 					}
 				}
 			} else {
@@ -29050,7 +29065,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next(ctx context.Context) coldata.Batc
 						} else {
 							projCol.Set(i, _j)
 						}
-
 					}
 				}
 			}
@@ -29075,7 +29089,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next(ctx context.Context) coldata.Batc
 					} else {
 						projCol.Set(i, _j)
 					}
-
 				}
 			} else {
 				_ = projCol.Get(n - 1)
@@ -29093,7 +29106,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next(ctx context.Context) coldata.Batc
 					} else {
 						projCol.Set(i, _j)
 					}
-
 				}
 			}
 			// _outNulls has been updated from within the _ASSIGN function to include
@@ -29158,6 +29170,9 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
+						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+						// is safe since we know the bytes won't change out from under us during
+						// FetchValKey.
 						_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29165,6 +29180,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29185,6 +29201,9 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
+						// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+						// is safe since we know the bytes won't change out from under us during
+						// FetchValKey.
 						_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29192,6 +29211,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29217,6 +29237,9 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 				for _, i := range sel {
 					arg := col.Get(i)
 
+					// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+					// is safe since we know the bytes won't change out from under us during
+					// FetchValKey.
 					_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -29224,6 +29247,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29241,6 +29265,9 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 				for i := 0; i < n; i++ {
 					arg := col.Get(i)
 
+					// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+					// is safe since we know the bytes won't change out from under us during
+					// FetchValKey.
 					_j, _err := arg.FetchValKey(*(*string)(unsafe.Pointer(&p.constArg)))
 					if _err != nil {
 						colexecerror.ExpectedError(_err)
@@ -29248,6 +29275,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29329,6 +29357,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29357,6 +29386,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29389,6 +29419,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29414,6 +29445,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29495,6 +29527,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29523,6 +29556,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29555,6 +29589,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29580,6 +29615,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29661,6 +29697,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29689,6 +29726,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next(ctx context.Context) coldata.Bat
 						if _j == nil {
 							_outNulls.SetNull(i)
 						} else {
+
 							_text, _err := _j.AsText()
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
@@ -29721,6 +29759,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -29746,6 +29785,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next(ctx context.Context) coldata.Bat
 					if _j == nil {
 						_outNulls.SetNull(i)
 					} else {
+
 						_text, _err := _j.AsText()
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
@@ -34862,7 +34902,7 @@ func (p projEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -34884,7 +34924,7 @@ func (p projEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult == 0
@@ -34911,7 +34951,7 @@ func (p projEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -34930,7 +34970,7 @@ func (p projEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult == 0
@@ -39866,7 +39906,7 @@ func (p projNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -39888,7 +39928,7 @@ func (p projNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult != 0
@@ -39915,7 +39955,7 @@ func (p projNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -39934,7 +39974,7 @@ func (p projNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult != 0
@@ -44870,7 +44910,7 @@ func (p projLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -44892,7 +44932,7 @@ func (p projLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult < 0
@@ -44919,7 +44959,7 @@ func (p projLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -44938,7 +44978,7 @@ func (p projLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult < 0
@@ -49874,7 +49914,7 @@ func (p projLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -49896,7 +49936,7 @@ func (p projLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult <= 0
@@ -49923,7 +49963,7 @@ func (p projLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -49942,7 +49982,7 @@ func (p projLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult <= 0
@@ -54878,7 +54918,7 @@ func (p projGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -54900,7 +54940,7 @@ func (p projGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult > 0
@@ -54927,7 +54967,7 @@ func (p projGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -54946,7 +54986,7 @@ func (p projGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult > 0
@@ -59882,7 +59922,7 @@ func (p projGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -59904,7 +59944,7 @@ func (p projGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 							var err error
 							cmpResult, err = arg.Compare(p.constArg)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 							projCol[i] = cmpResult >= 0
@@ -59931,7 +59971,7 @@ func (p projGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult >= 0
@@ -59950,7 +59990,7 @@ func (p projGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 						var err error
 						cmpResult, err = arg.Compare(p.constArg)
 						if err != nil {
-							panic(err)
+							colexecerror.ExpectedError(err)
 						}
 
 						projCol[i] = cmpResult >= 0

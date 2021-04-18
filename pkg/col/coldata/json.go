@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -41,7 +42,7 @@ func (js *JSONs) Get(i int) json.JSON {
 	}
 	ret, err := json.FromEncoding(bytes)
 	if err != nil {
-		panic(err)
+		colexecerror.ExpectedError(err)
 	}
 	return ret
 }
@@ -56,7 +57,7 @@ func (js *JSONs) Set(i int, j json.JSON) {
 	var err error
 	b.data, err = json.EncodeJSON(appendTo, j)
 	if err != nil {
-		panic(err)
+		colexecerror.ExpectedError(err)
 	}
 	b.offsets[i+1] = int32(len(b.data))
 	b.maxSetIndex = i
@@ -97,7 +98,7 @@ func (js *JSONs) AppendVal(j json.JSON) {
 	var err error
 	b.data, err = json.EncodeJSON(appendTo, j)
 	if err != nil {
-		panic(err)
+		colexecerror.ExpectedError(err)
 	}
 	b.maxSetIndex = b.Len()
 	b.offsets = append(b.offsets, int32(len(b.data)))

@@ -357,7 +357,7 @@ func NewRandomDataOp(
 		// Generate at least one type.
 		typs = make([]*types.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
-			typs[i] = types.Jsonb
+			typs[i] = randgen.RandType(rng)
 		}
 	}
 	return &RandomDataOp{

@@ -362,7 +362,7 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 				var err error
 				cmpResult, err = arg1.Compare(arg2)
 				if err != nil {
-					panic(err)
+					colexecerror.ExpectedError(err)
 				}
 
 				unique = cmpResult != 0

@@ -1125,11 +1125,11 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 				newJSON := colJSON.Get(tupleIdx)
 				b, err := json.EncodeJSON(nil, newJSON)
 				if err != nil {
-					panic(err)
+					colexecerror.ExpectedError(err)
 				}
 				_, j, err := json.DecodeJSON(b)
 				if err != nil {
-					panic(err)
+					colexecerror.ExpectedError(err)
 				}
 				val = reflect.ValueOf(j)
 			} else if family == typeconv.DatumVecCanonicalTypeFamily {

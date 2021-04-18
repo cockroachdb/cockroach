@@ -477,7 +477,7 @@ func (o *mergeJoinBase) isBufferedGroupFinished(
 					var err error
 					cmpResult, err = prevVal.Compare(curVal)
 					if err != nil {
-						panic(err)
+						colexecerror.ExpectedError(err)
 					}
 
 					match = cmpResult == 0

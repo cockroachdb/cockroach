@@ -661,39 +661,41 @@ func (j jsonBytesCustomizer) getBinOpAssignFunc() assignFunc {
 		if err != nil {
 			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
 		}
+		getJSONFetchValKey := func(handleNonNilPath string) string {
+			return fmt.Sprintf(`
+// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+// is safe since we know the bytes won't change out from under us during
+// FetchValKey.
+_j, _err := %[3]s.FetchValKey(*(*string)(unsafe.Pointer(&%[4]s)))
+if _err != nil {
+    colexecerror.ExpectedError(_err)
+}
+if _j == nil {
+    _outNulls.SetNull(%[2]s)
+} else {
+    %[1]s
+}`,
+				handleNonNilPath, idxVariable, leftElem, rightElem)
+		}
 		switch op.overloadBase.BinOp {
 		case tree.JSONFetchVal:
-			return fmt.Sprintf(`
-_j, _err := %[3]s.FetchValKey(*(*string)(unsafe.Pointer(&%[4]s)))
-if _err != nil {
-   colexecerror.ExpectedError(_err)
-}
-if _j == nil {
-	_outNulls.SetNull(%[2]s)
-} else {
-  %[1]s.Set(%[2]s, _j)
-} `, vecVariable, idxVariable, leftElem, rightElem)
+			return getJSONFetchValKey(fmt.Sprintf("%s.Set(%s, _j)", vecVariable, idxVariable))
 		case tree.JSONFetchText:
-			return fmt.Sprintf(`
-_j, _err := %[3]s.FetchValKey(*(*string)(unsafe.Pointer(&%[4]s)))
-if _err != nil {
-   colexecerror.ExpectedError(_err)
-}
-if _j == nil {
-	_outNulls.SetNull(%[2]s)
-} else {
-	_text, _err := _j.AsText()
-	if _err != nil {
-    colexecerror.ExpectedError(_err)
-	}
-	if _text == nil {
-	  _outNulls.SetNull(%[2]s)
-	} else {
-    %[1]s.Set(%[2]s, []byte(*_text))
-  }
-} `, vecVariable, idxVariable, leftElem, rightElem)
+			return getJSONFetchValKey(fmt.Sprintf(`
+			_text, _err := _j.AsText()
+			if _err != nil {
+				colexecerror.ExpectedError(_err)
+			}
+			if _text == nil {
+				_outNulls.SetNull(%[2]s)
+			} else {
+				%[1]s.Set(%[2]s, []byte(*_text))
+			}`, vecVariable, idxVariable))
 		case tree.Minus:
 			return fmt.Sprintf(`
+// Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
+// is safe since we know the bytes won't change out from under us during
+// RemoveString.
 _j, _, _err := %[3]s.RemoveString(*(*string)(unsafe.Pointer(&%[4]s)))
 if _err != nil {
     colexecerror.ExpectedError(_err)
@@ -714,39 +716,33 @@ func (j jsonIntCustomizer) getBinOpAssignFunc() assignFunc {
 		if err != nil {
 			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
 		}
+		getJSONFetchValIdx := func(handleNonNilPath string) string {
+			return fmt.Sprintf(`
+_j, _err := %[3]s.FetchValIdx(int(%[4]s))
+if _err != nil {
+    colexecerror.ExpectedError(_err)
+}
+if _j == nil {
+    _outNulls.SetNull(%[2]s)
+} else {
+    %[1]s
+}`,
+				handleNonNilPath, idxVariable, leftElem, rightElem)
+		}
 		switch op.overloadBase.BinOp {
 		case tree.JSONFetchVal:
-			return fmt.Sprintf(`
-_j, _err := %[3]s.FetchValIdx(int(%[4]s))
-if _err != nil {
-    colexecerror.ExpectedError(_err)
-}
-if _j == nil {
-	_outNulls.SetNull(%[2]s)
-} else {
-  %[1]s.Set(%[2]s, _j)
-}
-`,
-				vecVariable, idxVariable, leftElem, rightElem)
+			return getJSONFetchValIdx(fmt.Sprintf("%s.Set(%s, _j)", vecVariable, idxVariable))
 		case tree.JSONFetchText:
-			return fmt.Sprintf(`
-_j, _err := %[3]s.FetchValIdx(int(%[4]s))
-if _err != nil {
-    colexecerror.ExpectedError(_err)
-}
-if _j == nil {
-	_outNulls.SetNull(%[2]s)
-} else {
-	_text, _err := _j.AsText()
-	if _err != nil {
-	  colexecerror.ExpectedError(_err)
-	}
-	if _text == nil {
-	  _outNulls.SetNull(%[2]s)
-	} else {
-    %[1]s.Set(%[2]s, []byte(*_text))
-  }
-} `, vecVariable, idxVariable, leftElem, rightElem)
+			return getJSONFetchValIdx(fmt.Sprintf(`
+			_text, _err := _j.AsText()
+			if _err != nil {
+				colexecerror.ExpectedError(_err)
+			}
+			if _text == nil {
+				_outNulls.SetNull(%[2]s)
+			} else {
+				%[1]s.Set(%[2]s, []byte(*_text))
+			}`, vecVariable, idxVariable))
 		case tree.Minus:
 			return fmt.Sprintf(`
 _j, _, _err := %[3]s.RemoveIndex(int(%[4]s))

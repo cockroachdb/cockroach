@@ -2567,7 +2567,7 @@ func cmpInJSON(
 		var err error
 		cmpResult, err = targetElem.Compare(filterRow[i])
 		if err != nil {
-			panic(err)
+			colexecerror.ExpectedError(err)
 		}
 
 		if cmpResult == 0 {

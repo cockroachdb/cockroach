@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -179,20 +180,20 @@ var distinctTestCases = []distinctTestCase{
 		// same as the sort order of JSON. Specifically, NULL sorts before integers
 		// in JSON, but after integers in strings.
 		expected: colexectestutils.Tuples{
-			{MustParseJSON(`{"id": 1}`), "a"},
-			{MustParseJSON(`{"id": 2}`), "b"},
-			{MustParseJSON(`{"id": 3}`), "c"},
-			{MustParseJSON(`{"id": null}`), "d"},
-			{MustParseJSON(`{"id": 5}`), "e"},
-			{MustParseJSON(`{"id": 6}`), "f"},
+			{mustParseJSON(`{"id": 1}`), "a"},
+			{mustParseJSON(`{"id": 2}`), "b"},
+			{mustParseJSON(`{"id": 3}`), "c"},
+			{mustParseJSON(`{"id": null}`), "d"},
+			{mustParseJSON(`{"id": 5}`), "e"},
+			{mustParseJSON(`{"id": 6}`), "f"},
 		},
 	},
 }
 
-func MustParseJSON(s string) json.JSON {
+func mustParseJSON(s string) json.JSON {
 	j, err := json.ParseJSON(s)
 	if err != nil {
-		panic(err)
+		colexecerror.ExpectedError(err)
 	}
 	return j
 }

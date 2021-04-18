@@ -8395,7 +8395,7 @@ func (ht *HashTable) checkColDeleting(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -8443,7 +8443,7 @@ func (ht *HashTable) checkColDeleting(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -8491,7 +8491,7 @@ func (ht *HashTable) checkColDeleting(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -8540,7 +8540,7 @@ func (ht *HashTable) checkColDeleting(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -8586,7 +8586,7 @@ func (ht *HashTable) checkColDeleting(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -8652,7 +8652,7 @@ func (ht *HashTable) checkColDeleting(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -8700,7 +8700,7 @@ func (ht *HashTable) checkColDeleting(
 													var err error
 													cmpResult, err = probeVal.Compare(buildVal)
 													if err != nil {
-														panic(err)
+														colexecerror.ExpectedError(err)
 													}
 
 													unique = cmpResult != 0
@@ -8748,7 +8748,7 @@ func (ht *HashTable) checkColDeleting(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -8797,7 +8797,7 @@ func (ht *HashTable) checkColDeleting(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0
@@ -8843,7 +8843,7 @@ func (ht *HashTable) checkColDeleting(
 												var err error
 												cmpResult, err = probeVal.Compare(buildVal)
 												if err != nil {
-													panic(err)
+													colexecerror.ExpectedError(err)
 												}
 
 												unique = cmpResult != 0

@@ -475,7 +475,7 @@ func (c *JSONVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) 
 	var err error
 	cmp, err = left.Compare(right)
 	if err != nil {
-		panic(err)
+		colexecerror.ExpectedError(err)
 	}
 
 	return cmp

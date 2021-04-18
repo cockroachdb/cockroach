@@ -127,7 +127,7 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 						t.Fatal(err)
 					}
 					if cmp != 0 {
-						t.Fatalf("bytes mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedJson, resultJson)
+						t.Fatalf("json mismatch at index %d:\nexpected:\n%s\nactual:\n%s", i, expectedJson, resultJson)
 					}
 				}
 			}

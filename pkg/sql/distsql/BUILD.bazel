@@ -83,6 +83,7 @@ go_test(
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/netutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",

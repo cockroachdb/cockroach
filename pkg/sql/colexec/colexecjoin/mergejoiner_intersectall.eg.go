@@ -1779,7 +1779,7 @@ EqLoop:
 							var err error
 							cmp, err = lVal.Compare(rVal)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 						}
@@ -1816,7 +1816,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newLVal.Compare(lVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -1852,7 +1852,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newRVal.Compare(rVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -3822,7 +3822,7 @@ EqLoop:
 							var err error
 							cmp, err = lVal.Compare(rVal)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 						}
@@ -3859,7 +3859,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newLVal.Compare(lVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -3895,7 +3895,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newRVal.Compare(rVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -5865,7 +5865,7 @@ EqLoop:
 							var err error
 							cmp, err = lVal.Compare(rVal)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 						}
@@ -5902,7 +5902,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newLVal.Compare(lVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -5938,7 +5938,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newRVal.Compare(rVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -7908,7 +7908,7 @@ EqLoop:
 							var err error
 							cmp, err = lVal.Compare(rVal)
 							if err != nil {
-								panic(err)
+								colexecerror.ExpectedError(err)
 							}
 
 						}
@@ -7945,7 +7945,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newLVal.Compare(lVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0
@@ -7981,7 +7981,7 @@ EqLoop:
 										var err error
 										cmpResult, err = newRVal.Compare(rVal)
 										if err != nil {
-											panic(err)
+											colexecerror.ExpectedError(err)
 										}
 
 										match = cmpResult == 0

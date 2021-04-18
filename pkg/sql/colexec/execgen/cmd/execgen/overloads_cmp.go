@@ -338,7 +338,7 @@ func (c jsonCustomizer) getCmpOpCompareFunc() compareFunc {
 var err error
 %s, err = %s.Compare(%s)
 if err != nil {
-  panic(err)
+  colexecerror.ExpectedError(err)
 }
 `, targetElem, leftElem, rightElem)
 	}

@@ -2750,7 +2750,7 @@ func (a *minJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult < 0
@@ -2820,7 +2820,7 @@ func (a *minJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult < 0
@@ -2892,7 +2892,7 @@ func (a *minJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult < 0
@@ -2961,7 +2961,7 @@ func (a *minJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult < 0
@@ -6034,7 +6034,7 @@ func (a *maxJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult > 0
@@ -6104,7 +6104,7 @@ func (a *maxJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult > 0
@@ -6176,7 +6176,7 @@ func (a *maxJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult > 0
@@ -6245,7 +6245,7 @@ func (a *maxJSONOrderedAgg) Compute(
 								var err error
 								cmpResult, err = candidate.Compare(a.curAgg)
 								if err != nil {
-									panic(err)
+									colexecerror.ExpectedError(err)
 								}
 
 								cmp = cmpResult > 0

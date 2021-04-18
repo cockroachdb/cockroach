@@ -1175,7 +1175,7 @@ func (s *sortJSONAscWithNullsOp) Less(i, j int) bool {
 		var err error
 		cmpResult, err = arg1.Compare(arg2)
 		if err != nil {
-			panic(err)
+			colexecerror.ExpectedError(err)
 		}
 
 		lt = cmpResult < 0
@@ -2020,7 +2020,7 @@ func (s *sortJSONDescWithNullsOp) Less(i, j int) bool {
 		var err error
 		cmpResult, err = arg1.Compare(arg2)
 		if err != nil {
-			panic(err)
+			colexecerror.ExpectedError(err)
 		}
 
 		lt = cmpResult > 0
@@ -2765,7 +2765,7 @@ func (s *sortJSONAscOp) Less(i, j int) bool {
 		var err error
 		cmpResult, err = arg1.Compare(arg2)
 		if err != nil {
-			panic(err)
+			colexecerror.ExpectedError(err)
 		}
 
 		lt = cmpResult < 0
@@ -3500,7 +3500,7 @@ func (s *sortJSONDescOp) Less(i, j int) bool {
 		var err error
 		cmpResult, err = arg1.Compare(arg2)
 		if err != nil {
-			panic(err)
+			colexecerror.ExpectedError(err)
 		}
 
 		lt = cmpResult > 0
