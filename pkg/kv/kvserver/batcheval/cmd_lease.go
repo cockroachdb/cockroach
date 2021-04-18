@@ -118,6 +118,15 @@ func evalNewLease(
 		lease.Sequence = prevLease.Sequence + 1
 	}
 
+	// Record information about the type of event that resulted in this new lease.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.AcquisitionTypeInLeaseHistory) {
+		if isTransfer {
+			lease.AcquisitionType = roachpb.LeaseAcquisitionType_Transfer
+		} else {
+			lease.AcquisitionType = roachpb.LeaseAcquisitionType_Request
+		}
+	}
+
 	// Store the lease to disk & in-memory.
 	if err := MakeStateLoader(rec).SetLease(ctx, readWriter, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err

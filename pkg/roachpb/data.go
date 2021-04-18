@@ -1935,6 +1935,10 @@ func (l Lease) Equivalent(newL Lease) bool {
 	// Ignore sequence numbers, they are simply a reflection of
 	// the equivalency of other fields.
 	l.Sequence, newL.Sequence = 0, 0
+	// Ignore the acquisition type, as leases will always be extended via
+	// RequestLease requests regardless of how a leaseholder first acquired its
+	// lease.
+	l.AcquisitionType, newL.AcquisitionType = 0, 0
 	// Ignore the ReplicaDescriptor's type. This shouldn't affect lease
 	// equivalency because Raft state shouldn't be factored into the state of a
 	// Replica's lease. We don't expect a leaseholder to ever become a LEARNER
