@@ -258,6 +258,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 	var leaseReq roachpb.Request
 	if transfer {
+		reqLease.AcquisitionType = roachpb.LeaseAcquisitionType_Transfer
 		leaseReq = &roachpb.TransferLeaseRequest{
 			RequestHeader: reqHeader,
 			Lease:         reqLease,
@@ -265,6 +266,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	} else {
 		minProposedTS := p.repl.mu.minLeaseProposedTS
+		reqLease.AcquisitionType = roachpb.LeaseAcquisitionType_Request
 		leaseReq = &roachpb.RequestLeaseRequest{
 			RequestHeader: reqHeader,
 			Lease:         reqLease,
