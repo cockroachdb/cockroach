@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -57,30 +58,38 @@ func registerCancel(r *testRegistry) {
 
 			t.Status("running queries to cancel")
 			for _, queryNum := range tpchQueriesToRun {
-				sem := make(chan struct{}, 1)
+				// sem is used to indicate that the query-runner goroutine has
+				// been spawned up.
+				sem := make(chan struct{})
+				// Any error regarding the cancellation (or of its absence) will
+				// be sent on errCh.
+				errCh := make(chan error, 1)
 				go func(query string) {
-					t.l.Printf("executing \"%s\"\n", query)
+					defer close(errCh)
+					t.l.Printf("executing q%d\n", queryNum)
 					sem <- struct{}{}
+					close(sem)
 					_, err := conn.Exec(queryPrefix + query)
 					if err == nil {
-						close(sem)
-						t.Fatal("query completed before it could be canceled")
+						errCh <- errors.New("query completed before it could be canceled")
 					} else {
 						fmt.Printf("query failed with error: %s\n", err)
-						if !errors.Is(err, cancelchecker.QueryCanceledError) {
-							t.Fatal("unexpected error")
+						// Note that errors.Is() doesn't work here because
+						// lib/pq wraps the query canceled error.
+						if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
+							errCh <- errors.Wrap(err, "unexpected error")
 						}
 					}
-					sem <- struct{}{}
 				}(tpch.QueriesByNumber[queryNum])
 
+				// Wait for the query-runner goroutine to start.
 				<-sem
 
 				// The cancel query races with the execution of the query it's trying to
 				// cancel, which may result in attempting to cancel the query before it
 				// has started.  To be more confident that the query is executing, wait
 				// a bit before attempting to cancel it.
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(250 * time.Millisecond)
 
 				const cancelQuery = `CANCEL QUERIES
 	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
@@ -88,10 +97,11 @@ func registerCancel(r *testRegistry) {
 				cancelStartTime := timeutil.Now()
 
 				select {
-				case _, ok := <-sem:
-					if !ok {
-						t.Fatal("query could not be canceled")
+				case err, ok := <-errCh:
+					if ok {
+						t.Fatal(err)
 					}
+					// If errCh is closed, then the cancellation was successful.
 					timeToCancel := timeutil.Now().Sub(cancelStartTime)
 					fmt.Printf("canceling q%d took %s\n", queryNum, timeToCancel)
 
