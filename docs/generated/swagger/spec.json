@@ -413,6 +413,9 @@
       "description": "Lease contains information about range leases including the\nexpiration and lease holder.",
       "type": "object",
       "properties": {
+        "acquisition_type": {
+          "$ref": "#/definitions/LeaseAcquisitionType"
+        },
         "deprecated_start_stasis": {
           "$ref": "#/definitions/Timestamp"
         },
@@ -438,6 +441,12 @@
           "$ref": "#/definitions/ClockTimestamp"
         }
       },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "LeaseAcquisitionType": {
+      "description": "LeaseAcquisitionType indicates the type of lease acquisition event that\nresulted in the current lease.",
+      "type": "integer",
+      "format": "int32",
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
     },
     "LeaseSequence": {
