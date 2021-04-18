@@ -57,24 +57,31 @@ func registerCancel(r *testRegistry) {
 
 			t.Status("running queries to cancel")
 			for _, queryNum := range tpchQueriesToRun {
-				sem := make(chan struct{}, 1)
+				// At most two objects will be sent on ch: the first one is
+				// guaranteed to be nil and will indicate that the canceling
+				// goroutine has been spawned, the second one, if present,
+				// indicates an error that fails the test.
+				// NB: calling t.Fatal from a goroutine other than the runner is
+				// *not* allowed, so we will be sending the error, if any, on
+				// the channel.
+				ch := make(chan error, 1)
 				go func(query string) {
+					defer close(ch)
 					t.l.Printf("executing \"%s\"\n", query)
-					sem <- struct{}{}
+					ch <- nil
 					_, err := conn.Exec(queryPrefix + query)
 					if err == nil {
-						close(sem)
-						t.Fatal("query completed before it could be canceled")
+						ch <- errors.New("query completed before it could be canceled")
 					} else {
 						fmt.Printf("query failed with error: %s\n", err)
 						if !errors.Is(err, cancelchecker.QueryCanceledError) {
-							t.Fatal("unexpected error")
+							ch <- errors.Wrap(err, "unexpected error")
 						}
 					}
-					sem <- struct{}{}
 				}(tpch.QueriesByNumber[queryNum])
 
-				<-sem
+				// Wait for canceling goroutine to start.
+				<-ch
 
 				// The cancel query races with the execution of the query it's trying to
 				// cancel, which may result in attempting to cancel the query before it
@@ -88,10 +95,11 @@ func registerCancel(r *testRegistry) {
 				cancelStartTime := timeutil.Now()
 
 				select {
-				case _, ok := <-sem:
-					if !ok {
-						t.Fatal("query could not be canceled")
+				case err, ok := <-ch:
+					if ok {
+						t.Fatal(err)
 					}
+					// If ch is closed, then the cancellation was successful.
 					timeToCancel := timeutil.Now().Sub(cancelStartTime)
 					fmt.Printf("canceling q%d took %s\n", queryNum, timeToCancel)
 
