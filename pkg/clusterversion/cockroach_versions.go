@@ -278,6 +278,10 @@ const (
 	// JoinTokensTable adds the system table for storing ephemeral generated
 	// join tokens.
 	JoinTokensTable
+	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
+	// include the type of lease acquisition event that resulted in that replica's
+	// current lease.
+	AcquisitionTypeInLeaseHistory
 
 	// Step (1): Add new versions here.
 )
@@ -483,6 +487,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     JoinTokensTable,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     AcquisitionTypeInLeaseHistory,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 52},
 	},
 	// Step (2): Add new versions here.
 })

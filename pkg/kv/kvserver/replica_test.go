@@ -6254,7 +6254,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// there will be an initial nontrivial lease requested with the first write
 	// below. This lease acquisition will, in turn, create a prior read summary.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 64,
+		SysBytes: 66,
 		SysCount: 1,
 	})
 
