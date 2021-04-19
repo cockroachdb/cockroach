@@ -7,7 +7,8 @@
 
 required_version_major=1
 minimum_version_minor=15
-minimum_version_15_patch=3
+minimum_version_15_patch=10 # update to 11 when issue #63836 is addressed
+minimum_version_16_patch=3
 
 go=${1-go}
 
