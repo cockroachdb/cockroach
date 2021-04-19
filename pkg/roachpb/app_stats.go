@@ -145,6 +145,10 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 		s.SensitiveInfo = other.SensitiveInfo
 	}
 
+	if s.LastExecTimestamp.Before(other.LastExecTimestamp) {
+		s.LastExecTimestamp = other.LastExecTimestamp
+	}
+
 	s.Count += other.Count
 }
 
