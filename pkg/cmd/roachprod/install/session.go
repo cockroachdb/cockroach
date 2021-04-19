@@ -12,13 +12,17 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,24 +48,19 @@ type remoteSession struct {
 }
 
 func newRemoteSession(user, host string, logdir string) (*remoteSession, error) {
-	// TODO(tbg): this is disabled at the time of writing. It was difficult
-	// to assign the logfiles to the roachtest and as a bonus our CI harness
-	// never actually managed to collect the files since they had wrong
-	// permissions; instead they clogged up the roachprod dir.
-	// logfile := filepath.Join(
-	//	logdir,
-	// 	fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
-	// )
-	const logfile = ""
+	logfile := filepath.Join(
+		logdir,
+		fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
+	)
+	// Check that the file can be written to. This also ensures
+	// it has proper permissions so it can be collected / cleaned up afterwards.
+	if err := ioutil.WriteFile(logfile, nil, 0644); err != nil {
+		return nil, err
+	}
+
 	args := []string{
 		user + "@" + host,
-
-		// TODO(tbg): see above.
-		//"-vvv", "-E", logfile,
-		// NB: -q suppresses -E, at least on OSX. Difficult decisions will have
-		// to be made if omitting -q leads to annoyance on stdout/stderr.
-
-		"-q",
+		"-vvv", "-E", logfile,
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		// Send keep alives every minute to prevent connections without activity
@@ -79,8 +78,57 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil && s.logfile != "" {
+		err = s.annotateSSHLastLines(err)
 		err = errors.Wrapf(err, "ssh verbose log retained in %s", s.logfile)
 		s.logfile = "" // prevent removal on close
+	}
+	return err
+}
+
+func (s *remoteSession) annotateSSHLastLines(err error) error {
+	if err == nil || s.logfile == "" {
+		return err
+	}
+
+	fi, statErr := os.Stat(s.logfile)
+	if statErr != nil {
+		// Can't stat.
+		return errors.CombineErrors(err, statErr)
+	}
+	if fi.Size() == 0 {
+		// Log file empty. Nothing to do.
+		return err
+	}
+	f, openErr := os.Open(s.logfile)
+	if openErr != nil {
+		// Can't open.
+		return errors.CombineErrors(err, openErr)
+	}
+	defer f.Close()
+
+	const lastBufSz = 500
+	const truncMsg = "<...skipped...>"
+	buf := make([]byte, lastBufSz)
+	dstOff := 0
+	if int64(lastBufSz-len(truncMsg)) < fi.Size() {
+		// If we are only looking at part of the log file, inform the
+		// reader of the output that truncation occurred.
+		copy(buf, []byte(truncMsg))
+		dstOff = len(truncMsg)
+	}
+	// Read from the end, but avoid a negative offset.
+	srcOff := int64(0)
+	if fi.Size() > int64(lastBufSz-dstOff) {
+		srcOff = fi.Size() - int64(lastBufSz-dstOff)
+	}
+	n, readErr := f.ReadAt(buf[dstOff:], srcOff)
+	if readErr != nil {
+		err = errors.CombineErrors(err, readErr)
+		// Fallthrough: we still look at the data if any was read.
+	}
+	bufsz := dstOff + n
+	if bufsz > 0 {
+		err = errors.WithDetailf(err, "SSH debug log:\n%s", string(buf[:bufsz]))
 	}
 	return err
 }
