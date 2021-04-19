@@ -94,6 +94,9 @@ message StatementStatistics {
   // SQLType is the type of the sql (DDL, DML, DCL or TCL)
   optional string sql_type = 22 [(gogoproto.nullable) = false, (gogoproto.customname) = "SQLType"];
 
+  // LastExecTimestamp is the last timestamp the statement was executed.
+  optional google.protobuf.Timestamp last_exec_timestamp = 23 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
