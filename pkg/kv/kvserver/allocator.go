@@ -814,7 +814,7 @@ func (a *Allocator) allocateTargetFromList(
 		constraintsChecker,
 		existingReplicaSet,
 		a.storePool.getLocalitiesByStore(existingReplicaSet),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		options)
 
 	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
@@ -1041,7 +1041,7 @@ func (a Allocator) rebalanceTarget(
 		replicaSetToRebalance,
 		replicasWithExcludedStores,
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
-		a.storePool.isNodeReadyForRoutineReplicaTransfer,
+		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		options,
 	)
 
@@ -1243,7 +1243,7 @@ func (a *Allocator) TransferLeaseTarget(
 	checkCandidateFullness bool,
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 	sl = sl.filter(zone.VoterConstraints)
 	// The only thing we use the storeList for is for the lease mean across the
@@ -1388,7 +1388,7 @@ func (a *Allocator) ShouldTransferLease(
 		}
 	}
 
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 	sl = sl.filter(zone.VoterConstraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
