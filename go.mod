@@ -136,7 +136,7 @@ require (
 	github.com/sasha-s/go-deadlock v0.2.0
 	github.com/shirou/gopsutil v2.20.9+incompatible
 	github.com/shopspring/decimal v1.2.0 // indirect
-	github.com/spf13/cobra v0.0.5
+	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
 	github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e

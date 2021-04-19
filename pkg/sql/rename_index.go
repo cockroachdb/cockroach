@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -26,7 +27,7 @@ var errEmptyIndexName = pgerror.New(pgcode.Syntax, "empty index name")
 type renameIndexNode struct {
 	n         *tree.RenameIndex
 	tableDesc *tabledesc.Mutable
-	idx       *descpb.IndexDescriptor
+	idx       catalog.Index
 }
 
 // RenameIndex renames the index.
@@ -65,7 +66,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return nil, err
 	}
 
-	return &renameIndexNode{n: n, idx: idx.IndexDesc(), tableDesc: tableDesc}, nil
+	return &renameIndexNode{n: n, idx: idx, tableDesc: tableDesc}, nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -80,7 +81,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 	idx := n.idx
 
 	for _, tableRef := range tableDesc.DependedOnBy {
-		if tableRef.IndexID != idx.ID {
+		if tableRef.IndexID != idx.GetID() {
 			continue
 		}
 		return p.dependentViewError(
@@ -97,13 +98,11 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if _, err := tableDesc.FindIndexWithName(string(n.n.NewName)); err == nil {
+	if foundIndex, _ := tableDesc.FindIndexWithName(string(n.n.NewName)); foundIndex != nil {
 		return pgerror.Newf(pgcode.DuplicateRelation, "index name %q already exists", string(n.n.NewName))
 	}
 
-	if err := tableDesc.RenameIndexDescriptor(idx, string(n.n.NewName)); err != nil {
-		return err
-	}
+	idx.IndexDesc().Name = string(n.n.NewName)
 
 	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
 		return err

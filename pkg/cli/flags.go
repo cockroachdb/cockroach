@@ -284,6 +284,15 @@ func init() {
 		pf.AddFlag(flag)
 	})
 
+	{
+		// Since cobra v0.0.7, cobra auto-adds `-v` if not defined. We don't
+		// want that: we will likely want to add --verbose for some sub-commands,
+		// and -v should remain reserved as an alias for --verbose.
+		var unused bool
+		pf.BoolVarP(&unused, "verbose", "v", false, "")
+		_ = pf.MarkHidden("verbose")
+	}
+
 	// Logging flags common to all commands.
 	{
 		// Logging configuration.

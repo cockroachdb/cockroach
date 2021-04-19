@@ -346,12 +346,12 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error) error {
 		// addColumn adds adds either a table or a index column to the pg_attribute table.
-		addColumn := func(column *descpb.ColumnDescriptor, attRelID tree.Datum, attNum uint32) error {
-			colTyp := column.Type
+		addColumn := func(column catalog.Column, attRelID tree.Datum, attNum uint32) error {
+			colTyp := column.GetType()
 			// Sets the attgenerated column to 's' if the column is generated/
 			// computed stored, "v" if virtual, zero byte otherwise.
 			var isColumnComputed string
-			if column.IsComputed() && !column.Virtual {
+			if column.IsComputed() && !column.IsVirtual() {
 				isColumnComputed = "s"
 			} else if column.IsComputed() {
 				isColumnComputed = "v"
@@ -360,7 +360,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 			}
 			return addRow(
 				attRelID,                        // attrelid
-				tree.NewDName(column.Name),      // attname
+				tree.NewDName(column.GetName()), // attname
 				typOid(colTyp),                  // atttypid
 				zeroVal,                         // attstattarget
 				typLen(colTyp),                  // attlen
@@ -371,17 +371,17 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				tree.DNull, // attbyval (see pg_type.typbyval)
 				tree.DNull, // attstorage
 				tree.DNull, // attalign
-				tree.MakeDBool(tree.DBool(!column.Nullable)),          // attnotnull
-				tree.MakeDBool(tree.DBool(column.DefaultExpr != nil)), // atthasdef
-				tree.NewDString(""),               // attidentity
-				tree.NewDString(isColumnComputed), // attgenerated
-				tree.DBoolFalse,                   // attisdropped
-				tree.DBoolTrue,                    // attislocal
-				zeroVal,                           // attinhcount
-				typColl(colTyp, h),                // attcollation
-				tree.DNull,                        // attacl
-				tree.DNull,                        // attoptions
-				tree.DNull,                        // attfdwoptions
+				tree.MakeDBool(tree.DBool(!column.IsNullable())), // attnotnull
+				tree.MakeDBool(tree.DBool(column.HasDefault())),  // atthasdef
+				tree.NewDString(""),                              // attidentity
+				tree.NewDString(isColumnComputed),                // attgenerated
+				tree.DBoolFalse,                                  // attisdropped
+				tree.DBoolTrue,                                   // attislocal
+				zeroVal,                                          // attinhcount
+				typColl(colTyp, h),                               // attcollation
+				tree.DNull,                                       // attacl
+				tree.DNull,                                       // attoptions
+				tree.DNull,                                       // attfdwoptions
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // atthasmissing
 			)
@@ -390,7 +390,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Columns for table.
 		for _, column := range table.PublicColumns() {
 			tableID := tableOid(table.GetID())
-			if err := addColumn(column.ColumnDesc(), tableID, column.GetPGAttributeNum()); err != nil {
+			if err := addColumn(column, tableID, column.GetPGAttributeNum()); err != nil {
 				return err
 			}
 		}
@@ -402,7 +402,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				colID := index.GetColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
-				if err := addColumn(column.ColumnDesc(), idxID, column.GetPGAttributeNum()); err != nil {
+				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
 					return err
 				}
 			}
@@ -1479,7 +1479,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
-					colIDs = append(colIDs, index.IndexDesc().StoreColumnIDs...)
+					for i := 0; i < index.NumStoredColumns(); i++ {
+						colIDs = append(colIDs, index.GetStoredColumnID(i))
+					}
 					// indnatts is the number of attributes with INCLUDED columns.
 					indnatts := len(colIDs)
 					indkey, err := colIDArrayToVector(colIDs)
@@ -1532,7 +1534,7 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.GetName())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					def, err := indexDefFromDescriptor(ctx, p, db, scName, table, index.IndexDesc(), tableLookup)
+					def, err := indexDefFromDescriptor(ctx, p, db, scName, table, index, tableLookup)
 					if err != nil {
 						return err
 					}
@@ -1558,33 +1560,34 @@ func indexDefFromDescriptor(
 	db catalog.DatabaseDescriptor,
 	schemaName string,
 	table catalog.TableDescriptor,
-	index *descpb.IndexDescriptor,
+	index catalog.Index,
 	tableLookup tableLookupFn,
 ) (string, error) {
-	colNames := index.ColumnNames[index.ExplicitColumnStartIdx():]
+	colNames := index.IndexDesc().ColumnNames[index.ExplicitColumnStartIdx():]
 	indexDef := tree.CreateIndex{
-		Name:     tree.Name(index.Name),
+		Name:     tree.Name(index.GetName()),
 		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
-		Unique:   index.Unique,
+		Unique:   index.IsUnique(),
 		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
-		Inverted: index.Type == descpb.IndexDescriptor_INVERTED,
+		Storing:  make(tree.NameList, index.NumStoredColumns()),
+		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
 	}
 	for i, name := range colNames {
 		elem := tree.IndexElem{
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
-		if index.ColumnDirections[index.ExplicitColumnStartIdx()+i] == descpb.IndexDescriptor_DESC {
+		if index.GetColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
 		indexDef.Columns[i] = elem
 	}
-	for i, name := range index.StoreColumnNames {
+	for i := 0; i < index.NumStoredColumns(); i++ {
+		name := index.GetStoredColumnName(i)
 		indexDef.Storing[i] = tree.Name(name)
 	}
-	if len(index.Interleave.Ancestors) > 0 {
-		intl := index.Interleave
+	if index.NumInterleaveAncestors() > 0 {
+		intl := index.IndexDesc().Interleave
 		parentTable, err := tableLookup.getTableByID(intl.Ancestors[len(intl.Ancestors)-1].TableID)
 		if err != nil {
 			return "", err
@@ -1617,7 +1620,7 @@ func indexDefFromDescriptor(
 		//
 		// TODO(mgartner): Avoid parsing the predicate expression twice. It is
 		// parsed in schemaexpr.FormatExprForDisplay and again here.
-		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.Predicate, p.SemaCtx(), tree.FmtPGCatalog)
+		formattedPred, err := schemaexpr.FormatExprForDisplay(ctx, table, index.GetPredicate(), p.SemaCtx(), tree.FmtPGCatalog)
 		if err != nil {
 			return "", err
 		}

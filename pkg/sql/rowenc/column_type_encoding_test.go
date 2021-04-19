@@ -280,10 +280,7 @@ func TestMarshalColumnValueRoundtrip(t *testing.T) {
 					return "error generating datum"
 				}
 				datum := d.(tree.Datum)
-				desc := descpb.ColumnDescriptor{
-					Type: typ,
-				}
-				value, err := rowenc.MarshalColumnValue(&desc, datum)
+				value, err := rowenc.MarshalColumnTypeValue("testcol", typ, datum)
 				if err != nil {
 					return "error marshaling: " + err.Error()
 				}

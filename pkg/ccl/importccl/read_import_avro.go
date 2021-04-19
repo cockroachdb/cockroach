@@ -187,7 +187,7 @@ func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter)
 		typ := conv.VisibleColTypes[idx]
 		avroT, ok := familyToAvroT[typ.Family()]
 		if !ok {
-			return fmt.Errorf("cannot convert avro value %v to col %s", v, conv.VisibleCols[idx].Type.Name())
+			return fmt.Errorf("cannot convert avro value %v to col %s", v, conv.VisibleCols[idx].GetType().Name())
 		}
 
 		datum, err := nativeToDatum(v, typ, avroT, conv.EvalCtx)
@@ -212,7 +212,7 @@ func (a *avroConsumer) FillDatums(
 	for i := range conv.Datums {
 		if conv.TargetColOrds.Contains(i) && conv.Datums[i] == nil {
 			if a.strict {
-				return fmt.Errorf("field %s was not set in the avro import", conv.VisibleCols[i].Name)
+				return fmt.Errorf("field %s was not set in the avro import", conv.VisibleCols[i].GetName())
 			}
 			conv.Datums[i] = tree.DNull
 		}

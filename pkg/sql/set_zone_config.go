@@ -427,7 +427,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		var indexes []catalog.Index
 		for _, idx := range table.NonDropIndexes() {
-			if tabledesc.FindIndexPartitionByName(idx.IndexDesc(), partitionName) != nil {
+			if tabledesc.FindIndexPartitionByName(idx, partitionName) != nil {
 				indexes = append(indexes, idx)
 			}
 		}
@@ -453,7 +453,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	if n.zoneSpecifier.TargetsPartition() && n.allIndexes {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.AlterAllPartitions)
 		for _, idx := range table.NonDropIndexes() {
-			if p := tabledesc.FindIndexPartitionByName(idx.IndexDesc(), string(n.zoneSpecifier.Partition)); p != nil {
+			if p := tabledesc.FindIndexPartitionByName(idx, string(n.zoneSpecifier.Partition)); p != nil {
 				zs := n.zoneSpecifier
 				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.GetName())
 				specifiers = append(specifiers, zs)
@@ -507,7 +507,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		var partialSubzone *zonepb.Subzone
 		if index != nil {
-			partialSubzone = partialZone.GetSubzoneExact(uint32(index.ID), partition)
+			partialSubzone = partialZone.GetSubzoneExact(uint32(index.GetID()), partition)
 			if partialSubzone == nil {
 				partialSubzone = &zonepb.Subzone{Config: *zonepb.NewZoneConfig()}
 			}
@@ -573,7 +573,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 					// In the case of updating a partition, we need try inheriting fields
 					// from the subzone's index, and inherit the remainder from the zone.
 					subzoneInheritedFields := zonepb.ZoneConfig{}
-					if indexSubzone := completeZone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+					if indexSubzone := completeZone.GetSubzone(uint32(index.GetID()), ""); indexSubzone != nil {
 						subzoneInheritedFields.InheritFromParent(&indexSubzone.Config)
 					}
 					subzoneInheritedFields.InheritFromParent(&zoneInheritedFields)
@@ -586,8 +586,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		if deleteZone {
 			if index != nil {
-				didDelete := completeZone.DeleteSubzone(uint32(index.ID), partition)
-				_ = partialZone.DeleteSubzone(uint32(index.ID), partition)
+				didDelete := completeZone.DeleteSubzone(uint32(index.GetID()), partition)
+				_ = partialZone.DeleteSubzone(uint32(index.GetID()), partition)
 				if !didDelete {
 					// If we didn't do any work, return early. We'd otherwise perform an
 					// update that would make it look like one row was affected.
@@ -719,7 +719,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 					completeZone = zonepb.NewZoneConfig()
 				}
 				completeZone.SetSubzone(zonepb.Subzone{
-					IndexID:       uint32(index.ID),
+					IndexID:       uint32(index.GetID()),
 					PartitionName: partition,
 					Config:        newZone,
 				})
@@ -731,7 +731,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				}
 
 				partialZone.SetSubzone(zonepb.Subzone{
-					IndexID:       uint32(index.ID),
+					IndexID:       uint32(index.GetID()),
 					PartitionName: partition,
 					Config:        finalZone,
 				})
@@ -1052,7 +1052,7 @@ func RemoveIndexZoneConfigs(
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	tableDesc catalog.TableDescriptor,
-	indexDescs []descpb.IndexDescriptor,
+	indexIDs []uint32,
 ) error {
 	if !execCfg.Codec.ForSystemTenant() {
 		// Tenants are agnostic to zone configs.
@@ -1071,12 +1071,12 @@ func RemoveIndexZoneConfigs(
 	// of them. We only want to rewrite the zone config below if there's actual
 	// work to be done here.
 	zcRewriteNecessary := false
-	for _, indexDesc := range indexDescs {
+	for _, indexID := range indexIDs {
 		for _, s := range zone.Subzones {
-			if s.IndexID == uint32(indexDesc.ID) {
+			if s.IndexID == indexID {
 				// We've found an subzone that matches the given indexID. Delete all of
 				// this index's subzones and move on to the next index.
-				zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+				zone.DeleteIndexSubzones(indexID)
 				zcRewriteNecessary = true
 				break
 			}

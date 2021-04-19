@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -29,7 +30,7 @@ import (
 type alterIndexNode struct {
 	n         *tree.AlterIndex
 	tableDesc *tabledesc.Mutable
-	indexDesc *descpb.IndexDescriptor
+	index     catalog.Index
 }
 
 // AlterIndex applies a schema change on an index.
@@ -43,19 +44,11 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 		return nil, err
 	}
 
-	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
+	tableDesc, index, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err
 	}
-	// As an artifact of finding the index by name, we get a pointer to a
-	// different copy than the one in the tableDesc. To make it easier for the
-	// code below, get a pointer to the index descriptor that's actually in
-	// tableDesc.
-	index, err := tableDesc.FindIndexWithID(indexDesc.ID)
-	if err != nil {
-		return nil, err
-	}
-	return &alterIndexNode{n: n, tableDesc: tableDesc, indexDesc: index.IndexDesc()}, nil
+	return &alterIndexNode{n: n, tableDesc: tableDesc, index: index}, nil
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -86,7 +79,8 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot change the partitioning of an index if the table has PARTITION ALL BY defined",
 				)
 			}
-			if n.indexDesc.Partitioning.NumImplicitColumns > 0 {
+			existingIndexDesc := n.index.IndexDescDeepCopy()
+			if existingIndexDesc.Partitioning.NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
 					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",
@@ -99,7 +93,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				params.extendedEvalCtx.Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				*n.indexDesc,
+				existingIndexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
 				allowImplicitPartitioning,
@@ -113,19 +107,21 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot ALTER INDEX and change the partitioning to contain implicit columns",
 				)
 			}
-			descriptorChanged = !n.indexDesc.Equal(&newIndexDesc)
+			descriptorChanged = !existingIndexDesc.Equal(&newIndexDesc)
 			if err = deleteRemovedPartitionZoneConfigs(
 				params.ctx,
 				params.p.txn,
 				n.tableDesc,
-				n.indexDesc,
-				&n.indexDesc.Partitioning,
+				n.index.GetID(),
+				&existingIndexDesc.Partitioning,
 				&newIndexDesc.Partitioning,
 				params.extendedEvalCtx.ExecCfg,
 			); err != nil {
 				return err
 			}
-			*n.indexDesc = newIndexDesc
+			// Update value to make sure it doesn't become stale.
+			n.index = n.tableDesc.AllIndexes()[n.index.Ordinal()]
+			*n.index.IndexDesc() = newIndexDesc
 		default:
 			return errors.AssertionFailedf(
 				"unsupported alter command: %T", cmd)
@@ -158,7 +154,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		n.tableDesc.ID,
 		&eventpb.AlterIndex{
 			TableName:  n.n.Index.Table.FQString(),
-			IndexName:  n.indexDesc.Name,
+			IndexName:  n.index.GetName(),
 			MutationID: uint32(mutationID),
 		})
 }

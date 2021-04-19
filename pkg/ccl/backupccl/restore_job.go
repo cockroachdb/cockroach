@@ -1762,14 +1762,14 @@ func revalidateIndexes(
 		}
 		tableDesc := tabledesc.NewBuilder(tbl).BuildExistingMutableTable()
 
-		var forward, inverted []*descpb.IndexDescriptor
+		var forward, inverted []catalog.Index
 		for _, idx := range tableDesc.AllIndexes() {
 			if _, ok := indexes[idx.GetID()]; ok {
 				switch idx.GetType() {
 				case descpb.IndexDescriptor_FORWARD:
-					forward = append(forward, idx.IndexDesc())
+					forward = append(forward, idx)
 				case descpb.IndexDescriptor_INVERTED:
-					inverted = append(inverted, idx.IndexDesc())
+					inverted = append(inverted, idx)
 				}
 			}
 		}
@@ -1908,9 +1908,9 @@ func (r *restoreResumer) publishDescriptors(
 			if err != nil {
 				return err
 			}
-			newIdx := protoutil.Clone(found.IndexDesc()).(*descpb.IndexDescriptor)
+			newIdx := found.IndexDescDeepCopy()
 			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
-			if err := mutTable.AddIndexMutation(newIdx, descpb.DescriptorMutation_ADD); err != nil {
+			if err := mutTable.AddIndexMutation(&newIdx, descpb.DescriptorMutation_ADD); err != nil {
 				return err
 			}
 		}

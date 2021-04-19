@@ -143,8 +143,8 @@ func (p *planner) sequenceDependencyError(
 func (p *planner) canRemoveAllTableOwnedSequences(
 	ctx context.Context, desc *tabledesc.Mutable, behavior tree.DropBehavior,
 ) error {
-	for _, col := range desc.Columns {
-		err := p.canRemoveOwnedSequencesImpl(ctx, desc, &col, behavior, false /* isColumnDrop */)
+	for _, col := range desc.PublicColumns() {
+		err := p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, false /* isColumnDrop */)
 		if err != nil {
 			return err
 		}
@@ -153,10 +153,7 @@ func (p *planner) canRemoveAllTableOwnedSequences(
 }
 
 func (p *planner) canRemoveAllColumnOwnedSequences(
-	ctx context.Context,
-	desc *tabledesc.Mutable,
-	col *descpb.ColumnDescriptor,
-	behavior tree.DropBehavior,
+	ctx context.Context, desc *tabledesc.Mutable, col catalog.Column, behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, true /* isColumnDrop */)
 }
@@ -164,11 +161,12 @@ func (p *planner) canRemoveAllColumnOwnedSequences(
 func (p *planner) canRemoveOwnedSequencesImpl(
 	ctx context.Context,
 	desc *tabledesc.Mutable,
-	col *descpb.ColumnDescriptor,
+	col catalog.Column,
 	behavior tree.DropBehavior,
 	isColumnDrop bool,
 ) error {
-	for _, sequenceID := range col.OwnsSequenceIds {
+	for i := 0; i < col.NumOwnsSequences(); i++ {
+		sequenceID := col.GetOwnsSequenceID(i)
 		seqDesc, err := p.LookupTableByID(ctx, sequenceID)
 		if err != nil {
 			// Special case error swallowing for #50711 and #50781, which can cause a
@@ -203,7 +201,7 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 				continue
 			}
 			// ...or we're dropping a column in the table of interest.
-			if len(firstDep.ColumnIDs) == 1 && firstDep.ColumnIDs[0] == col.ID {
+			if len(firstDep.ColumnIDs) == 1 && firstDep.ColumnIDs[0] == col.GetID() {
 				// The sequence is safe to remove iff it's not depended on by any other
 				// columns in the table other than that one.
 				continue
@@ -264,10 +262,9 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 
 		// Iterate over all columns in the table, drop affected columns' default values
 		// and update back references.
-		for idx := range tblDesc.Columns {
-			column := &tblDesc.Columns[idx]
-			if _, ok := colsToDropDefault[column.ID]; ok {
-				column.DefaultExpr = nil
+		for _, column := range tblDesc.PublicColumns() {
+			if _, ok := colsToDropDefault[column.GetID()]; ok {
+				column.ColumnDesc().DefaultExpr = nil
 				if err := p.removeSequenceDependencies(ctx, tblDesc, column); err != nil {
 					return err
 				}

@@ -196,7 +196,7 @@ func (c *csvRowConsumer) FillDatums(
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(
-					errors.Wrapf(err, "parse %q as %s", col.Name, col.Type.SQLString()),
+					errors.Wrapf(err, "parse %q as %s", col.GetName(), col.GetType().SQLString()),
 					strRecord(record, c.opts.Comma),
 					rowNum)
 			}
