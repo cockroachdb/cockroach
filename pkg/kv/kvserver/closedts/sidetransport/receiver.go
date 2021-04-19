@@ -127,6 +127,14 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 		log.VEventf(ctx, 2, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	}
 	if nodeID != 0 {
+		// Remove the connection from the map, awaiting a new conn to be opened by
+		// the remote node. Note that, in doing so, we lose all information about
+		// the ranges tracked by this connection. We could go through all of them
+		// and move their data to the replica, but that might be expensive.
+		// Alternatively, we could also do something else to not destroy the state
+		// of this connection. Note, though, that if any of these closed timestamps
+		// have been actually used to serve a read already, the info has been copied
+		// to the respective replica.
 		delete(s.mu.conns, nodeID)
 	}
 }
