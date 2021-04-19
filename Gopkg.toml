@@ -35,7 +35,8 @@ ignored = [
 # The collation tables must never change.
 [[constraint]]
   name = "golang.org/x/text"
-  revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
+  # SHA for v0.3.5.
+  revision = "75a595aef632b07c6eeaaa805adb6f0f66e4130e"
 
 [[constraint]]
   name = "go.etcd.io/etcd"
