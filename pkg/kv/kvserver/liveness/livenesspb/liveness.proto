@@ -135,4 +135,6 @@ enum NodeLivenessStatus {
   // DECOMMISSIONED indicates a node that has finished the decommissioning
   // process.
   NODE_STATUS_DECOMMISSIONED = 5 [(gogoproto.enumvalue_customname) = "DECOMMISSIONED"];
+  // DRAINING indicates a node that is in the process of draining.
+  NODE_STATUS_DRAINING = 6 [(gogoproto.enumvalue_customname) = "DRAINING"];
 }

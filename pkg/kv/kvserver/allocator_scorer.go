@@ -413,7 +413,7 @@ func rankedCandidateListForAllocation(
 	constraintsCheck constraintsCheckFn,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
@@ -421,8 +421,8 @@ func rankedCandidateListForAllocation(
 		if nodeHasReplica(s.Node.NodeID, existingReplicas) {
 			continue
 		}
-		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {
-			log.VEventf(ctx, 3, "not considering non-ready node n%d for allocate", s.Node.NodeID)
+		if !isStoreValidForRoutineReplicaTransfer(ctx, s.StoreID) {
+			log.VEventf(ctx, 3, "not considering non-ready node s%d for allocate", s.StoreID)
 			continue
 		}
 		constraintsOK, necessary := constraintsCheck(s)
@@ -534,7 +534,7 @@ func rankedCandidateListForRebalancing(
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,
 	existingReplicasForType, replicasWithExcludedStores []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	options scorerOptions,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
@@ -542,8 +542,8 @@ func rankedCandidateListForRebalancing(
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingStoreLocalities)
 	for _, store := range allStores.stores {
-		if !isNodeValidForRoutineReplicaTransfer(ctx, store.Node.NodeID) {
-			log.VEventf(ctx, 3, "not considering non-ready node n%d for rebalance", store.Node.NodeID)
+		if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
+			log.VEventf(ctx, 3, "not considering non-ready node s%d for rebalance", store.StoreID)
 			continue
 		}
 		for _, repl := range existingReplicasForType {
