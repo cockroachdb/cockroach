@@ -37,6 +37,7 @@ import (
 
 func TestTelemetrySQLStatsIndependence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 63844, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	// This test fails if the central reporting server from CRL
