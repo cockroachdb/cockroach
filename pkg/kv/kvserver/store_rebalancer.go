@@ -199,7 +199,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterNone)
+			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterSuspect)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})

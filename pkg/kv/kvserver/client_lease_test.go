@@ -13,7 +13,10 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"math"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -562,4 +565,142 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is a hefty test, so we skip it under short. 
+	skip.UnderShort(t)
+
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	// Speed up lease transfers.
+	kvserver.MinLeaseTransferInterval.Override(sv, 1*time.Millisecond)
+	// We are not going to have stats, so disable this so we just rely on
+	// the store means.
+	kvserver.EnableLoadBasedLeaseRebalancing.Override(sv, false)
+	stickyRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	serverArgs := make(map[int]base.TestServerArgs)
+	numNodes := 3
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource:               manualClock.UnixNano,
+					StickyEngineRegistry:      stickyRegistry,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	tc.GetFirstStoreFromServer(t, 0).SetReplicateQueueActive(true)
+	tc.GetFirstStoreFromServer(t, 2).SetReplicateQueueActive(true)
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 0).ForceReplicationScanAndProcess())
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 2).ForceReplicationScanAndProcess())
+
+	numberOfLeases := func(store *kvserver.Store) int {
+		leases := 0
+		store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+			if replica.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
+				leases++
+			}
+			return true
+		})
+		return leases
+	}
+
+	checkLeases := func() error {
+		for i := range tc.Servers {
+			leases := numberOfLeases(tc.GetFirstStoreFromServer(t, i))
+			if leases == 0 {
+				return errors.Errorf("Expected all stores to have leases store %d had %d leases", i, leases)
+			}
+		}
+		return nil
+	}
+
+	allReplicasHaveLeases := func() error {
+		replicaCount := tc.GetFirstStoreFromServer(t, 0).ReplicaCount()
+		leaseCount := 0
+		for i := range tc.Servers {
+			leaseCount += numberOfLeases(tc.GetFirstStoreFromServer(t, i))
+		}
+		if replicaCount != leaseCount {
+			return errors.Errorf("Expected all replicas %d to have leases, but found only %d leases", replicaCount, leaseCount)
+		}
+		return nil
+	}
+
+	heartbeat := func(servers ...int) {
+		for _, i := range servers {
+			testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+		}
+	}
+
+	for i := range tc.Servers {
+		require.NoError(t, tc.GetFirstStoreFromServer(t, i).ForceReplicationScanAndProcess())
+	}
+	testutils.SucceedsSoon(t, checkLeases)
+
+	// We simulate an overloaded failed node, by just shutting it down.
+	tc.StopServer(1)
+	// We move the time, so that server 1 can start failing its liveness.
+	livenessDuration, _ := tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().RaftConfig.NodeLivenessDurations()
+
+	// We dont want the other stores to lose liveness while we move the time, so
+	// tick the time a second and a time and make sure they heartbeat.
+	for i := 0; i < int(math.Ceil(livenessDuration.Seconds())); i++ {
+		manualClock.Increment(time.Second.Nanoseconds())
+		heartbeat(0, 2)
+	}
+
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 0).ForceReplicationScanAndProcess())
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 2).ForceReplicationScanAndProcess())
+	testutils.SucceedsSoon(t, func() error {
+		if numberOfLeases(tc.GetFirstStoreFromServer(t, 1)) != 0 {
+			return errors.Errorf("Expected no leases to be left on store1")
+		}
+		return nil
+	})
+	testutils.SucceedsSoon(t, allReplicasHaveLeases)
+
+	require.NoError(t, tc.RestartServer(1))
+	for i := 0; i < int(math.Ceil(livenessDuration.Seconds())); i++ {
+		manualClock.Increment(time.Second.Nanoseconds())
+		heartbeat(0, 2)
+	}
+	// Force all the replication queues, server 1 is still suspect so it should not pick up any leases.
+	for i := range tc.Servers {
+		require.NoError(t, tc.GetFirstStoreFromServer(t, i).ForceReplicationScanAndProcess())
+	}
+	require.Equal(t, 0, numberOfLeases(tc.GetFirstStoreFromServer(t, 1)))
+
+	// Wait out the suspect time.
+	suspectDuration := kvserver.SuspectStoreDuration.Get(&tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().Settings.SV)
+	for i := 0; i < int(math.Ceil(suspectDuration.Seconds())); i++ {
+		manualClock.Increment(time.Second.Nanoseconds())
+		heartbeat(0, 1, 2)
+	}
+	// Force all the replication queues, server 1 should get some leases back as it's no longer suspect.
+	for i := range tc.Servers {
+		require.NoError(t, tc.GetFirstStoreFromServer(t, i).ForceReplicationScanAndProcess())
+	}
+	testutils.SucceedsSoon(t, checkLeases)
 }

@@ -56,10 +56,10 @@ const (
 // Made configurable for the sake of testing.
 var MinLeaseTransferStatsDuration = 30 * time.Second
 
-// enableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
+// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 // via the new heuristic based on request load and latency or via the simpler
 // approach that purely seeks to balance the number of leases per node evenly.
-var enableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
+var EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 	"kv.allocator.load_based_lease_rebalancing.enabled",
 	"set to enable rebalancing of range leases based on load and latency",
 	true,
@@ -1243,7 +1243,7 @@ func (a *Allocator) TransferLeaseTarget(
 	checkCandidateFullness bool,
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
@@ -1384,7 +1384,7 @@ func (a *Allocator) ShouldTransferLease(
 		}
 	}
 
-	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	sl, _, _ := a.storePool.getStoreList(storeFilterSuspect)
 	sl = sl.filter(zone.Constraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
@@ -1446,7 +1446,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
-	if stats == nil || !enableLoadBasedLeaseRebalancing.Get(&a.storePool.st.SV) {
+	if stats == nil || !EnableLoadBasedLeaseRebalancing.Get(&a.storePool.st.SV) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
 	replicaLocalities := a.storePool.getLocalitiesByNode(existing)

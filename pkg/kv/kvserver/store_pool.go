@@ -62,6 +62,15 @@ var FailedReservationsTimeout = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// SuspectStoreDuration measures how long we consider a store suspect since
+// it's last failure.
+var SuspectStoreDuration = settings.RegisterDurationSetting(
+	"server.suspect_store_duration",
+	"the amount of time we consider a store suspect after it failed it's for the last time liveliness",
+	60*time.Second,
+	settings.NonNegativeDuration,
+)
+
 const timeUntilStoreDeadSettingName = "server.time_until_store_dead"
 
 // TimeUntilStoreDead wraps "server.time_until_store_dead".
@@ -174,11 +183,24 @@ type storeDetail struct {
 	// lastUpdatedTime is set when a store is first consulted and every time
 	// gossip arrives for a store.
 	lastUpdatedTime time.Time
+	// lastUnavailable is set when it's detected that a store was unavailable,
+	// i.e. failed liveliness.
+	lastUnavailable time.Time
+	// lastAvailable is set when it's detected that a store was available,
+	// i.e. we got a liveliness heartbeat.
+	lastAvailable time.Time
 }
 
 // isThrottled returns whether the store is currently throttled.
 func (sd storeDetail) isThrottled(now time.Time) bool {
 	return sd.throttledUntil.After(now)
+}
+
+// isSuspect returns whether the store is currently suspect. We measure that by
+// looking at the time it was last unavailable making sure we have not seen any
+//failures for a period of time defined by StoreSuspectDuration.
+func (sd storeDetail) isSuspect(now time.Time, suspectDuration time.Duration) bool {
+	return sd.lastUnavailable.Add(suspectDuration).After(now)
 }
 
 // storeStatus is the current status of a store.
@@ -201,10 +223,12 @@ const (
 	storeStatusAvailable
 	// The store is decommissioning.
 	storeStatusDecommissioning
+	// The store failed it's liveliness and is considered suspect.
+	storeStatusSuspect
 )
 
 func (sd *storeDetail) status(
-	now time.Time, threshold time.Duration, nl NodeLivenessFunc,
+	now time.Time, threshold time.Duration, nl NodeLivenessFunc, suspectDuration time.Duration,
 ) storeStatus {
 	// The store is considered dead if it hasn't been updated via gossip
 	// within the liveness threshold. Note that lastUpdatedTime is set
@@ -227,7 +251,14 @@ func (sd *storeDetail) status(
 		return storeStatusDead
 	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case livenesspb.NodeLivenessStatus_UNKNOWN, livenesspb.NodeLivenessStatus_UNAVAILABLE:
+	case livenesspb.NodeLivenessStatus_UNAVAILABLE:
+		// We don't suspect the store until it's been considered available.
+		if sd.lastAvailable.UnixNano() > 0 {
+			sd.lastUnavailable = now
+			return storeStatusSuspect
+		}
+		return storeStatusUnknown
+	case livenesspb.NodeLivenessStatus_UNKNOWN:
 		return storeStatusUnknown
 	}
 
@@ -235,6 +266,10 @@ func (sd *storeDetail) status(
 		return storeStatusThrottled
 	}
 
+	if sd.isSuspect(now, suspectDuration) {
+		return storeStatusSuspect
+	}
+	sd.lastAvailable = now
 	return storeStatusAvailable
 }
 
@@ -327,11 +362,12 @@ func (sp *StorePool) String() string {
 	var buf bytes.Buffer
 	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	suspectDuration := SuspectStoreDuration.Get(&sp.st.SV)
 
 	for _, id := range ids {
 		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, suspectDuration)
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
@@ -496,10 +532,11 @@ func (sp *StorePool) decommissioningReplicas(
 	// take clock signals from remote nodes into consideration.
 	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	suspectDuration := SuspectStoreDuration.Get(&sp.st.SV)
 
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
-		switch detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn) {
+		switch detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, suspectDuration) {
 		case storeStatusDecommissioning:
 			decommissioningReplicas = append(decommissioningReplicas, repl)
 		}
@@ -527,11 +564,12 @@ func (sp *StorePool) liveAndDeadReplicas(
 
 	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	suspectDuration := SuspectStoreDuration.Get(&sp.st.SV)
 
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, suspectDuration)
 		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
@@ -541,7 +579,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 			// We count decommissioning replicas to be alive because they are readable
 			// and should be used for up-replication if necessary.
 			liveReplicas = append(liveReplicas, repl)
-		case storeStatusUnknown:
+		case storeStatusUnknown, storeStatusSuspect:
 		// No-op.
 		default:
 			log.Fatalf(context.TODO(), "unknown store status %d", status)
@@ -654,6 +692,12 @@ const (
 	// for replica rebalancing, for example, but can still be considered for lease
 	// rebalancing.
 	storeFilterThrottled
+	// storeFilterSuspect requests that the returned store list additionally
+	// exclude stores that have been suspected as unhealthy. We dont want unhealthy
+	// stores to be considered for rebalancing or for lease transfers. i.e. we dont
+	// actively shift leases or replicas away from them, but we dont allow them to
+	// get any new ones until they get better.
+	storeFilterSuspect
 )
 
 type throttledStoreReasons []string
@@ -700,6 +744,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 
 	now := sp.clock.Now().GoTime()
 	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	suspectDuration := SuspectStoreDuration.Get(&sp.st.SV)
 
 	for _, storeID := range storeIDs {
 		detail, ok := sp.detailsMu.storeDetails[storeID]
@@ -707,7 +752,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 			// Do nothing; this store is not in the StorePool.
 			continue
 		}
-		switch s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn); s {
+		switch s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn, suspectDuration); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttled = append(throttled, detail.throttledBecause)
@@ -717,6 +762,12 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 		case storeStatusAvailable:
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.desc)
+		case storeStatusSuspect:
+			aliveStoreCount++
+			throttled = append(throttled, "throttled because the node is considered suspect")
+			if filter != storeFilterThrottled && filter != storeFilterSuspect {
+				storeDescriptors = append(storeDescriptors, *detail.desc)
+			}
 		case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
 			// Do nothing; this store cannot be used.
 		default:
