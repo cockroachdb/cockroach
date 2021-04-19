@@ -348,6 +348,201 @@ CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"
 	}
 }
 
+// TestRegionAddDropEnclosingRegionalByRowOps tests adding/dropping regions
+// (which may or may not succeed) with a concurrent operation on a regional by
+// row table. The sketch of the test is as follows:
+// - Client 1 performs an ALTER ADD / DROP REGION. Let the user txn commit.
+// - Block in the type schema changer.
+// - Client 2 performs an operation on a REGIONAL BY ROW table, such as creating
+// an index, unique constraint, altering the primary key etc.
+// - Test both a rollback in the type schema changer and a successful execution.
+// - Ensure the partitions on the REGIONAL BY ROW table are sane.
+func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	regionAlterCmds := []struct {
+		name               string
+		cmd                string
+		shouldSucceed      bool
+		expectedPartitions []string
+	}{
+		{
+			name:               "drop-region-fail",
+			cmd:                `ALTER DATABASE db DROP REGION "us-east3"`,
+			shouldSucceed:      false,
+			expectedPartitions: []string{"us-east1", "us-east2", "us-east3"},
+		},
+		{
+			name:               "drop-region-succeed",
+			cmd:                `ALTER DATABASE db DROP REGION "us-east3"`,
+			shouldSucceed:      true,
+			expectedPartitions: []string{"us-east1", "us-east2"},
+		},
+		{
+			name:               "add-region",
+			cmd:                `ALTER DATABASE db ADD REGION "us-east4"`,
+			shouldSucceed:      false,
+			expectedPartitions: []string{"us-east1", "us-east2", "us-east3"},
+		},
+		{
+			name:               "add-region",
+			cmd:                `ALTER DATABASE db ADD REGION "us-east4"`,
+			shouldSucceed:      true,
+			expectedPartitions: []string{"us-east1", "us-east2", "us-east3", "us-east4"},
+		},
+	}
+
+	testCases := []struct {
+		name            string
+		op              string
+		expectedIndexes []string
+	}{
+		{
+			name:            "create-rbr-table",
+			op:              `DROP TABLE db.rbr; CREATE TABLE db.rbr() LOCALITY REGIONAL BY ROW`,
+			expectedIndexes: []string{"rbr@primary"},
+		},
+		{
+			name:            "create-index",
+			op:              `CREATE INDEX idx ON db.rbr(v)`,
+			expectedIndexes: []string{"rbr@primary", "rbr@idx"},
+		},
+		{
+			name:            "add-column",
+			op:              `ALTER TABLE db.rbr ADD COLUMN v2 INT`,
+			expectedIndexes: []string{"rbr@primary"},
+		},
+		{
+			name:            "alter-pk",
+			op:              `ALTER TABLE db.rbr ALTER PRIMARY KEY USING COLUMNS (k, v)`,
+			expectedIndexes: []string{"rbr@primary"},
+		},
+		{
+			name:            "drop-column",
+			op:              `ALTER TABLE db.rbr DROP COLUMN v`,
+			expectedIndexes: []string{"rbr@primary"},
+		},
+		{
+			name:            "unique-index",
+			op:              `CREATE UNIQUE INDEX uniq ON db.rbr(v)`,
+			expectedIndexes: []string{"rbr@primary", "rbr@uniq"},
+		},
+	}
+
+	for _, tc := range testCases {
+		for _, regionAlterCmd := range regionAlterCmds {
+			t.Run(regionAlterCmd.name+"-"+tc.name, func(t *testing.T) {
+				var mu syncutil.Mutex
+				typeChangeStarted := make(chan struct{})
+				typeChangeFinished := make(chan struct{})
+				rbrOpFinished := make(chan struct{})
+
+				knobs := base.TestingKnobs{
+					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+						RunBeforeEnumMemberPromotion: func() error {
+							mu.Lock()
+							defer mu.Unlock()
+							close(typeChangeStarted)
+							<-rbrOpFinished
+							if !regionAlterCmd.shouldSucceed {
+								// Trigger a roll-back.
+								return errors.New("boom")
+							}
+							// Trod on.
+							return nil
+						},
+					},
+				}
+
+				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+					t, 4 /* numServers */, knobs, nil, /* baseDir */
+				)
+				defer cleanup()
+
+				_, err := sqlDB.Exec(`
+DROP DATABASE IF EXISTS db;
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+CREATE TABLE db.rbr(k INT PRIMARY KEY, v INT NOT NULL) LOCALITY REGIONAL BY ROW;
+`)
+				require.NoError(t, err)
+
+				go func() {
+					defer func() {
+						close(typeChangeFinished)
+					}()
+					_, err := sqlDB.Exec(regionAlterCmd.cmd)
+					if regionAlterCmd.shouldSucceed {
+						if err != nil {
+							t.Errorf("expected success, got %v", err)
+						}
+					} else {
+						if !testutils.IsError(err, "boom") {
+							t.Errorf("expected error boom, found %v", err)
+						}
+					}
+				}()
+
+				<-typeChangeStarted
+
+				_, err = sqlDB.Exec(tc.op)
+				close(rbrOpFinished)
+				require.NoError(t, err)
+
+				testutils.SucceedsSoon(t, func() error {
+					rows, err := sqlDB.Query("SELECT index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE db.rbr] ORDER BY partition_name")
+					if err != nil {
+						return err
+					}
+					defer rows.Close()
+
+					indexPartitions := make(map[string][]string)
+					for rows.Next() {
+						var indexName string
+						var partitionName string
+						if err := rows.Scan(&indexName, &partitionName); err != nil {
+							return err
+						}
+
+						indexPartitions[indexName] = append(indexPartitions[indexName], partitionName)
+					}
+
+					for _, expectedIndex := range tc.expectedIndexes {
+						partitions, found := indexPartitions[expectedIndex]
+						if !found {
+							return errors.AssertionFailedf("did not find index %s", expectedIndex)
+						}
+
+						if len(partitions) != len(regionAlterCmd.expectedPartitions) {
+							return errors.AssertionFailedf(
+								"unexpected number of partitions; expected %d, found %d",
+								len(partitions),
+								len(regionAlterCmd.expectedPartitions),
+							)
+						}
+						for i, expectedPartition := range regionAlterCmd.expectedPartitions {
+							if expectedPartition != partitions[i] {
+								return errors.AssertionFailedf(
+									"unexpected partitions; expected %v, found %v",
+									regionAlterCmd.expectedPartitions,
+									partitions,
+								)
+							}
+						}
+					}
+					return nil
+				})
+				<-typeChangeFinished
+			})
+		}
+	}
+}
+
 func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
