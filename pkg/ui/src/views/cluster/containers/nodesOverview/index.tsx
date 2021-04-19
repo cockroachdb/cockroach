@@ -144,6 +144,8 @@ const getBadgeTypeByNodeStatus = (
       return "warning";
     case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
       return "default";
+    case LivenessStatus.NODE_STATUS_DRAINING:
+      return "warning";
     case AggregatedNodeStatus.LIVE:
       return "default";
     case AggregatedNodeStatus.WARNING:
