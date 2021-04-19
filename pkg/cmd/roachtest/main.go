@@ -21,8 +21,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+// ExitCodeTestsFailed is the exit code that results from a run of
+// roachtest in which the infrastructure worked, but at least one
+// test failed.
+const ExitCodeTestsFailed = 10
 
 // runnerLogsDir is the dir under the artifacts root where the test runner log
 // and other runner-related logs (i.e. cluster creation logs) will be written.
@@ -145,6 +151,10 @@ Examples:
 roachtest run takes a list of regex patterns and runs all the matching tests.
 If no pattern is given, all tests are run. See "help list" for more details on
 the test tags.
+
+If all invoked tests passed, the exit status is zero. If at least one test
+failed, it is 10. Any other exit status reports a problem with the test
+runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerTests, cliCfg{
@@ -235,8 +245,12 @@ the test tags.
 	rootCmd.AddCommand(benchCmd)
 
 	if err := rootCmd.Execute(); err != nil {
+		code := 1
+		if errors.Is(err, errTestsFailed) {
+			code = ExitCodeTestsFailed
+		}
 		// Cobra has already printed the error message.
-		os.Exit(1)
+		os.Exit(code)
 	}
 }
 

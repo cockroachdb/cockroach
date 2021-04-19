@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 const OwnerUnitTest Owner = `unowned`
@@ -330,4 +332,38 @@ func TestRegistryMinVersion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func runExitCodeTest(t *testing.T, injectedError error) error {
+	ctx := context.Background()
+	t.Helper()
+	cr := newClusterRegistry()
+	runner := newTestRunner(cr, version.Version{})
+	r, err := makeTestRegistry()
+	require.NoError(t, err)
+	r.Add(testSpec{
+		Name:    "boom",
+		Owner:   OwnerUnitTest,
+		Cluster: makeClusterSpec(0),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			if injectedError != nil {
+				t.Fatal(injectedError)
+			}
+		},
+	})
+	tests := testsToRun(ctx, r, newFilter(nil))
+	lopt := loggingOpt{
+		l:            nilLogger(),
+		tee:          noTee,
+		stdout:       ioutil.Discard,
+		stderr:       ioutil.Discard,
+		artifactsDir: "",
+	}
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, "", lopt)
+}
+
+func TestExitCode(t *testing.T) {
+	require.NoError(t, runExitCodeTest(t, nil /* test passes */))
+	err := runExitCodeTest(t, errors.New("boom"))
+	require.True(t, errors.Is(err, errTestsFailed))
 }
