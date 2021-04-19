@@ -242,7 +242,7 @@ and result=_ left=b right=ac
 ----
 span expression
  ├── tight: true
- ├── to read: ["a", "c")
+ ├── to read: ["b", "b"]
  └── union spans: ["b", "b"]
 
 new-span-leaf name=bj tight=true span=b,j
@@ -265,7 +265,7 @@ and result=_ left=b right=bj
 ----
 span expression
  ├── tight: true
- ├── to read: ["b", "j")
+ ├── to read: ["b", "b"]
  └── union spans: ["b", "b"]
 
 # [b, j) or [a, c) = [a, j)
