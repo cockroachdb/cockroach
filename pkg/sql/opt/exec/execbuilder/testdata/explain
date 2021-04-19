@@ -1567,3 +1567,27 @@ vectorized: true
 • insert fast path
   into: t2(x)
   auto commit
+
+statement ok
+PREPARE prep AS SELECT $1 + 1
+
+statement error EXPLAIN EXECUTE is not supported
+EXPLAIN EXECUTE prep(1)
+
+statement error EXPLAIN EXECUTE is not supported
+SELECT 1 FROM [ EXPLAIN EXECUTE prep(1) ]
+
+query T
+EXPLAIN ANALYZE EXECUTE prep(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+·
+• values
+  cluster nodes: <hidden>
+  actual row count: 1
+  size: 1 column, 1 row

@@ -14,12 +14,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
+	if _, ok := explain.Statement.(*tree.Execute); ok {
+		panic(pgerror.New(
+			pgcode.FeatureNotSupported, "EXPLAIN EXECUTE is not supported; use EXPLAIN ANALYZE",
+		))
+	}
+
 	stmtScope := b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */)
 
 	outScope = inScope.push()
