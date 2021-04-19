@@ -854,6 +854,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
+%type <tree.Statement> explainable_stmt
 %type <tree.Statement> row_source_extension_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
@@ -3801,7 +3802,7 @@ analyze_target:
 //
 // %SeeAlso: WEBDOCS/explain.html
 explain_stmt:
-  EXPLAIN preparable_stmt
+  EXPLAIN explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain(nil /* options */, $2.stmt())
@@ -3810,7 +3811,7 @@ explain_stmt:
     }
   }
 | EXPLAIN error // SHOW HELP: EXPLAIN
-| EXPLAIN '(' explain_option_list ')' preparable_stmt
+| EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain($3.strs(), $5.stmt())
@@ -3818,7 +3819,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYZE preparable_stmt
+| EXPLAIN ANALYZE explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
@@ -3826,7 +3827,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYSE preparable_stmt
+| EXPLAIN ANALYSE explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
@@ -3834,7 +3835,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
+| EXPLAIN ANALYZE '(' explain_option_list ')' explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain(append($4.strs(), "ANALYZE"), $6.stmt())
@@ -3842,7 +3843,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYSE '(' explain_option_list ')' preparable_stmt
+| EXPLAIN ANALYSE '(' explain_option_list ')' explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain(append($4.strs(), "ANALYZE"), $6.stmt())
@@ -3855,6 +3856,10 @@ explain_stmt:
 // cause a help text for the select clause, which will be confusing in
 // the context of EXPLAIN.
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
+
+explainable_stmt:
+  preparable_stmt
+| execute_stmt
 
 preparable_stmt:
   alter_stmt     // help texts in sub-rule
