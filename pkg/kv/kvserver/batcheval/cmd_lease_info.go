@@ -40,8 +40,10 @@ func LeaseInfo(
 		// If there's a lease request in progress, speculatively return that future
 		// lease.
 		reply.Lease = nextLease
+		reply.CurrentLease = &lease
 	} else {
 		reply.Lease = lease
 	}
+	reply.EvaluatedBy = cArgs.EvalCtx.StoreID()
 	return result.Result{}, nil
 }

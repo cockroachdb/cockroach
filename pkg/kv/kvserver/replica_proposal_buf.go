@@ -150,11 +150,12 @@ type propBuf struct {
 	cnt    propBufCnt
 	arr    propBufArray
 
-	// assignedClosedTimestamp is the largest "closed timestamp" - i.e. the largest
-	// timestamp that was communicated to other replicas as closed, representing a
-	// promise that this leaseholder will not evaluate writes below this timestamp
-	// any more. It is set when proposals are flushed from the buffer, and also
-	// by the side-transport which closes timestamps out of band.
+	// assignedClosedTimestamp is the largest "closed timestamp" - i.e. the
+	// largest timestamp that was communicated to other replicas as closed,
+	// representing a promise that this leaseholder will not evaluate writes with
+	// timestamp <= assignedClosedTimestamp any more. It is set when proposals are
+	// flushed from the buffer, and also by the side-transport which closes
+	// timestamps out of band.
 	//
 	// Note that this field is not used by the local replica (or by anybody)
 	// directly to decide whether follower reads can be served. See
@@ -594,17 +595,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		// Exit the tracker.
 		p.tok.doneIfNotMovedLocked(ctx)
 
-		// Potentially drop the proposal before passing it to etcd/raft, but
-		// only after performing necessary bookkeeping.
-		if filter := b.testing.submitProposalFilter; filter != nil {
-			if drop, err := filter(p); drop || err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				continue
-			}
-		}
-
 		// If we don't have a raft group or if the raft group has rejected one
 		// of the proposals, we don't try to propose any more proposals. The
 		// rest of the proposals will still be registered with the proposer, so
@@ -623,6 +613,17 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			err := b.assignClosedTimestampToProposalLocked(ctx, p, closedTSTarget)
 			if err != nil {
 				firstErr = err
+				continue
+			}
+		}
+
+		// Potentially drop the proposal before passing it to etcd/raft, but
+		// only after performing necessary bookkeeping.
+		if filter := b.testing.submitProposalFilter; filter != nil {
+			if drop, err := filter(p); drop || err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
 				continue
 			}
 		}
@@ -713,7 +714,6 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 	// Lease transfers behave like regular proposals. Note that transfers
 	// carry a summary of the timestamp cache, so the new leaseholder will be
 	// aware of all the reads performed by the previous leaseholder.
-	isBrandNewLeaseRequest := false
 	if p.Request.IsLeaseRequest() {
 		// We read the lease from the ReplicatedEvalResult, not from leaseReq, because the
 		// former is more up to date, having been modified by the evaluation.
@@ -723,12 +723,51 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		if leaseExtension {
 			return nil
 		}
-		isBrandNewLeaseRequest = true
 		// For brand new leases, we close the lease start time. Since this proposing
 		// replica is not the leaseholder, the previous target is meaningless.
 		closedTSTarget = newLease.Start.ToTimestamp()
-	}
-	if !isBrandNewLeaseRequest {
+		// We forward closedTSTarget to b.assignedClosedTimestamp. We surprisingly
+		// might have previously closed a timestamp above the lease start time -
+		// when we close timestamps in the future, then attempt to transfer our
+		// lease away (and thus proscribe it) but the transfer fails and we're now
+		// acquiring a new lease to replace the proscribed one.
+		//
+		// TODO(andrei,nvanbenschoten): add a test with scenario:
+		// - Acquire lease @ 1
+		// - Close future timestamp @ 3
+		// - Attempt to transfer lease @ 2
+		// - Reject
+		// - Reacquire lease @ 2
+		closedTSTarget.Forward(b.assignedClosedTimestamp)
+
+		// Note that we're not bumping b.assignedClosedTimestamp here (we're not
+		// calling forwardClosedTimestampLocked). Bumping it to the lease start time
+		// would (surprisingly?) be illegal: just because we're proposing a lease
+		// starting at timestamp 100, doesn't mean we're sure to not be in the
+		// process of evaluating requests writing below 100. This can happen if a
+		// lease transfer has already applied while we were evaluating this lease
+		// request, and if we've already started evaluating writes under the
+		// transferred lease. Such a transfer can give us the lease starting at
+		// timestamp 50. If such a transfer applied, then our lease request that
+		// we're proposing now is sure to not apply. But if we were to bump
+		// b.assignedClosedTimestamp, the damage would be done. See
+		// TestRejectedLeaseDoesntDictateClosedTimestamp.
+	} else {
+		// Sanity check that this command is not violating the closed timestamp. It
+		// must be writing at a timestamp above assignedClosedTimestamp
+		// (assignedClosedTimestamp represents the promise that this replica made
+		// through previous commands to not evaluate requests with lower
+		// timestamps); in other words, assignedClosedTimestamp was not supposed to
+		// have been incremented while requests with lower timestamps were
+		// evaluating (instead, assignedClosedTimestamp was supposed to have bumped
+		// the write timestamp of any request the began evaluating after it was
+		// set).
+		if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.IsIntentWrite() {
+			return errors.AssertionFailedf("attempting to propose command writing below closed timestamp. "+
+				"wts: %s < assigned closed: %s; ba: %s",
+				p.Request.WriteTimestamp(), b.assignedClosedTimestamp, p.Request)
+		}
+
 		lb := b.evalTracker.LowerBound(ctx)
 		if !lb.IsEmpty() {
 			// If the tracker told us that requests are currently evaluating at
@@ -739,15 +778,18 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		}
 		// We can't close timestamps above the current lease's expiration.
 		closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound())
+
+		// We're about to close closedTSTarget. The propBuf needs to remember that
+		// in order for incoming requests to be bumped above it (through
+		// TrackEvaluatingRequest).
+		if !b.forwardClosedTimestampLocked(closedTSTarget) {
+			closedTSTarget = b.assignedClosedTimestamp
+		}
 	}
 
-	// We're about to close closedTSTarget. The propBuf needs to remember that in
-	// order for incoming requests to be bumped above it (through
-	// TrackEvaluatingRequest).
-	b.forwardClosedTimestampLocked(closedTSTarget)
 	// Fill in the closed ts in the proposal.
 	f := &b.tmpClosedTimestampFooter
-	f.ClosedTimestamp = b.assignedClosedTimestamp
+	f.ClosedTimestamp = closedTSTarget
 	footerLen := f.Size()
 	if log.ExpensiveLogEnabled(ctx, 4) {
 		log.VEventf(ctx, 4, "attaching closed timestamp %s to proposal %x", b.assignedClosedTimestamp, p.idKey)

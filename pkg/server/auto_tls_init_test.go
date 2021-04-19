@@ -77,10 +77,13 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 		return bundleFromDisk, err
 	}
 
-	// TODO(aaron-crl): Figure out how to handle client auth case.
-	//bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
-	//	ctx, cl.ClientCertPath(), cl.ClientKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
-	//)
+	err = bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
+		ctx, cl.ClientNodeCertPath(), cl.ClientNodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		true, /* serviceCertIsAlsoValidAsClient */
+	)
+	if err != nil {
+		return bundleFromDisk, err
+	}
 	err = bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
 		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 		false, /* serviceCertIsAlsoValidAsClient */
@@ -180,6 +183,13 @@ func compareBundleServiceCerts(
 	cmp(
 		cb1.InterNode.HostKey,
 		cb2.InterNode.HostKey, serviceNameInterNode+" Host key")
+
+	cmp(
+		cb1.UserAuth.HostCertificate,
+		cb2.UserAuth.HostCertificate, serviceNameUserAuth+" Host cert")
+	cmp(
+		cb1.UserAuth.HostKey,
+		cb2.UserAuth.HostKey, serviceNameUserAuth+" Host key")
 
 	cmp(
 		cb1.SQLService.HostCertificate,
@@ -378,18 +388,12 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 		t.Fatalf("rotation failed; expected err=nil, got: %q", err)
 	}
 
-	// Verify that client and UI service host certs are unchanged.
+	// Verify that the UI service host certs is unchanged.
 	diskBundle, err := loadAllCertsFromDisk(ctx, cfg)
 	if err != nil {
 		t.Fatalf("failed loading certs from disk, got: %q", err)
 	}
 	cmp := certCompareHelper(t, true)
-	cmp(
-		certBundle.UserAuth.HostCertificate,
-		diskBundle.UserAuth.HostCertificate, "UserAuth host cert")
-	cmp(
-		certBundle.UserAuth.HostKey,
-		diskBundle.UserAuth.HostKey, "UserAuth host key")
 	cmp(
 		certBundle.AdminUIService.HostCertificate,
 		diskBundle.AdminUIService.HostCertificate, "AdminUIService host cert")

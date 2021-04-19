@@ -184,12 +184,13 @@ message RestoreDetails {
   // stages have completed via these flags.
   bool prepare_completed = 8;
   bool stats_inserted = 9;
-  // SystemTablesRestored keeps track of dynamic states that need to happen only
-  // once during the lifetime of a job. Note, that this state may be shared
-  // between job versions, so updates to this map must be considered carefully.
-  // It maps system table names to whether or not they have already been
-  // restored.
-  map<string, bool> system_tables_restored = 17;
+  // SystemTablesMigrated keeps track of which system tables data have been
+  // migrated. We need to keep track of this because if we've modified the
+  // restored data via a migration, we can't restore back into that span as the
+  // migrated keys will shadow the ones that will be restored.
+  // Note, that this state may be shared between job versions, so updates to
+  // this map must be considered carefully.
+  map<string, bool> system_tables_migrated = 17;
   // DescriptorsPublished indicates whether or not the descriptors written in
   // the job have been transactionally updated after the data was restored.
   bool descriptors_published = 10;
