@@ -1549,6 +1549,7 @@ func TestGenAutocomplete(t *testing.T) {
 	}{
 		{shell: ""},
 		{shell: "bash"},
+		{shell: "fish"},
 		{shell: "zsh"},
 		{shell: "bad", expErr: `invalid argument "bad" for "cockroach gen autocomplete"`},
 	} {
