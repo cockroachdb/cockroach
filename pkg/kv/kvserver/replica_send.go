@@ -466,14 +466,9 @@ func (r *Replica) handleInvalidLeaseError(
 	// and leases and address the TODO in checkExecutionCanProceed to check the
 	// closed timestamp before consulting the lease.
 
-	var update replicaUpdate
-	defer update.apply(ctx, r)
-
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var ok bool
-	ok, update = r.canServeFollowerReadRLocked(ctx, ba, pErr.GoError())
-	if ok {
+	if r.canServeFollowerReadRLocked(ctx, ba, pErr.GoError()) {
 		// Follower read possible. Retry command.
 		return nil
 	}
