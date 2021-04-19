@@ -904,7 +904,7 @@ INSERT INTO t57085_c VALUES (10, 1, true), (20, 1, false), (30, 2, true);
 query T kvtrace
 DELETE FROM t57085_p WHERE p = 1;
 ----
-DelRange /Table/56/1/1 - /Table/56/1/1/#
+Del /Table/56/1/1/0
 Scan /Table/57/{1-2}
 Del /Table/57/2/1/10/0
 Del /Table/57/1/10/0

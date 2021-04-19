@@ -109,7 +109,7 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			}
 			builder := span.MakeBuilder(evalCtx, execCfg.Codec, desc, idx.IndexDesc())
 			if res := builder.CanSplitSpanIntoFamilySpans(
-				tc.numNeededFamilies, tc.prefixLen, tc.containsNull); res != tc.canSplit {
+				tc.numNeededFamilies, tc.prefixLen, tc.containsNull, false); res != tc.canSplit {
 				t.Errorf("expected result to be %v, but found %v", tc.canSplit, res)
 			}
 		})
