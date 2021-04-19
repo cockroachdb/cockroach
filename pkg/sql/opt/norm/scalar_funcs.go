@@ -305,3 +305,27 @@ func (c *CustomFuncs) IsTupleOfVars(t *memo.TupleExpr, cols opt.ColList) bool {
 func (c *CustomFuncs) VarsAreSame(left, right *memo.VariableExpr) bool {
 	return left.Col == right.Col
 }
+
+// EqualsColumn returns true if the two column IDs are the same.
+func (c *CustomFuncs) EqualsColumn(left, right opt.ColumnID) bool {
+	return left == right
+}
+
+// TuplesHaveSameLength returns true if two tuples have the same number of
+// elements.
+func (c *CustomFuncs) TuplesHaveSameLength(a, b *memo.TupleExpr) bool {
+	return len(a.Elems) == len(b.Elems)
+}
+
+// SplitTupleEq splits an equality condition between two tuples into multiple
+// equalities, one for each tuple column.
+func (c *CustomFuncs) SplitTupleEq(lhs, rhs *memo.TupleExpr) memo.FiltersExpr {
+	if len(lhs.Elems) != len(rhs.Elems) {
+		panic(errors.AssertionFailedf("unequal tuple lengths"))
+	}
+	res := make(memo.FiltersExpr, len(lhs.Elems))
+	for i := range res {
+		res[i] = c.f.ConstructFiltersItem(c.f.ConstructEq(lhs.Elems[i], rhs.Elems[i]))
+	}
+	return res
+}

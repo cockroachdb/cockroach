@@ -8349,3 +8349,21 @@ semi-join (lookup abc_part)
  │    │         └── fd: ()-->(16-19)
  │    └── filters (true)
  └── filters (true)
+
+# A multi-column IN query must be able to become a lookup join.
+opt
+SELECT * FROM abc WHERE (a, b) IN (SELECT m, n FROM small)
+----
+project
+ ├── columns: a:1 b:2 c:3
+ └── inner-join (lookup abc@ab)
+      ├── columns: a:1!null b:2!null c:3 m:6!null n:7!null
+      ├── key columns: [6 7] = [1 2]
+      ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+      ├── distinct-on
+      │    ├── columns: m:6 n:7
+      │    ├── grouping columns: m:6 n:7
+      │    ├── key: (6,7)
+      │    └── scan small
+      │         └── columns: m:6 n:7
+      └── filters (true)
