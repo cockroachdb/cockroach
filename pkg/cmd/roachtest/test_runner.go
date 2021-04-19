@@ -323,9 +323,23 @@ func (r *testRunner) Run(
 	passFailLine := r.generateReport()
 	shout(ctx, l, lopt.stdout, passFailLine)
 	if len(r.status.fail) > 0 {
-		return fmt.Errorf("some tests failed")
+		return &exitCodeErr{
+			error: fmt.Errorf("some tests failed"),
+			code:  ExitCodeTestsFailed,
+		}
 	}
 	return nil
+}
+
+var ExitCodeTestsFailed = 10
+
+type exitCodeErr struct {
+	error
+	code int
+}
+
+func (err *exitCodeErr) exitCode() int {
+	return err.code
 }
 
 type clusterAllocatorFn func(

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -145,6 +146,10 @@ Examples:
 roachtest run takes a list of regex patterns and runs all the matching tests.
 If no pattern is given, all tests are run. See "help list" for more details on
 the test tags.
+
+If all invoked tests passed, the exit status is zero. If at least one test
+failed, it is 10. Any other exit status reports a problem with the test
+runner itself.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerTests, cliCfg{
@@ -235,9 +240,17 @@ the test tags.
 	rootCmd.AddCommand(benchCmd)
 
 	if err := rootCmd.Execute(); err != nil {
+		code := 1
+		if ec := exitCoder(nil); errors.As(err, &ec) {
+			code = ec.exitCode()
+		}
 		// Cobra has already printed the error message.
-		os.Exit(1)
+		os.Exit(code)
 	}
+}
+
+type exitCoder interface {
+	exitCode() int
 }
 
 type cliCfg struct {
