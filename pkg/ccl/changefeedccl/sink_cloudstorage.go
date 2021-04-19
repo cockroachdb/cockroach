@@ -515,8 +515,15 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		return nil
 	}
 
-	// If the file is written via compression codec, close the codec to ensure it
-	// has flushed to the underlying buffer.
+	// Release memory allocated for this file.  Note, closing codec
+	// below may as well write more data to our buffer (and that may cause buffer
+	// to grow due to reallocation).  But we don't account for that additional memory
+	// because a) we don't know if buffer will be resized (nor by how much), and
+	// b) if we're out of memory we'd OOMed when trying to close codec anyway.
+	defer func(delta int) {
+		s.mem.Shrink(ctx, int64(delta))
+	}(file.buf.Cap())
+
 	if file.codec != nil {
 		if err := file.codec.Close(); err != nil {
 			return err
@@ -541,7 +548,6 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	if err := s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
 		return err
 	}
-	s.mem.Shrink(ctx, int64(file.buf.Cap()))
 	return nil
 }
 
