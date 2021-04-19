@@ -289,13 +289,6 @@ def go_deps():
     )
 
     go_repository(
-        name = "com_github_benesch_cgosymbolizer",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/benesch/cgosymbolizer",
-        sum = "h1:Llg88pHOiUbcFOFhr009G8fOBQL6gaVDnxUUeWZuLog=",
-        version = "v0.0.0-20180702220239-70e1ee2b39d3",
-    )
-    go_repository(
         name = "com_github_beorn7_perks",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/beorn7/perks",
@@ -1706,13 +1699,7 @@ def go_deps():
         sum = "h1:EPRgaDqXpLFUJLXZdGLnBTy1l6CLiNAPnvn2l+kHit0=",
         version = "v0.0.0-20141126152155-54553eb933fb",
     )
-    go_repository(
-        name = "com_github_ianlancetaylor_cgosymbolizer",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/ianlancetaylor/cgosymbolizer",
-        sum = "h1:SgAfkQ7+MVwIQP9PPN+NrTsRvzLOfpDuMqaVhvjqMGA=",
-        version = "v0.0.0-20201002210021-dda951febc36",
-    )
+
     go_repository(
         name = "com_github_ianlancetaylor_demangle",
         build_file_proto_mode = "disable_global",
