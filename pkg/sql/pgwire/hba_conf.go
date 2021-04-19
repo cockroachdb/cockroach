@@ -100,7 +100,7 @@ func loadLocalAuthConfigUponRemoteSettingChange(
 		if err != nil {
 			// The default is also used if the node is unable to load the
 			// config from the cluster setting.
-			log.Warningf(ctx, "invalid %s: %v", serverHBAConfSetting, err)
+			log.Ops.Warningf(ctx, "invalid %s: %v", serverHBAConfSetting, err)
 			conf = DefaultHBAConfig
 		}
 	}
