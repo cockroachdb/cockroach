@@ -284,6 +284,7 @@ go_library(
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/colflow",
