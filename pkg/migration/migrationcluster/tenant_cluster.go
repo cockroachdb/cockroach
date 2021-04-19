@@ -77,7 +77,6 @@ import (
 //      up to the active cluster version of the attached KV node.
 //    * Populate tenant version setting using the current version of the binary
 //      writing the state.
-//        * TODO(ajwerner): This.
 //    * Not supported:
 //        * Any reliable claims about the versions of other node.
 //    * Do not do anything to permit SQL pods to continue to operate at the old

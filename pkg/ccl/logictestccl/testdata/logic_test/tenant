@@ -1,5 +1,14 @@
 # LogicTest: 3node-tenant
 
+# Show that the version setting for the tenant is set and has the proper value.
+
+query B
+SELECT version = crdb_internal.node_executable_version()
+  FROM [SHOW CLUSTER SETTING version]
+ WHERE EXISTS(SELECT * FROM system.settings WHERE name = 'version');
+----
+true
+
 # This file documents operations that are supported when running a SQL tenant
 # server. It's mostly a dumping ground for tests moved from tenatn_unsupported.
 
