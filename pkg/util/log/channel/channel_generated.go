@@ -111,7 +111,7 @@ const SENSITIVE_ACCESS = logpb.Channel_SENSITIVE_ACCESS
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 const SQL_EXEC = logpb.Channel_SQL_EXEC
 
 // SQL_PERF is used to report SQL executions
