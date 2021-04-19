@@ -109,6 +109,12 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
 }
 
+// IsIncremental reads a BackupManifest and returns false or true
+// corresponding to the backup being full or incremental.
+func (m *BackupManifest) IsIncremental() bool {
+	return !m.StartTime.IsEmpty()
+}
+
 // ReadBackupManifestFromURI creates an export store from the given URI, then
 // reads and unmarshalls a BackupManifest at the standard location in the
 // export storage.
