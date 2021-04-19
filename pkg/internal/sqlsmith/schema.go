@@ -481,7 +481,8 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			continue
 		}
 		if strings.Contains(def.Name, "crdb_internal.force_") ||
-			strings.Contains(def.Name, "crdb_internal.unsafe_") {
+			strings.Contains(def.Name, "crdb_internal.unsafe_") ||
+			strings.Contains(def.Name, "crdb_internal.create_join_token") {
 			continue
 		}
 		if _, ok := m[def.Class]; !ok {
