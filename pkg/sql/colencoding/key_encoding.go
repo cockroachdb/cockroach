@@ -40,7 +40,7 @@ func DecodeIndexKeyToCols(
 	vecs []coldata.Vec,
 	idx int,
 	desc catalog.TableDescriptor,
-	index *descpb.IndexDescriptor,
+	index catalog.Index,
 	indexColIdx []int,
 	types []*types.T,
 	colDirs []descpb.IndexDescriptor_Direction,
@@ -53,8 +53,9 @@ func DecodeIndexKeyToCols(
 
 	origKey := key
 
-	if len(index.Interleave.Ancestors) > 0 {
-		for i, ancestor := range index.Interleave.Ancestors {
+	if index.NumInterleaveAncestors() > 0 {
+		for i := 0; i < index.NumInterleaveAncestors(); i++ {
+			ancestor := index.GetInterleaveAncestor(i)
 			// Our input key had its first table id / index id chopped off, so
 			// don't try to decode those for the first ancestor.
 			if i != 0 {
@@ -101,11 +102,11 @@ func DecodeIndexKeyToCols(
 		if err != nil {
 			return nil, false, false, err
 		}
-		if decodedTableID != desc.GetID() || decodedIndexID != index.ID {
+		if decodedTableID != desc.GetID() || decodedIndexID != index.GetID() {
 			// We don't match. Return a key with the table ID / index ID we're
 			// searching for, so the caller knows what to seek to.
 			curPos := len(origKey) - len(key)
-			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos], desc.GetID(), index.ID)
+			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos], desc.GetID(), index.GetID())
 			return key, false, false, nil
 		}
 	}

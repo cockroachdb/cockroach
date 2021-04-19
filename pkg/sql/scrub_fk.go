@@ -102,15 +102,6 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		o.run.rows = append(o.run.rows, rows...)
 	}
 
-	// Collect the expected types for the query results. This is all
-	// columns and extra columns in the secondary index used for foreign
-	// key referencing. This also implicitly includes all primary index
-	// columns.
-	columnsByID := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(o.tableDesc.PublicColumns()))
-	for _, c := range o.tableDesc.PublicColumns() {
-		columnsByID[c.GetID()] = c.ColumnDesc()
-	}
-
 	// Get primary key columns not included in the FK.
 	var colIDs []descpb.ColumnID
 	colIDs = append(colIDs, o.constraint.FK.OriginColumnIDs...)

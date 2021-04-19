@@ -116,7 +116,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	for _, f := range s.Fields {
 		// s.Fields[idx] has `Name` and `SchemaType` set but nothing else.
 		// They're needed for serialization/deserialization, so fake out a
-		// column descriptor so that we can reuse columnDescToAvroSchema to get
+		// column descriptor so that we can reuse columnToAvroSchema to get
 		// all the various fields of avroSchemaField populated for free.
 		colDesc, err := avroFieldMetadataToColDesc(f.Metadata)
 		if err != nil {
@@ -286,7 +286,7 @@ func TestAvroSchema(t *testing.T) {
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
-		indexSchema, err := indexToAvroSchema(tableDesc, tableDesc.GetPrimaryIndex().IndexDesc(), tableDesc.GetName(), "")
+		indexSchema, err := indexToAvroSchema(tableDesc, tableDesc.GetPrimaryIndex(), tableDesc.GetName(), "")
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -329,7 +329,7 @@ func TestAvroSchema(t *testing.T) {
 			colType := typ.SQLString()
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
-			field, err := columnDescToAvroSchema(tableDesc.PublicColumns()[1].ColumnDesc())
+			field, err := columnToAvroSchema(tableDesc.PublicColumns()[1])
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)
 			require.NoError(t, err)

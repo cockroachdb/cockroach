@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -383,7 +383,7 @@ func (p *planner) AlterPrimaryKey(
 	// * depend on uniqueness from the old primary key (inverted, non-unique, or unique with nulls).
 	// * don't store or index all columns in the new primary key.
 	// * is affected by a locality config swap.
-	shouldRewriteIndex := func(idx *descpb.IndexDescriptor) (bool, error) {
+	shouldRewriteIndex := func(idx catalog.Index) (bool, error) {
 		if alterPrimaryKeyLocalitySwap != nil {
 			return true, nil
 		}
@@ -392,8 +392,9 @@ func (p *planner) AlterPrimaryKey(
 				return true, nil
 			}
 		}
-		if idx.Unique {
-			for _, colID := range idx.ColumnIDs {
+		if idx.IsUnique() {
+			for i := 0; i < idx.NumColumns(); i++ {
+				colID := idx.GetColumnID(i)
 				col, err := tableDesc.FindColumnWithID(colID)
 				if err != nil {
 					return false, err
@@ -403,26 +404,24 @@ func (p *planner) AlterPrimaryKey(
 				}
 			}
 		}
-		return !idx.Unique || idx.Type == descpb.IndexDescriptor_INVERTED, nil
+		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
 	}
-	var indexesToRewrite []*descpb.IndexDescriptor
+	var indexesToRewrite []catalog.Index
 	for _, idx := range tableDesc.PublicNonPrimaryIndexes() {
-		shouldRewrite, err := shouldRewriteIndex(idx.IndexDesc())
+		shouldRewrite, err := shouldRewriteIndex(idx)
 		if err != nil {
 			return err
 		}
 		if idx.GetID() != newPrimaryIndexDesc.ID && shouldRewrite {
-			indexesToRewrite = append(indexesToRewrite, idx.IndexDesc())
+			indexesToRewrite = append(indexesToRewrite, idx)
 		}
 	}
 
 	// TODO (rohany): this loop will be unused until #45510 is resolved.
-	for i := range tableDesc.Mutations {
-		mut := &tableDesc.Mutations[i]
+	for _, mut := range tableDesc.AllMutations() {
 		// If there is an index that is getting built right now that started in a previous txn, we
 		// need to potentially rebuild that index as well.
-		if idx := mut.GetIndex(); mut.MutationID < currentMutationID && idx != nil &&
-			mut.Direction == descpb.DescriptorMutation_ADD {
+		if idx := mut.AsIndex(); mut.MutationID() < currentMutationID && idx != nil && mut.Adding() {
 			shouldRewrite, err := shouldRewriteIndex(idx)
 			if err != nil {
 				return err
@@ -439,7 +438,7 @@ func (p *planner) AlterPrimaryKey(
 	var oldIndexIDs, newIndexIDs []descpb.IndexID
 	for _, idx := range indexesToRewrite {
 		// Clone the index that we want to rewrite.
-		newIndex := protoutil.Clone(idx).(*descpb.IndexDescriptor)
+		newIndex := idx.IndexDescDeepCopy()
 		basename := newIndex.Name + "_rewrite_for_primary_key_change"
 
 		// Drop any PARTITION ALL BY clause.
@@ -451,7 +450,7 @@ func (p *planner) AlterPrimaryKey(
 		}
 
 		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
-		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, newIndex, newPrimaryIndexDesc); err != nil {
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc); err != nil {
 			return err
 		}
 		// If the index that we are rewriting is interleaved, we need to setup the rewritten
@@ -459,18 +458,18 @@ func (p *planner) AlterPrimaryKey(
 		// on the new index is already set up. So, we just need to add the backreference from the
 		// parent to this new index.
 		if len(newIndex.Interleave.Ancestors) != 0 {
-			if err := p.finalizeInterleave(ctx, tableDesc, newIndex); err != nil {
+			if err := p.finalizeInterleave(ctx, tableDesc, &newIndex); err != nil {
 				return err
 			}
 		}
 		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
 		if isNewPartitionAllBy {
-			if *newIndex, err = CreatePartitioning(
+			if newIndex, err = CreatePartitioning(
 				ctx,
 				p.ExecCfg().Settings,
 				p.EvalContext(),
 				tableDesc,
-				*newIndex,
+				newIndex,
 				partitionAllBy,
 				allowedNewColumnNames,
 				allowImplicitPartitioning,
@@ -478,7 +477,7 @@ func (p *planner) AlterPrimaryKey(
 				return err
 			}
 		}
-		oldIndexIDs = append(oldIndexIDs, idx.ID)
+		oldIndexIDs = append(oldIndexIDs, idx.GetID())
 		newIndexIDs = append(newIndexIDs, newIndex.ID)
 	}
 
@@ -537,7 +536,7 @@ func (p *planner) shouldCreateIndexes(
 	oldPK := desc.GetPrimaryIndex()
 
 	// Validate if basic properties between the two match.
-	if len(oldPK.IndexDesc().ColumnIDs) != len(alterPKNode.Columns) ||
+	if oldPK.NumColumns() != len(alterPKNode.Columns) ||
 		oldPK.IsSharded() != (alterPKNode.Sharded != nil) ||
 		oldPK.IsInterleaved() != (alterPKNode.Interleave != nil) {
 		return true, nil
@@ -549,7 +548,7 @@ func (p *planner) shouldCreateIndexes(
 		if err != nil {
 			return true, err
 		}
-		if oldPK.IndexDesc().Sharded.ShardBuckets != shardBuckets {
+		if oldPK.GetSharded().ShardBuckets != shardBuckets {
 			return true, nil
 		}
 	}
@@ -565,15 +564,14 @@ func (p *planner) shouldCreateIndexes(
 			return true, err
 		}
 
-		ancestors := oldPK.IndexDesc().Interleave.Ancestors
-		if len(ancestors) == 0 {
+		if oldPK.NumInterleaveAncestors() == 0 {
 			return true, nil
 		}
-		if ancestors[len(ancestors)-1].TableID !=
+		if oldPK.GetInterleaveAncestor(oldPK.NumInterleaveAncestors()-1).TableID !=
 			parentTable.GetID() {
 			return true, nil
 		}
-		if ancestors[len(ancestors)-1].IndexID !=
+		if oldPK.GetInterleaveAncestor(oldPK.NumInterleaveAncestors()-1).IndexID !=
 			parentTable.GetPrimaryIndexID() {
 			return true, nil
 		}
@@ -581,7 +579,7 @@ func (p *planner) shouldCreateIndexes(
 
 	// If the old primary key is dropped, then recreation
 	// is required.
-	if oldPK.IndexDesc().Disabled {
+	if oldPK.IsDisabled() {
 		return true, nil
 	}
 
@@ -592,13 +590,13 @@ func (p *planner) shouldCreateIndexes(
 			return true, err
 		}
 
-		if col.GetID() != oldPK.IndexDesc().ColumnIDs[idx] {
+		if col.GetID() != oldPK.GetColumnID(idx) {
 			return true, nil
 		}
 		if (elem.Direction == tree.Ascending &&
-			oldPK.IndexDesc().ColumnDirections[idx] != descpb.IndexDescriptor_ASC) ||
+			oldPK.GetColumnDirection(idx) != descpb.IndexDescriptor_ASC) ||
 			(elem.Direction == tree.Descending &&
-				oldPK.IndexDesc().ColumnDirections[idx] != descpb.IndexDescriptor_DESC) {
+				oldPK.GetColumnDirection(idx) != descpb.IndexDescriptor_DESC) {
 			return true, nil
 		}
 	}
@@ -612,7 +610,7 @@ func (p *planner) shouldCreateIndexes(
 			return true, nil
 		}
 		if localitySwapConfig.NewRegionalByRowColumnID != nil &&
-			*localitySwapConfig.NewRegionalByRowColumnID != oldPK.IndexDesc().ColumnIDs[0] {
+			*localitySwapConfig.NewRegionalByRowColumnID != oldPK.GetColumnID(0) {
 			return true, nil
 		}
 	}

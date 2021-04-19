@@ -66,7 +66,7 @@ type invertedJoiner struct {
 	desc         catalog.TableDescriptor
 	// The map from ColumnIDs in the table to the column position.
 	colIdxMap catalog.TableColMap
-	index     *descpb.IndexDescriptor
+	index     catalog.Index
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
 	invertedColID descpb.ColumnID
@@ -200,12 +200,12 @@ func newInvertedJoiner(
 	if indexIdx >= len(ij.desc.ActiveIndexes()) {
 		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	ij.index = ij.desc.ActiveIndexes()[indexIdx].IndexDesc()
+	ij.index = ij.desc.ActiveIndexes()[indexIdx]
 	ij.invertedColID = ij.index.InvertedColumnID()
 
 	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
 	// a mapping from indexRow column ordinal to tableRow column ordinals.
-	indexColumnIDs, _ := ij.index.FullColumnIDs()
+	indexColumnIDs, _ := catalog.FullIndexColumnIDs(ij.index)
 	// Inverted joins are not used for mutations.
 	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
 	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
@@ -446,7 +446,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
 					ij.indexRow[:len(ij.prefixEqualityCols)],
 					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-					ij.index.ColumnDirections,
+					ij.index.IndexDesc().ColumnDirections,
 					ij.desc,
 					ij.index,
 					&ij.alloc,
@@ -540,7 +540,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
 				ij.indexRow[:len(ij.prefixEqualityCols)],
 				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-				ij.index.ColumnDirections,
+				ij.index.IndexDesc().ColumnDirections,
 				ij.desc,
 				ij.index,
 				&ij.alloc,

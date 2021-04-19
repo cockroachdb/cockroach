@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -691,14 +692,21 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 //
 // If val's type is incompatible with col, or if col's type is not yet
 // implemented by this function, an error is returned.
-func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
+func MarshalColumnValue(col catalog.Column, val tree.Datum) (roachpb.Value, error) {
+	return MarshalColumnTypeValue(col.GetName(), col.GetType(), val)
+}
+
+// MarshalColumnTypeValue is called by MarshalColumnValue and in tests.
+func MarshalColumnTypeValue(
+	colName string, colType *types.T, val tree.Datum,
+) (roachpb.Value, error) {
 	var r roachpb.Value
 
 	if val == tree.DNull {
 		return r, nil
 	}
 
-	switch col.Type.Family() {
+	switch colType.Family() {
 	case types.BitFamily:
 		if v, ok := val.(*tree.DBitArray); ok {
 			r.SetBitArray(v.BitArray)
@@ -801,7 +809,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 		}
 	case types.ArrayFamily:
 		if v, ok := val.(*tree.DArray); ok {
-			if err := checkElementType(v.ParamTyp, col.Type.ArrayContents()); err != nil {
+			if err := checkElementType(v.ParamTyp, colType.ArrayContents()); err != nil {
 				return r, err
 			}
 			b, err := encodeArray(v, nil)
@@ -813,7 +821,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 		}
 	case types.CollatedStringFamily:
 		if v, ok := val.(*tree.DCollatedString); ok {
-			if lex.LocaleNamesAreEqual(v.Locale, col.Type.Locale()) {
+			if lex.LocaleNamesAreEqual(v.Locale, colType.Locale()) {
 				r.SetString(v.Contents)
 				return r, nil
 			}
@@ -822,7 +830,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 			// the mutation planning code.
 			return r, errors.AssertionFailedf(
 				"locale mismatch %q vs %q for column %q",
-				v.Locale, col.Type.Locale(), tree.ErrNameString(col.Name))
+				v.Locale, colType.Locale(), tree.ErrNameString(colName))
 		}
 	case types.OidFamily:
 		if v, ok := val.(*tree.DOid); ok {
@@ -835,10 +843,10 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 			return r, nil
 		}
 	default:
-		return r, errors.AssertionFailedf("unsupported column type: %s", col.Type.Family())
+		return r, errors.AssertionFailedf("unsupported column type: %s", colType.Family())
 	}
 	return r, errors.AssertionFailedf("mismatched type %q vs %q for column %q",
-		val.ResolvedType(), col.Type.Family(), tree.ErrNameString(col.Name))
+		val.ResolvedType(), colType.Family(), tree.ErrNameString(colName))
 }
 
 // UnmarshalColumnValue is the counterpart to MarshalColumnValues.

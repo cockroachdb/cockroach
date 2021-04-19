@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -303,14 +302,13 @@ func initCRowFetcher(
 	valNeededForCol util.FastIntSet,
 	spec *execinfrapb.TableReaderSpec,
 	withSystemColumns bool,
-) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
+) (index catalog.Index, isSecondaryIndex bool, err error) {
 	indexIdx := int(spec.IndexIdx)
 	if indexIdx >= len(desc.ActiveIndexes()) {
 		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	indexI := desc.ActiveIndexes()[indexIdx]
-	index = indexI.IndexDesc()
-	isSecondaryIndex = !indexI.Primary()
+	index = desc.ActiveIndexes()[indexIdx]
+	isSecondaryIndex = !index.Primary()
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
