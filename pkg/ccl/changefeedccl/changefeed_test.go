@@ -2254,7 +2254,10 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, or PLAIN`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
-
+	sqlDB.ExpectErr(
+		t, `client has run out of available brokers`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100}}'`,
+	)
 	// The avro format doesn't support key_in_value yet.
 	sqlDB.ExpectErr(
 		t, `key_in_value is not supported with format=experimental_avro`,
