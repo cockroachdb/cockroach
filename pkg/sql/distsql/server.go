@@ -439,26 +439,6 @@ func newFlow(
 	return rowflow.NewRowBasedFlow(base)
 }
 
-// SetupSyncFlow sets up a synchronous flow, connecting the sync response
-// output stream to the given RowReceiver. The flow is not started. The flow
-// will be associated with the given context.
-// Note: the returned context contains a span that must be finished through
-// Flow.Cleanup.
-func (ds *ServerImpl) SetupSyncFlow(
-	ctx context.Context,
-	parentMonitor *mon.BytesMonitor,
-	req *execinfrapb.SetupFlowRequest,
-	output execinfra.RowReceiver,
-) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(
-		ds.AnnotateCtx(ctx), tracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	return ctx, f, err
-}
-
 // LocalState carries information that is required to set up a flow with wrapped
 // planNodes.
 type LocalState struct {
@@ -483,9 +463,12 @@ type LocalState struct {
 	LocalProcs []execinfra.LocalProcessor
 }
 
-// SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node.
-// It's used by the gateway node to set up the flows local to it.
-// It's the same as SetupSyncFlow except it takes the localState.
+// SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node,
+// connecting the sync response output stream to the given RowReceiver. It's
+// used by the gateway node to set up the flows local to it. The flow is not
+// started. The flow will be associated with the given context.
+// Note: the returned context contains a span that must be finished through
+// Flow.Cleanup.
 func (ds *ServerImpl) SetupLocalSyncFlow(
 	ctx context.Context,
 	parentMonitor *mon.BytesMonitor,

@@ -88,12 +88,10 @@ message ConsumerSignal {
   // stream.
   optional DrainRequest drain_request = 1;
 
-  // Used in the RunSyncFlow case; the first message on the client stream must
-  // contain this message.
-  optional SetupFlowRequest setup_flow_request = 2;
-
   // Consumer->Producer handshake messages. See message definition.
   optional ConsumerHandshake handshake = 3;
+
+  reserved 2;
 }
 
 message DrainRequest {
