@@ -470,7 +470,8 @@ type Store struct {
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
 	// obeyed: baseQueue.mu < Replica.raftMu < Replica.readOnlyCmdMu < Store.mu
-	// < Replica.mu < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
+	// < Replica.mu < Replica.unreachablesMu < Store.coalescedMu
+	// < Store.scheduler.mu < Stopper.mu.
 	// (It is not required to acquire every lock in sequence, but when multiple
 	// locks are held at the same time, it is incorrect to acquire a lock with
 	// "lesser" value in this sequence after one with "greater" value).

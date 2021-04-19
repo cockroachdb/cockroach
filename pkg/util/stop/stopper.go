@@ -473,8 +473,18 @@ func (s *Stopper) Stop(ctx context.Context) {
 	s.Quiesce(ctx)
 
 	s.mu.Lock()
+	closers := s.mu.closers
 	defer s.mu.Unlock()
-	for _, c := range s.mu.closers {
+
+	// We can't hold on to Stopper.mu while executing closers. Closers are
+	// allowed to be defined anywhere, and are allowed to grab any lock
+	// available. As far as lock ordering is concerned, Stopper.mu comes after
+	// everything else to avoid any deadlocks (see comment on Store.mu).
+	//
+	// There's no concern around new closers being added; we've marked this
+	// stopper as `stopping` above, so any attempts to do so will be refused
+	// (see refuseRLocked).
+	for _, c := range closers {
 		c.Close()
 	}
 }
