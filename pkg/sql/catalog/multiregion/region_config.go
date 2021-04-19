@@ -29,10 +29,11 @@ const minNumRegionsForSurviveRegionGoal = 3
 // inform be a RegionConfig must be made directly on those structs and a new
 // RegionConfig must be synthesized to pick up those changes.
 type RegionConfig struct {
-	survivalGoal  descpb.SurvivalGoal
-	regions       descpb.RegionNames
-	primaryRegion descpb.RegionName
-	regionEnumID  descpb.ID
+	survivalGoal         descpb.SurvivalGoal
+	regions              descpb.RegionNames
+	transitioningRegions descpb.RegionNames
+	primaryRegion        descpb.RegionName
+	regionEnumID         descpb.ID
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -65,9 +66,26 @@ func (r RegionConfig) PrimaryRegionString() string {
 	return string(r.PrimaryRegion())
 }
 
+// TransitioningRegions returns all the regions which are currently transitioning
+// from or to being PUBLIC.
+func (r RegionConfig) TransitioningRegions() descpb.RegionNames {
+	return r.transitioningRegions
+}
+
 // RegionEnumID returns the multi-region enum ID.
 func (r *RegionConfig) RegionEnumID() descpb.ID {
 	return r.regionEnumID
+}
+
+// MakeRegionConfigOption is an option for MakeRegionConfig
+type MakeRegionConfigOption func(r *RegionConfig)
+
+// WithTransitioningRegions is an option to include transitioning
+// regions into MakeRegionConfig.
+func WithTransitioningRegions(transitioningRegions descpb.RegionNames) MakeRegionConfigOption {
+	return func(r *RegionConfig) {
+		r.transitioningRegions = transitioningRegions
+	}
 }
 
 // MakeRegionConfig constructs a RegionConfig.
@@ -76,13 +94,18 @@ func MakeRegionConfig(
 	primaryRegion descpb.RegionName,
 	survivalGoal descpb.SurvivalGoal,
 	regionEnumID descpb.ID,
+	opts ...MakeRegionConfigOption,
 ) RegionConfig {
-	return RegionConfig{
+	ret := RegionConfig{
 		regions:       regions,
 		primaryRegion: primaryRegion,
 		survivalGoal:  survivalGoal,
 		regionEnumID:  regionEnumID,
 	}
+	for _, opt := range opts {
+		opt(&ret)
+	}
+	return ret
 }
 
 // canSatisfySurvivalGoal returns true if the survival goal is satisfiable by
