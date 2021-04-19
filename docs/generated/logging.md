@@ -143,7 +143,7 @@ behalf of client connections:
 
 - Logical SQL statement executions (when enabled via the
   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-- pgwire events (when enabled)
+- uncaught Go panic errors during the execution of a SQL statement.
 
 ## `SQL_PERF`
 

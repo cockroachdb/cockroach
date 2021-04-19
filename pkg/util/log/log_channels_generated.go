@@ -4241,7 +4241,7 @@ type loggerSqlExec struct{}
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 var SqlExec loggerSqlExec
 
 // SqlExec and loggerSqlExec implement ChannelLogger.
@@ -4260,7 +4260,7 @@ var _ ChannelLogger = SqlExec
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4279,7 +4279,7 @@ func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4298,7 +4298,7 @@ func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, arg
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4316,7 +4316,7 @@ func (loggerSqlExec) Info(ctx context.Context, msg string) {
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
@@ -4333,7 +4333,7 @@ func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, a
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4352,7 +4352,7 @@ func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interf
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4371,7 +4371,7 @@ func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, 
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4389,7 +4389,7 @@ func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
@@ -4406,7 +4406,7 @@ func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4426,7 +4426,7 @@ func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interfac
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4446,7 +4446,7 @@ func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, ar
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4465,7 +4465,7 @@ func (loggerSqlExec) Error(ctx context.Context, msg string) {
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
@@ -4483,7 +4483,7 @@ func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, 
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4503,7 +4503,7 @@ func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interfac
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4523,7 +4523,7 @@ func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, ar
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4542,7 +4542,7 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4559,7 +4559,7 @@ func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, 
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, msg)
 }
@@ -4573,7 +4573,7 @@ func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 //
 // - Logical SQL statement executions (when enabled via the
 //   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
-// - pgwire events (when enabled)
+// - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
 }
