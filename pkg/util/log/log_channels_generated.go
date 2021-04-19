@@ -4126,8 +4126,8 @@ type loggerSqlExec struct{}
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 var SqlExec loggerSqlExec
 
 // SqlExec and loggerSqlExec implement ChannelLogger.
@@ -4144,8 +4144,8 @@ var _ ChannelLogger = SqlExec
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The INFO severity is used for informational messages, when no action
 // is required as a result.
@@ -4162,8 +4162,8 @@ func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The INFO severity is used for informational messages, when no action
 // is required as a result.
@@ -4180,8 +4180,8 @@ func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, arg
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The INFO severity is used for informational messages, when no action
 // is required as a result.
@@ -4197,8 +4197,8 @@ func (loggerSqlExec) Info(ctx context.Context, msg string) {
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The INFO severity is used for informational messages, when no action
 // is required as a result.
@@ -4213,8 +4213,8 @@ func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, a
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
@@ -4231,8 +4231,8 @@ func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interf
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
@@ -4249,8 +4249,8 @@ func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, 
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
@@ -4266,8 +4266,8 @@ func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The WARNING severity is used for situations which may require special handling,
 // while normal operation is expected to resume automatically.
@@ -4282,8 +4282,8 @@ func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
@@ -4301,8 +4301,8 @@ func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interfac
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
@@ -4320,8 +4320,8 @@ func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, ar
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
@@ -4338,8 +4338,8 @@ func (loggerSqlExec) Error(ctx context.Context, msg string) {
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The ERROR severity is used for situations that require special handling,
 // when normal operation could not proceed as expected.
@@ -4355,8 +4355,8 @@ func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, 
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4374,8 +4374,8 @@ func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interfac
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4393,8 +4393,8 @@ func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, ar
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4411,8 +4411,8 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The FATAL severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
@@ -4427,8 +4427,8 @@ func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, 
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, msg)
 }
@@ -4440,8 +4440,8 @@ func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 // The SQL_EXEC channel is the channel used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - logical SQL statement executions (if enabled).
+// - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
 }

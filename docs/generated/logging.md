@@ -136,8 +136,8 @@ numbering and synchronous writes.
 The SQL_EXEC channel is the channel used to report SQL execution on
 behalf of client connections:
 
-- logical SQL statement executions (if enabled)
-- pgwire events (if enabled)
+- logical SQL statement executions (if enabled).
+- uncaught Go panic errors during the execution of a SQL statement.
 
 ## SQL_PERF
 
