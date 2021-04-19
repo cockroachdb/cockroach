@@ -47,6 +47,11 @@ type StoreTestingKnobs struct {
 
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter kvserverbase.ReplicaProposalFilter
+	// TestingProposalSubmitFilter can be used by tests to observe and optionally
+	// drop Raft proposals before they are handed to etcd/raft to begin the
+	// process of replication. Dropped proposals are still eligible to be
+	// reproposed due to ticks.
+	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
