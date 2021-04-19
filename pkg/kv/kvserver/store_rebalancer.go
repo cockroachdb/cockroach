@@ -200,7 +200,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterNone)
+			storeList, _, _ := sr.rq.allocator.storePool.getStoreList(storeFilterSuspect)
 			sr.rebalanceStore(ctx, mode, storeList)
 		}
 	})
@@ -948,7 +948,7 @@ func (sr *StoreRebalancer) shouldNotMoveTo(
 	// about node liveness.
 	targetNodeID := candidateStore.Node.NodeID
 	if targetNodeID != sr.rq.store.Ident.NodeID {
-		if !sr.rq.store.cfg.StorePool.isNodeReadyForRoutineReplicaTransfer(ctx, targetNodeID) {
+		if !sr.rq.allocator.storePool.isStoreReadyForRoutineReplicaTransfer(ctx, candidateStore.StoreID) {
 			log.VEventf(ctx, 3,
 				"refusing to transfer replica to n%d/s%d", targetNodeID, candidateStore.StoreID)
 			return true

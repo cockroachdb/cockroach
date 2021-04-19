@@ -418,7 +418,7 @@ func rankedCandidateListForAllocation(
 	constraintsCheck constraintsCheckFn,
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
 	options scorerOptions,
 ) candidateList {
@@ -434,7 +434,7 @@ func rankedCandidateListForAllocation(
 		if !allowMultipleReplsPerNode && nodeHasReplica(s.Node.NodeID, existingReplTargets) {
 			continue
 		}
-		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {
+		if !isStoreValidForRoutineReplicaTransfer(ctx, s.StoreID) {
 			log.VEventf(
 				ctx,
 				3,
@@ -561,7 +561,7 @@ func rankedCandidateListForRebalancing(
 	rebalanceConstraintsChecker rebalanceConstraintsCheckFn,
 	existingReplicasForType, replicasOnExemptedStores []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
-	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	options scorerOptions,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
@@ -643,7 +643,7 @@ func rankedCandidateListForRebalancing(
 		for _, store := range allStores.stores {
 			// Ignore any stores on dead nodes or stores that contain any of the
 			// replicas within `replicasOnExemptedStores`.
-			if !isNodeValidForRoutineReplicaTransfer(ctx, store.Node.NodeID) {
+			if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
 				log.VEventf(
 					ctx,
 					3,
