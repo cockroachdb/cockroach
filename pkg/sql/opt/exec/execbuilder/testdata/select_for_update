@@ -720,6 +720,7 @@ vectorized: true
     │ table: t@primary
     │ equality: (b) = (a)
     │ equality cols are key
+    │ locking strength: for update
     │
     └── • distinct
         │ columns: (b)
@@ -777,6 +778,7 @@ vectorized: true
     │ table: t@primary
     │ equality: (b) = (a)
     │ equality cols are key
+    │ locking strength: for update
     │
     └── • distinct
         │ columns: (b)

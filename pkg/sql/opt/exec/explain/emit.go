@@ -478,6 +478,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			cols[i] = inputCols[c].Name
 		}
 		ob.VAttr("key columns", strings.Join(cols, ", "))
+		e.emitLockingPolicy(a.Locking)
 
 	case groupByOp:
 		a := n.args.(*groupByArgs)
@@ -604,6 +605,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.OnCond != tree.DBoolTrue {
 			ob.Expr("on", a.OnCond, cols)
 		}
+		e.emitLockingPolicy(a.Locking)
 
 	case projectSetOp:
 		a := n.args.(*projectSetArgs)
