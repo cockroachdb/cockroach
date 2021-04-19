@@ -3232,7 +3232,8 @@ type SequenceOperators interface {
 // errors when run by any tenant other than the system tenant.
 type TenantOperator interface {
 	// CreateTenant attempts to install a new tenant in the system. It returns
-	// an error if the tenant already exists.
+	// an error if the tenant already exists. The new tenant is created at the
+	// current active version of the cluster performing the create.
 	CreateTenant(ctx context.Context, tenantID uint64) error
 
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
