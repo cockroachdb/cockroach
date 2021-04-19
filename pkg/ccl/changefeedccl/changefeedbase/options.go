@@ -113,4 +113,5 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptInitialScan:              sql.KVStringOptRequireNoValue,
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
+	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
 }
