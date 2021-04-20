@@ -62,18 +62,6 @@ func registerDecommission(r *testRegistry) {
 			},
 		})
 	}
-	{
-		numNodes := 4
-		r.Add(testSpec{
-			Name:       "decommission/mixed-versions",
-			Owner:      OwnerKV,
-			MinVersion: "v20.2.0",
-			Cluster:    makeClusterSpec(numNodes),
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				runDecommissionMixedVersions(ctx, t, c, r.buildVersion)
-			},
-		})
-	}
 }
 
 // runDecommission decommissions and wipes nodes in a cluster repeatedly,
