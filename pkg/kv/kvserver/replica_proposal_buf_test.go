@@ -909,11 +909,8 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			default:
 				t.Fatalf("unknown req type %d", tc.reqType)
 			}
-			tok := TrackedRequestToken{
-				done: false,
-				tok:  nil,
-				b:    &b,
-			}
+			var tok TrackedRequestToken
+			tok.SetNoop()
 			_, err := b.Insert(ctx, pd, data, tok)
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
