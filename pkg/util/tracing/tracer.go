@@ -284,7 +284,7 @@ func (t *Tracer) startSpanGeneric(
 	}
 
 	if opts.Parent != nil {
-		if opts.RemoteParent != nil {
+		if !opts.RemoteParent.Empty() {
 			panic("can't specify both Parent and RemoteParent")
 		}
 	}
@@ -460,7 +460,7 @@ func (t *Tracer) startSpanGeneric(
 		t.activeSpans.m[spanID] = s
 		t.activeSpans.Unlock()
 
-		if opts.RemoteParent != nil {
+		if !opts.RemoteParent.Empty() {
 			for k, v := range opts.RemoteParent.Baggage {
 				s.SetBaggageItem(k, v)
 			}
@@ -544,8 +544,8 @@ func (fn textMapWriterFn) Set(key, val string) {
 // InjectMetaInto is used to serialize the given span metadata into the given
 // Carrier. This, alongside ExtractMetaFrom, can be used to carry span metadata
 // across process boundaries. See serializationFormat for more details.
-func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
-	if sm == nil {
+func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
+	if sm.Empty() {
 		// Fast path when tracing is disabled. ExtractMetaFrom will accept an
 		// empty map as a noop context.
 		return nil
@@ -588,12 +588,13 @@ func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
 	return nil
 }
 
-var noopSpanMeta = (*SpanMeta)(nil)
+// var noopSpanMeta = (*SpanMeta)(nil)
+var noopSpanMeta = SpanMeta{}
 
 // ExtractMetaFrom is used to deserialize a span metadata (if any) from the
 // given Carrier. This, alongside InjectMetaFrom, can be used to carry span
 // metadata across process boundaries. See serializationFormat for more details.
-func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
+func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	var format serializationFormat
 	switch carrier.(type) {
 	case MapCarrier:
@@ -679,7 +680,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
 		}
 	}
 
-	return &SpanMeta{
+	return SpanMeta{
 		traceID:          traceID,
 		spanID:           spanID,
 		shadowTracerType: shadowType,

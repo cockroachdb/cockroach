@@ -123,7 +123,7 @@ func (s *spanInner) Finish() {
 	s.tracer.activeSpans.Unlock()
 }
 
-func (s *spanInner) Meta() *SpanMeta {
+func (s *spanInner) Meta() SpanMeta {
 	var traceID uint64
 	var spanID uint64
 	var recordingType RecordingType
@@ -157,9 +157,9 @@ func (s *spanInner) Meta() *SpanMeta {
 		shadowCtx == nil &&
 		recordingType == 0 &&
 		baggage == nil {
-		return nil
+		return SpanMeta{}
 	}
-	return &SpanMeta{
+	return SpanMeta{
 		traceID:          traceID,
 		spanID:           spanID,
 		shadowTracerType: shadowTrTyp,

@@ -113,7 +113,7 @@ func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 // boundaries in order to derive child spans from this Span. This may return
 // nil, which is a valid input to `WithParentAndManualCollection`, if the Span
 // has been optimized out.
-func (sp *Span) Meta() *SpanMeta {
+func (sp *Span) Meta() SpanMeta {
 	// It shouldn't be done in practice, but it is allowed to call Meta on
 	// a finished span.
 	return sp.i.Meta()
@@ -228,6 +228,7 @@ func (sp *Span) TraceID() uint64 {
 // is that the recording is to be returned to the caller when the
 // child finishes, so that the caller can inductively construct the
 // entire trace.
+// XXX: This is typically allocated, can we avoid that?
 type SpanMeta struct {
 	traceID uint64
 	spanID  uint64
@@ -248,6 +249,10 @@ type SpanMeta struct {
 
 	// The Span's associated baggage.
 	Baggage map[string]string
+}
+
+func (sm SpanMeta) Empty() bool {
+	return sm.spanID == 0 && sm.traceID == 0
 }
 
 func (sm *SpanMeta) String() string {
