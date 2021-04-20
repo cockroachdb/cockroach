@@ -2137,11 +2137,15 @@ func TestChangefeedErrors(t *testing.T) {
 		changefeedbase.OptFormatAvro, `bar`,
 	)
 
+	unknownParams := func(sink string, params ...string) string {
+		return fmt.Sprintf(`unknown %s sink query parameters: [%s]`, sink, strings.Join(params, ", "))
+	}
+
 	// Check that confluent_schema_registry is only accepted if format is avro.
 	// TODO: This should be testing it as a WITH option and check avro_schema_prefix too
 	sqlDB.ExpectErr(
-		t, `unknown sink query parameter: confluent_schema_registry`,
-		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo`,
+		t, unknownParams("SQL", "confluent_schema_registry", "weird"),
+		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo&weird=bar`,
 	)
 
 	// Check unavailable kafka.
@@ -2159,13 +2163,13 @@ func TestChangefeedErrors(t *testing.T) {
 	// kafka_topic_prefix was referenced by an old version of the RFC, it's
 	// "topic_prefix" now.
 	sqlDB.ExpectErr(
-		t, `unknown sink query parameter: kafka_topic_prefix`,
+		t, unknownParams(`kafka`, `kafka_topic_prefix`),
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?kafka_topic_prefix=foo`,
 	)
 
 	// topic_name is only honored for kafka sinks
 	sqlDB.ExpectErr(
-		t, `unknown sink query parameter: topic_name`,
+		t, unknownParams("SQL", "topic_name"),
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?topic_name=foo`,
 	)
 
