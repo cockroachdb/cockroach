@@ -60,7 +60,7 @@ var (
 	cloud                         = gce
 	encrypt          encryptValue = "false"
 	instanceType     string
-	localSSD         bool
+	localSSDArg      bool
 	workload         string
 	roachprod        string
 	createArgs       []string
@@ -724,7 +724,7 @@ func isSSD(machineType string) bool {
 	if cloud != aws {
 		panic("can only differentiate SSDs based on machine type on AWS")
 	}
-	if !localSSD {
+	if !localSSDArg {
 		// Overridden by the user using a cmd arg.
 		return false
 	}
@@ -855,6 +855,7 @@ type clusterSpec struct {
 	// CPUs is the number of CPUs per node.
 	CPUs        int
 	SSDs        int
+	VolumeSize  int
 	Zones       string
 	Geo         bool
 	Lifetime    time.Duration
@@ -924,6 +925,22 @@ func (s *clusterSpec) args() []string {
 		}
 		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
 		args = append(args, machineTypeArg)
+	}
+
+	if !local && s.VolumeSize != 0 {
+		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
+		// Set network disk options.
+		args = append(args, "--local-ssd=false")
+
+		var arg string
+		switch cloud {
+		case gce:
+			arg = fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize)
+		default:
+			fmt.Fprintf(os.Stderr, "specifying volume size is not yet supported on %s", cloud)
+			os.Exit(1)
+		}
+		args = append(args, arg)
 	}
 
 	if !local && s.SSDs != 0 {
@@ -996,6 +1013,17 @@ func (o nodeCPUOption) apply(spec *clusterSpec) {
 // cpu is a node option which requests nodes with the specified number of CPUs.
 func cpu(n int) nodeCPUOption {
 	return nodeCPUOption(n)
+}
+
+type volumeSizeOption int
+
+func (o volumeSizeOption) apply(spec *clusterSpec) {
+	spec.VolumeSize = int(o)
+}
+
+// volumeSize is the size in GB of the disk volume.
+func volumeSize(n int) volumeSizeOption {
+	return volumeSizeOption(n)
 }
 
 type nodeSSDOption int
@@ -1298,7 +1326,7 @@ func (f *clusterFactory) newCluster(
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
 	sargs = append(sargs, cfg.spec.args()...)
-	if !cfg.useIOBarrier && localSSD {
+	if !cfg.useIOBarrier && localSSDArg {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
 

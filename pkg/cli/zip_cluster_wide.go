@@ -169,7 +169,10 @@ func (zc *debugZipContext) collectSchemaData(ctx context.Context) error {
 	{
 		var doctorData bytes.Buffer
 		fmt.Printf("doctor examining cluster...")
-		doctorErr := runClusterDoctor(nil, nil, zc.firstNodeSQLConn, &doctorData, zc.timeout)
+		descs, ns, jobs, doctorErr := fromCluster(zc.firstNodeSQLConn, zc.timeout)
+		if doctorErr == nil {
+			doctorErr = runDoctor("examine", descs, ns, jobs, &doctorData)
+		}
 		if err := zc.z.createRawOrError(reportsPrefix+"/doctor.txt", doctorData.Bytes(), doctorErr); err != nil {
 			return err
 		}

@@ -306,17 +306,34 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 }
 
 func registerRestore(r *testRegistry) {
+	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
+
 	for _, item := range []struct {
-		nodes   int
+		nodes        int
+		cpus         int
+		largeVolumes bool
+
 		timeout time.Duration
 	}{
-		{10, 6 * time.Hour},
-		{32, 3 * time.Hour},
+		{nodes: 10, timeout: 6 * time.Hour},
+		{nodes: 32, timeout: 3 * time.Hour},
+		{nodes: 6, timeout: 4 * time.Hour, cpus: 16, largeVolumes: true},
 	} {
+		clusterOpts := make([]createOption, 0)
+		testName := fmt.Sprintf("restore2TB/nodes=%d", item.nodes)
+		if item.cpus != 0 {
+			clusterOpts = append(clusterOpts, cpu(item.cpus))
+			testName += fmt.Sprintf("/cpus=%d", item.cpus)
+		}
+		if item.largeVolumes {
+			clusterOpts = append(clusterOpts, volumeSize(largeVolumeSize))
+			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
+		}
+
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
+			Name:    testName,
 			Owner:   OwnerBulkIO,
-			Cluster: makeClusterSpec(item.nodes),
+			Cluster: makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				// Randomize starting with encryption-at-rest enabled.
