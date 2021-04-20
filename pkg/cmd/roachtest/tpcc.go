@@ -382,14 +382,6 @@ func registerTPCC(r *testRegistry) {
 		Tags: []string{`weekly`},
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
-		Nodes:        6,
-		CPUs:         16,
-		Distribution: multiZone,
-
-		LoadWarehouses: 5000,
-		EstimatedMax:   2500,
-	})
-	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:        9,
 		CPUs:         4,
 		Distribution: multiRegion,
