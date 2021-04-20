@@ -468,6 +468,10 @@ message SchemaChangeDetails {
   // (controlled and updated by a SchemaChanger) and jobs as they exist in 20.1
   // (scheduled and run by the job registry).
   uint32 format_version = 7 [(gogoproto.casttype) = "SchemaChangeDetailsFormatVersion"];
+
+  util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 11.
 }
 
 message SchemaChangeProgress {
