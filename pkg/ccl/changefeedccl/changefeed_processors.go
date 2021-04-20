@@ -49,7 +49,6 @@ import (
 
 type changeAggregator struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeAggregatorSpec
@@ -188,6 +187,11 @@ func newChangeAggregatorProcessor(
 		ca.flushFrequency = changefeedbase.DefaultFlushFrequency
 	}
 	return ca, nil
+}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (ca *changeAggregator) MustBeStreaming() bool {
+	return true
 }
 
 // Start is part of the RowSource interface.
@@ -834,7 +838,6 @@ const (
 
 type changeFrontier struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeFrontierSpec
@@ -965,6 +968,11 @@ func newChangeFrontierProcessor(
 	}
 
 	return cf, nil
+}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (cf *changeFrontier) MustBeStreaming() bool {
+	return true
 }
 
 // Start is part of the RowSource interface.

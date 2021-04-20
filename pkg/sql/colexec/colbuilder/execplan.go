@@ -118,8 +118,12 @@ func wrapRowSources(
 		return nil, releasables, err
 	}
 
+	proc, isProcessor := toWrap.(execinfra.Processor)
+	if !isProcessor {
+		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
+	}
 	var c *colexec.Columnarizer
-	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
+	if proc.MustBeStreaming() {
 		c, err = colexec.NewStreamingColumnarizer(
 			ctx, colmem.NewAllocator(ctx, args.StreamingMemAccount, factory), flowCtx, args.Spec.ProcessorID, toWrap,
 		)
