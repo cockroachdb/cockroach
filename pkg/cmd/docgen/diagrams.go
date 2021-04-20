@@ -1371,7 +1371,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "show_zone_stmt",
-		inline: []string{"opt_partition", "table_index_name", "partition"},
+		inline: []string{"opt_partition", "table_index_name", "partition", "from_with_implicit_for_alias"},
 	},
 	{
 		name:   "sort_clause",
