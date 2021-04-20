@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -4463,13 +4464,15 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
+	var gcAt hlc.Timestamp
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
 		}
+		gcAt = tc.Server(0).Clock().Now()
 		gcr := roachpb.GCRequest{
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
-			Threshold:     tc.Server(0).Clock().Now(),
+			Threshold:     gcAt,
 		}
 		_, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr)
 		if err != nil {
@@ -4500,12 +4503,22 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+	if _, err := db.Exec(`CREATE UNIQUE INDEX index_created_in_test ON t.test (v)`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, 2, 0); err != nil {
 		t.Fatal(err)
+	}
+
+	got := sqlDB.QueryStr(t, `
+		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
+		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM system.jobs)
+		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
+		gcAt.WallTime,
+	)[0]
+	if got[0] != "true" {
+		t.Fatalf("expected write-ts < gc time. details: %s", got[1])
 	}
 }
 
