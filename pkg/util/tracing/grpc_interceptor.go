@@ -129,9 +129,10 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ctx,
 			info.FullMethod,
-			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
+		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 
 		resp, err = handler(ctx, req)
@@ -172,9 +173,10 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ss.Context(),
 			info.FullMethod,
-			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
+		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
 			ServerStream: ss,
@@ -259,8 +261,9 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		clientSpan := tracer.StartSpan(
 			method,
 			WithParentAndAutoCollection(parent),
-			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
+		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		defer clientSpan.Finish()
 		ctx = injectSpanMeta(ctx, tracer, clientSpan)
@@ -308,8 +311,9 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 		clientSpan := tracer.StartSpan(
 			method,
 			WithParentAndAutoCollection(parent),
-			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
+		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		cs, err := streamer(ctx, desc, cc, method, opts...)

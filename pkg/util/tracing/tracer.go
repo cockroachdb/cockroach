@@ -418,8 +418,8 @@ func (t *Tracer) startSpanGeneric(
 		s.i.crdb.enableRecording(p, opts.recordingType())
 	}
 
-	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
-	// as appropriate.
+	// Set initial tags (has to happen after instantiating the recording type).
+	// These will propagate to the crdbSpan, ot, and netTr as appropriate.
 	//
 	// NB: this could be optimized.
 	for k, v := range opts.Tags {

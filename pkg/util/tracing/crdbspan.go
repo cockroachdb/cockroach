@@ -252,6 +252,11 @@ func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 }
 
 func (s *crdbSpan) setTagLocked(key string, value interface{}) {
+	// XXX: Basically don't store tags if we're unlikely to retrieve them.
+	if s.recordingType() != RecordingVerbose {
+		return
+	}
+
 	if s.mu.tags == nil {
 		s.mu.tags = make(opentracing.Tags)
 	}
