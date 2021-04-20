@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -322,7 +321,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
-	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
+	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +337,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		}
 	}
 
-	rightValuesSpec, err := execinfra.GenerateValuesSpec(typs, rightRows, 10 /* rows per chunk */)
+	rightValuesSpec, err := execinfra.GenerateValuesSpec(typs, rightRows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,29 +588,26 @@ func BenchmarkInfrastructure(b *testing.B) {
 		b.Run(fmt.Sprintf("n%d", numNodes), func(b *testing.B) {
 			for _, numRows := range []int{1, 100, 10000} {
 				b.Run(fmt.Sprintf("r%d", numRows), func(b *testing.B) {
-					// Generate some data sets, consisting of rows with three values; the first
-					// value is increasing.
+					// Generate some data sets, consisting of rows with three values; the
+					// first value is increasing.
 					rng, _ := randutil.NewPseudoRand()
 					lastVal := 1
 					valSpecs := make([]execinfrapb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
-						se := flowinfra.StreamEncoder{}
-						se.Init(types.ThreeIntCols)
+						rows := make(rowenc.EncDatumRows, numRows)
 						for j := 0; j < numRows; j++ {
 							row := make(rowenc.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
 							row[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(lastVal)))
 							row[1] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
 							row[2] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
-							if err := se.AddRow(row); err != nil {
-								b.Fatal(err)
-							}
+							rows[j] = row
 						}
-						msg := se.FormMessage(context.Background())
-						valSpecs[i] = execinfrapb.ValuesCoreSpec{
-							Columns:  msg.Typing,
-							RawBytes: [][]byte{msg.Data.RawBytes},
+						valSpec, err := execinfra.GenerateValuesSpec(types.ThreeIntCols, rows)
+						if err != nil {
+							b.Fatal(err)
 						}
+						valSpecs[i] = valSpec
 					}
 
 					// Set up the following network:

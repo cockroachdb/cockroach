@@ -3005,6 +3005,11 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	var a rowenc.DatumAlloc
 	evalCtx := &planCtx.ExtendedEvalCtx.EvalContext
 	numRows := len(tuples)
+	if len(resultTypes) == 0 {
+		// Optimization for zero-column sets.
+		spec := dsp.createValuesSpec(planCtx, resultTypes, numRows, nil /* rawBytes */)
+		return spec, nil
+	}
 	rawBytes := make([][]byte, numRows)
 	for rowIdx, tuple := range tuples {
 		var buf []byte
