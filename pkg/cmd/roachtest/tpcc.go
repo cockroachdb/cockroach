@@ -395,10 +395,8 @@ func registerTPCC(r *testRegistry) {
 		Distribution: multiRegion,
 		LoadConfig:   multiLoadgen,
 
-		LoadWarehouses: 5000,
-		EstimatedMax:   3000,
-
-		MinVersion: "v20.1.0",
+		LoadWarehouses: 3000,
+		EstimatedMax:   2000,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
@@ -408,8 +406,6 @@ func registerTPCC(r *testRegistry) {
 
 		LoadWarehouses: 2000,
 		EstimatedMax:   900,
-
-		MinVersion: "v20.1.0",
 	})
 }
 
@@ -803,7 +799,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				}
 
 				extraFlags := ""
-				activeWarehouses := warehouses
 				switch b.LoadConfig {
 				case singleLoadgen:
 					// Nothing.
@@ -812,7 +807,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				case multiLoadgen:
 					extraFlags = fmt.Sprintf(` --partitions=%d --partition-affinity=%d`,
 						b.partitions(), groupIdx)
-					activeWarehouses = warehouses / numLoadGroups
 				default:
 					panic("unexpected")
 				}
@@ -822,10 +816,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					extraFlags += " --method=simple"
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, activeWarehouses)
+				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", perfArtifactsDir, warehouses)
 				cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
 					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s}",
-					b.LoadWarehouses, activeWarehouses, rampDur,
+					b.LoadWarehouses, warehouses, rampDur,
 					loadDur, extraFlags, histogramsPath, sqlGateways)
 				err := c.RunE(ctx, group.loadNodes, cmd)
 				loadDone <- timeutil.Now()
@@ -842,7 +836,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				if err != nil {
 					return errors.Wrapf(err, "failed to decode histogram snapshots")
 				}
-				result := tpcc.NewResultWithSnapshots(activeWarehouses, 0, snapshots)
+				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
 				resultChan <- result
 				return nil
 			})
