@@ -982,7 +982,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// "foo" is being added.
 	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err,
-		`duplicate: index "foo" in the middle of being added, not yet public`) {
+		`duplicate index name: "foo"`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
