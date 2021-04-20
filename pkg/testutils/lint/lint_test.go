@@ -708,6 +708,7 @@ func TestLint(t *testing.T) {
 			":!util/tracing/span.go",
 			":!util/tracing/crdbspan.go",
 			":!util/tracing/tracer.go",
+			":!cmd/roachtest/gorm_helpers.go",
 		)
 		if err != nil {
 			t.Fatal(err)
