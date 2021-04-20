@@ -66,16 +66,6 @@ func registerGopg(r *testRegistry) {
 		installLatestGolang(ctx, t, c, node)
 
 		if err := repeatRunE(
-			ctx,
-			c,
-			node,
-			"install dependencies",
-			`sudo apt-get -qq install build-essential`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
 			ctx, c, node, "remove old gopg",
 			fmt.Sprintf(`sudo rm -rf %s`, destPath),
 		); err != nil {
