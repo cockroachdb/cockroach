@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -882,18 +880,18 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
-	var typ colinfo.ColTypeInfo
-	var rows *rowcontainer.RowContainer
+	var typs []*types.T
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.existsMode = true
-		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
+		typs = []*types.T{}
 	} else {
-		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.GetResultTypes())
+		typs = subqueryPhysPlan.GetResultTypes()
 	}
-	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ)
-	defer rows.Close(ctx)
+	var rows rowContainerHelper
+	rows.init(typs, evalCtx, "subquery" /* opName */)
+	defer rows.close(ctx)
 
-	subqueryRowReceiver := NewRowResultWriter(rows)
+	subqueryRowReceiver := NewRowResultWriter(&rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
 	dsp.Run(subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
@@ -903,13 +901,23 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	switch subqueryPlan.execMode {
 	case rowexec.SubqueryExecModeExists:
 		// For EXISTS expressions, all we want to know if there is at least one row.
-		hasRows := rows.Len() != 0
+		hasRows := rows.len() != 0
 		subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
 	case rowexec.SubqueryExecModeAllRows, rowexec.SubqueryExecModeAllRowsNormalized:
+		// TODO(yuzefovich): this is unfortunate - we're materializing all
+		// buffered rows into a single tuple kept in memory without any memory
+		// accounting. Refactor it.
 		var result tree.DTuple
-		for rows.Len() > 0 {
-			row := rows.At(0)
-			rows.PopFirst(ctx)
+		iterator := newRowContainerIterator(ctx, rows, typs)
+		defer iterator.close()
+		for {
+			row, err := iterator.next()
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				break
+			}
 			if row.Len() == 1 {
 				// This seems hokey, but if we don't do this then the subquery expands
 				// to a tuple of tuples instead of a tuple of values and an expression
@@ -926,16 +934,24 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		}
 		subqueryPlans[planIdx].result = &result
 	case rowexec.SubqueryExecModeOneRow:
-		switch rows.Len() {
+		switch rows.len() {
 		case 0:
 			subqueryPlans[planIdx].result = tree.DNull
 		case 1:
-			row := rows.At(0)
+			iterator := newRowContainerIterator(ctx, rows, typs)
+			defer iterator.close()
+			row, err := iterator.next()
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return errors.AssertionFailedf("iterator didn't return a row although container len is 1")
+			}
 			switch row.Len() {
 			case 1:
 				subqueryPlans[planIdx].result = row[0]
 			default:
-				subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
+				subqueryPlans[planIdx].result = &tree.DTuple{D: row}
 			}
 		default:
 			return pgerror.Newf(pgcode.CardinalityViolation,
@@ -1017,7 +1033,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		buf := plan.cascades[i].Buffer
 		var numBufferedRows int
 		if buf != nil {
-			numBufferedRows = buf.(*bufferNode).bufferedRows.Len()
+			numBufferedRows = buf.(*bufferNode).rows.rows.Len()
 			if numBufferedRows == 0 {
 				// No rows were actually modified.
 				continue

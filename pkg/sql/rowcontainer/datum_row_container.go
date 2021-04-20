@@ -145,10 +145,14 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti colinfo.ColTypeInfo, rowCap
 		}
 	}
 
-	// Precalculate the memory used for a chunk, specifically by the Datums in the
-	// chunk and the slice pointing at the chunk.
-	c.chunkMemSize = tree.SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
-	c.chunkMemSize += tree.SizeOfDatums
+	if nCols > 0 {
+		// Precalculate the memory used for a chunk, specifically by the Datums
+		// in the chunk and the slice pointing at the chunk.
+		// Note that when there are no columns, we simply track the number of
+		// rows added in c.numRows and don't allocate any memory.
+		c.chunkMemSize = tree.SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
+		c.chunkMemSize += tree.SizeOfDatums
+	}
 }
 
 // Clear resets the container and releases the associated memory. This allows
