@@ -6191,3 +6191,23 @@ inner-join-apply
  │    │         └── a:11 * stu.s:1 [as="?column?":16, outer=(1,11), immutable]
  │    └── filters (true)
  └── filters (true)
+
+# A multi-column IN query must be able to become a lookup join.
+opt
+SELECT * FROM stu WHERE (s, t) IN (SELECT m, n FROM small)
+----
+project
+ ├── columns: s:1!null t:2!null u:3!null
+ ├── key: (1-3)
+ └── inner-join (lookup stu)
+      ├── columns: s:1!null t:2!null u:3!null m:5!null n:6!null
+      ├── key columns: [5 6] = [1 2]
+      ├── key: (3,5,6)
+      ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
+      ├── distinct-on
+      │    ├── columns: m:5 n:6
+      │    ├── grouping columns: m:5 n:6
+      │    ├── key: (5,6)
+      │    └── scan small
+      │         └── columns: m:5 n:6
+      └── filters (true)
