@@ -30,7 +30,6 @@ const streamIngestionFrontierProcName = `ingestfntr`
 
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionFrontierSpec
@@ -84,6 +83,11 @@ func newStreamIngestionFrontierProcessor(
 		return nil, err
 	}
 	return sf, nil
+}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (sf *streamIngestionFrontier) MustBeStreaming() bool {
+	return true
 }
 
 // Start is part of the RowSource interface.

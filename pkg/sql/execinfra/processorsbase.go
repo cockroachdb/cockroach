@@ -35,6 +35,11 @@ type Processor interface {
 	// through an output router).
 	OutputTypes() []*types.T
 
+	// MustBeStreaming indicates whether this processor is of "streaming" nature
+	// and is expected to emit the output one row at a time (in both row-by-row
+	// and the vectorized engines).
+	MustBeStreaming() bool
+
 	// Run is the main loop of the processor.
 	Run(context.Context)
 }
@@ -503,6 +508,11 @@ type ProcessorBase struct {
 	// curInputToDrain is the index into inputsToDrain that needs to be drained
 	// next.
 	curInputToDrain int
+}
+
+// MustBeStreaming implements the Processor interface.
+func (pb *ProcessorBase) MustBeStreaming() bool {
+	return false
 }
 
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
@@ -975,18 +985,10 @@ func NewLimitedMonitor(
 // these objects at creation time.
 type LocalProcessor interface {
 	RowSourcedProcessor
-	StreamingProcessor
 	// InitWithOutput initializes this processor.
 	InitWithOutput(flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
 	SetInput(ctx context.Context, input RowSource) error
-}
-
-// StreamingProcessor is a marker interface that indicates that the processor is
-// of "streaming" nature and is expected to emit the output one tuple at a time
-// (in both row-by-row and the vectorized engines).
-type StreamingProcessor interface {
-	mustBeStreaming()
 }

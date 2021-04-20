@@ -158,11 +158,6 @@ type splitAndScatterProcessor struct {
 
 var _ execinfra.Processor = &splitAndScatterProcessor{}
 
-// OutputTypes implements the execinfra.Processor interface.
-func (ssp *splitAndScatterProcessor) OutputTypes() []*types.T {
-	return splitAndScatterOutputTypes
-}
-
 func newSplitAndScatterProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
