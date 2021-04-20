@@ -12,15 +12,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 )
 
@@ -149,11 +153,44 @@ func registerBackup(r *testRegistry) {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
+
+			// Register a named histogram to track the total time the backup took.
+			// Roachperf uses this information to display information about this
+			// roachtest.
+			reg := histogram.NewRegistry(2 * time.Hour)
+			reg.GetHandle().Get("backup/2TB")
+
+			// Create the stats file where the roachtest will write perf artifacts.
+			// We probably don't want to fail the roachtest if we are unable to
+			// collect perf stats.
+			statsFile := perfArtifactsDir + "/stats.json"
+			err := os.MkdirAll(filepath.Dir(statsFile), 0755)
+			if err != nil {
+				log.Errorf(ctx, "backup/2TB failed to create perf artifacts directory %s: %s", statsFile,
+					err.Error())
+			}
+			jsonF, err := os.Create(statsFile)
+			if err != nil {
+				log.Errorf(ctx, "backup/2TB failed to create perf artifacts directory %s: %s", statsFile,
+					err.Error())
+			}
+			jsonEnc := json.NewEncoder(jsonF)
+			tick := func() {
+				reg.Tick(func(tick histogram.Tick) {
+					_ = jsonEnc.Encode(tick.Snapshot())
+				})
+			}
+
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
+				// Tick once before starting the backup, and once after to capture the
+				// total elapsed time. This is used by roachperf to compute and display
+				// the average MB/sec per node.
+				tick()
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
+				tick()
 				return nil
 			})
 			m.Wait()
