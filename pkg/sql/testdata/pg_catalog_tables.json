@@ -257,8 +257,8 @@
     },
     "pg_attrdef": {
       "adbin": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -283,8 +283,8 @@
     },
     "pg_attribute": {
       "attacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -661,8 +661,8 @@
         "expectedDataType": null
       },
       "relacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -697,8 +697,8 @@
         "expectedDataType": null
       },
       "relfrozenxid": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -751,8 +751,8 @@
         "expectedDataType": null
       },
       "relminmxid": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -799,8 +799,8 @@
         "expectedDataType": null
       },
       "relpartbound": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -931,8 +931,8 @@
     },
     "pg_constraint": {
       "conbin": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1171,8 +1171,8 @@
     },
     "pg_database": {
       "datacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1207,8 +1207,8 @@
         "expectedDataType": null
       },
       "datfrozenxid": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1225,8 +1225,8 @@
         "expectedDataType": null
       },
       "datminmxid": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1277,8 +1277,8 @@
     },
     "pg_default_acl": {
       "defaclacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1543,8 +1543,8 @@
     },
     "pg_foreign_data_wrapper": {
       "fdwacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1593,8 +1593,8 @@
         "expectedDataType": null
       },
       "srvacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1751,8 +1751,8 @@
         "expectedDataType": null
       },
       "indexprs": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1841,8 +1841,8 @@
         "expectedDataType": null
       },
       "indpred": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1913,8 +1913,8 @@
         "expectedDataType": null
       },
       "initprivs": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1939,8 +1939,8 @@
     },
     "pg_language": {
       "lanacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2015,8 +2015,8 @@
     },
     "pg_largeobject_metadata": {
       "lomacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2101,8 +2101,8 @@
         "expectedDataType": null
       },
       "transactionid": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2171,8 +2171,8 @@
     },
     "pg_namespace": {
       "nspacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2401,8 +2401,8 @@
         "expectedDataType": null
       },
       "partexprs": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2501,8 +2501,8 @@
         "expectedDataType": null
       },
       "polqual": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2519,8 +2519,8 @@
         "expectedDataType": null
       },
       "polwithcheck": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       }
@@ -2583,8 +2583,8 @@
         "expectedDataType": null
       },
       "transaction": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       }
@@ -2597,8 +2597,8 @@
         "expectedDataType": null
       },
       "proacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2609,8 +2609,8 @@
         "expectedDataType": null
       },
       "proargdefaults": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2927,14 +2927,14 @@
         "expectedDataType": null
       },
       "local_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
       "remote_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       }
@@ -2953,14 +2953,14 @@
         "expectedDataType": null
       },
       "catalog_xmin": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       },
       "confirmed_flush_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2983,8 +2983,8 @@
         "expectedDataType": null
       },
       "restart_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -3019,16 +3019,16 @@
         "expectedDataType": null
       },
       "xmin": {
-        "oid": 28,
-        "dataType": "xid",
+        "oid": 26,
+        "dataType": "OID",
         "expectedOid": null,
         "expectedDataType": null
       }
     },
     "pg_rewrite": {
       "ev_action": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -3045,8 +3045,8 @@
         "expectedDataType": null
       },
       "ev_qual": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -3657,2890 +3657,6 @@
         "expectedDataType": null
       }
     },
-    "pg_stat_activity": {
-      "application_name": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backend_start": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backend_type": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backend_xid": {
-        "oid": 28,
-        "dataType": "xid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backend_xmin": {
-        "oid": 28,
-        "dataType": "xid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_addr": {
-        "oid": 869,
-        "dataType": "inet",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_hostname": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_port": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "leader_pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "query": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "query_start": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "state": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "state_change": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "usename": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "usesysid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "wait_event": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "wait_event_type": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "xact_start": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_all_indexes": {
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_all_tables": {
-      "analyze_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "autoanalyze_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "autovacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_analyze": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_autoanalyze": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_autovacuum": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_vacuum": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_dead_tup": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_ins_since_vacuum": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_live_tup": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_mod_since_analyze": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_del": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_hot_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_ins": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "vacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_archiver": {
-      "archived_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "failed_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_archived_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_archived_wal": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_failed_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_failed_wal": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stats_reset": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_bgwriter": {
-      "buffers_alloc": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "buffers_backend": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "buffers_backend_fsync": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "buffers_checkpoint": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "buffers_clean": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "checkpoint_sync_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "checkpoint_write_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "checkpoints_req": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "checkpoints_timed": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "maxwritten_clean": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stats_reset": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_database": {
-      "blk_read_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blk_write_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "checksum_failures": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "checksum_last_failure": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "conflicts": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "deadlocks": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "numbackends": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stats_reset": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "temp_bytes": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "temp_files": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tup_deleted": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tup_fetched": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tup_inserted": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tup_returned": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tup_updated": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "xact_commit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "xact_rollback": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_database_conflicts": {
-      "confl_bufferpin": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "confl_deadlock": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "confl_lock": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "confl_snapshot": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "confl_tablespace": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_gssapi": {
-      "encrypted": {
-        "oid": 16,
-        "dataType": "bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "gss_authenticated": {
-        "oid": 16,
-        "dataType": "bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "principal": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_progress_analyze": {
-      "child_tables_done": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "child_tables_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "current_child_table_relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "ext_stats_computed": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "ext_stats_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "phase": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sample_blks_scanned": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sample_blks_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_progress_basebackup": {
-      "backup_streamed": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backup_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "phase": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tablespaces_streamed": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tablespaces_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_progress_cluster": {
-      "cluster_index_relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "command": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_scanned": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_tuples_scanned": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_tuples_written": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "index_rebuild_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "phase": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_progress_create_index": {
-      "blocks_done": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blocks_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "command": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "current_locker_pid": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "index_relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "lockers_done": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "lockers_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "partitions_done": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "partitions_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "phase": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tuples_done": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tuples_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_progress_vacuum": {
-      "datid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "datname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_scanned": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_total": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_vacuumed": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "index_vacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "max_dead_tuples": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "num_dead_tuples": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "phase": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_replication": {
-      "application_name": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backend_start": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "backend_xmin": {
-        "oid": 28,
-        "dataType": "xid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_addr": {
-        "oid": 869,
-        "dataType": "inet",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_hostname": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_port": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "flush_lag": {
-        "oid": 1186,
-        "dataType": "interval",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "flush_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "replay_lag": {
-        "oid": 1186,
-        "dataType": "interval",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "replay_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "reply_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sent_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "state": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sync_priority": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sync_state": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "usename": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "usesysid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "write_lag": {
-        "oid": 1186,
-        "dataType": "interval",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "write_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_slru": {
-      "blks_exists": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_written": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_zeroed": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "flushes": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "name": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stats_reset": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "truncates": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_ssl": {
-      "bits": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "cipher": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_dn": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "client_serial": {
-        "oid": 1700,
-        "dataType": "numeric",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "compression": {
-        "oid": 16,
-        "dataType": "bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "issuer_dn": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "ssl": {
-        "oid": 16,
-        "dataType": "bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "version": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_subscription": {
-      "last_msg_receipt_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_msg_send_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "latest_end_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "latest_end_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "received_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "subid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "subname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_sys_indexes": {
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_sys_tables": {
-      "analyze_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "autoanalyze_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "autovacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_analyze": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_autoanalyze": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_autovacuum": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_vacuum": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_dead_tup": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_ins_since_vacuum": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_live_tup": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_mod_since_analyze": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_del": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_hot_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_ins": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "vacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_user_functions": {
-      "calls": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "funcid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "funcname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "self_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "total_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_user_indexes": {
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_user_tables": {
-      "analyze_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "autoanalyze_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "autovacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_analyze": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_autoanalyze": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_autovacuum": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_vacuum": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_dead_tup": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_ins_since_vacuum": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_live_tup": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_mod_since_analyze": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_del": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_hot_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_ins": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "vacuum_count": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_wal_receiver": {
-      "conninfo": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "flushed_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_msg_receipt_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "last_msg_send_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "latest_end_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "latest_end_time": {
-        "oid": 1184,
-        "dataType": "timestamptz",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "pid": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "receive_start_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "receive_start_tli": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "received_tli": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sender_host": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "sender_port": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "slot_name": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "status": {
-        "oid": 25,
-        "dataType": "text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "written_lsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_xact_all_tables": {
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_del": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_hot_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_ins": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_xact_sys_tables": {
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_del": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_hot_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_ins": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_xact_user_functions": {
-      "calls": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "funcid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "funcname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "self_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "total_time": {
-        "oid": 701,
-        "dataType": "float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stat_xact_user_tables": {
-      "idx_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_tup_fetch": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_del": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_hot_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_ins": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_tup_upd": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_scan": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "seq_tup_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_all_indexes": {
-      "idx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_all_sequences": {
-      "blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_all_tables": {
-      "heap_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tidx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tidx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "toast_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "toast_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_sys_indexes": {
-      "idx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_sys_sequences": {
-      "blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_sys_tables": {
-      "heap_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tidx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tidx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "toast_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "toast_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_user_indexes": {
-      "idx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "indexrelname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_user_sequences": {
-      "blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statio_user_tables": {
-      "heap_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "heap_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "idx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "relname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tidx_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tidx_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "toast_blks_hit": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "toast_blks_read": {
-        "oid": 20,
-        "dataType": "int8",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statistic": {
-      "staattnum": {
-        "oid": 21,
-        "dataType": "int2",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stacoll1": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stacoll2": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stacoll3": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stacoll4": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stacoll5": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stadistinct": {
-        "oid": 700,
-        "dataType": "float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stainherit": {
-        "oid": 16,
-        "dataType": "bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stakind1": {
-        "oid": 21,
-        "dataType": "int2",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stakind2": {
-        "oid": 21,
-        "dataType": "int2",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stakind3": {
-        "oid": 21,
-        "dataType": "int2",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stakind4": {
-        "oid": 21,
-        "dataType": "int2",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stakind5": {
-        "oid": 21,
-        "dataType": "int2",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stanullfrac": {
-        "oid": 700,
-        "dataType": "float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stanumbers1": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stanumbers2": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stanumbers3": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stanumbers4": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stanumbers5": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "staop1": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "staop2": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "staop3": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "staop4": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "staop5": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "starelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stavalues1": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stavalues2": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stavalues3": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stavalues4": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stavalues5": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stawidth": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statistic_ext": {
-      "oid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxkeys": {
-        "oid": 22,
-        "dataType": "int2vector",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxkind": {
-        "oid": 1002,
-        "dataType": "_char",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxnamespace": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxowner": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxrelid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxstattarget": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_statistic_ext_data": {
-      "stxddependencies": {
-        "oid": 3402,
-        "dataType": "pg_dependencies",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxdmcv": {
-        "oid": 5017,
-        "dataType": "pg_mcv_list",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxdndistinct": {
-        "oid": 3361,
-        "dataType": "pg_ndistinct",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "stxoid": {
-        "oid": 26,
-        "dataType": "oid",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stats": {
-      "attname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "avg_width": {
-        "oid": 23,
-        "dataType": "int4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "correlation": {
-        "oid": 700,
-        "dataType": "float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "elem_count_histogram": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "histogram_bounds": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "inherited": {
-        "oid": 16,
-        "dataType": "bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_elem_freqs": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_elems": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_freqs": {
-        "oid": 1021,
-        "dataType": "_float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_vals": {
-        "oid": 2277,
-        "dataType": "anyarray",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_distinct": {
-        "oid": 700,
-        "dataType": "float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "null_frac": {
-        "oid": 700,
-        "dataType": "float4",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tablename": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
-    "pg_stats_ext": {
-      "attnames": {
-        "oid": 1003,
-        "dataType": "_name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "dependencies": {
-        "oid": 3402,
-        "dataType": "pg_dependencies",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "kinds": {
-        "oid": 1002,
-        "dataType": "_char",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_base_freqs": {
-        "oid": 1022,
-        "dataType": "_float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_freqs": {
-        "oid": 1022,
-        "dataType": "_float8",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_val_nulls": {
-        "oid": 1000,
-        "dataType": "_bool",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "most_common_vals": {
-        "oid": 1009,
-        "dataType": "_text",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "n_distinct": {
-        "oid": 3361,
-        "dataType": "pg_ndistinct",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "statistics_name": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "statistics_owner": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "statistics_schemaname": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      },
-      "tablename": {
-        "oid": 19,
-        "dataType": "name",
-        "expectedOid": null,
-        "expectedDataType": null
-      }
-    },
     "pg_subscription": {
       "oid": {
         "oid": 26,
@@ -6611,8 +3727,8 @@
         "expectedDataType": null
       },
       "srsublsn": {
-        "oid": 3220,
-        "dataType": "pg_lsn",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -6681,8 +3797,8 @@
         "expectedDataType": null
       },
       "spcacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -6881,8 +3997,8 @@
         "expectedDataType": null
       },
       "tgqual": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -7085,8 +4201,8 @@
         "expectedDataType": null
       },
       "typacl": {
-        "oid": 1034,
-        "dataType": "_aclitem",
+        "oid": 1009,
+        "dataType": "_TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -7139,8 +4255,8 @@
         "expectedDataType": null
       },
       "typdefaultbin": {
-        "oid": 194,
-        "dataType": "pg_node_tree",
+        "oid": 25,
+        "dataType": "TEXT",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -7413,14 +4529,6 @@
     }
   },
   "unimplementedTypes": {
-    "1034": "_aclitem",
-    "194": "pg_node_tree",
-    "2275": "cstring",
-    "2277": "anyarray",
-    "28": "xid",
-    "3220": "pg_lsn",
-    "3361": "pg_ndistinct",
-    "3402": "pg_dependencies",
-    "5017": "pg_mcv_list"
+    "2277": "anyarray"
   }
 }

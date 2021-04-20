@@ -7,43 +7,17 @@
       "expectedDataType": "regproc"
     }
   },
-  "pg_attrdef": {
-    "adbin": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    }
-  },
   "pg_attribute": {
-    "attacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    },
     "attmissingval": null
   },
   "pg_class": {
-    "relacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    },
     "relfrozenxid": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
+      "expectedOid": 26,
+      "expectedDataType": "OID"
     },
-    "relminmxid": null,
-    "relpartbound": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    }
+    "relminmxid": null
   },
   "pg_collation": {
     "collcollate": {
@@ -66,12 +40,6 @@
     }
   },
   "pg_constraint": {
-    "conbin": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    },
     "confdeltype": {
       "oid": 25,
       "dataType": "text",
@@ -107,12 +75,6 @@
     }
   },
   "pg_database": {
-    "datacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    },
     "datcollate": {
       "oid": 25,
       "dataType": "text",
@@ -128,22 +90,14 @@
     "datfrozenxid": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
+      "expectedOid": 26,
+      "expectedDataType": "OID"
     },
     "datminmxid": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
-    }
-  },
-  "pg_default_acl": {
-    "defaclacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
+      "expectedOid": 26,
+      "expectedDataType": "OID"
     }
   },
   "pg_enum": {
@@ -168,60 +122,14 @@
       "expectedDataType": "_oid"
     }
   },
-  "pg_foreign_data_wrapper": {
-    "fdwacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    }
-  },
-  "pg_foreign_server": {
-    "srvacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    }
-  },
-  "pg_index": {
-    "indexprs": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    },
-    "indpred": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    }
-  },
   "pg_init_privs": {},
-  "pg_language": {
-    "lanacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    }
-  },
   "pg_largeobject_metadata": {},
   "pg_locks": {
     "transactionid": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
-    }
-  },
-  "pg_namespace": {
-    "nspacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
+      "expectedOid": 26,
+      "expectedDataType": "OID"
     }
   },
   "pg_operator": {
@@ -256,23 +164,11 @@
     "transaction": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
+      "expectedOid": 26,
+      "expectedDataType": "OID"
     }
   },
   "pg_proc": {
-    "proacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    },
-    "proargdefaults": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    },
     "proargmodes": {
       "oid": 1009,
       "dataType": "_text",
@@ -297,23 +193,11 @@
   "pg_replication_origin_status": {},
   "pg_replication_slots": {},
   "pg_rewrite": {
-    "ev_action": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    },
     "ev_enabled": {
       "oid": 25,
       "dataType": "text",
       "expectedOid": 18,
       "expectedDataType": "char"
-    },
-    "ev_qual": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
     },
     "ev_type": {
       "oid": 25,
@@ -339,106 +223,13 @@
       "expectedDataType": "_text"
     }
   },
-  "pg_stat_activity": {
-    "backend_xid": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
-    },
-    "backend_xmin": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 28,
-      "expectedDataType": "xid"
-    },
-    "client_port": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 23,
-      "expectedDataType": "int4"
-    },
-    "pid": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 23,
-      "expectedDataType": "int4"
-    }
-  },
-  "pg_stat_all_indexes": {},
-  "pg_stat_all_tables": {},
-  "pg_stat_archiver": {},
-  "pg_stat_bgwriter": {},
-  "pg_stat_database": {},
-  "pg_stat_database_conflicts": {},
-  "pg_stat_gssapi": {},
-  "pg_stat_progress_analyze": {},
-  "pg_stat_progress_basebackup": {},
-  "pg_stat_progress_cluster": {},
-  "pg_stat_progress_create_index": {},
-  "pg_stat_progress_vacuum": {},
-  "pg_stat_replication": {},
-  "pg_stat_slru": {},
-  "pg_stat_ssl": {},
-  "pg_stat_subscription": {},
-  "pg_stat_sys_indexes": {},
-  "pg_stat_sys_tables": {},
-  "pg_stat_user_functions": {},
-  "pg_stat_user_indexes": {},
-  "pg_stat_user_tables": {},
-  "pg_stat_wal_receiver": {},
-  "pg_stat_xact_all_tables": {},
-  "pg_stat_xact_sys_tables": {},
-  "pg_stat_xact_user_functions": {},
-  "pg_stat_xact_user_tables": {},
-  "pg_statio_all_indexes": {},
-  "pg_statio_all_sequences": {},
-  "pg_statio_all_tables": {},
-  "pg_statio_sys_indexes": {},
-  "pg_statio_sys_sequences": {},
-  "pg_statio_sys_tables": {},
-  "pg_statio_user_indexes": {},
-  "pg_statio_user_sequences": {},
-  "pg_statio_user_tables": {},
-  "pg_statistic": {},
-  "pg_statistic_ext_data": {},
-  "pg_stats": {},
-  "pg_stats_ext": {},
   "pg_subscription_rel": {},
-  "pg_tablespace": {
-    "spcacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    }
-  },
   "pg_trigger": {
     "tgenabled": {
       "oid": 25,
       "dataType": "text",
       "expectedOid": 18,
       "expectedDataType": "char"
-    },
-    "tgqual": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
-    }
-  },
-  "pg_type": {
-    "typacl": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1034,
-      "expectedDataType": "_aclitem"
-    },
-    "typdefaultbin": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 194,
-      "expectedDataType": "pg_node_tree"
     }
   },
   "pg_user": {
