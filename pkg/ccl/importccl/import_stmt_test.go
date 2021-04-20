@@ -1179,6 +1179,7 @@ CREATE INDEX i ON t USING btree (a) WHERE (b > 10);
 
 func TestImportUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 63907, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
