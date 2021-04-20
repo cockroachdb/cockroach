@@ -239,7 +239,7 @@ func newNameResolver(
 		*tn,
 		colinfo.ResultColumnsFromColumns(tableID, cols),
 	)
-	nrc := &nameResolverIVarContainer{cols}
+	nrc := &nameResolverIVarContainer{append(make([]catalog.Column, 0, len(cols)), cols...)}
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
 
 	return &nameResolver{
