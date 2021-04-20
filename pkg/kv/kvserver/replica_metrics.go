@@ -120,8 +120,8 @@ func calcReplicaMetrics(
 	m.Quiescent = quiescent
 	m.Ticking = ticking
 
-	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated =
-		calcRangeCounter(storeID, desc, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
+	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
+		storeID, desc, leaseStatus, livenessMap, zone.GetNumVoters(), *zone.NumReplicas, clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -146,30 +146,31 @@ func calcReplicaMetrics(
 // number of non-voting replicas).
 //
 // Note: we compute an estimated range count across the cluster by counting the
-// first live replica in each descriptor. Note that the first live replica is
-// an arbitrary choice. We want to select one live replica to do the counting
-// that all replicas can agree on.
-//
-// Note that this heuristic can double count. If the first live replica is on
-// a node that is partitioned from the other replicas in the range, there may
-// be multiple nodes which believe they are the first live replica. This
-// scenario seems rare as it requires the partitioned node to be alive enough
-// to be performing liveness heartbeats.
+// leaseholder of each descriptor if it's live, otherwise the first live
+// replica. This heuristic can double count, as all nodes may not agree on who
+// the leaseholder is, nor whether it is live (e.g. during a network partition).
 func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
+	leaseStatus kvserverpb.LeaseStatus,
 	livenessMap liveness.IsLiveMap,
 	numVoters, numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
-	// It seems unlikely that a learner replica would be the first live one, but
-	// there's no particular reason to exclude them.
-	for _, rd := range desc.Replicas().Descriptors() {
-		if livenessMap[rd.NodeID].IsLive {
-			rangeCounter = rd.StoreID == storeID
-			break
+	// If there is a live leaseholder (regardless of whether the lease is still
+	// valid) that leaseholder is responsible for range-level metrics.
+	if livenessMap[leaseStatus.Lease.Replica.NodeID].IsLive {
+		rangeCounter = leaseStatus.OwnedBy(storeID)
+	} else {
+		// Otherwise, use the first live replica.
+		for _, rd := range desc.Replicas().Descriptors() {
+			if livenessMap[rd.NodeID].IsLive {
+				rangeCounter = rd.StoreID == storeID
+				break
+			}
 		}
 	}
+
 	// We also compute an estimated per-range count of under-replicated and
 	// unavailable ranges for each range based on the liveness table.
 	if rangeCounter {
