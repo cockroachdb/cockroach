@@ -870,9 +870,39 @@ statement error attempting to update zone config which contains an extra zone co
 ALTER TABLE tbl2 SET LOCALITY GLOBAL
 
 statement ok
+ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl2@tbl2_i_idx
+----
+INDEX tbl2@tbl2_i_idx  ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 10,
+                       num_voters = 3,
+                       constraints = '{+region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
 SET override_multi_region_zone_config = true;
 ALTER TABLE tbl2 SET LOCALITY GLOBAL;
 SET override_multi_region_zone_config = false
+
+# Validate that we don't overwrite gc.ttlseconds
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl2@tbl2_i_idx
+----
+INDEX tbl2@tbl2_i_idx  ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 3,
+                       num_voters = 3,
+                       constraints = '{+region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
 ALTER TABLE tbl2 SET LOCALITY REGIONAL BY ROW
