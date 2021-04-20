@@ -234,7 +234,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-
+				// If the index is named, ensure that the name is unique.
+				// Unnamed indexes will be given a unique auto-generated name later on.
+				if d.Name != "" && n.tableDesc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
+					return pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
