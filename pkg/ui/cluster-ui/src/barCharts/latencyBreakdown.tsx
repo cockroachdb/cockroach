@@ -4,7 +4,7 @@ import { stdDevLong } from "src/util";
 import { NumericStatLegend } from "./numericStatLegend";
 import { scaleLinear } from "d3-scale";
 import { Duration } from "src/util/format";
-import { Tooltip } from "src/tooltip";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { clamp, normalizeClosedDomain } from "./utils";
@@ -53,7 +53,7 @@ export function latencyBreakdown(s: StatementStatistics) {
         format,
       );
       return (
-        <Tooltip text={title} short>
+        <Tooltip content={title} style="light">
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
             <div className={cx("bar-chart__label")}>
               {Duration(parseMean * 1e9)}
@@ -88,7 +88,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(planSd + (planSd > planMean ? planMean : planSd));
       const title = NumericStatLegend(s.stats.count, planMean, planSd, format);
       return (
-        <Tooltip text={title} short>
+        <Tooltip content={title} style="light">
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
             <div className={cx("bar-chart__label")}>
               {Duration(planMean * 1e9)}
@@ -127,7 +127,7 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(runSd + (runSd > runMean ? runMean : runSd));
       const title = NumericStatLegend(s.stats.count, runMean, runSd, format);
       return (
-        <Tooltip text={title} short>
+        <Tooltip content={title} style="light">
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
             <div className={cx("bar-chart__label")}>
               {Duration(runMean * 1e9)}
@@ -173,7 +173,7 @@ export function latencyBreakdown(s: StatementStatistics) {
         format,
       );
       return (
-        <Tooltip text={title} short>
+        <Tooltip content={title} style="light">
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
             <div className={cx("bar-chart__label")}>
               {Duration(overheadMean * 1e9)}
@@ -221,7 +221,7 @@ export function latencyBreakdown(s: StatementStatistics) {
         format,
       );
       return (
-        <Tooltip text={title} short>
+        <Tooltip content={title} style="light">
           <div className={cx("bar-chart", "bar-chart--breakdown")}>
             <div className={cx("bar-chart__label")}>
               {Duration(overallMean * 1e9)}
