@@ -4,593 +4,65 @@
   "_pg_foreign_table_columns": {},
   "_pg_foreign_tables": {},
   "_pg_user_mappings": {},
-  "administrable_role_authorizations": {
-    "grantee": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "is_grantable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "role_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "applicable_roles": {
-    "grantee": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "is_grantable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "role_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
   "attributes": {},
-  "character_sets": {
-    "character_repertoire": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "default_collate_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "default_collate_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "default_collate_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "form_of_use": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
   "check_constraint_routine_usage": {},
-  "check_constraints": {
-    "check_clause": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "constraint_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "collation_character_set_applicability": {
-    "character_set_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "collations": {
-    "collation_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "pad_attribute": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    }
-  },
   "column_column_usage": {},
   "column_domain_usage": {},
   "column_options": {},
-  "column_privileges": {
-    "column_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "grantee": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "grantor": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "is_grantable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "privilege_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "column_udt_usage": {
-    "column_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
   "columns": {
     "character_maximum_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "character_octet_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "character_set_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "column_default": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "column_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "data_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "datetime_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "domain_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "domain_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "domain_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "dtd_identifier": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "generation_expression": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "identity_cycle": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "identity_generation": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "identity_increment": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "identity_maximum": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "identity_minimum": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "identity_start": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "interval_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "interval_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "is_generated": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "is_identity": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_nullable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_self_referencing": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_updatable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "maximum_cardinality": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision_radix": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_scale": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "ordinal_position": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "scope_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "constraint_column_usage": {
-    "column_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     }
   },
   "constraint_table_usage": {},
@@ -599,14 +71,6 @@
   "domain_udt_usage": {},
   "domains": {},
   "element_types": {},
-  "enabled_roles": {
-    "role_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
   "foreign_data_wrapper_options": {},
   "foreign_data_wrappers": {},
   "foreign_server_options": {},
@@ -615,956 +79,208 @@
   "foreign_tables": {},
   "information_schema_catalog_name": {},
   "key_column_usage": {
-    "column_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
     "ordinal_position": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "position_in_unique_constraint": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     }
   },
   "parameters": {
-    "as_locator": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
     "character_maximum_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "character_octet_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "character_set_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "data_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "datetime_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "dtd_identifier": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "interval_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "interval_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "is_result": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "maximum_cardinality": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision_radix": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_scale": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "ordinal_position": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "parameter_default": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "parameter_mode": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "parameter_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "specific_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "specific_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "specific_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "referential_constraints": {
-    "constraint_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "delete_rule": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "match_option": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "unique_constraint_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "unique_constraint_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "unique_constraint_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "update_rule": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     }
   },
   "role_column_grants": {},
   "role_routine_grants": {},
-  "role_table_grants": {
-    "grantee": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "grantor": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "is_grantable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "privilege_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "with_hierarchy": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    }
-  },
   "role_udt_grants": {},
   "role_usage_grants": {},
   "routine_privileges": {},
   "routines": {
-    "as_locator": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
     "character_maximum_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "character_octet_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "character_set_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "character_set_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "collation_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "created": {
-      "oid": 1184,
-      "dataType": "timestamptz",
-      "expectedOid": 13448,
-      "expectedDataType": "time_stamp"
-    },
-    "data_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "datetime_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "dtd_identifier": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "external_language": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "external_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "interval_precision": {
       "oid": 25,
       "dataType": "text",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "interval_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "is_deterministic": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_implicitly_invocable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_null_call": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_udt_dependent": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_user_defined_cast": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "last_altered": {
-      "oid": 1184,
-      "dataType": "timestamptz",
-      "expectedOid": 13448,
-      "expectedDataType": "time_stamp"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "max_dynamic_result_sets": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "maximum_cardinality": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "module_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "module_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "module_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "new_savepoint_level": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision_radix": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_scale": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "parameter_style": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "result_cast_as_locator": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_char_max_length": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_char_octet_length": {
       "oid": 25,
       "dataType": "text",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "result_cast_char_set_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_char_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_char_set_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_collation_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_collation_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_collation_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_datetime_precision": {
       "oid": 25,
       "dataType": "text",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "result_cast_dtd_identifier": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_from_data_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_interval_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "result_cast_interval_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_maximum_cardinality": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_numeric_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_numeric_precision_radix": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "result_cast_numeric_scale": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
-    "result_cast_scope_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_scope_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_scope_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_type_udt_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_type_udt_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "result_cast_type_udt_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "routine_body": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "routine_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "routine_definition": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "routine_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "routine_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "routine_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "schema_level_routine": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "scope_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "scope_schema": null,
-    "security_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "specific_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "specific_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "specific_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "sql_data_access": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "sql_path": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "to_sql_specific_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "to_sql_specific_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "to_sql_specific_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "type_udt_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "type_udt_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "type_udt_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "udt_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
+    "scope_schema": null
   },
   "schemata": {
-    "catalog_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
     "default_character_set_catalog": null,
-    "default_character_set_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
     "default_character_set_schema": null,
-    "schema_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "schema_owner": null,
-    "sql_path": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    }
+    "schema_owner": null
   },
   "sequences": {
-    "cycle_option": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "data_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "increment": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "maximum_value": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "minimum_value": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
     "numeric_precision": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_precision_radix": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     },
     "numeric_scale": {
       "oid": 20,
       "dataType": "int8",
-      "expectedOid": 13438,
-      "expectedDataType": "cardinal_number"
-    },
-    "sequence_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "sequence_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "sequence_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "start_value": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
+      "expectedOid": 23,
+      "expectedDataType": "INT4"
     }
   },
   "sql_features": {},
@@ -1572,147 +288,13 @@
   "sql_parts": {},
   "sql_sizing": {},
   "table_constraints": {
-    "constraint_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "constraint_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "enforced": null,
-    "initially_deferred": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_deferrable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    }
-  },
-  "table_privileges": {
-    "grantee": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "grantor": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "is_grantable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "privilege_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "with_hierarchy": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    }
+    "enforced": null
   },
   "tables": {
     "commit_action": null,
-    "is_insertable_into": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
     "is_typed": null,
     "reference_generation": null,
     "self_referencing_column_name": null,
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
     "user_defined_type_catalog": null,
     "user_defined_type_name": null,
     "user_defined_type_schema": null
@@ -1727,67 +309,5 @@
   "user_mappings": {},
   "view_column_usage": {},
   "view_routine_usage": {},
-  "view_table_usage": {},
-  "views": {
-    "check_option": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    },
-    "is_insertable_into": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_trigger_deletable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_trigger_insertable_into": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_trigger_updatable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "is_updatable": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13450,
-      "expectedDataType": "yes_or_no"
-    },
-    "table_catalog": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_name": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "table_schema": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13443,
-      "expectedDataType": "sql_identifier"
-    },
-    "view_definition": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 13441,
-      "expectedDataType": "character_data"
-    }
-  }
+  "view_table_usage": {}
 }
