@@ -101,8 +101,8 @@ func NewUniquenessConstraintViolationError(
 	skipCols := index.ExplicitColumnStartIdx()
 	return errors.WithDetail(
 		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
-			"duplicate key value violates unique constraint %q", index.GetName(),
-		), index.GetName()),
+			"duplicate key value violates unique constraint %q", index.Name,
+		), index.Name),
 		fmt.Sprintf(
 			"Key (%s)=(%s) already exists.",
 			strings.Join(names[skipCols:], ","),
@@ -134,7 +134,7 @@ func NewLockNotAvailableError(
 		strings.Join(colNames, ","),
 		strings.Join(values, ","),
 		tableDesc.GetName(),
-		index.GetName())
+		index.Name)
 }
 
 // DecodeRowInfo takes a table descriptor, a key, and an optional value and
@@ -146,7 +146,7 @@ func DecodeRowInfo(
 	key roachpb.Key,
 	value *roachpb.Value,
 	allColumns bool,
-) (_ catalog.Index, columnNames []string, columnValues []string, _ error) {
+) (_ *descpb.IndexDescriptor, columnNames []string, columnValues []string, _ error) {
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used
 	// to decode the corresponding datums and never escapes this function.
@@ -188,19 +188,19 @@ func DecodeRowInfo(
 	valNeededForCol.AddRange(0, len(colIDs)-1)
 
 	var colIdxMap catalog.TableColMap
-	cols := make([]catalog.Column, len(colIDs))
+	cols := make([]descpb.ColumnDescriptor, len(colIDs))
 	for i, colID := range colIDs {
 		colIdxMap.Set(colID, i)
 		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		cols[i] = col
+		cols[i] = *col.ColumnDesc()
 	}
 
 	tableArgs := FetcherTableArgs{
 		Desc:             tableDesc,
-		Index:            index,
+		Index:            index.IndexDesc(),
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
@@ -237,13 +237,13 @@ func DecodeRowInfo(
 	names := make([]string, len(cols))
 	values := make([]string, len(cols))
 	for i := range cols {
-		names[i] = cols[i].GetName()
+		names[i] = cols[i].Name
 		if datums[i] == tree.DNull {
 			continue
 		}
 		values[i] = datums[i].String()
 	}
-	return index, names, values, nil
+	return index.IndexDesc(), names, values, nil
 }
 
 func (f *singleKVFetcher) close(context.Context) {}

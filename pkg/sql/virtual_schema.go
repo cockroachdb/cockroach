@@ -478,7 +478,7 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 // where we can't guarantee it will be Close()d in case of error.
 func (e *virtualDefEntry) getPlanInfo(
 	table catalog.TableDescriptor,
-	index catalog.Index,
+	index *descpb.IndexDescriptor,
 	idxConstraint *constraint.Constraint,
 	stopper *stop.Stopper,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
@@ -541,14 +541,14 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			// We are now dealing with a constrained virtual index scan.
 
-			if index.GetID() == 1 {
+			if index.ID == 1 {
 				return nil, errors.AssertionFailedf(
 					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.GetName())
 			}
 
 			// Figure out the ordinal position of the column that we're filtering on.
 			columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
-			indexKeyDatums := make([]tree.Datum, index.NumColumns())
+			indexKeyDatums := make([]tree.Datum, len(index.ColumnIDs))
 
 			generator, cleanup, setupError := setupGenerator(ctx, e.makeConstrainedRowsGenerator(
 				ctx, p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
@@ -572,7 +572,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	ctx context.Context,
 	p *planner,
 	dbDesc catalog.DatabaseDescriptor,
-	index catalog.Index,
+	index *descpb.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
 	columnIdxMap catalog.TableColMap,
 	idxConstraint *constraint.Constraint,
@@ -583,8 +583,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		var span constraint.Span
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
-				for i := 0; i < index.NumColumns(); i++ {
-					id := index.GetColumnID(i)
+				for i, id := range index.ColumnIDs {
 					indexKeyDatums[i] = datums[columnIdxMap.GetDefault(id)]
 				}
 				// Construct a single key span out of the current row, so that
@@ -621,7 +620,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				break
 			}
 			constraintDatum := span.StartKey().Value(0)
-			virtualIndex := def.getIndex(index.GetID())
+			virtualIndex := def.getIndex(index.ID)
 
 			// For each span, run the index's populate method, constrained to the
 			// constraint span's value.

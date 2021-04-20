@@ -87,7 +87,7 @@ func ShowCreateTable(
 			f.WriteString(",")
 		}
 		f.WriteString("\n\t")
-		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, desc, col, &p.RunParams(ctx).p.semaCtx)
+		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, desc, col.ColumnDesc(), &p.RunParams(ctx).p.semaCtx)
 		if err != nil {
 			return "", err
 		}
@@ -155,7 +155,7 @@ func ShowCreateTable(
 			// Build the PARTITION BY clause.
 			var partitionBuf bytes.Buffer
 			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx, &idx.IndexDesc().Partitioning, &partitionBuf, 1 /* indent */, 0, /* colOffset */
+				a, p.ExecCfg().Codec, desc, idx.IndexDesc(), &idx.IndexDesc().Partitioning, &partitionBuf, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -166,7 +166,7 @@ func ShowCreateTable(
 			if includeInterleaveClause {
 				// TODO(mgartner): The logic in showCreateInterleave can be
 				// moved to catformat.IndexForDisplay.
-				if err := showCreateInterleave(idx, &interleaveBuf, dbPrefix, lCtx); err != nil {
+				if err := showCreateInterleave(idx.IndexDesc(), &interleaveBuf, dbPrefix, lCtx); err != nil {
 					return "", err
 				}
 			}
@@ -176,7 +176,7 @@ func ShowCreateTable(
 				ctx,
 				desc,
 				&descpb.AnonymousTable,
-				idx,
+				idx.IndexDesc(),
 				partitionBuf.String(),
 				interleaveBuf.String(),
 				p.RunParams(ctx).p.SemaCtx(),
@@ -195,11 +195,11 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showCreateInterleave(desc.GetPrimaryIndex(), &f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(desc.GetPrimaryIndex().IndexDesc(), &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), &desc.GetPrimaryIndex().IndexDesc().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex().IndexDesc(), &desc.GetPrimaryIndex().IndexDesc().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}

@@ -34,7 +34,7 @@ type Builder struct {
 	evalCtx       *tree.EvalContext
 	codec         keys.SQLCodec
 	table         catalog.TableDescriptor
-	index         catalog.Index
+	index         *descpb.IndexDescriptor
 	indexColTypes []*types.T
 	indexColDirs  []descpb.IndexDescriptor_Direction
 
@@ -60,20 +60,20 @@ func MakeBuilder(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
-	index catalog.Index,
+	index *descpb.IndexDescriptor,
 ) *Builder {
 	s := &Builder{
 		evalCtx:        evalCtx,
 		codec:          codec,
 		table:          table,
 		index:          index,
-		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
-		interstices:    make([][]byte, index.NumColumns()+index.NumExtraColumns()+1),
+		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.ID),
+		interstices:    make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1),
 		neededFamilies: nil,
 	}
 
 	var columnIDs descpb.ColumnIDs
-	columnIDs, s.indexColDirs = catalog.FullIndexColumnIDs(index)
+	columnIDs, s.indexColDirs = index.FullColumnIDs()
 	s.indexColTypes = make([]*types.T, len(columnIDs))
 	for i, colID := range columnIDs {
 		col, _ := table.FindColumnWithID(colID)
@@ -85,11 +85,10 @@ func MakeBuilder(
 
 	// Set up the interstices for encoding interleaved tables later.
 	s.interstices[0] = s.KeyPrefix
-	if index.NumInterleaveAncestors() > 0 {
+	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(rohany): too much of this code is copied from EncodePartialIndexKey.
 		sharedPrefixLen := 0
-		for i := 0; i < index.NumInterleaveAncestors(); i++ {
-			ancestor := index.GetInterleaveAncestor(i)
+		for i, ancestor := range index.Interleave.Ancestors {
 			// The first ancestor is already encoded in interstices[0].
 			if i != 0 {
 				s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
@@ -100,7 +99,7 @@ func MakeBuilder(
 				s.interstices[sharedPrefixLen])
 		}
 		s.interstices[sharedPrefixLen] = rowenc.EncodePartialTableIDIndexID(
-			s.interstices[sharedPrefixLen], table.GetID(), index.GetID())
+			s.interstices[sharedPrefixLen], table.GetID(), index.ID)
 	}
 
 	return s
@@ -192,12 +191,12 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 	}
 
 	// * The index is unique.
-	if !s.index.IsUnique() {
+	if !s.index.Unique {
 		return false
 	}
 
 	// * The index is fully constrained.
-	if prefixLen != s.index.NumColumns() {
+	if prefixLen != len(s.index.ColumnIDs) {
 		return false
 	}
 
@@ -210,24 +209,24 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 	}
 
 	// If we're looking at a secondary index...
-	if s.index.GetID() != s.table.GetPrimaryIndexID() {
+	if s.index.ID != s.table.GetPrimaryIndexID() {
 		// * The index constraint must not contain null, since that would cause the
 		//   index key to not be completely knowable.
 		if containsNull {
 			return false
 		}
 		// * The index cannot be inverted.
-		if s.index.GetType() != descpb.IndexDescriptor_FORWARD {
+		if s.index.Type != descpb.IndexDescriptor_FORWARD {
 			return false
 		}
 
 		// * The index must store some columns.
-		if s.index.NumStoredColumns() == 0 {
+		if len(s.index.StoreColumnIDs) == 0 {
 			return false
 		}
 
 		// * The index is a new enough version.
-		if s.index.GetVersion() < descpb.SecondaryIndexFamilyFormatVersion {
+		if s.index.Version < descpb.SecondaryIndexFamilyFormatVersion {
 			return false
 		}
 	}
@@ -342,8 +341,8 @@ func (s *Builder) encodeConstraintKey(
 		// For extra columns (like implicit columns), the direction
 		// is ascending.
 		dir := encoding.Ascending
-		if i < s.index.NumColumns() {
-			dir, err = s.index.GetColumnDirection(i).ToEncodingDirection()
+		if i < len(s.index.ColumnDirections) {
+			dir, err = s.index.ColumnDirections[i].ToEncodingDirection()
 			if err != nil {
 				return nil, false, err
 			}

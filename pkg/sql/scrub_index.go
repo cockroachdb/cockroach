@@ -33,13 +33,13 @@ import (
 type indexCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc catalog.TableDescriptor
-	index     catalog.Index
+	indexDesc *descpb.IndexDescriptor
 	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
 	// twice this.
-	columns []catalog.Column
+	columns []*descpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -58,13 +58,13 @@ type indexCheckRun struct {
 func newIndexCheckOperation(
 	tableName *tree.TableName,
 	tableDesc catalog.TableDescriptor,
-	index catalog.Index,
+	indexDesc *descpb.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) *indexCheckOperation {
 	return &indexCheckOperation{
 		tableName: tableName,
 		tableDesc: tableDesc,
-		index:     index,
+		indexDesc: indexDesc,
 		asOf:      asOf,
 	}
 }
@@ -79,41 +79,48 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colToIdx.Set(c.GetID(), c.Ordinal())
 	}
 
-	var pkColumns, otherColumns []catalog.Column
+	var pkColumns, otherColumns []*descpb.ColumnDescriptor
 
 	for i := 0; i < o.tableDesc.GetPrimaryIndex().NumColumns(); i++ {
 		colID := o.tableDesc.GetPrimaryIndex().GetColumnID(i)
 		col := o.tableDesc.PublicColumns()[colToIdx.GetDefault(colID)]
-		pkColumns = append(pkColumns, col)
+		pkColumns = append(pkColumns, col.ColumnDesc())
 		colToIdx.Set(colID, -1)
 	}
 
-	maybeAddOtherCol := func(colID descpb.ColumnID) error {
+	maybeAddOtherCol := func(colID descpb.ColumnID) {
 		pos := colToIdx.GetDefault(colID)
 		if pos == -1 {
 			// Skip PK column.
-			return nil
+			return
 		}
 		col := o.tableDesc.PublicColumns()[pos]
-		otherColumns = append(otherColumns, col)
-		return nil
+		otherColumns = append(otherColumns, col.ColumnDesc())
 	}
 
 	// Collect all of the columns we are fetching from the index. This
 	// includes the columns involved in the index: columns, extra columns,
 	// and store columns.
-	_ = o.index.ForEachColumnID(maybeAddOtherCol)
+	for _, colID := range o.indexDesc.ColumnIDs {
+		maybeAddOtherCol(colID)
+	}
+	for _, colID := range o.indexDesc.ExtraColumnIDs {
+		maybeAddOtherCol(colID)
+	}
+	for _, colID := range o.indexDesc.StoreColumnIDs {
+		maybeAddOtherCol(colID)
+	}
 
-	colNames := func(cols []catalog.Column) []string {
+	colNames := func(cols []*descpb.ColumnDescriptor) []string {
 		res := make([]string, len(cols))
 		for i := range cols {
-			res[i] = cols[i].GetName()
+			res[i] = cols[i].Name
 		}
 		return res
 	}
 
 	checkQuery := createIndexCheckQuery(
-		colNames(pkColumns), colNames(otherColumns), o.tableDesc.GetID(), o.index.GetID(),
+		colNames(pkColumns), colNames(otherColumns), o.tableDesc.GetID(), o.indexDesc.ID,
 	)
 
 	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
@@ -174,12 +181,12 @@ func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})
 	details["row_data"] = rowDetails
-	details["index_name"] = o.index.GetName()
+	details["index_name"] = o.indexDesc.Name
 	if isMissingIndexReferenceError {
 		// Fetch the primary index values from the primary index row data.
 		for rowIdx, col := range o.columns {
 			// TODO(joey): We should maybe try to get the underlying type.
-			rowDetails[col.GetName()] = row[rowIdx].String()
+			rowDetails[col.Name] = row[rowIdx].String()
 		}
 	} else {
 		// Fetch the primary index values from the secondary index row data,
@@ -188,7 +195,7 @@ func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
 		// set of columns is for the primary index.
 		for rowIdx, col := range o.columns {
 			// TODO(joey): We should maybe try to get the underlying type.
-			rowDetails[col.GetName()] = row[rowIdx+colLen].String()
+			rowDetails[col.Name] = row[rowIdx+colLen].String()
 		}
 	}
 

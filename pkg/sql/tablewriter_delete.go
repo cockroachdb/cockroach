@@ -116,14 +116,14 @@ func (td *tableDeleter) deleteAllRowsScan(
 
 	var valNeededForCol util.FastIntSet
 	for i := range td.rd.FetchCols {
-		col := td.rd.FetchCols[i].GetID()
+		col := td.rd.FetchCols[i].ID
 		valNeededForCol.Add(td.rd.FetchColIDtoRowIndex.GetDefault(col))
 	}
 
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           td.tableDesc().GetPrimaryIndex(),
+		Index:           td.tableDesc().GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,
@@ -189,7 +189,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 //
 // limit is a limit on the number of index entries deleted in the operation.
 func (td *tableDeleter) deleteIndex(
-	ctx context.Context, idx catalog.Index, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, idx *descpb.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if idx.IsInterleaved() {
 		if log.V(2) {
@@ -201,10 +201,10 @@ func (td *tableDeleter) deleteIndex(
 }
 
 func (td *tableDeleter) deleteIndexFast(
-	ctx context.Context, idx catalog.Index, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, idx *descpb.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
-		resume = td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.GetID())
+		resume = td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.ID)
 	}
 
 	if traceKV {
@@ -221,12 +221,12 @@ func (td *tableDeleter) deleteIndexFast(
 	return td.b.Results[0].ResumeSpanAsValue(), nil
 }
 
-func (td *tableDeleter) clearIndex(ctx context.Context, idx catalog.Index) error {
+func (td *tableDeleter) clearIndex(ctx context.Context, idx *descpb.IndexDescriptor) error {
 	if idx.IsInterleaved() {
-		return errors.Errorf("unexpected interleaved index %d", idx.GetID())
+		return errors.Errorf("unexpected interleaved index %d", idx.ID)
 	}
 
-	sp := td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.GetID())
+	sp := td.tableDesc().IndexSpan(td.rd.Helper.Codec, idx.ID)
 
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
@@ -241,7 +241,7 @@ func (td *tableDeleter) clearIndex(ctx context.Context, idx catalog.Index) error
 }
 
 func (td *tableDeleter) deleteIndexScan(
-	ctx context.Context, idx catalog.Index, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, idx *descpb.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.tableDesc().PrimaryIndexSpan(td.rd.Helper.Codec)
@@ -249,14 +249,14 @@ func (td *tableDeleter) deleteIndexScan(
 
 	var valNeededForCol util.FastIntSet
 	for i := range td.rd.FetchCols {
-		col := td.rd.FetchCols[i].GetID()
+		col := td.rd.FetchCols[i].ID
 		valNeededForCol.Add(td.rd.FetchColIDtoRowIndex.GetDefault(col))
 	}
 
 	var rf row.Fetcher
 	tableArgs := row.FetcherTableArgs{
 		Desc:            td.tableDesc(),
-		Index:           td.tableDesc().GetPrimaryIndex(),
+		Index:           td.tableDesc().GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
 		Cols:            td.rd.FetchCols,
 		ValNeededForCol: valNeededForCol,

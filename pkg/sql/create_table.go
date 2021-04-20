@@ -474,7 +474,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.p.txn,
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
-				desc.PublicColumns(),
+				desc.Columns,
 				params.p.alloc)
 			if err != nil {
 				return err
@@ -1740,7 +1740,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
+				checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
 				if err != nil {
 					return nil, err
 				}
@@ -1825,7 +1825,7 @@ func NewTableDesc(
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		n.Table, colinfo.ResultColumnsFromColumns(desc.GetID(), desc.PublicColumns()),
+		n.Table, colinfo.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
 	)
 
 	for i := range desc.Columns {
@@ -1868,7 +1868,7 @@ func NewTableDesc(
 			if err != nil {
 				return nil, err
 			}
-			checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
+			checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
 			if err != nil {
 				return nil, err
 			}
@@ -2715,7 +2715,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 }
 
 func makeShardCheckConstraintDef(
-	buckets int, shardCol catalog.Column,
+	desc *tabledesc.Mutable, buckets int, shardCol *descpb.ColumnDescriptor,
 ) (*tree.CheckConstraintTableDef, error) {
 	values := &tree.Tuple{}
 	for i := 0; i < buckets; i++ {
@@ -2729,7 +2729,7 @@ func makeShardCheckConstraintDef(
 		Expr: &tree.ComparisonExpr{
 			Operator: tree.In,
 			Left: &tree.ColumnItem{
-				ColumnName: tree.Name(shardCol.GetName()),
+				ColumnName: tree.Name(shardCol.Name),
 			},
 			Right: values,
 		},

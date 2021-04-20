@@ -12,7 +12,6 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -24,8 +23,9 @@ import (
 func partitionByFromTableDesc(
 	codec keys.SQLCodec, tableDesc *tabledesc.Mutable,
 ) (*tree.PartitionBy, error) {
-	idx := tableDesc.GetPrimaryIndex()
-	return partitionByFromTableDescImpl(codec, tableDesc, idx, &idx.IndexDesc().Partitioning, 0)
+	idxDesc := tableDesc.GetPrimaryIndex().IndexDesc()
+	partDesc := idxDesc.Partitioning
+	return partitionByFromTableDescImpl(codec, tableDesc, idxDesc, &partDesc, 0)
 }
 
 // partitionByFromTableDescImpl contains the inner logic of partitionByFromTableDesc.
@@ -34,7 +34,7 @@ func partitionByFromTableDesc(
 func partitionByFromTableDescImpl(
 	codec keys.SQLCodec,
 	tableDesc *tabledesc.Mutable,
-	idx catalog.Index,
+	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	colOffset int,
 ) (*tree.PartitionBy, error) {
@@ -55,7 +55,7 @@ func partitionByFromTableDescImpl(
 		Range:  make([]tree.RangePartition, len(partDesc.Range)),
 	}
 	for i := 0; i < int(partDesc.NumColumns); i++ {
-		partitionBy.Fields[i] = tree.Name(idx.GetColumnName(colOffset + i))
+		partitionBy.Fields[i] = tree.Name(idxDesc.ColumnNames[colOffset+i])
 	}
 
 	// Copy the LIST of the PARTITION BY clause.
@@ -69,7 +69,7 @@ func partitionByFromTableDescImpl(
 				a,
 				codec,
 				tableDesc,
-				idx,
+				idxDesc,
 				partDesc,
 				values,
 				fakePrefixDatums,
@@ -89,7 +89,7 @@ func partitionByFromTableDescImpl(
 		if partitionBy.List[i].Subpartition, err = partitionByFromTableDescImpl(
 			codec,
 			tableDesc,
-			idx,
+			idxDesc,
 			&part.Subpartitioning,
 			colOffset+int(partDesc.NumColumns),
 		); err != nil {
@@ -104,7 +104,7 @@ func partitionByFromTableDescImpl(
 			a,
 			codec,
 			tableDesc,
-			idx,
+			idxDesc,
 			partDesc,
 			part.FromInclusive,
 			fakePrefixDatums,
@@ -119,7 +119,7 @@ func partitionByFromTableDescImpl(
 			a,
 			codec,
 			tableDesc,
-			idx,
+			idxDesc,
 			partDesc,
 			part.ToExclusive,
 			fakePrefixDatums,

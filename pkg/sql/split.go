@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -28,7 +29,7 @@ type splitNode struct {
 	optColumnsSlot
 
 	tableDesc      catalog.TableDescriptor
-	index          catalog.Index
+	index          *descpb.IndexDescriptor
 	rows           planNode
 	run            splitRun
 	expirationTime hlc.Timestamp
@@ -87,16 +88,19 @@ func (n *splitNode) Close(ctx context.Context) {
 // getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.
 // Both tableDesc and index are required (index can be the primary index).
 func getRowKey(
-	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, index catalog.Index, values []tree.Datum,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	index *descpb.IndexDescriptor,
+	values []tree.Datum,
 ) ([]byte, error) {
-	if index.NumColumns() < len(values) {
-		return nil, pgerror.Newf(pgcode.Syntax, "excessive number of values provided: expected %d, got %d", index.NumColumns(), len(values))
+	if len(index.ColumnIDs) < len(values) {
+		return nil, pgerror.Newf(pgcode.Syntax, "excessive number of values provided: expected %d, got %d", len(index.ColumnIDs), len(values))
 	}
 	var colMap catalog.TableColMap
 	for i := range values {
-		colMap.Set(index.GetColumnID(i), i)
+		colMap.Set(index.ColumnIDs[i], i)
 	}
-	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
+	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc, index.ID)
 	key, _, err := rowenc.EncodePartialIndexKey(
 		tableDesc, index, len(values), colMap, values, prefix,
 	)

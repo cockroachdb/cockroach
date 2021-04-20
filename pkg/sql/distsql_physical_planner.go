@@ -1025,9 +1025,10 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-func getIndexIdx(index catalog.Index, desc catalog.TableDescriptor) (uint32, error) {
-	if index.Public() {
-		return uint32(index.Ordinal()), nil
+func getIndexIdx(index *descpb.IndexDescriptor, desc catalog.TableDescriptor) (uint32, error) {
+	foundIndex, _ := desc.FindIndexWithID(index.ID)
+	if foundIndex != nil && foundIndex.Public() {
+		return uint32(foundIndex.Ordinal()), nil
 	}
 	return 0, errors.Errorf("invalid index %v (table %s)", index, desc.GetName())
 }
@@ -2046,7 +2047,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(n.cols))
 
 	for i := range n.cols {
-		ord := tableOrdinal(n.table.desc, n.cols[i].GetID(), n.table.colCfg.visibility)
+		ord := tableOrdinal(n.table.desc, n.cols[i].ID, n.table.colCfg.visibility)
 		post.OutputColumns[i] = uint32(ord)
 	}
 

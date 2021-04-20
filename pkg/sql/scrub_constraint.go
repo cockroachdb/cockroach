@@ -34,7 +34,7 @@ type sqlCheckConstraintCheckOperation struct {
 
 	// columns is a list of the columns returned in the query result
 	// tree.Datums.
-	columns []catalog.Column
+	columns []*descpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -107,8 +107,11 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 
 	o.run.started = true
 	o.run.rows = rows
+
 	// Collect all the columns.
-	o.columns = o.tableDesc.PublicColumns()
+	for _, c := range o.tableDesc.PublicColumns() {
+		o.columns = append(o.columns, c.ColumnDesc())
+	}
 	// Find the row indexes for all of the primary index columns.
 	o.primaryColIdxs, err = getPrimaryColIdxs(o.tableDesc, o.columns)
 	return err
@@ -137,7 +140,7 @@ func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, 
 	details["constraint_name"] = o.checkDesc.Name
 	for rowIdx, col := range o.columns {
 		// TODO(joey): We should maybe try to get the underlying type.
-		rowDetails[col.GetName()] = row[rowIdx].String()
+		rowDetails[col.Name] = row[rowIdx].String()
 	}
 	detailsJSON, err := tree.MakeDJSON(details)
 	if err != nil {

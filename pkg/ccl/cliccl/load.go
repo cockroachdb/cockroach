@@ -483,17 +483,19 @@ func makeRowFetcher(
 ) (row.Fetcher, error) {
 	var colIdxMap catalog.TableColMap
 	var valNeededForCol util.FastIntSet
+	colDescs := make([]descpb.ColumnDescriptor, len(entry.Desc.PublicColumns()))
 	for i, col := range entry.Desc.PublicColumns() {
 		colIdxMap.Set(col.GetID(), i)
 		valNeededForCol.Add(i)
+		colDescs[i] = *col.ColumnDesc()
 	}
 	table := row.FetcherTableArgs{
 		Spans:            []roachpb.Span{entry.Span},
 		Desc:             entry.Desc,
-		Index:            entry.Desc.GetPrimaryIndex(),
+		Index:            entry.Desc.GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: false,
-		Cols:             entry.Desc.PublicColumns(),
+		Cols:             colDescs,
 		ValNeededForCol:  valNeededForCol,
 	}
 

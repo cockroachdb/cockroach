@@ -163,11 +163,14 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	rfArgs := row.FetcherTableArgs{
 		Spans:            tableDesc.AllIndexSpans(c.codec),
 		Desc:             tableDesc,
-		Index:            tableDesc.GetPrimaryIndex(),
+		Index:            tableDesc.GetPrimaryIndex().IndexDesc(),
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: false,
-		Cols:             tableDesc.PublicColumns(),
+		Cols:             make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns())),
 		ValNeededForCol:  valNeededForCol,
+	}
+	for i, col := range tableDesc.PublicColumns() {
+		rfArgs.Cols[i] = *col.ColumnDesc()
 	}
 	if err := rf.Init(
 		context.TODO(),

@@ -41,11 +41,11 @@ func ColTypeInfoFromColTypes(colTypes []*types.T) ColTypeInfo {
 	return ColTypeInfo{colTypes: colTypes}
 }
 
-// ColTypeInfoFromColumns creates a ColTypeInfo from []catalog.Column.
-func ColTypeInfoFromColumns(columns []catalog.Column) ColTypeInfo {
-	colTypes := make([]*types.T, len(columns))
-	for i, col := range columns {
-		colTypes[i] = col.GetType()
+// ColTypeInfoFromColDescs creates a ColTypeInfo from []ColumnDescriptor.
+func ColTypeInfoFromColDescs(colDescs []descpb.ColumnDescriptor) ColTypeInfo {
+	colTypes := make([]*types.T, len(colDescs))
+	for i, colDesc := range colDescs {
+		colTypes[i] = colDesc.Type
 	}
 	return ColTypeInfoFromColTypes(colTypes)
 }
@@ -171,7 +171,7 @@ func GetColumnTypes(
 // IDs into the outTypes slice, returning it. You must use the returned slice,
 // as this function might allocate a new slice.
 func GetColumnTypesFromColDescs(
-	cols []catalog.Column, columnIDs []descpb.ColumnID, outTypes []*types.T,
+	cols []descpb.ColumnDescriptor, columnIDs []descpb.ColumnID, outTypes []*types.T,
 ) []*types.T {
 	if cap(outTypes) < len(columnIDs) {
 		outTypes = make([]*types.T, len(columnIDs))
@@ -180,8 +180,8 @@ func GetColumnTypesFromColDescs(
 	}
 	for i, id := range columnIDs {
 		for j := range cols {
-			if id == cols[j].GetID() {
-				outTypes[i] = cols[j].GetType()
+			if id == cols[j].ID {
+				outTypes[i] = cols[j].Type
 				break
 			}
 		}

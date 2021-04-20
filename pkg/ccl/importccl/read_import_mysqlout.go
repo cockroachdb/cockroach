@@ -252,7 +252,7 @@ func (d *delimitedConsumer) FillDatums(
 			if err != nil {
 				col := conv.VisibleCols[datumIdx]
 				return newImportRowError(
-					fmt.Errorf("error %s while parse %q as %s", err, col.GetName(), col.GetType().SQLString()),
+					fmt.Errorf("error %s while parse %q as %s", err, col.Name, col.Type.SQLString()),
 					string(data), rowNum)
 			}
 		}

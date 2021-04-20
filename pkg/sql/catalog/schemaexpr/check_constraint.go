@@ -161,9 +161,9 @@ func (b *CheckConstraintBuilder) DefaultName(expr tree.Expr) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
 
-	err := iterColDescriptors(b.desc, expr, func(c catalog.Column) error {
+	err := iterColDescriptors(b.desc, expr, func(c *descpb.ColumnDescriptor) error {
 		nameBuf.WriteByte('_')
-		nameBuf.WriteString(c.GetName())
+		nameBuf.WriteString(c.Name)
 		return nil
 	})
 	if err != nil {

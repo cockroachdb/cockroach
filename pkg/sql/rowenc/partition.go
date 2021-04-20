@@ -106,12 +106,12 @@ func DecodePartitionTuple(
 	a *DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	index catalog.Index,
+	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
 ) (*PartitionTuple, []byte, error) {
-	if len(prefixDatums)+int(partDesc.NumColumns) > index.NumColumns() {
+	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
 
@@ -119,8 +119,8 @@ func DecodePartitionTuple(
 		Datums: make(tree.Datums, 0, int(partDesc.NumColumns)),
 	}
 
-	for i := len(prefixDatums); i < index.NumColumns() && i < len(prefixDatums)+int(partDesc.NumColumns); i++ {
-		colID := index.GetColumnID(i)
+	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
+	for _, colID := range colIDs {
 		col, err := tableDesc.FindColumnWithID(colID)
 		if err != nil {
 			return nil, nil, err
@@ -161,12 +161,12 @@ func DecodePartitionTuple(
 	allDatums := append(prefixDatums, t.Datums...)
 	var colMap catalog.TableColMap
 	for i := range allDatums {
-		colMap.Set(index.GetColumnID(i), i)
+		colMap.Set(idxDesc.ColumnIDs[i], i)
 	}
 
-	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
+	indexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc, idxDesc.ID)
 	key, _, err := EncodePartialIndexKey(
-		tableDesc, index, len(allDatums), colMap, allDatums, indexKeyPrefix)
+		tableDesc, idxDesc, len(allDatums), colMap, allDatums, indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}

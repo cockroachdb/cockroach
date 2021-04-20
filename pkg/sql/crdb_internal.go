@@ -2174,7 +2174,7 @@ func showAlterStatementWithInterleave(
 				sharedPrefixLen += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)
 			}
 			// Write the CREATE INDEX statements.
-			if err := showCreateIndexWithInterleave(ctx, f, table, idx, tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
+			if err := showCreateIndexWithInterleave(ctx, f, table, idx.IndexDesc(), tableName, parentName, sharedPrefixLen, semaCtx); err != nil {
 				return err
 			}
 			if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -2189,7 +2189,7 @@ func showCreateIndexWithInterleave(
 	ctx context.Context,
 	f *tree.FmtCtx,
 	table catalog.TableDescriptor,
-	idx catalog.Index,
+	idx *descpb.IndexDescriptor,
 	tableName tree.TableName,
 	parentName tree.TableName,
 	sharedPrefixLen int,
@@ -2208,8 +2208,7 @@ func showCreateIndexWithInterleave(
 	f.WriteString(" (")
 	// Get all of the columns and write them.
 	comma := ""
-	for i := 0; i < sharedPrefixLen; i++ {
-		name := idx.GetColumnName(i)
+	for _, name := range idx.ColumnNames[:sharedPrefixLen] {
 		f.WriteString(comma)
 		f.FormatNameP(&name)
 		comma = ", "
@@ -2362,31 +2361,32 @@ CREATE TABLE crdb_internal.index_columns (
 				parentName := parent.GetName()
 				tableName := tree.NewDString(table.GetName())
 
-				reportIndex := func(idx catalog.Index) error {
-					idxID := tree.NewDInt(tree.DInt(idx.GetID()))
-					idxName := tree.NewDString(idx.GetName())
+				reportIndex := func(idxI catalog.Index) error {
+					idx := idxI.IndexDesc()
+					idxID := tree.NewDInt(tree.DInt(idx.ID))
+					idxName := tree.NewDString(idx.Name)
 
 					// Report the main (key) columns.
-					for i, c := range idx.IndexDesc().ColumnIDs {
+					for i, c := range idx.ColumnIDs {
 						colName := tree.DNull
 						colDir := tree.DNull
-						if i >= len(idx.IndexDesc().ColumnNames) {
+						if i >= len(idx.ColumnNames) {
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
-								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
-								len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnNames))
+								table.GetID(), idx.ID, parentName, table.GetName(), idx.Name,
+								len(idx.ColumnIDs), len(idx.ColumnNames))
 						} else {
-							colName = tree.NewDString(idx.GetColumnName(i))
+							colName = tree.NewDString(idx.ColumnNames[i])
 						}
-						if i >= len(idx.IndexDesc().ColumnDirections) {
+						if i >= len(idx.ColumnDirections) {
 							// See comment above.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
-								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
-								len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnDirections))
+								table.GetID(), idx.ID, parentName, table.GetName(), idx.Name,
+								len(idx.ColumnIDs), len(idx.ColumnDirections))
 						} else {
-							colDir = idxDirMap[idx.GetColumnDirection(i)]
+							colDir = idxDirMap[idx.ColumnDirections[i]]
 						}
 
 						if err := addRow(
@@ -2401,7 +2401,7 @@ CREATE TABLE crdb_internal.index_columns (
 					notImplicit := tree.DBoolFalse
 
 					// Report the stored columns.
-					for _, c := range idx.IndexDesc().StoreColumnIDs {
+					for _, c := range idx.StoreColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2412,7 +2412,7 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the extra columns.
-					for _, c := range idx.IndexDesc().ExtraColumnIDs {
+					for _, c := range idx.ExtraColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2423,7 +2423,7 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the composite columns
-					for _, c := range idx.IndexDesc().CompositeColumnIDs {
+					for _, c := range idx.CompositeColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -3570,7 +3570,7 @@ func addPartitioningRows(
 	p *planner,
 	database string,
 	table catalog.TableDescriptor,
-	index catalog.Index,
+	index *descpb.IndexDescriptor,
 	partitioning *descpb.PartitioningDescriptor,
 	parentName tree.Datum,
 	colOffset int,
@@ -3585,7 +3585,7 @@ func addPartitioningRows(
 	}
 
 	tableID := tree.NewDInt(tree.DInt(table.GetID()))
-	indexID := tree.NewDInt(tree.DInt(index.GetID()))
+	indexID := tree.NewDInt(tree.DInt(index.ID))
 	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
 
 	var buf bytes.Buffer
@@ -3593,7 +3593,7 @@ func addPartitioningRows(
 		if i != uint32(colOffset) {
 			buf.WriteString(`, `)
 		}
-		buf.WriteString(index.GetColumnName(int(i)))
+		buf.WriteString(index.ColumnNames[i])
 	}
 	colNames := tree.NewDString(buf.String())
 
@@ -3746,7 +3746,7 @@ CREATE TABLE crdb_internal.partitions (
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index catalog.Index) error {
-						return addPartitioningRows(ctx, p, dbName, table, index, &index.IndexDesc().Partitioning,
+						return addPartitioningRows(ctx, p, dbName, table, index.IndexDesc(), &index.IndexDesc().Partitioning,
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})
 				})

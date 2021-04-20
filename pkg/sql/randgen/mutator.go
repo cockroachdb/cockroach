@@ -357,9 +357,15 @@ func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (
 	var err error
 	switch colType.Family() {
 	case types.GeometryFamily:
-		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeometryIndexConfig())
+		tempIdx := descpb.IndexDescriptor{
+			GeoConfig: *geoindex.DefaultGeometryIndexConfig(),
+		}
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, &tempIdx)
 	case types.GeographyFamily:
-		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, *geoindex.DefaultGeographyIndexConfig())
+		tempIdx := descpb.IndexDescriptor{
+			GeoConfig: *geoindex.DefaultGeographyIndexConfig(),
+		}
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, &tempIdx)
 	default:
 		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.EmptyArraysInInvertedIndexesVersion)
 	}

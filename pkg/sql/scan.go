@@ -46,10 +46,10 @@ type scanNode struct {
 	_ util.NoCopy
 
 	desc  catalog.TableDescriptor
-	index catalog.Index
+	index *descpb.IndexDescriptor
 
 	// Set if an index was explicitly specified.
-	specifiedIndex catalog.Index
+	specifiedIndex *descpb.IndexDescriptor
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
@@ -231,14 +231,14 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
 		}
-		n.specifiedIndex = foundIndex
+		n.specifiedIndex = foundIndex.IndexDesc()
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
 		foundIndex, _ := n.desc.FindIndexWithID(descpb.IndexID(indexFlags.IndexID))
 		if foundIndex == nil || !foundIndex.Public() {
 			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
-		n.specifiedIndex = foundIndex
+		n.specifiedIndex = foundIndex.IndexDesc()
 	}
 	return nil
 }
@@ -301,7 +301,7 @@ func initColsForScan(
 // Initializes the column structures.
 func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.colCfg = colCfg
-	n.index = n.desc.GetPrimaryIndex()
+	n.index = n.desc.GetPrimaryIndex().IndexDesc()
 
 	var err error
 	n.cols, err = initColsForScan(n.desc, n.colCfg)

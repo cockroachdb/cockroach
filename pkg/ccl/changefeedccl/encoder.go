@@ -360,7 +360,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 	if !ok {
 		var err error
 		tableName := e.rawTableName(row.tableDesc)
-		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
+		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex().IndexDesc(), tableName, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}

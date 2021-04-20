@@ -532,7 +532,6 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/multiregion",
-        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/distsql",

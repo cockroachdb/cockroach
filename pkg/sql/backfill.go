@@ -188,7 +188,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
-	var droppedIndexes []catalog.Index
+	var droppedIndexDescs []descpb.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
 	var addedIndexes []descpb.IndexID
 
@@ -268,12 +268,13 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			} else {
 				return errors.AssertionFailedf("unsupported mutation: %+v", m)
 			}
+
 		} else if m.Dropped() {
 			if col := m.AsColumn(); col != nil {
 				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
 			} else if idx := m.AsIndex(); idx != nil {
-				if !canClearRangeForDrop(idx) {
-					droppedIndexes = append(droppedIndexes, idx)
+				if !canClearRangeForDrop(idx.IndexDesc()) {
+					droppedIndexDescs = append(droppedIndexDescs, *idx.IndexDesc())
 				}
 			} else if c := m.AsConstraint(); c != nil {
 				constraintsToDrop = append(constraintsToDrop, c)
@@ -305,8 +306,8 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 
 	// Drop indexes not to be removed by `ClearRange`.
-	if len(droppedIndexes) > 0 {
-		if err := sc.truncateIndexes(ctx, version, droppedIndexes); err != nil {
+	if len(droppedIndexDescs) > 0 {
+		if err := sc.truncateIndexes(ctx, version, droppedIndexDescs); err != nil {
 			return err
 		}
 	}
@@ -773,21 +774,13 @@ func TruncateInterleavedIndexes(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	table catalog.TableDescriptor,
-	indexIDs []descpb.IndexID,
+	indexes []descpb.IndexDescriptor,
 ) error {
-	log.Infof(ctx, "truncating %d interleaved indexes", len(indexIDs))
+	log.Infof(ctx, "truncating %d interleaved indexes", len(indexes))
 	chunkSize := int64(indexTruncateChunkSize)
 	alloc := &rowenc.DatumAlloc{}
 	codec, db := execCfg.Codec, execCfg.DB
-	zoneConfigIndexIDList := make([]uint32, len(indexIDs))
-	for i, id := range indexIDs {
-		zoneConfigIndexIDList[i] = uint32(id)
-	}
-	for _, id := range indexIDs {
-		idx, err := table.FindIndexWithID(id)
-		if err != nil {
-			return err
-		}
+	for _, desc := range indexes {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
 			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.GetID(), rowIdx, resume)
@@ -801,7 +794,7 @@ func TruncateInterleavedIndexes(
 				}
 				resume, err := td.deleteIndex(
 					ctx,
-					idx,
+					&desc,
 					resumeAt,
 					chunkSize,
 					false, /* traceKV */
@@ -819,7 +812,7 @@ func TruncateInterleavedIndexes(
 			if err != nil {
 				return err
 			}
-			return RemoveIndexZoneConfigs(ctx, txn, execCfg, freshTableDesc, zoneConfigIndexIDList)
+			return RemoveIndexZoneConfigs(ctx, txn, execCfg, freshTableDesc, indexes)
 		}); err != nil {
 			return err
 		}
@@ -833,7 +826,7 @@ func TruncateInterleavedIndexes(
 // The indexes are dropped chunk by chunk, each chunk being deleted in
 // its own txn.
 func (sc *SchemaChanger) truncateIndexes(
-	ctx context.Context, version descpb.DescriptorVersion, dropped []catalog.Index,
+	ctx context.Context, version descpb.DescriptorVersion, dropped []descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "clearing data for %d indexes", len(dropped))
 
@@ -842,11 +835,7 @@ func (sc *SchemaChanger) truncateIndexes(
 		chunkSize = sc.testingKnobs.BackfillChunkSize
 	}
 	alloc := &rowenc.DatumAlloc{}
-	droppedIndexIDs := make([]uint32, len(dropped))
-	for i, idx := range dropped {
-		droppedIndexIDs[i] = uint32(idx.GetID())
-	}
-	for _, idx := range dropped {
+	for _, desc := range dropped {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
 			resumeAt := resume
@@ -878,10 +867,10 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
-				if !canClearRangeForDrop(idx) {
+				if !canClearRangeForDrop(&desc) {
 					resume, err = td.deleteIndex(
 						ctx,
-						idx,
+						&desc,
 						resumeAt,
 						chunkSize,
 						false, /* traceKV */
@@ -890,7 +879,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				done = true
-				return td.clearIndex(ctx, idx)
+				return td.clearIndex(ctx, &desc)
 			}); err != nil {
 				return err
 			}
@@ -903,7 +892,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			if err != nil {
 				return err
 			}
-			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, table, droppedIndexIDs)
+			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, table, dropped)
 		}); err != nil {
 			return err
 		}
@@ -1444,7 +1433,8 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		return err
 	}
 
-	var forwardIndexes, invertedIndexes []catalog.Index
+	var forwardIndexes []*descpb.IndexDescriptor
+	var invertedIndexes []*descpb.IndexDescriptor
 
 	for _, m := range tableDesc.AllMutations() {
 		if sc.mutationID != m.MutationID() {
@@ -1456,9 +1446,9 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		}
 		switch idx.GetType() {
 		case descpb.IndexDescriptor_FORWARD:
-			forwardIndexes = append(forwardIndexes, idx)
+			forwardIndexes = append(forwardIndexes, idx.IndexDesc())
 		case descpb.IndexDescriptor_INVERTED:
-			invertedIndexes = append(invertedIndexes, idx)
+			invertedIndexes = append(invertedIndexes, idx.IndexDesc())
 		}
 	}
 	if len(forwardIndexes) == 0 && len(invertedIndexes) == 0 {
@@ -1505,7 +1495,7 @@ func ValidateInvertedIndexes(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	indexes []catalog.Index,
+	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn HistoricalInternalExecTxnRunner,
 	gatherAllInvalid bool,
 ) error {
@@ -1528,7 +1518,7 @@ func ValidateInvertedIndexes(
 			// distributed execution and avoid bypassing the SQL decoding
 			start := timeutil.Now()
 			var idxLen int64
-			span := tableDesc.IndexSpan(codec, idx.GetID())
+			span := tableDesc.IndexSpan(codec, idx.ID)
 			key := span.Key
 			endKey := span.EndKey
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ *InternalExecutor) error {
@@ -1548,12 +1538,12 @@ func ValidateInvertedIndexes(
 				return err
 			}
 			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
-				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+				tableDesc.GetName(), idx.Name, idxLen, timeutil.Since(start))
 			select {
 			case <-countReady[i]:
 				if idxLen != expectedCount[i] {
 					if gatherAllInvalid {
-						invalid <- idx.GetID()
+						invalid <- idx.ID
 						return nil
 					}
 					// JSON columns cannot have unique indexes, so if the expected and
@@ -1561,7 +1551,7 @@ func ValidateInvertedIndexes(
 					// uniqueness violation.
 					return errors.AssertionFailedf(
 						"validation of index %s failed: expected %d rows, found %d",
-						idx.GetName(), errors.Safe(expectedCount[i]), errors.Safe(idxLen))
+						idx.Name, errors.Safe(expectedCount[i]), errors.Safe(idxLen))
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1577,22 +1567,21 @@ func ValidateInvertedIndexes(
 
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
 				var stmt string
-				geoConfig := idx.GetGeoConfig()
-				if geoindex.IsEmptyConfig(&geoConfig) {
+				if geoindex.IsEmptyConfig(&idx.GeoConfig) {
 					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%q, %d)), 0) FROM [%d AS t]`,
-						col, idx.GetVersion(), tableDesc.GetID(),
+						col, idx.Version, tableDesc.GetID(),
 					)
 				} else {
 					stmt = fmt.Sprintf(
 						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %q)), 0) FROM [%d AS t]`,
-						tableDesc.GetID(), idx.GetID(), col, tableDesc.GetID(),
+						tableDesc.GetID(), idx.ID, col, tableDesc.GetID(),
 					)
 				}
 				// If the index is a partial index the predicate must be added
 				// as a filter to the query.
 				if idx.IsPartial() {
-					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
+					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.Predicate)
 				}
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
 					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, sessiondata.InternalExecutorOverride{}, stmt)
@@ -1643,7 +1632,7 @@ func ValidateInvertedIndexes(
 func ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	indexes []catalog.Index,
+	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
@@ -1709,11 +1698,11 @@ func ValidateForwardIndexes(
 			// Retrieve the row count in the index.
 			var idxLen int64
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
-				query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
+				query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.ID)
 				// If the index is a partial index the predicate must be added
 				// as a filter to the query to force scanning the index.
 				if idx.IsPartial() {
-					query = fmt.Sprintf(`%s WHERE %s`, query, idx.GetPredicate())
+					query = fmt.Sprintf(`%s WHERE %s`, query, idx.Predicate)
 				}
 
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
@@ -1728,13 +1717,13 @@ func ValidateForwardIndexes(
 
 					// For implicitly partitioned unique indexes, we need to independently
 					// validate that the non-implicitly partitioned columns are unique.
-					if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns > 0 && !skipUniquenessChecks {
+					if idx.Unique && idx.Partitioning.NumImplicitColumns > 0 && !skipUniquenessChecks {
 						if err := validateUniqueConstraint(
 							ctx,
 							tableDesc,
 							idx.GetName(),
-							idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns:],
-							idx.GetPredicate(),
+							idx.ColumnIDs[idx.Partitioning.NumImplicitColumns:],
+							idx.Predicate,
 							ie,
 							txn,
 						); err != nil {
@@ -1748,7 +1737,7 @@ func ValidateForwardIndexes(
 			}
 
 			log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
-				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+				tableDesc.GetName(), idx.Name, idxLen, timeutil.Since(start))
 
 			// Now compare with the row count in the table.
 			select {
@@ -1757,19 +1746,19 @@ func ValidateForwardIndexes(
 				// If the index is a partial index, the expected number of rows
 				// is different than the total number of rows in the table.
 				if idx.IsPartial() {
-					expectedCount = partialIndexExpectedCounts[idx.GetID()]
+					expectedCount = partialIndexExpectedCounts[idx.ID]
 				}
 
 				if idxLen != expectedCount {
 					if gatherAllInvalid {
-						invalid <- idx.GetID()
+						invalid <- idx.ID
 						return nil
 					}
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 						"duplicate key value violates unique constraint %q",
-						idx.GetName()),
-						idx.GetName())
+						idx.Name),
+						idx.Name)
 
 				}
 
@@ -1806,7 +1795,7 @@ func ValidateForwardIndexes(
 				// For partial indexes, count the number of rows in the table
 				// for which the predicate expression evaluates to true.
 				if idx.IsPartial() {
-					s.WriteString(fmt.Sprintf(`, count(1) FILTER (WHERE %s)`, idx.GetPredicate()))
+					s.WriteString(fmt.Sprintf(`, count(1) FILTER (WHERE %s)`, idx.Predicate))
 				}
 			}
 			partialIndexCounts := s.String()
@@ -1828,7 +1817,7 @@ func ValidateForwardIndexes(
 				cntIdx := 1
 				for _, idx := range indexes {
 					if idx.IsPartial() {
-						partialIndexExpectedCounts[idx.GetID()] = int64(tree.MustBeDInt(cnt[cntIdx]))
+						partialIndexExpectedCounts[idx.ID] = int64(tree.MustBeDInt(cnt[cntIdx]))
 						cntIdx++
 					}
 				}
@@ -2015,7 +2004,7 @@ func runSchemaChangesInTxn(
 				}
 			} else if idx := m.AsIndex(); idx != nil {
 				if err := indexTruncateInTxn(
-					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, idx, traceKV,
+					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, idx.IndexDesc(), traceKV,
 				); err != nil {
 					return err
 				}
@@ -2421,7 +2410,7 @@ func indexTruncateInTxn(
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
 	tableDesc catalog.TableDescriptor,
-	idx catalog.Index,
+	idx *descpb.IndexDescriptor,
 	traceKV bool,
 ) error {
 	alloc := &rowenc.DatumAlloc{}
@@ -2441,5 +2430,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc, []uint32{uint32(idx.GetID())})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc, []descpb.IndexDescriptor{*idx})
 }

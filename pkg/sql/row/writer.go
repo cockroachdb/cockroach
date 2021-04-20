@@ -29,10 +29,10 @@ import (
 // ColIDtoRowIndexFromCols groups a slice of ColumnDescriptors by their ID
 // field, returning a map from ID to the index of the column in the input slice.
 // It assumes there are no duplicate descriptors in the input.
-func ColIDtoRowIndexFromCols(cols []catalog.Column) catalog.TableColMap {
+func ColIDtoRowIndexFromCols(cols []descpb.ColumnDescriptor) catalog.TableColMap {
 	var colIDtoRowIndex catalog.TableColMap
 	for i := range cols {
-		colIDtoRowIndex.Set(cols[i].GetID(), i)
+		colIDtoRowIndex.Set(cols[i].ID, i)
 	}
 	return colIDtoRowIndex
 }
@@ -42,11 +42,11 @@ func ColIDtoRowIndexFromCols(cols []catalog.Column) catalog.TableColMap {
 //
 //   result[i] = j such that fromCols[i].ID == toCols[j].ID, or
 //                -1 if the column is not part of toCols.
-func ColMapping(fromCols, toCols []catalog.Column) []int {
+func ColMapping(fromCols, toCols []descpb.ColumnDescriptor) []int {
 	// colMap is a map from ColumnID to ordinal into fromCols.
 	var colMap util.FastIntMap
 	for i := range fromCols {
-		colMap.Set(int(fromCols[i].GetID()), i)
+		colMap.Set(int(fromCols[i].ID), i)
 	}
 
 	result := make([]int, len(fromCols))
@@ -57,7 +57,7 @@ func ColMapping(fromCols, toCols []catalog.Column) []int {
 
 	// Set the appropriate index values for the returning columns.
 	for toOrd := range toCols {
-		if fromOrd, ok := colMap.Get(int(toCols[toOrd].GetID())); ok {
+		if fromOrd, ok := colMap.Get(int(toCols[toOrd].ID)); ok {
 			result[fromOrd] = toOrd
 		}
 	}
@@ -94,7 +94,7 @@ func prepareInsertOrUpdateBatch(
 	batch putter,
 	helper *rowHelper,
 	primaryIndexKey []byte,
-	fetchedCols []catalog.Column,
+	fetchedCols []descpb.ColumnDescriptor,
 	values []tree.Datum,
 	valColIDMapping catalog.TableColMap,
 	marshaledValues []roachpb.Value,
@@ -180,12 +180,12 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			col := fetchedCols[idx]
-			if lastColID > col.GetID() {
-				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+			col := &fetchedCols[idx]
+			if lastColID > col.ID {
+				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.ID, lastColID)
 			}
-			colIDDiff := col.GetID() - lastColID
-			lastColID = col.GetID()
+			colIDDiff := col.ID - lastColID
+			lastColID = col.ID
 			var err error
 			rawValueBuf, err = rowenc.EncodeTableValue(rawValueBuf, colIDDiff, values[idx], nil)
 			if err != nil {

@@ -50,13 +50,13 @@ type cTableInfo struct {
 	// want to scan.
 	spans            roachpb.Spans
 	desc             catalog.TableDescriptor
-	index            catalog.Index
+	index            *descpb.IndexDescriptor
 	isSecondaryIndex bool
 	indexColumnDirs  []descpb.IndexDescriptor_Direction
 
 	// The table columns to use for fetching, possibly including ones currently in
 	// schema changes.
-	cols []catalog.Column
+	cols []descpb.ColumnDescriptor
 
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
@@ -392,7 +392,7 @@ func (rf *cFetcher) Init(
 	colDescriptors := tableArgs.Cols
 	for i := range colDescriptors {
 		//gcassert:bce
-		id := colDescriptors[i].GetID()
+		id := colDescriptors[i].ID
 		table.colIdxMap.vals = append(table.colIdxMap.vals, id)
 		table.colIdxMap.ords = append(table.colIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
@@ -422,7 +422,7 @@ func (rf *cFetcher) Init(
 	_ = typs[len(colDescriptors)-1]
 	for i := range colDescriptors {
 		//gcassert:bce
-		typs[i] = colDescriptors[i].GetType()
+		typs[i] = colDescriptors[i].Type
 	}
 
 	var err error
@@ -435,7 +435,7 @@ func (rf *cFetcher) Init(
 	}
 	for i := range colDescriptors {
 		//gcassert:bce
-		col := colDescriptors[i].GetID()
+		col := colDescriptors[i].ID
 		idx := tableArgs.ColIdxMap.GetDefault(col)
 		if tableArgs.ValNeededForCol.Contains(idx) {
 			// The idx-th column is required.
@@ -453,14 +453,13 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
+	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
 
 	var indexColumnIDs []descpb.ColumnID
-	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
+	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
 	compositeColumnIDs := util.MakeFastIntSet()
-	for i := 0; i < table.index.NumCompositeColumns(); i++ {
-		id := table.index.GetCompositeColumnID(i)
+	for _, id := range table.index.CompositeColumnIDs {
 		compositeColumnIDs.Add(int(id))
 	}
 
@@ -517,7 +516,7 @@ func (rf *cFetcher) Init(
 		}
 	}
 	table.invertedColOrdinal = -1
-	if table.index.GetType() == descpb.IndexDescriptor_INVERTED {
+	if table.index.Type == descpb.IndexDescriptor_INVERTED {
 		id := table.index.InvertedColumnID()
 		colIdx, ok := tableArgs.ColIdxMap.Get(id)
 		if ok && neededCols.Contains(int(id)) {
@@ -529,9 +528,8 @@ func (rf *cFetcher) Init(
 	// Unique secondary indexes contain the extra column IDs as part of
 	// the value component. We process these separately, so we need to know
 	// what extra columns are composite or not.
-	if table.isSecondaryIndex && table.index.IsUnique() {
-		for i := 0; i < table.index.NumExtraColumns(); i++ {
-			id := table.index.GetExtraColumnID(i)
+	if table.isSecondaryIndex && table.index.Unique {
+		for _, id := range table.index.ExtraColumnIDs {
 			colIdx, ok := tableArgs.ColIdxMap.Get(id)
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
@@ -548,16 +546,16 @@ func (rf *cFetcher) Init(
 	// - If there are needed columns from the index key, we need to read it.
 	//
 	// Otherwise, we can completely avoid decoding the index key.
-	if neededIndexCols > 0 || table.index.NumInterleavedBy() > 0 || table.index.NumInterleaveAncestors() > 0 {
+	if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
 		rf.mustDecodeIndexKey = true
 	}
 
 	if table.isSecondaryIndex {
 		for i := range colDescriptors {
 			//gcassert:bce
-			id := colDescriptors[i].GetID()
+			id := colDescriptors[i].ID
 			if neededCols.Contains(int(id)) && !table.index.ContainsColumnID(id) {
-				return errors.Errorf("requested column %s not in index", colDescriptors[i].GetName())
+				return errors.Errorf("requested column %s not in index", colDescriptors[i].Name)
 			}
 		}
 	}
@@ -566,16 +564,17 @@ func (rf *cFetcher) Init(
 	table.keyValTypes = colinfo.GetColumnTypesFromColDescs(
 		colDescriptors, indexColumnIDs, table.keyValTypes,
 	)
-	if table.index.NumExtraColumns() > 0 {
+	if len(table.index.ExtraColumnIDs) > 0 {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
+		extraColumnIDs := table.index.ExtraColumnIDs
 		table.extraTypes = colinfo.GetColumnTypesFromColDescs(
-			colDescriptors, table.index.IndexDesc().ExtraColumnIDs, table.extraTypes,
+			colDescriptors, extraColumnIDs, table.extraTypes,
 		)
-		nExtraColumns := table.index.NumExtraColumns()
+		nExtraColumns := len(extraColumnIDs)
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
 		} else {
@@ -589,11 +588,10 @@ func (rf *cFetcher) Init(
 		}
 
 		extraValColOrdinals := table.extraValColOrdinals
-		_ = extraValColOrdinals[nExtraColumns-1]
+		_ = extraValColOrdinals[len(extraColumnIDs)-1]
 		allExtraValColOrdinals := table.allExtraValColOrdinals
-		_ = allExtraValColOrdinals[nExtraColumns-1]
-		for i := 0; i < nExtraColumns; i++ {
-			id := table.index.GetExtraColumnID(i)
+		_ = allExtraValColOrdinals[len(extraColumnIDs)-1]
+		for i, id := range extraColumnIDs {
 			idx := tableArgs.ColIdxMap.GetDefault(id)
 			//gcassert:bce
 			allExtraValColOrdinals[i] = idx
@@ -609,7 +607,7 @@ func (rf *cFetcher) Init(
 
 	// Keep track of the maximum keys per row to accommodate a
 	// limitHint when StartScan is invoked.
-	keysPerRow, err := table.desc.KeysPerRow(table.index.GetID())
+	keysPerRow, err := table.desc.KeysPerRow(table.index.ID)
 	if err != nil {
 		return err
 	}
@@ -914,7 +912,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			// them when processing the index. The difference with unique secondary indexes
 			// is that the extra columns are not always there, and are used to unique-ify
 			// the index key, rather than provide the primary key column values.
-			if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1 {
+			if foundNull && rf.table.isSecondaryIndex && rf.table.index.Unique && rf.table.desc.NumFamilies() != 1 {
 				// We get the remaining bytes after the computed prefix, and then
 				// slice off the extra encoded columns from those bytes. We calculate
 				// how many bytes were sliced away, and then extend lastRowPrefix
@@ -922,7 +920,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				prefixLen := len(rf.machine.lastRowPrefix)
 				remainingBytes := rf.machine.nextKV.Key[prefixLen:]
 				origRemainingBytesLen := len(remainingBytes)
-				for i := 0; i < rf.table.index.NumExtraColumns(); i++ {
+				for range rf.table.index.ExtraColumnIDs {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
 					remainingBytes, err = rowenc.SkipTableKey(remainingBytes)
@@ -1145,7 +1143,7 @@ func (rf *cFetcher) processValue(
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.desc.GetName())
 		buf.WriteByte('/')
-		buf.WriteString(rf.table.index.GetName())
+		buf.WriteString(rf.table.index.Name)
 		for _, idx := range rf.table.allIndexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
@@ -1166,7 +1164,7 @@ func (rf *cFetcher) processValue(
 	}
 
 	val := rf.machine.nextKV.Value
-	if !table.isSecondaryIndex || table.index.GetEncodingType() == descpb.PrimaryIndexEncoding {
+	if !table.isSecondaryIndex || table.index.EncodingType == descpb.PrimaryIndexEncoding {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
@@ -1218,7 +1216,7 @@ func (rf *cFetcher) processValue(
 				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 
-			if table.isSecondaryIndex && table.index.IsUnique() {
+			if table.isSecondaryIndex && table.index.Unique {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
 				var err error
@@ -1316,7 +1314,7 @@ func (rf *cFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].GetType()
+			typ := table.cols[idx].Type
 			err := colencoding.UnmarshalColumnValueToCol(
 				&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
 			)
@@ -1416,7 +1414,7 @@ func (rf *cFetcher) processValueBytes(
 
 		vec := rf.machine.colvecs[idx]
 
-		valTyp := table.cols[idx].GetType()
+		valTyp := table.cols[idx].Type
 		valueBytes, err = colencoding.DecodeTableValueToCol(
 			&table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
 		)
@@ -1456,7 +1454,7 @@ func (rf *cFetcher) fillNulls() error {
 		if table.compositeIndexColOrdinals.Contains(i) {
 			continue
 		}
-		if !table.cols[i].IsNullable() {
+		if !table.cols[i].Nullable {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
@@ -1466,8 +1464,8 @@ func (rf *cFetcher) fillNulls() error {
 				}
 				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 					"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
-					strings.Join(table.index.IndexDesc().ColumnNames, ","), strings.Join(indexColValues, ",")))
+					table.desc.GetName(), table.cols[i].Name, table.index.Name,
+					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 		}
 		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
@@ -1511,7 +1509,7 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if len(key) < rf.table.knownPrefixLength {
 		return nil, false
 	}
-	nIndexCols := rf.table.index.NumColumns() + rf.table.index.NumExtraColumns()
+	nIndexCols := len(rf.table.index.ColumnIDs) + len(rf.table.index.ExtraColumnIDs)
 	tableKeyVals := make([]rowenc.EncDatum, nIndexCols)
 	_, ok, _, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 		rf.table.desc,

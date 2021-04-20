@@ -387,9 +387,9 @@ INSERT INTO foo VALUES (1), (10), (100);
 			row.FetcherTableArgs{
 				Spans:            spans,
 				Desc:             table,
-				Index:            idx,
+				Index:            idx.IndexDesc(),
 				ColIdxMap:        colIdxMap,
-				Cols:             table.PublicColumns(),
+				Cols:             table.Columns,
 				ValNeededForCol:  valsNeeded,
 				IsSecondaryIndex: !idx.Primary(),
 			},

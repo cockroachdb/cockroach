@@ -26,8 +26,8 @@ func EncodeKV(
 	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
 ) roachpb.KeyValue {
 	require.Equal(t, 1, descr.NumFamilies(), "there can be only one")
-	primary := descr.GetPrimaryIndex()
-	require.LessOrEqual(t, primary.NumColumns(), len(pkeyVals))
+	primary := descr.GetPrimaryIndex().IndexDesc()
+	require.LessOrEqual(t, len(primary.ColumnIDs), len(pkeyVals))
 
 	var datums tree.Datums
 	var colMap catalog.TableColMap

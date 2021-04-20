@@ -531,6 +531,6 @@ func (p *planner) reassignIndexComments(
 // key from a single span.
 // This determines whether an index is dropped during a schema change, or if
 // it is only deleted upon GC.
-func canClearRangeForDrop(index catalog.Index) bool {
+func canClearRangeForDrop(index *descpb.IndexDescriptor) bool {
 	return !index.IsInterleaved()
 }

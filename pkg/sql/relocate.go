@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,7 +32,7 @@ type relocateNode struct {
 	relocateLease     bool
 	relocateNonVoters bool
 	tableDesc         catalog.TableDescriptor
-	index             catalog.Index
+	index             *descpb.IndexDescriptor
 	rows              planNode
 
 	run relocateRun

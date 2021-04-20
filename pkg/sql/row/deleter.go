@@ -26,7 +26,7 @@ import (
 // Deleter abstracts the key/value operations for deleting table rows.
 type Deleter struct {
 	Helper    rowHelper
-	FetchCols []catalog.Column
+	FetchCols []descpb.ColumnDescriptor
 	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex catalog.TableColMap
 	// For allocation avoidance.
@@ -41,11 +41,15 @@ type Deleter struct {
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
 func MakeDeleter(
-	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, requestedCols []catalog.Column,
+	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, requestedCols []descpb.ColumnDescriptor,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
+	indexDescs := make([]descpb.IndexDescriptor, len(indexes))
+	for i, index := range indexes {
+		indexDescs[i] = *index.IndexDesc()
+	}
 
-	var fetchCols []catalog.Column
+	var fetchCols []descpb.ColumnDescriptor
 	var fetchColIDtoRowIndex catalog.TableColMap
 	if requestedCols != nil {
 		fetchCols = requestedCols[:len(requestedCols):len(requestedCols)]
@@ -58,7 +62,7 @@ func MakeDeleter(
 					return err
 				}
 				fetchColIDtoRowIndex.Set(col.GetID(), len(fetchCols))
-				fetchCols = append(fetchCols, col)
+				fetchCols = append(fetchCols, *col.ColumnDesc())
 			}
 			return nil
 		}
@@ -86,7 +90,7 @@ func MakeDeleter(
 	}
 
 	rd := Deleter{
-		Helper:               newRowHelper(codec, tableDesc, indexes),
+		Helper:               newRowHelper(codec, tableDesc, indexDescs),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
@@ -106,7 +110,7 @@ func (rd *Deleter) DeleteRow(
 	for i := range rd.Helper.Indexes {
 		// If the index ID exists in the set of indexes to ignore, do not
 		// attempt to delete from the index.
-		if pm.IgnoreForDel.Contains(int(rd.Helper.Indexes[i].GetID())) {
+		if pm.IgnoreForDel.Contains(int(rd.Helper.Indexes[i].ID)) {
 			continue
 		}
 
@@ -114,7 +118,7 @@ func (rd *Deleter) DeleteRow(
 		entries, err := rowenc.EncodeSecondaryIndex(
 			rd.Helper.Codec,
 			rd.Helper.TableDesc,
-			rd.Helper.Indexes[i],
+			&rd.Helper.Indexes[i],
 			rd.FetchColIDtoRowIndex,
 			values,
 			true, /* includeEmpty */
@@ -160,7 +164,7 @@ func (rd *Deleter) DeleteRow(
 // DeleteIndexRow adds to the batch the kv operations necessary to delete a
 // table row from the given index.
 func (rd *Deleter) DeleteIndexRow(
-	ctx context.Context, b *kv.Batch, idx catalog.Index, values []tree.Datum, traceKV bool,
+	ctx context.Context, b *kv.Batch, idx *descpb.IndexDescriptor, values []tree.Datum, traceKV bool,
 ) error {
 	// We want to include empty k/v pairs because we want
 	// to delete all k/v's for this row. By setting includeEmpty

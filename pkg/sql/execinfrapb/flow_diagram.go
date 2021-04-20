@@ -149,7 +149,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 		tbl := tr.BuildTableDescriptor()
 		// only show the first span
 		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
-		valDirs := catalogkeys.IndexKeyValDirs(idx)
+		valDirs := catalogkeys.IndexKeyValDirs(idx.IndexDesc())
 
 		var spanStr strings.Builder
 		spanStr.WriteString("Spans: ")

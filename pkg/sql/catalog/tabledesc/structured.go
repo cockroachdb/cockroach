@@ -87,8 +87,10 @@ type PostDeserializationTableDescriptorChanges struct {
 
 // FindIndexPartitionByName searches this index descriptor for a partition whose name
 // is the input and returns it, or nil if no match is found.
-func FindIndexPartitionByName(idx catalog.Index, name string) *descpb.PartitioningDescriptor {
-	return idx.IndexDesc().Partitioning.FindPartitionByName(name)
+func FindIndexPartitionByName(
+	desc *descpb.IndexDescriptor, name string,
+) *descpb.PartitioningDescriptor {
+	return desc.Partitioning.FindPartitionByName(name)
 }
 
 // DescriptorType returns the type of this descriptor.
@@ -1138,9 +1140,9 @@ func (desc *Mutable) RemoveColumnFromFamily(colID descpb.ColumnID) {
 
 // RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
-func (desc *Mutable) RenameColumnDescriptor(column catalog.Column, newColName string) {
-	colID := column.GetID()
-	column.ColumnDesc().Name = newColName
+func (desc *Mutable) RenameColumnDescriptor(column *descpb.ColumnDescriptor, newColName string) {
+	colID := column.ID
+	column.Name = newColName
 
 	for i := range desc.Families {
 		for j := range desc.Families[i].ColumnIDs {
@@ -1209,6 +1211,31 @@ func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
 		names[i] = col.GetName()
 	}
 	return names, nil
+}
+
+// RenameIndexDescriptor renames an index descriptor.
+func (desc *Mutable) RenameIndexDescriptor(index *descpb.IndexDescriptor, name string) error {
+	id := index.ID
+	if id == desc.PrimaryIndex.ID {
+		idx := desc.PrimaryIndex
+		idx.Name = name
+		desc.SetPrimaryIndex(idx)
+		return nil
+	}
+	for i, idx := range desc.Indexes {
+		if idx.ID == id {
+			idx.Name = name
+			desc.SetPublicNonPrimaryIndex(i+1, idx)
+			return nil
+		}
+	}
+	for _, m := range desc.Mutations {
+		if idx := m.GetIndex(); idx != nil && idx.ID == id {
+			idx.Name = name
+			return nil
+		}
+	}
+	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
 // DropConstraint drops a constraint, either by removing it from the table
@@ -1366,12 +1393,7 @@ func (desc *Mutable) RenameConstraint(
 			}
 			return dependentViewRenameError("index", tableRef.ID)
 		}
-		idx, err := desc.FindIndexWithID(detail.Index.ID)
-		if err != nil {
-			return err
-		}
-		idx.IndexDesc().Name = newName
-		return nil
+		return desc.RenameIndexDescriptor(detail.Index, newName)
 
 	case descpb.ConstraintTypeUnique:
 		if detail.Index != nil {
@@ -1381,11 +1403,9 @@ func (desc *Mutable) RenameConstraint(
 				}
 				return dependentViewRenameError("index", tableRef.ID)
 			}
-			idx, err := desc.FindIndexWithID(detail.Index.ID)
-			if err != nil {
+			if err := desc.RenameIndexDescriptor(detail.Index, newName); err != nil {
 				return err
 			}
-			idx.IndexDesc().Name = newName
 		} else if detail.UniqueWithoutIndexConstraint != nil {
 			if detail.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
 				return unimplemented.NewWithIssueDetailf(42844,
@@ -1725,8 +1745,8 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 	oldColName := oldCol.GetName()
 
 	// Rename old column to this new name, and rename newCol to oldCol's name.
-	desc.RenameColumnDescriptor(oldCol, uniqueName)
-	desc.RenameColumnDescriptor(newCol, oldColName)
+	desc.RenameColumnDescriptor(oldCol.ColumnDesc(), uniqueName)
+	desc.RenameColumnDescriptor(newCol.ColumnDesc(), oldColName)
 
 	// Swap Column Family ordering for oldCol and newCol.
 	// Both columns must be in the same family since the new column is
@@ -2263,9 +2283,9 @@ func (desc *immutable) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
 
 // IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 // index. This method assumes that col is currently a member of desc.
-func (desc *Mutable) IsShardColumn(col catalog.Column) bool {
+func (desc *Mutable) IsShardColumn(col *descpb.ColumnDescriptor) bool {
 	return nil != catalog.FindNonDropIndex(desc, func(idx catalog.Index) bool {
-		return idx.IsSharded() && idx.GetShardColumnName() == col.GetName()
+		return idx.IsSharded() && idx.GetShardColumnName() == col.Name
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +53,7 @@ type insertRun struct {
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted into.
-	insertCols []catalog.Column
+	insertCols []descpb.ColumnDescriptor
 
 	// done informs a new call to BatchedNext() that the previous call to
 	// BatchedNext() has completed the work already.
@@ -109,7 +110,7 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 	colIDToRetIndex := catalog.ColumnIDToOrdinalMap(r.ti.tableDesc().PublicColumns())
 	r.rowIdxToTabColIdx = make([]int, len(r.insertCols))
 	for i, col := range r.insertCols {
-		if idx, ok := colIDToRetIndex.Get(col.GetID()); !ok {
+		if idx, ok := colIDToRetIndex.Get(col.ID); !ok {
 			// Column must be write only and not public.
 			r.rowIdxToTabColIdx[i] = -1
 		} else {

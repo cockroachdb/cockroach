@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -58,7 +57,7 @@ var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
 func AlterColumnType(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	col catalog.Column,
+	col *descpb.ColumnDescriptor,
 	t *tree.AlterTableAlterColumnType,
 	params runParams,
 	cmds tree.AlterTableCmds,
@@ -67,13 +66,13 @@ func AlterColumnType(
 	for _, tableRef := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
-			if colID == col.GetID() {
+			if colID == col.ID {
 				found = true
 			}
 		}
 		if found {
 			return params.p.dependentViewError(
-				ctx, "column", col.GetName(), tableDesc.ParentID, tableRef.ID, "alter type of",
+				ctx, "column", col.Name, tableDesc.ParentID, tableRef.ID, "alter type of",
 			)
 		}
 	}
@@ -115,7 +114,7 @@ func AlterColumnType(
 		// using the expression.
 		kind = schemachange.ColumnConversionGeneral
 	} else {
-		kind, err = schemachange.ClassifyConversion(ctx, col.GetType(), typ)
+		kind, err = schemachange.ClassifyConversion(ctx, col.Type, typ)
 		if err != nil {
 			return err
 		}
@@ -128,9 +127,9 @@ func AlterColumnType(
 		// what they're going for.
 		return pgerror.Newf(pgcode.CannotCoerce,
 			"the requested type conversion (%s -> %s) requires an explicit USING expression",
-			col.GetType().SQLString(), typ.SQLString())
+			col.Type.SQLString(), typ.SQLString())
 	case schemachange.ColumnConversionTrivial:
-		col.ColumnDesc().Type = typ
+		col.Type = typ
 	case schemachange.ColumnConversionGeneral, schemachange.ColumnConversionValidate:
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
 			return err
@@ -143,7 +142,7 @@ func AlterColumnType(
 			"some writes to the altered column may be rejected until the schema change is finalized"))
 	default:
 		return errors.AssertionFailedf("unknown conversion for %s -> %s",
-			col.GetType().SQLString(), typ.SQLString())
+			col.Type.SQLString(), typ.SQLString())
 	}
 
 	return nil
@@ -152,7 +151,7 @@ func AlterColumnType(
 func alterColumnTypeGeneral(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	col catalog.Column,
+	col *descpb.ColumnDescriptor,
 	toType *types.T,
 	using tree.Expr,
 	params runParams,
@@ -175,7 +174,7 @@ func alterColumnTypeGeneral(
 				errors.WithIssueLink(
 					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
 						"supported experimentally",
-						col.GetType(), toType),
+						col.Type, toType),
 					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
@@ -183,14 +182,14 @@ func alterColumnTypeGeneral(
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that own sequences.
-	if col.NumOwnsSequences() != 0 {
+	if len(col.OwnsSequenceIds) != 0 {
 		return colOwnsSequenceNotSupportedErr
 	}
 
 	// Disallow ALTER COLUMN TYPE general for columns that have a check
 	// constraint.
 	for i := range tableDesc.Checks {
-		uses, err := tableDesc.CheckConstraintUsesColumn(tableDesc.Checks[i], col.GetID())
+		uses, err := tableDesc.CheckConstraintUsesColumn(tableDesc.Checks[i], col.ID)
 		if err != nil {
 			return err
 		}
@@ -203,7 +202,7 @@ func alterColumnTypeGeneral(
 	// UNIQUE WITHOUT INDEX constraint.
 	for _, uc := range tableDesc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
 		for _, id := range uc.ColumnIDs {
-			if col.GetID() == id {
+			if col.ID == id {
 				return colWithConstraintNotSupportedErr
 			}
 		}
@@ -213,7 +212,7 @@ func alterColumnTypeGeneral(
 	// constraint.
 	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
 		for _, id := range append(fk.OriginColumnIDs, fk.ReferencedColumnIDs...) {
-			if col.GetID() == id {
+			if col.ID == id {
 				return colWithConstraintNotSupportedErr
 			}
 		}
@@ -223,12 +222,12 @@ func alterColumnTypeGeneral(
 	// part of indexes.
 	for _, idx := range tableDesc.NonDropIndexes() {
 		for i := 0; i < idx.NumColumns(); i++ {
-			if idx.GetColumnID(i) == col.GetID() {
+			if idx.GetColumnID(i) == col.ID {
 				return colInIndexNotSupportedErr
 			}
 		}
 		for i := 0; i < idx.NumExtraColumns(); i++ {
-			if idx.GetExtraColumnID(i) == col.GetID() {
+			if idx.GetExtraColumnID(i) == col.ID {
 				return colInIndexNotSupportedErr
 			}
 		}
@@ -259,7 +258,7 @@ func alterColumnTypeGeneral(
 		return err == nil
 	}
 
-	shadowColName := tabledesc.GenerateUniqueConstraintName(col.GetName(), nameExists)
+	shadowColName := tabledesc.GenerateUniqueConstraintName(col.Name, nameExists)
 
 	var newColComputeExpr *string
 	// oldCol still needs to have values written to it in case nodes read it from
@@ -290,7 +289,7 @@ func alterColumnTypeGeneral(
 		newColComputeExpr = &expr
 
 		insertedValToString := tree.CastExpr{
-			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.GetName())},
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
 			Type:       types.String,
 			SyntaxMode: tree.CastShort,
 		}
@@ -308,9 +307,9 @@ func alterColumnTypeGeneral(
 			"'column %s is undergoing the ALTER COLUMN TYPE USING EXPRESSION "+
 				"schema change, inserts are not supported until the schema change is "+
 				"finalized, '",
-			col.GetName())
+			col.Name)
 		failedInsertMsg := fmt.Sprintf(
-			"'tried to insert ', %s, ' into %s'", insertedVal, col.GetName(),
+			"'tried to insert ', %s, ' into %s'", insertedVal, col.Name,
 		)
 		inverseExpr = fmt.Sprintf(
 			"crdb_internal.force_error('%s', concat(%s, %s))",
@@ -318,7 +317,7 @@ func alterColumnTypeGeneral(
 	} else {
 		// The default computed expression is casting the column to the new type.
 		newComputedExpr := tree.CastExpr{
-			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.GetName())},
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
 			Type:       toType,
 			SyntaxMode: tree.CastShort,
 		}
@@ -326,8 +325,8 @@ func alterColumnTypeGeneral(
 		newColComputeExpr = &s
 
 		oldColComputeExpr := tree.CastExpr{
-			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.GetName())},
-			Type:       col.GetType(),
+			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
+			Type:       col.Type,
 			SyntaxMode: tree.CastShort,
 		}
 		inverseExpr = tree.Serialize(&oldColComputeExpr)
@@ -337,13 +336,13 @@ func alterColumnTypeGeneral(
 	hasDefault := col.HasDefault()
 	var newColDefaultExpr *string
 	if hasDefault {
-		if col.ColumnDesc().HasNullDefault() {
+		if col.HasNullDefault() {
 			s := tree.Serialize(tree.DNull)
 			newColDefaultExpr = &s
 		} else {
 			// The default expression for the new column is applying the
 			// computed expression to the previous default expression.
-			expr, err := parser.ParseExpr(col.GetDefaultExpr())
+			expr, err := parser.ParseExpr(*col.DefaultExpr)
 			if err != nil {
 				return err
 			}
@@ -364,16 +363,16 @@ func alterColumnTypeGeneral(
 	newCol := descpb.ColumnDescriptor{
 		Name:            shadowColName,
 		Type:            toType,
-		Nullable:        col.IsNullable(),
+		Nullable:        col.Nullable,
 		DefaultExpr:     newColDefaultExpr,
-		UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
-		OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
+		UsesSequenceIds: col.UsesSequenceIds,
+		OwnsSequenceIds: col.OwnsSequenceIds,
 		ComputeExpr:     newColComputeExpr,
 	}
 
 	// Ensure new column is created in the same column family as the original
 	// so backfiller writes to the same column family.
-	family, err := tableDesc.GetFamilyOfColumn(col.GetID())
+	family, err := tableDesc.GetFamilyOfColumn(col.ID)
 	if err != nil {
 		return err
 	}
@@ -390,7 +389,7 @@ func alterColumnTypeGeneral(
 	}
 
 	swapArgs := &descpb.ComputedColumnSwap{
-		OldColumnId: col.GetID(),
+		OldColumnId: col.ID,
 		NewColumnId: newCol.ID,
 		InverseExpr: inverseExpr,
 	}

@@ -512,32 +512,6 @@ func FindDeleteOnlyNonPrimaryIndex(desc TableDescriptor, test func(idx Index) bo
 	return findIndex(desc.DeleteOnlyNonPrimaryIndexes(), test)
 }
 
-// FullIndexColumnIDs returns the index column IDs including any extra (implicit or
-// stored (old STORING encoding)) column IDs for non-unique indexes. It also
-// returns the direction with which each column was encoded.
-func FullIndexColumnIDs(idx Index) ([]descpb.ColumnID, []descpb.IndexDescriptor_Direction) {
-	n := idx.NumColumns()
-	if !idx.IsUnique() {
-		n += idx.NumExtraColumns()
-	}
-	ids := make([]descpb.ColumnID, 0, n)
-	dirs := make([]descpb.IndexDescriptor_Direction, 0, n)
-	for i := 0; i < idx.NumColumns(); i++ {
-		ids = append(ids, idx.GetColumnID(i))
-		dirs = append(dirs, idx.GetColumnDirection(i))
-	}
-	// Non-unique indexes have some of the primary-key columns appended to
-	// their key.
-	if !idx.IsUnique() {
-		for i := 0; i < idx.NumExtraColumns(); i++ {
-			// Extra columns are encoded in ascending order.
-			ids = append(ids, idx.GetExtraColumnID(i))
-			dirs = append(dirs, descpb.IndexDescriptor_ASC)
-		}
-	}
-	return ids, dirs
-}
-
 // UserDefinedTypeColsHaveSameVersion returns whether one table descriptor's
 // columns with user defined type metadata have the same versions of metadata
 // as in the other descriptor. Note that this function is only valid on two

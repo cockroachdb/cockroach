@@ -69,7 +69,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	// Construct the secondary index key that is currently in the
 	// database.
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		keys.SystemSQLCodec, tableDesc, secondaryIndex.IndexDesc(), colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -138,7 +138,7 @@ CREATE INDEX secondary ON t.test (v);
 	// Construct datums and secondary k/v for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		keys.SystemSQLCodec, tableDesc, secondaryIndex.IndexDesc(), colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -233,7 +233,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		keys.SystemSQLCodec, tableDesc, secondaryIndex.IndexDesc(), colIDtoRowIndex, values, true /* includeEmpty */)
 
 	if len(secondaryIndexKey) != 1 {
 		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
@@ -250,7 +250,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	// Generate a secondary index k/v that has a different value.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
 	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		keys.SystemSQLCodec, tableDesc, secondaryIndex.IndexDesc(), colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -353,7 +353,7 @@ INSERT INTO t.test VALUES (10, 2);
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
 		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -454,7 +454,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	// Construct the secondary index key entry as it exists in the
 	// database.
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		keys.SystemSQLCodec, tableDesc, secondaryIndex.IndexDesc(), colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -474,7 +474,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 
 	// Construct the new secondary index key that will be inserted.
 	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		keys.SystemSQLCodec, tableDesc, secondaryIndex.IndexDesc(), colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -593,7 +593,7 @@ INSERT INTO t.test VALUES (217, 314);
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
 		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -676,7 +676,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
 		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -781,7 +781,7 @@ CREATE TABLE t.test (
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
 		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -886,7 +886,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
 		keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
-		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
+		tableDesc, tableDesc.GetPrimaryIndex().IndexDesc(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

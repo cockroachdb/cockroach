@@ -307,7 +307,7 @@ func (p *planner) dropTableImpl(
 	// Remove interleave relationships.
 	for _, idx := range tableDesc.NonDropIndexes() {
 		if idx.NumInterleaveAncestors() > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx.IndexDesc()); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -320,15 +320,15 @@ func (p *planner) dropTableImpl(
 	}
 
 	// Remove sequence dependencies.
-	for _, col := range tableDesc.PublicColumns() {
-		if err := p.removeSequenceDependencies(ctx, tableDesc, col); err != nil {
+	for i := range tableDesc.Columns {
+		if err := p.removeSequenceDependencies(ctx, tableDesc, &tableDesc.Columns[i]); err != nil {
 			return droppedViews, err
 		}
 	}
 
 	// Drop sequences that the columns of the table own.
-	for _, col := range tableDesc.PublicColumns() {
-		if err := p.dropSequencesOwnedByCol(ctx, col, !droppingParent, behavior); err != nil {
+	for _, col := range tableDesc.Columns {
+		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingParent, behavior); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -639,12 +639,12 @@ func removeFKBackReferenceFromTable(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, idx catalog.Index,
+	ctx context.Context, tableDesc *tabledesc.Mutable, idx *descpb.IndexDescriptor,
 ) error {
-	if idx.NumInterleaveAncestors() == 0 {
+	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
-	ancestor := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1)
+	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
 	var t *tabledesc.Mutable
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
@@ -666,10 +666,10 @@ func (p *planner) removeInterleaveBackReference(
 	targetIdx := targetIdxI.IndexDesc()
 	foundAncestor := false
 	for k, ref := range targetIdx.InterleavedBy {
-		if ref.Table == tableDesc.ID && ref.Index == idx.GetID() {
+		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
 			if foundAncestor {
 				return errors.AssertionFailedf(
-					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.GetName())
+					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.Name)
 			}
 			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
 			foundAncestor = true

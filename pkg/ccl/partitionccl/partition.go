@@ -39,7 +39,10 @@ import (
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodePartitionTuple(
-	typ tree.PartitionByType, evalCtx *tree.EvalContext, maybeTuple tree.Expr, cols []catalog.Column,
+	typ tree.PartitionByType,
+	evalCtx *tree.EvalContext,
+	maybeTuple tree.Expr,
+	cols []descpb.ColumnDescriptor,
 ) ([]byte, error) {
 	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
 	// into MinVal and MaxVal, to be recognized below.
@@ -95,7 +98,7 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
-		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].GetType(), "partition",
+		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].Type, "partition",
 			&semaCtx,
 			tree.VolatilityImmutable,
 		)
@@ -110,7 +113,7 @@ func valueEncodePartitionTuple(
 		if err != nil {
 			return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 		}
-		if err := colinfo.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType()); err != nil {
+		if err := colinfo.CheckDatumTypeFitsColumnType(&cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
 		}
 		value, err = rowenc.EncodeTableValue(
@@ -173,7 +176,7 @@ func createPartitioningImpl(
 		return strings.Join(partCols, ", ")
 	}
 
-	var cols []catalog.Column
+	var cols []descpb.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
 			return partDesc, pgerror.Newf(pgcode.Syntax,
@@ -190,7 +193,7 @@ func createPartitioningImpl(
 		if err != nil {
 			return partDesc, err
 		}
-		cols = append(cols, col)
+		cols = append(cols, *col.ColumnDesc())
 		if string(partBy.Fields[i]) != col.GetName() {
 			// This used to print the first `colOffset + len(partBy.Fields)` fields
 			// but there might not be this many columns in the index. See #37682.
@@ -434,7 +437,7 @@ func selectPartitionExprs(
 		AddMutations: true,
 	}, func(idx catalog.Index) error {
 		return selectPartitionExprsByName(
-			a, evalCtx, tableDesc, idx, &idx.IndexDesc().Partitioning, prefixDatums, exprsByPartName, true /* genExpr */)
+			a, evalCtx, tableDesc, idx.IndexDesc(), &idx.IndexDesc().Partitioning, prefixDatums, exprsByPartName, true /* genExpr */)
 	}); err != nil {
 		return nil, err
 	}
@@ -487,7 +490,7 @@ func selectPartitionExprsByName(
 	a *rowenc.DatumAlloc,
 	evalCtx *tree.EvalContext,
 	tableDesc catalog.TableDescriptor,
-	idx catalog.Index,
+	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	prefixDatums tree.Datums,
 	exprsByPartName map[string]tree.TypedExpr,
@@ -504,7 +507,7 @@ func selectPartitionExprsByName(
 			exprsByPartName[l.Name] = tree.DBoolFalse
 			var fakeDatums tree.Datums
 			if err := selectPartitionExprsByName(
-				a, evalCtx, tableDesc, idx, &l.Subpartitioning, fakeDatums, exprsByPartName, genExpr,
+				a, evalCtx, tableDesc, idxDesc, &l.Subpartitioning, fakeDatums, exprsByPartName, genExpr,
 			); err != nil {
 				return err
 			}
@@ -521,7 +524,7 @@ func selectPartitionExprsByName(
 		// the column ordinal references, so reconstruct them here.
 		colVars = make(tree.Exprs, len(prefixDatums)+int(partDesc.NumColumns))
 		for i := range colVars {
-			col, err := tabledesc.FindPublicColumnWithID(tableDesc, idx.GetColumnID(i))
+			col, err := tabledesc.FindPublicColumnWithID(tableDesc, idxDesc.ColumnIDs[i])
 			if err != nil {
 				return err
 			}
@@ -544,7 +547,7 @@ func selectPartitionExprsByName(
 		for _, l := range partDesc.List {
 			for _, valueEncBuf := range l.Values {
 				t, _, err := rowenc.DecodePartitionTuple(
-					a, evalCtx.Codec, tableDesc, idx, partDesc, valueEncBuf, prefixDatums)
+					a, evalCtx.Codec, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err
 				}
@@ -578,7 +581,7 @@ func selectPartitionExprsByName(
 					genExpr = false
 				}
 				if err := selectPartitionExprsByName(
-					a, evalCtx, tableDesc, idx, &l.Subpartitioning, allDatums, exprsByPartName, genExpr,
+					a, evalCtx, tableDesc, idxDesc, &l.Subpartitioning, allDatums, exprsByPartName, genExpr,
 				); err != nil {
 					return err
 				}

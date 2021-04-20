@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -65,20 +64,19 @@ func IsDefaultCreatedDescriptor(descID descpb.ID) bool {
 //    /51/1/42/#/51/2/1337
 // which would return the slice
 //    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
-func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
+func IndexKeyValDirs(index *descpb.IndexDescriptor) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
 
-	dirs := make([]encoding.Direction, 0, (index.NumInterleaveAncestors()+1)*2+index.NumColumns())
+	dirs := make([]encoding.Direction, 0, (len(index.Interleave.Ancestors)+1)*2+len(index.ColumnDirections))
 
 	colIdx := 0
-	for i := 0; i < index.NumInterleaveAncestors(); i++ {
-		ancs := index.GetInterleaveAncestor(i)
+	for _, ancs := range index.Interleave.Ancestors {
 		// Table/Index IDs are always encoded ascending.
 		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
-			d, err := index.GetColumnDirection(colIdx).ToEncodingDirection()
+			d, err := index.ColumnDirections[colIdx].ToEncodingDirection()
 			if err != nil {
 				panic(err)
 			}
@@ -95,8 +93,8 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 	// The index's table/index ID.
 	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
 
-	for colIdx < index.NumColumns() {
-		d, err := index.GetColumnDirection(colIdx).ToEncodingDirection()
+	for colIdx < len(index.ColumnDirections) {
+		d, err := index.ColumnDirections[colIdx].ToEncodingDirection()
 		if err != nil {
 			panic(err)
 		}
@@ -142,7 +140,7 @@ func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) strin
 // PrettySpans returns a human-readable description of the spans.
 // If index is nil, then pretty print subroutines will use their default
 // settings.
-func PrettySpans(index catalog.Index, spans []roachpb.Span, skip int) string {
+func PrettySpans(index *descpb.IndexDescriptor, spans []roachpb.Span, skip int) string {
 	if len(spans) == 0 {
 		return ""
 	}

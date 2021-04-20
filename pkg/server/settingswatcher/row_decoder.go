@@ -36,7 +36,7 @@ func MakeRowDecoder(codec keys.SQLCodec) RowDecoder {
 	return RowDecoder{
 		codec: codec,
 		colIdxMap: row.ColIDtoRowIndexFromCols(
-			systemschema.SettingsTable.PublicColumns(),
+			systemschema.SettingsTable.TableDesc().Columns,
 		),
 	}
 }
@@ -52,7 +52,7 @@ func (d *RowDecoder) DecodeRow(
 	{
 		types := []*types.T{tbl.PublicColumns()[0].GetType()}
 		nameRow := make([]rowenc.EncDatum, 1)
-		_, matches, _, err := rowenc.DecodeIndexKey(d.codec, tbl, tbl.GetPrimaryIndex(), types, nameRow, nil, kv.Key)
+		_, matches, _, err := rowenc.DecodeIndexKey(d.codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, nameRow, nil, kv.Key)
 		if err != nil {
 			return "", "", "", false, errors.Wrap(err, "failed to decode key")
 		}

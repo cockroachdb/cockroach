@@ -53,11 +53,14 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 		fetcherArgs[i] = FetcherTableArgs{
 			Spans:            entry.spans,
 			Desc:             entry.tableDesc,
-			Index:            index,
+			Index:            index.IndexDesc(),
 			ColIdxMap:        catalog.ColumnIDToOrdinalMap(entry.tableDesc.PublicColumns()),
 			IsSecondaryIndex: !index.Primary(),
-			Cols:             entry.tableDesc.PublicColumns(),
+			Cols:             make([]descpb.ColumnDescriptor, len(entry.tableDesc.PublicColumns())),
 			ValNeededForCol:  entry.valNeededForCol,
+		}
+		for j, col := range entry.tableDesc.PublicColumns() {
+			fetcherArgs[i].Cols[j] = *col.ColumnDesc()
 		}
 	}
 	return fetcherArgs
@@ -192,11 +195,11 @@ func TestNextRowSingle(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.GetID() || index.GetID() != tableDesc.GetPrimaryIndexID() {
+				if desc.GetID() != tableDesc.GetID() || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
 						tableDesc.GetName(), tableDesc.GetPrimaryIndex().GetName(),
-						desc.GetName(), index.GetName(),
+						desc.GetName(), index.Name,
 					)
 				}
 
@@ -313,11 +316,11 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.GetID() || index.GetID() != tableDesc.GetPrimaryIndexID() {
+				if desc.GetID() != tableDesc.GetID() || index.ID != tableDesc.GetPrimaryIndexID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
 						tableDesc.GetName(), tableDesc.GetPrimaryIndex().GetName(),
-						desc.GetName(), index.GetName(),
+						desc.GetName(), index.Name,
 					)
 				}
 
@@ -673,11 +676,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 				count++
 
-				if desc.GetID() != tableDesc.GetID() || index.GetID() != tableDesc.PublicNonPrimaryIndexes()[0].GetID() {
+				if desc.GetID() != tableDesc.GetID() || index.ID != tableDesc.PublicNonPrimaryIndexes()[0].GetID() {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
 						tableDesc.GetName(), tableDesc.PublicNonPrimaryIndexes()[0].GetName(),
-						desc.GetName(), index.GetName(),
+						desc.GetName(), index.Name,
 					)
 				}
 
@@ -1029,11 +1032,11 @@ func TestNextRowInterleaved(t *testing.T) {
 					break
 				}
 
-				entry, found := idLookups[idLookupKey(desc.GetID(), index.GetID())]
+				entry, found := idLookups[idLookupKey(desc.GetID(), index.ID)]
 				if !found {
 					t.Fatalf(
 						"unexpected row from table %s - index %s",
-						desc.GetName(), index.GetName(),
+						desc.GetName(), index.Name,
 					)
 				}
 

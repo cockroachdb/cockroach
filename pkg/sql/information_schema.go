@@ -1297,16 +1297,16 @@ CREATE TABLE information_schema.statistics (
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
 
-				appendRow := func(index catalog.Index, colName string, sequence int,
+				appendRow := func(index *descpb.IndexDescriptor, colName string, sequence int,
 					direction tree.Datum, isStored, isImplicit bool,
 				) error {
 					return addRow(
 						dbNameStr,                         // table_catalog
 						scNameStr,                         // table_schema
 						tbNameStr,                         // table_name
-						yesOrNoDatum(!index.IsUnique()),   // non_unique
+						yesOrNoDatum(!index.Unique),       // non_unique
 						scNameStr,                         // index_schema
-						tree.NewDString(index.GetName()),  // index_name
+						tree.NewDString(index.Name),       // index_name
 						tree.NewDInt(tree.DInt(sequence)), // seq_in_index
 						tree.NewDString(colName),          // column_name
 						tree.DNull,                        // collation
@@ -1344,7 +1344,7 @@ CREATE TABLE information_schema.statistics (
 						// We add a row for each column of index.
 						dir := dStringForIndexDirection(index.GetColumnDirection(i))
 						if err := appendRow(
-							index,
+							index.IndexDesc(),
 							col,
 							sequence,
 							dir,
@@ -1359,7 +1359,7 @@ CREATE TABLE information_schema.statistics (
 					for i := 0; i < index.NumStoredColumns(); i++ {
 						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
-						if err := appendRow(index, col, sequence,
+						if err := appendRow(index.IndexDesc(), col, sequence,
 							indexDirectionNA, true, false); err != nil {
 							return err
 						}
@@ -1377,7 +1377,7 @@ CREATE TABLE information_schema.statistics (
 							col := table.GetPrimaryIndex().GetColumnName(i)
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
-								if err := appendRow(index, col, sequence,
+								if err := appendRow(index.IndexDesc(), col, sequence,
 									indexDirectionAsc, false, true); err != nil {
 									return err
 								}

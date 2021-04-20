@@ -184,10 +184,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// Phase 1: set up all necessary infrastructure for table reader planning
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
 	tabDesc := table.(*optTable).desc
-	idx := index.(*optIndex).idx
+	indexDesc := index.(*optIndex).desc
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
+	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, indexDesc)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
 	// to what scan.initTable call does in execFactory.ConstructScan.
@@ -215,7 +215,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
-		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, idx.GetID()),
+		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.VirtualColumn = vc.ColumnDesc()
 	}
 
-	trSpec.IndexIdx, err = getIndexIdx(idx, tabDesc)
+	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
 	if err != nil {
 		return nil, err
 	}

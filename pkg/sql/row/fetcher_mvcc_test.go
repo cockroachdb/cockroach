@@ -92,17 +92,19 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	for _, desc := range []catalog.TableDescriptor{parentDesc, childDesc} {
 		var colIdxMap catalog.TableColMap
 		var valNeededForCol util.FastIntSet
+		colDescs := make([]descpb.ColumnDescriptor, len(desc.PublicColumns()))
 		for i, col := range desc.PublicColumns() {
 			colIdxMap.Set(col.GetID(), i)
 			valNeededForCol.Add(i)
+			colDescs[i] = *col.ColumnDesc()
 		}
 		args = append(args, row.FetcherTableArgs{
 			Spans:            desc.AllIndexSpans(keys.SystemSQLCodec),
 			Desc:             desc,
-			Index:            desc.GetPrimaryIndex(),
+			Index:            desc.GetPrimaryIndex().IndexDesc(),
 			ColIdxMap:        colIdxMap,
 			IsSecondaryIndex: false,
-			Cols:             desc.PublicColumns(),
+			Cols:             colDescs,
 			ValNeededForCol:  valNeededForCol,
 		})
 	}

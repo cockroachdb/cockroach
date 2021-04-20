@@ -37,15 +37,32 @@ type ResultColumn struct {
 // describe the column types of a table.
 type ResultColumns []ResultColumn
 
+// ResultColumnsFromColDescs converts []descpb.ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescs(
+	tableID descpb.ID, colDescs []descpb.ColumnDescriptor,
+) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
+		return &colDescs[i]
+	})
+}
+
+// ResultColumnsFromColDescPtrs converts []*descpb.ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescPtrs(
+	tableID descpb.ID, colDescs []*descpb.ColumnDescriptor,
+) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
+		return colDescs[i]
+	})
+}
+
 // ResultColumnsFromColumns converts []catalog.Column to []ResultColumn.
 func ResultColumnsFromColumns(tableID descpb.ID, columns []catalog.Column) ResultColumns {
-	return ResultColumnsFromColDescs(tableID, len(columns), func(i int) *descpb.ColumnDescriptor {
+	return resultColumnsFromColDescs(tableID, len(columns), func(i int) *descpb.ColumnDescriptor {
 		return columns[i].ColumnDesc()
 	})
 }
 
-// ResultColumnsFromColDescs is used by ResultColumnsFromColumns and by tests.
-func ResultColumnsFromColDescs(
+func resultColumnsFromColDescs(
 	tableID descpb.ID, numCols int, getColDesc func(int) *descpb.ColumnDescriptor,
 ) ResultColumns {
 	cols := make(ResultColumns, numCols)

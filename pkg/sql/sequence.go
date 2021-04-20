@@ -495,7 +495,7 @@ func assignSequenceOptions(
 				// We only want to trigger schema changes if the owner is not what we
 				// want it to be.
 				if opts.SequenceOwner.OwnerTableID != tableDesc.ID ||
-					opts.SequenceOwner.OwnerColumnID != col.GetID() {
+					opts.SequenceOwner.OwnerColumnID != col.ID {
 					if err := removeSequenceOwnerIfExists(params.ctx, params.p, sequenceID, opts); err != nil {
 						return err
 					}
@@ -559,17 +559,17 @@ func removeSequenceOwnerIfExists(
 		return err
 	}
 	// Find an item in colDesc.OwnsSequenceIds which references SequenceID.
-	newOwnsSequenceIDs := make([]descpb.ID, 0, col.NumOwnsSequences())
+	refIdx := -1
 	for i := 0; i < col.NumOwnsSequences(); i++ {
 		id := col.GetOwnsSequenceID(i)
-		if id != sequenceID {
-			newOwnsSequenceIDs = append(newOwnsSequenceIDs, id)
+		if id == sequenceID {
+			refIdx = i
 		}
 	}
-	if len(newOwnsSequenceIDs) == col.NumOwnsSequences() {
+	if refIdx == -1 {
 		return errors.AssertionFailedf("couldn't find reference from column to this sequence")
 	}
-	col.ColumnDesc().OwnsSequenceIds = newOwnsSequenceIDs
+	col.ColumnDesc().OwnsSequenceIds = append(col.ColumnDesc().OwnsSequenceIds[:refIdx], col.ColumnDesc().OwnsSequenceIds[refIdx+1:]...)
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID,
 		fmt.Sprintf("removing sequence owner %s(%d) for sequence %d",
@@ -585,7 +585,7 @@ func removeSequenceOwnerIfExists(
 
 func resolveColumnItemToDescriptors(
 	ctx context.Context, p *planner, columnItem *tree.ColumnItem,
-) (*tabledesc.Mutable, catalog.Column, error) {
+) (*tabledesc.Mutable, *descpb.ColumnDescriptor, error) {
 	if columnItem.TableName == nil {
 		err := pgerror.New(pgcode.Syntax, "invalid OWNED BY option")
 		return nil, nil, errors.WithHint(err, "Specify OWNED BY table.column or OWNED BY NONE.")
@@ -599,7 +599,7 @@ func resolveColumnItemToDescriptors(
 	if err != nil {
 		return nil, nil, err
 	}
-	return tableDesc, col, nil
+	return tableDesc, col.ColumnDesc(), nil
 }
 
 func addSequenceOwner(
@@ -614,9 +614,9 @@ func addSequenceOwner(
 		return err
 	}
 
-	col.ColumnDesc().OwnsSequenceIds = append(col.ColumnDesc().OwnsSequenceIds, sequenceID)
+	col.OwnsSequenceIds = append(col.OwnsSequenceIds, sequenceID)
 
-	opts.SequenceOwner.OwnerColumnID = col.GetID()
+	opts.SequenceOwner.OwnerColumnID = col.ID
 	opts.SequenceOwner.OwnerTableID = tableDesc.GetID()
 	return p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, fmt.Sprintf(
@@ -736,16 +736,12 @@ func GetSequenceDescFromIdentifier(
 // dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.
 // Called when the respective column (or the whole table) is being dropped.
 func (p *planner) dropSequencesOwnedByCol(
-	ctx context.Context, col catalog.Column, queueJob bool, behavior tree.DropBehavior,
+	ctx context.Context, col *descpb.ColumnDescriptor, queueJob bool, behavior tree.DropBehavior,
 ) error {
 	// Copy out the sequence IDs as the code to drop the sequence will reach
 	// back around and update the descriptor from underneath us.
-	colOwnsSequenceIDs := make([]descpb.ID, col.NumOwnsSequences())
-	for i := 0; i < col.NumOwnsSequences(); i++ {
-		colOwnsSequenceIDs[i] = col.GetOwnsSequenceID(i)
-	}
-
-	for _, sequenceID := range colOwnsSequenceIDs {
+	ownsSequenceIDs := append([]descpb.ID(nil), col.OwnsSequenceIds...)
+	for _, sequenceID := range ownsSequenceIDs {
 		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		// Special case error swallowing for #50781, which can cause a
 		// column to own sequences that do not exist.
@@ -780,10 +776,9 @@ func (p *planner) dropSequencesOwnedByCol(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func (p *planner) removeSequenceDependencies(
-	ctx context.Context, tableDesc *tabledesc.Mutable, col catalog.Column,
+	ctx context.Context, tableDesc *tabledesc.Mutable, col *descpb.ColumnDescriptor,
 ) error {
-	for i := 0; i < col.NumUsesSequences(); i++ {
-		sequenceID := col.GetUsesSequenceID(i)
+	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
 		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
 		if err != nil {
@@ -808,7 +803,7 @@ func (p *planner) removeSequenceDependencies(
 			if reference.ID == tableDesc.ID {
 				refTableIdx = i
 				for j, colRefID := range seqDesc.DependedOnBy[i].ColumnIDs {
-					if colRefID == col.GetID() {
+					if colRefID == col.ID {
 						refColIdx = j
 						break found
 					}
@@ -847,6 +842,6 @@ func (p *planner) removeSequenceDependencies(
 		}
 	}
 	// Remove the reference from the column descriptor to the sequence descriptor.
-	col.ColumnDesc().UsesSequenceIds = []descpb.ID{}
+	col.UsesSequenceIds = []descpb.ID{}
 	return nil
 }

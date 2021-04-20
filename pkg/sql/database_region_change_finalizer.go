@@ -174,7 +174,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 					ctx,
 					txn,
 					tableDesc,
-					index.GetID(),
+					index.IndexDesc(),
 					&oldPartitioning,
 					&index.IndexDesc().Partitioning,
 					execCfg,

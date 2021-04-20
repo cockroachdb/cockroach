@@ -1020,7 +1020,7 @@ func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor
 // indicates how many index columns to skip over.
 func (desc *wrapper) validatePartitioningDescriptor(
 	a *rowenc.DatumAlloc,
-	idx catalog.Index,
+	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	colOffset int,
 	partitionNames map[string]string,
@@ -1041,9 +1041,9 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// InterleavedBy is fine, so using the root of the interleave hierarchy will
 	// work. It is expected that this is sufficient for real-world use cases.
 	// Revisit this restriction if that expectation is wrong.
-	if idx.NumInterleaveAncestors() > 0 {
+	if len(idxDesc.Interleave.Ancestors) > 0 {
 		return errors.Errorf("cannot set a zone config for interleaved index %s; "+
-			"set it on the root of the interleaved hierarchy instead", idx.GetName())
+			"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
 	}
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we're
@@ -1071,10 +1071,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// The partitioning descriptor may be invalid and refer to columns
 			// not stored in the index. In that case, skip this check as the
 			// validation will fail later.
-			if i >= idx.NumColumns() {
+			if i >= len(idxDesc.ColumnIDs) {
 				continue
 			}
-			col, err := desc.FindColumnWithID(idx.GetColumnID(i))
+			col, err := desc.FindColumnWithID(idxDesc.ColumnIDs[i])
 			if err != nil {
 				return err
 			}
@@ -1089,12 +1089,12 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			return fmt.Errorf("PARTITION name must be non-empty")
 		}
 		if indexName, exists := partitionNames[name]; exists {
-			if indexName == idx.GetName() {
+			if indexName == idxDesc.Name {
 				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
 		}
-		partitionNames[name] = idx.GetName()
+		partitionNames[name] = idxDesc.Name
 		return nil
 	}
 
@@ -1117,7 +1117,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
 				tuple, keyPrefix, err := rowenc.DecodePartitionTuple(
-					a, codec, desc, idx, partDesc, valueEncBuf, fakePrefixDatums)
+					a, codec, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
@@ -1129,7 +1129,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 
 			newColOffset := colOffset + int(partDesc.NumColumns)
 			if err := desc.validatePartitioningDescriptor(
-				a, idx, &p.Subpartitioning, newColOffset, partitionNames,
+				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
 			); err != nil {
 				return err
 			}
@@ -1146,12 +1146,12 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
 			fromDatums, fromKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idx, partDesc, p.FromInclusive, fakePrefixDatums)
+				a, codec, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
 			toDatums, toKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idx, partDesc, p.ToExclusive, fakePrefixDatums)
+				a, codec, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
@@ -1198,8 +1198,9 @@ func (desc *wrapper) validatePartitioning() error {
 
 	a := &rowenc.DatumAlloc{}
 	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
+		idxDesc := idx.IndexDesc()
 		return desc.validatePartitioningDescriptor(
-			a, idx, &idx.IndexDesc().Partitioning, 0 /* colOffset */, partitionNames,
+			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
 		)
 	})
 }

@@ -569,7 +569,7 @@ func TestingMakePrimaryIndexKeyForTenant(
 	}
 
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc, index.GetID())
-	key, _, err := rowenc.EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+	key, _, err := rowenc.EncodeIndexKey(desc, index.IndexDesc(), colIDToRowIndex, datums, keyPrefix)
 	if err != nil {
 		return nil, err
 	}

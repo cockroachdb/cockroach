@@ -102,15 +102,11 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		if err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, details.InterleavedTable.ID); err != nil {
 			return err
 		}
-		interleavedIndexIDs := make([]descpb.IndexID, len(details.InterleavedIndexes))
-		for i := range details.InterleavedIndexes {
-			interleavedIndexIDs[i] = details.InterleavedIndexes[i].ID
-		}
 		if err := sql.TruncateInterleavedIndexes(
 			ctx,
 			execCfg,
 			tabledesc.NewBuilder(details.InterleavedTable).BuildImmutableTable(),
-			interleavedIndexIDs,
+			details.InterleavedIndexes,
 		); err != nil {
 			return err
 		}

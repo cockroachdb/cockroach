@@ -1149,7 +1149,7 @@ func (m *pgDumpReader) readFile(
 							if err != nil {
 								col := conv.VisibleCols[idx]
 								return wrapRowErr(err, "", count, pgcode.Syntax,
-									"parse %q as %s", col.GetName(), col.GetType().SQLString())
+									"parse %q as %s", col.Name, col.Type.SQLString())
 							}
 						}
 					}
