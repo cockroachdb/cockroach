@@ -51,13 +51,6 @@ import (
 )
 
 const (
-	// TODO(vivek): Replace these constants with a runtime budget for the
-	// operation chunk involved.
-
-	// columnTruncateAndBackfillChunkSize is the maximum number of rows
-	// processed per chunk during column truncate or backfill.
-	columnTruncateAndBackfillChunkSize = 200
-
 	// indexTruncateChunkSize is the maximum number of index entries truncated
 	// per chunk during an index truncation. This value is larger than the
 	// other chunk constants because the operation involves only running a
@@ -84,6 +77,16 @@ var indexBackfillBatchSize = settings.RegisterIntSetting(
 	"bulkio.index_backfill.batch_size",
 	"the number of rows for which we construct index entries in a single batch",
 	50000,
+	settings.NonNegativeInt, /* validateFn */
+)
+
+// indexBackfillBatchSize is the maximum number of rows we construct index
+// entries for before we attempt to fill in a single index batch before queueing
+// it up for ingestion and progress reporting in the index backfiller processor.
+var columnBackfillBatchSize = settings.RegisterIntSetting(
+	"bulkio.column_backfill.batch_size",
+	"the number of rows updated at a time to add/remove columns",
+	200,
 	settings.NonNegativeInt, /* validateFn */
 )
 
@@ -1909,7 +1912,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	log.Infof(ctx, "clearing and backfilling columns")
 
 	if err := sc.distBackfill(
-		ctx, version, columnBackfill, columnTruncateAndBackfillChunkSize,
+		ctx, version, columnBackfill, columnBackfillBatchSize.Get(&sc.settings.SV),
 		backfill.ColumnMutationFilter, nil); err != nil {
 		return err
 	}
@@ -2365,7 +2368,7 @@ func columnBackfillInTxn(
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, sp, columnTruncateAndBackfillChunkSize,
+			txn, tableDesc, sp, columnBackfillBatchSize.Get(&evalCtx.Settings.SV),
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err
