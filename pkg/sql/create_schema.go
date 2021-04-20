@@ -83,7 +83,10 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	// Ensure that the cluster version is high enough to create the schema.
-	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.VersionUserDefinedSchemas) {
+	if !params.p.ExecCfg().Settings.Version.IsActive(
+		params.ctx, clusterversion.VersionUserDefinedSchemas,
+	) ||
+		params.p.Descriptors().DatabaseLeasingUnsupported() {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			`creating schemas requires all nodes to be upgraded to %s`,
 			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
