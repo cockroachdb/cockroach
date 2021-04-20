@@ -437,6 +437,18 @@ func changefeedJobDescription(
 	return tree.AsStringWithFQNames(c, ann), nil
 }
 
+// validateNonNegativeDuration returns a nil error if optValue can be
+// parsed as a duration and is non-negative; otherwise, an error is
+// returned.
+func validateNonNegativeDuration(optName string, optValue string) error {
+	if d, err := time.ParseDuration(optValue); err != nil {
+		return err
+	} else if d < 0 {
+		return errors.Errorf("negative durations are not accepted: %s='%s'", optName, optValue)
+	}
+	return nil
+}
+
 func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails, error) {
 	if details.Opts == nil {
 		// The proto MarshalTo method omits the Opts field if the map is empty.
@@ -447,11 +459,8 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	{
 		const opt = changefeedbase.OptResolvedTimestamps
 		if o, ok := details.Opts[opt]; ok && o != `` {
-			if d, err := time.ParseDuration(o); err != nil {
+			if err := validateNonNegativeDuration(opt, o); err != nil {
 				return jobspb.ChangefeedDetails{}, err
-			} else if d < 0 {
-				return jobspb.ChangefeedDetails{}, errors.Errorf(
-					`negative durations are not accepted: %s='%s'`, opt, o)
 			}
 		}
 	}

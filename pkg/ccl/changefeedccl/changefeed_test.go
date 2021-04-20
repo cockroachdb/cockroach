@@ -2228,10 +2228,16 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown envelope: nope`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH envelope=nope`,
 	)
+
+	sqlDB.ExpectErr(
+		t, `time: invalid duration "bar"`,
+		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='bar'`,
+	)
 	sqlDB.ExpectErr(
 		t, `negative durations are not accepted: resolved='-1s'`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH resolved='-1s'`,
 	)
+
 	sqlDB.ExpectErr(
 		t, `cannot specify timestamp in the future`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
