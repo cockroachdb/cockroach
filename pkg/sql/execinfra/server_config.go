@@ -48,7 +48,7 @@ var SettingWorkMemBytes = settings.RegisterByteSizeSetting(
 	"sql.distsql.temp_storage.workmem",
 	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
 	64*1024*1024, /* 64MB */
-)
+).WithPublic()
 
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
