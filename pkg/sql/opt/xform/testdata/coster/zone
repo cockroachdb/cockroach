@@ -755,7 +755,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │         └── a2.r:6 = 'west' [outer=(6), constraints=(/6: [/'west' - /'west']; tight), fd=()-->(6)]
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 23.4031483
+ ├── cost: 19.7431618
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── anti-join (lookup abc_part@bc_idx [as=a2])
@@ -766,7 +766,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         └── a2.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.900900001, distinct(1)=0.89738934, null(1)=0, distinct(2)=0.900900001, null(2)=0, distinct(3)=0.900900001, null(3)=0, distinct(4)=0.900900001, null(4)=0]
- │    ├── cost: 14.2891619
+ │    ├── cost: 12.4499727
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── locality-optimized-search
