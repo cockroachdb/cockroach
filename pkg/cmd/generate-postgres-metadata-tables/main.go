@@ -28,16 +28,38 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/jackc/pgx"
+	"github.com/lib/pq/oid"
 )
 
 const getServerVersion = `SELECT current_setting('server_version');`
 
+// Flags or command line arguments.
 var (
 	postgresAddr   = flag.String("addr", "localhost:5432", "Postgres server address")
 	postgresUser   = flag.String("user", "postgres", "Postgres user")
 	postgresSchema = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
 )
+
+// Map for unimplemented types.
+// For reference see:
+// https://www.npgsql.org/doc/dev/type-representations.html
+var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
+	// These types only exists in information_schema.
+	// cardinal_number in postgres is an INT4 but we already implemented columns as INT8.
+	oid.Oid(13438): oid.T_int8,        // cardinal_number
+	oid.Oid(13450): oid.T_text,        // yes_or_no
+	oid.Oid(13441): oid.T_text,        // character_data
+	oid.Oid(13443): oid.T_text,        // sql_identifier
+	oid.Oid(13448): oid.T_timestamptz, // time_stamp
+
+	// Other types
+	oid.T__aclitem:     oid.T__text,
+	oid.T_pg_node_tree: oid.T_text,
+	oid.T_xid:          oid.T_oid,
+	oid.T_pg_lsn:       oid.T_text,
+}
 
 func main() {
 	flag.Parse()
@@ -51,12 +73,16 @@ func main() {
 	rows := describePgCatalog(db)
 	defer rows.Close()
 	for rows.Next() {
-		var table, column, dataType string
+		var table, column, dataTypeName string
 		var dataTypeOid uint32
-		if err := rows.Scan(&table, &column, &dataType, &dataTypeOid); err != nil {
+		if err := rows.Scan(&table, &column, &dataTypeName, &dataTypeOid); err != nil {
 			panic(err)
 		}
-		pgCatalogFile.PGMetadata.AddColumnMetadata(table, column, dataType, dataTypeOid)
+		mappedTypeName, mappedTypeOid, err := getMappedType(dataTypeName, dataTypeOid)
+		if err != nil {
+			panic(err)
+		}
+		pgCatalogFile.PGMetadata.AddColumnMetadata(table, column, mappedTypeName, mappedTypeOid)
 		columnType := pgCatalogFile.PGMetadata[table][column]
 		if !columnType.IsImplemented() {
 			pgCatalogFile.AddUnimplementedType(columnType)
@@ -99,4 +125,29 @@ func closeDB(conn *pgx.Conn) {
 	if err := conn.Close(); err != nil {
 		panic(err)
 	}
+}
+
+// getMappedType checks if the postgres type can be implemented as other crdb
+// implemented type.
+func getMappedType(dataTypeName string, dataTypeOid uint32) (string, uint32, error) {
+	actualOid := oid.Oid(dataTypeOid)
+	mappedOid, ok := unimplementedEquivalencies[actualOid]
+	if !ok {
+		// No mapped type
+		return dataTypeName, dataTypeOid, nil
+	}
+
+	_, ok = types.OidToType[mappedOid]
+	if !ok {
+		// not expected this to happen
+		return "", 0, fmt.Errorf("type with oid %d is unimplemented", mappedOid)
+	}
+
+	typeName, ok := oid.TypeName[mappedOid]
+	if !ok {
+		// not expected this to happen
+		return "", 0, fmt.Errorf("type name for oid %d does not exist in oid.TypeName map", mappedOid)
+	}
+
+	return typeName, uint32(mappedOid), nil
 }
