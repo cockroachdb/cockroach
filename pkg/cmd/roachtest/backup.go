@@ -12,15 +12,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,6 +46,26 @@ const (
 	rows5GiB   = rows100GiB / 20
 	rows3GiB   = rows30GiB / 10
 )
+
+// writeArtifacts writes a histogram with the backupDuration to the artifacts
+// directory. This information is used by roachperf to track backup performance.
+func writeArtifacts(backupDuration time.Duration, histogramName string) error {
+	reg := histogram.NewRegistry(2 * time.Hour)
+	reg.GetHandle().Get(histogramName).Record(backupDuration)
+	backupPerfDir := perfArtifactsDir + "/stats.json"
+	_ = os.MkdirAll(filepath.Dir(backupPerfDir), 0755)
+	jsonF, err := os.Create(backupPerfDir)
+	if err != nil {
+		return err
+	}
+	jsonEnc := json.NewEncoder(jsonF)
+	reg.Tick(func(tick histogram.Tick) {
+		if jsonEnc != nil {
+			_ = jsonEnc.Encode(tick.Snapshot())
+		}
+	})
+	return nil
+}
 
 func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) string {
 	dest := c.name
@@ -152,8 +176,14 @@ func registerBackup(r *testRegistry) {
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
+				backupStart := timeutil.Now()
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
+				backupTimeElapsed := timeutil.Since(backupStart)
+				if err := writeArtifacts(backupTimeElapsed, "backup2TB"); err != nil {
+					log.Warningf(ctx, "failed to write perf artifacts during backup2TB, elapsed: %s",
+						backupTimeElapsed.String())
+				}
 				return nil
 			})
 			m.Wait()
