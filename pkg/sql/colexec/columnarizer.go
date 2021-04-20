@@ -111,7 +111,7 @@ func newColumnarizer(
 	c := &Columnarizer{
 		allocator:       allocator,
 		input:           input,
-		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx.Cfg),
+		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx),
 		ctx:             ctx,
 		mode:            mode,
 	}

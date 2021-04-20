@@ -14,7 +14,3 @@ package colexecop
 // that the external sorter needs to have in order to make progress (when
 // merging, we have to merge at least two partitions into a new third one).
 const ExternalSorterMinPartitions = 3
-
-// DefaultMemoryLimit is the default value of sql.distsql.temp_storage.workmem
-// cluster setting.
-const DefaultMemoryLimit = 64 << 20 /* 64 MiB */
