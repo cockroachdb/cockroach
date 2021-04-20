@@ -284,7 +284,7 @@ func (t *Tracer) startSpanGeneric(
 	}
 
 	if opts.Parent != nil {
-		if opts.RemoteParent != nil {
+		if !opts.RemoteParent.Empty() {
 			panic("can't specify both Parent and RemoteParent")
 		}
 	}
@@ -396,6 +396,21 @@ func (t *Tracer) startSpanGeneric(
 		netTr:  netTr,
 	}
 
+	// Copy over the parent span's root span reference, and if there isn't one
+	// (we're creating a new root span), set a reference to ourselves.
+	//
+	// TODO(irfansharif): Given we have a handle on the root span, we should
+	// reconsider the maxChildrenPerSpan limit, which only limits the branching
+	// factor. To bound the total memory usage for pkg/tracing, we could instead
+	// limit the number of spans per trace (no-oping all subsequent ones) and
+	// do the same for the total number of root spans.
+	if rootSpan := opts.deriveRootSpan(); rootSpan != nil {
+		helper.crdbSpan.rootSpan = rootSpan
+	} else {
+		helper.crdbSpan.traceEmpty.Store(true)
+		helper.crdbSpan.rootSpan = &helper.crdbSpan
+	}
+
 	s := &helper.span
 
 	{
@@ -410,8 +425,8 @@ func (t *Tracer) startSpanGeneric(
 		s.i.crdb.enableRecording(p, opts.recordingType())
 	}
 
-	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr
-	// as appropriate.
+	// Set initial tags (has to happen after instantiating the recording type).
+	// These will propagate to the crdbSpan, ot, and netTr as appropriate.
 	//
 	// NB: this could be optimized.
 	for k, v := range opts.Tags {
@@ -426,10 +441,11 @@ func (t *Tracer) startSpanGeneric(
 		if !opts.Parent.i.isNoop() {
 			opts.Parent.i.crdb.mu.Lock()
 			m := opts.Parent.i.crdb.mu.baggage
+			opts.Parent.i.crdb.mu.Unlock()
+
 			for k, v := range m {
 				s.SetBaggageItem(k, v)
 			}
-			opts.Parent.i.crdb.mu.Unlock()
 		}
 	} else {
 		// Local root span - put it into the registry of active local root
@@ -452,7 +468,7 @@ func (t *Tracer) startSpanGeneric(
 		t.activeSpans.m[spanID] = s
 		t.activeSpans.Unlock()
 
-		if opts.RemoteParent != nil {
+		if !opts.RemoteParent.Empty() {
 			for k, v := range opts.RemoteParent.Baggage {
 				s.SetBaggageItem(k, v)
 			}
@@ -536,8 +552,8 @@ func (fn textMapWriterFn) Set(key, val string) {
 // InjectMetaInto is used to serialize the given span metadata into the given
 // Carrier. This, alongside ExtractMetaFrom, can be used to carry span metadata
 // across process boundaries. See serializationFormat for more details.
-func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
-	if sm == nil {
+func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) error {
+	if sm.Empty() {
 		// Fast path when tracing is disabled. ExtractMetaFrom will accept an
 		// empty map as a noop context.
 		return nil
@@ -580,108 +596,24 @@ func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
 	return nil
 }
 
-var noopSpanMeta = (*SpanMeta)(nil)
+// var noopSpanMeta = (*SpanMeta)(nil)
+var noopSpanMeta = SpanMeta{}
 
 // ExtractMetaFrom is used to deserialize a span metadata (if any) from the
 // given Carrier. This, alongside InjectMetaFrom, can be used to carry span
 // metadata across process boundaries. See serializationFormat for more details.
-func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
-	var format serializationFormat
-	switch carrier.(type) {
+func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
+	switch c := carrier.(type) {
 	case MapCarrier:
-		format = mapFormat
+		return t.extractMetaFromMapCarrier(c)
 	case metadataCarrier:
-		format = metadataFormat
+		return t.extractMetaFromMetadataCarrier(c)
 	default:
 		return noopSpanMeta, errors.New("unsupported carrier")
 	}
-
-	var shadowType string
-	var shadowCarrier opentracing.TextMapCarrier
-
-	var traceID uint64
-	var spanID uint64
-	var baggage map[string]string
-
-	// TODO(tbg): ForeachKey forces things on the heap. We can do better
-	// by using an explicit carrier.
-	err := carrier.ForEach(func(k, v string) error {
-		switch k = strings.ToLower(k); k {
-		case fieldNameTraceID:
-			var err error
-			traceID, err = strconv.ParseUint(v, 16, 64)
-			if err != nil {
-				return opentracing.ErrSpanContextCorrupted
-			}
-		case fieldNameSpanID:
-			var err error
-			spanID, err = strconv.ParseUint(v, 16, 64)
-			if err != nil {
-				return opentracing.ErrSpanContextCorrupted
-			}
-		case fieldNameShadowType:
-			shadowType = v
-		default:
-			if strings.HasPrefix(k, prefixBaggage) {
-				if baggage == nil {
-					baggage = make(map[string]string)
-				}
-				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
-			} else if strings.HasPrefix(k, prefixShadow) {
-				if shadowCarrier == nil {
-					shadowCarrier = make(opentracing.TextMapCarrier)
-				}
-				// We build a shadow textmap with the original shadow keys.
-				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return noopSpanMeta, err
-	}
-	if traceID == 0 && spanID == 0 {
-		return noopSpanMeta, nil
-	}
-
-	var recordingType RecordingType
-	if baggage[verboseTracingBaggageKey] != "" {
-		recordingType = RecordingVerbose
-	}
-
-	var shadowCtx opentracing.SpanContext
-	if shadowType != "" {
-		shadowTr := t.getShadowTracer()
-		curShadowTyp, _ := shadowTr.Type()
-
-		if shadowType != curShadowTyp {
-			// If either the incoming context or tracer disagree on which
-			// shadow tracer (if any) is active, scrub shadow tracing from
-			// consideration.
-			shadowType = ""
-		} else {
-			// Shadow tracing is active on this node and the incoming information
-			// was created using the same type of tracer.
-			//
-			// Extract the shadow context using the un-encapsulated textmap.
-			shadowCtx, err = shadowTr.Extract(format, shadowCarrier)
-			if err != nil {
-				return noopSpanMeta, err
-			}
-		}
-	}
-
-	return &SpanMeta{
-		traceID:          traceID,
-		spanID:           spanID,
-		shadowTracerType: shadowType,
-		shadowCtx:        shadowCtx,
-		recordingType:    recordingType,
-		Baggage:          baggage,
-	}, nil
 }
 
-// GetActiveSpanFromID retrieves any active span given its span ID.
+// GetActiveSpanFromID retrieves any active root span given its ID.
 func (t *Tracer) GetActiveSpanFromID(spanID uint64) (*Span, bool) {
 	t.activeSpans.Lock()
 	span, found := t.activeSpans.m[spanID]
@@ -850,4 +782,180 @@ func ContextWithRecordingSpan(
 		tr.Close()
 	}
 	return ctx, sp.GetRecording, cancel
+}
+
+// extractMetaFromMapCarrier is identical to extractMetaFromMetadataCarrier,
+// differing only in the explicit carrier type. We do this to avoid allocating
+// on the heap when iterating over kvs through the Carrier interface.
+func (t *Tracer) extractMetaFromMapCarrier(carrier MapCarrier) (SpanMeta, error) {
+	const format = mapFormat
+
+	var shadowType string
+	var shadowCarrier opentracing.TextMapCarrier
+	var traceID uint64
+	var spanID uint64
+	var baggage map[string]string
+
+	err := carrier.ForEach(func(k, v string) error {
+		switch k = strings.ToLower(k); k {
+		case fieldNameTraceID:
+			var err error
+			traceID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameSpanID:
+			var err error
+			spanID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameShadowType:
+			shadowType = v
+		default:
+			if strings.HasPrefix(k, prefixBaggage) {
+				if baggage == nil {
+					baggage = make(map[string]string)
+				}
+				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
+			} else if strings.HasPrefix(k, prefixShadow) {
+				if shadowCarrier == nil {
+					shadowCarrier = make(opentracing.TextMapCarrier)
+				}
+				// We build a shadow textmap with the original shadow keys.
+				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return noopSpanMeta, err
+	}
+	if traceID == 0 && spanID == 0 {
+		return noopSpanMeta, nil
+	}
+
+	var recordingType RecordingType
+	if baggage[verboseTracingBaggageKey] != "" {
+		recordingType = RecordingVerbose
+	}
+
+	var shadowCtx opentracing.SpanContext
+	if shadowType != "" {
+		shadowTr := t.getShadowTracer()
+		curShadowTyp, _ := shadowTr.Type()
+
+		if shadowType != curShadowTyp {
+			// If either the incoming context or tracer disagree on which
+			// shadow tracer (if any) is active, scrub shadow tracing from
+			// consideration.
+			shadowType = ""
+		} else {
+			// Shadow tracing is active on this node and the incoming information
+			// was created using the same type of tracer.
+			//
+			// Extract the shadow context using the un-encapsulated textmap.
+			shadowCtx, err = shadowTr.Extract(format, shadowCarrier)
+			if err != nil {
+				return noopSpanMeta, err
+			}
+		}
+	}
+
+	return SpanMeta{
+		traceID:          traceID,
+		spanID:           spanID,
+		shadowTracerType: shadowType,
+		shadowCtx:        shadowCtx,
+		recordingType:    recordingType,
+		Baggage:          baggage,
+	}, nil
+}
+
+// extractMetaFromMetadataCarrier is identical to extractMetaFromMapCarrier,
+// differing only in the explicit carrier type. We do this to avoid allocating
+// on the heap when iterating over kvs through the Carrier interface.
+func (t *Tracer) extractMetaFromMetadataCarrier(carrier metadataCarrier) (SpanMeta, error) {
+	const format = metadataFormat
+
+	var shadowType string
+	var shadowCarrier opentracing.TextMapCarrier
+	var traceID uint64
+	var spanID uint64
+	var baggage map[string]string
+
+	err := carrier.ForEach(func(k, v string) error {
+		switch k = strings.ToLower(k); k {
+		case fieldNameTraceID:
+			var err error
+			traceID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameSpanID:
+			var err error
+			spanID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameShadowType:
+			shadowType = v
+		default:
+			if strings.HasPrefix(k, prefixBaggage) {
+				if baggage == nil {
+					baggage = make(map[string]string)
+				}
+				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
+			} else if strings.HasPrefix(k, prefixShadow) {
+				if shadowCarrier == nil {
+					shadowCarrier = make(opentracing.TextMapCarrier)
+				}
+				// We build a shadow textmap with the original shadow keys.
+				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return noopSpanMeta, err
+	}
+	if traceID == 0 && spanID == 0 {
+		return noopSpanMeta, nil
+	}
+
+	var recordingType RecordingType
+	if baggage[verboseTracingBaggageKey] != "" {
+		recordingType = RecordingVerbose
+	}
+
+	var shadowCtx opentracing.SpanContext
+	if shadowType != "" {
+		shadowTr := t.getShadowTracer()
+		curShadowTyp, _ := shadowTr.Type()
+
+		if shadowType != curShadowTyp {
+			// If either the incoming context or tracer disagree on which
+			// shadow tracer (if any) is active, scrub shadow tracing from
+			// consideration.
+			shadowType = ""
+		} else {
+			// Shadow tracing is active on this node and the incoming information
+			// was created using the same type of tracer.
+			//
+			// Extract the shadow context using the un-encapsulated textmap.
+			shadowCtx, err = shadowTr.Extract(format, shadowCarrier)
+			if err != nil {
+				return noopSpanMeta, err
+			}
+		}
+	}
+
+	return SpanMeta{
+		traceID:          traceID,
+		spanID:           spanID,
+		shadowTracerType: shadowType,
+		shadowCtx:        shadowCtx,
+		recordingType:    recordingType,
+		Baggage:          baggage,
+	}, nil
 }

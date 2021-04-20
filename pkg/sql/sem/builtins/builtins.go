@@ -59,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -3732,30 +3731,17 @@ may increase either contention or retry errors, or both.`,
 				traceID := uint64(*(args[0].(*tree.DInt)))
 				verbosity := bool(*(args[1].(*tree.DBool)))
 
-				const query = `SELECT span_id
-  	 									FROM crdb_internal.node_inflight_trace_spans
- 		 									WHERE trace_id = $1
-											AND parent_span_id = 0`
+				var rootSpan *tracing.Span
+				if err := ctx.Settings.Tracer.VisitSpans(func(span *tracing.Span) error {
+					if span.TraceID() == traceID || rootSpan != nil {
+						rootSpan = span
+					}
 
-				ie := ctx.InternalExecutor.(sqlutil.InternalExecutor)
-				row, err := ie.QueryRowEx(
-					ctx.Ctx(),
-					"crdb_internal.set_trace_verbose",
-					ctx.Txn,
-					sessiondata.NoSessionDataOverride,
-					query,
-					traceID,
-				)
-				if err != nil {
+					return nil
+				}); err != nil {
 					return nil, err
 				}
-				if row == nil {
-					return tree.DBoolFalse, nil
-				}
-				rootSpanID := uint64(*row[0].(*tree.DInt))
-
-				rootSpan, found := ctx.Settings.Tracer.GetActiveSpanFromID(rootSpanID)
-				if !found {
+				if rootSpan == nil { // not found
 					return tree.DBoolFalse, nil
 				}
 
