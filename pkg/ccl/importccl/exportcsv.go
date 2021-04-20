@@ -164,6 +164,10 @@ func (sp *csvWriter) OutputTypes() []*types.T {
 	return res
 }
 
+func (sp *csvWriter) MustBeStreaming() bool {
+	return false
+}
+
 func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer span.Finish()

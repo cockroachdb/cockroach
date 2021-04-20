@@ -118,8 +118,12 @@ func wrapRowSources(
 		return nil, releasables, err
 	}
 
+	proc, isProcessor := toWrap.(execinfra.Processor)
+	if !isProcessor {
+		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
+	}
 	var c *colexec.Columnarizer
-	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
+	if proc.MustBeStreaming() {
 		c, err = colexec.NewStreamingColumnarizer(
 			ctx, colmem.NewAllocator(ctx, args.StreamingMemAccount, factory), flowCtx, args.Spec.ProcessorID, toWrap,
 		)
@@ -2160,6 +2164,21 @@ func planProjectionExpr(
 				return nil, resultIdx, typs, err
 			}
 			right = tupleDatum
+		}
+		// We have a special case behavior for Is{Not}DistinctFrom before
+		// checking whether the right expression is constant below in order to
+		// extract NULL from the cast expression.
+		//
+		// Normally, the optimizer folds all constants; however, for nulls it
+		// creates a cast expression from tree.DNull to the desired type in
+		// order to propagate the type of the null. We need to extract the
+		// constant NULL so that the optimized operator was planned below.
+		if projOp == tree.IsDistinctFrom || projOp == tree.IsNotDistinctFrom {
+			if cast, ok := right.(*tree.CastExpr); ok {
+				if cast.Expr == tree.DNull {
+					right = tree.DNull
+				}
+			}
 		}
 		if rConstArg, rConst := right.(tree.Datum); rConst {
 			// Case 2: The right is constant.
