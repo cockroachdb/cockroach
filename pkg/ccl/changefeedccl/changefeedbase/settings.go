@@ -45,3 +45,12 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	"controls amount of data that can be buffered per changefeed",
 	1<<30,
 )
+
+// SlowSpanLogThreshold controls when we will log slow spans if a
+// per-changefeed threshold hasn't been set.
+var SlowSpanLogThreshold = settings.RegisterDurationSetting(
+	"changefeed.slow_span_log_threshold",
+	"a changefeed will log spans with resolved timestamps this far behind the current wall-clock time; if 0, a default value is calculated based on other cluster settings, and if a changefeed has been started with the slow_span_log_threshold option, that value takes precedence",
+	0,
+	settings.NonNegativeDuration,
+)

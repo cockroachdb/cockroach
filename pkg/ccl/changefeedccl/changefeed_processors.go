@@ -857,8 +857,11 @@ type changeFrontier struct {
 	freqEmitResolved time.Duration
 	// lastEmitResolved is the last time a resolved timestamp was emitted.
 	lastEmitResolved time.Time
-	// lastSlowSpanLog is the last time a slow span from `sf` was logged.
-	lastSlowSpanLog time.Time
+
+	// slowSpanLogThreshold is the threshold duration at which we
+	// will log slow spans.
+	slowSpanLogThreshold time.Duration
+	slowLogEveryN        log.EveryN
 
 	// schemaChangeBoundary represents an hlc timestamp at which a schema change
 	// event occurred to a target watched by this frontier. If the changefeed is
@@ -901,7 +904,10 @@ type changeFrontier struct {
 	metricsID int
 }
 
-const runStatusUpdateFrequency time.Duration = time.Minute
+const (
+	runStatusUpdateFrequency time.Duration = time.Minute
+	slowSpanMaxFrequency                   = 10 * time.Second
+)
 
 type jobState struct {
 	job                 *jobs.Job
@@ -922,11 +928,12 @@ func newChangeFrontierProcessor(
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	cf := &changeFrontier{
-		flowCtx: flowCtx,
-		spec:    spec,
-		memAcc:  memMonitor.MakeBoundAccount(),
-		input:   input,
-		sf:      span.MakeFrontier(spec.TrackedSpans...),
+		flowCtx:       flowCtx,
+		spec:          spec,
+		memAcc:        memMonitor.MakeBoundAccount(),
+		input:         input,
+		sf:            span.MakeFrontier(spec.TrackedSpans...),
+		slowLogEveryN: log.Every(slowSpanMaxFrequency),
 	}
 	if err := cf.Init(
 		cf,
@@ -957,6 +964,14 @@ func newChangeFrontierProcessor(
 		}
 	} else {
 		cf.freqEmitResolved = emitNoResolved
+	}
+
+	if r, ok := cf.spec.Feed.Opts[changefeedbase.OptSlowSpanLogThreshold]; ok {
+		threshold, err := time.ParseDuration(r)
+		if err != nil {
+			return nil, err
+		}
+		cf.slowSpanLogThreshold = threshold
 	}
 
 	var err error
@@ -1398,22 +1413,14 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 // returned boolean will be true if the resolved timestamp lags far behind the
 // present as defined by the current configuration.
 func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind bool) {
-	// These two cluster setting values represent the target responsiveness of
-	// poller and range feed. The cluster setting for switching between poller and
-	// rangefeed is only checked at changefeed start/resume, so instead of
-	// switching on it here, just add them. Also add 1 second in case both these
-	// settings are set really low (as they are in unit tests).
-	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
-	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
-	slownessThreshold := time.Second + 10*(pollInterval+closedtsInterval)
 	frontier := cf.sf.Frontier()
 	now := timeutil.Now()
 	resolvedBehind := now.Sub(frontier.GoTime())
-	if resolvedBehind <= slownessThreshold {
+	if resolvedBehind <= cf.slownessThreshold() {
 		return false
 	}
 
-	description := `sinkless feed`
+	description := "sinkless feed"
 	if !cf.isSinkless() {
 		description = fmt.Sprintf("job %d", cf.spec.JobID)
 	}
@@ -1421,13 +1428,35 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 		log.Infof(cf.Ctx, "%s new resolved timestamp %s is behind by %s",
 			description, frontier, resolvedBehind)
 	}
-	const slowSpanMaxFrequency = 10 * time.Second
-	if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
-		cf.lastSlowSpanLog = now
+
+	if cf.slowLogEveryN.ShouldProcess(now) {
 		s := cf.sf.PeekFrontierSpan()
 		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 	return true
+}
+
+func (cf *changeFrontier) slownessThreshold() time.Duration {
+	if cf.slowSpanLogThreshold > 0 {
+		return cf.slowSpanLogThreshold
+	}
+
+	clusterThreshold := changefeedbase.SlowSpanLogThreshold.Get(&cf.flowCtx.Cfg.Settings.SV)
+	if clusterThreshold > 0 {
+		return clusterThreshold
+	}
+
+	// These two cluster setting values represent the target
+	// responsiveness of schemafeed and rangefeed.
+	//
+	// We add 1 second in case both these settings are set really
+	// low (as they are in unit tests).
+	//
+	// TODO(ssd): We should probably take into account the flush
+	// frequency here.
+	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
+	return time.Second + 10*(pollInterval+closedtsInterval)
 }
 
 // ConsumerClosed is part of the RowSource interface.
