@@ -8,7 +8,7 @@ source build/shlib.sh
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 INSTANCE=${GCEWORKER_NAME-gceworker-$(id -un)}
-SSH_USER=${GCEWORKER_USER:-""}
+SSH_USER=${GCEWORKER_USER:-"$(id -un)"}
 
 cmd=${1-}
 if [[ "${cmd}" ]]; then
