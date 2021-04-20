@@ -14,6 +14,7 @@ package doctor
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -277,9 +278,115 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 	// Add descriptor-identifying prefix if it isn't there already.
 	// The prefix has the same format as the validation error wrapper.
 	msgPrefix := fmt.Sprintf("%s %q (%d): ", desc.DescriptorType(), desc.GetName(), desc.GetID())
-	if msg[:len(msgPrefix)] == msgPrefix {
+	if strings.HasPrefix(msg, msgPrefix) {
 		msgPrefix = ""
 	}
 	_, _ = fmt.Fprintf(stdout, "  ParentID %3d, ParentSchemaID %2d: %s%s\n",
 		desc.GetParentID(), desc.GetParentSchemaID(), msgPrefix, msg)
+}
+
+// DumpSQL dumps SQL statements to an io.Writer to load the descriptor and
+// namespace table contents into an empty cluster. System tables are not
+// included. The descriptors themselves are as they were in the source cluster,
+// with the possible exception of the version counter and the modification time
+// timestamp.
+func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
+	// Print first transaction, which removes all predefined user descriptors.
+	fmt.Fprintln(out, `BEGIN;`)
+	// Add a query which triggers a divide-by-zero error when the txn runs on a
+	// non-empty cluster (excluding predefined user descriptors).
+	fmt.Fprintf(out,
+		"SELECT 1/(1-sign(count(*))) FROM system.descriptor WHERE id >= %d;\n",
+		keys.MinNonPredefinedUserDescID)
+	// Delete predefined user descriptors.
+	fmt.Fprintf(out,
+		"SELECT crdb_internal.unsafe_delete_descriptor(id, true) FROM system.descriptor WHERE id >= %d;\n",
+		keys.MinUserDescID)
+	// Delete predefined user descriptor namespace entries.
+	fmt.Fprintf(out,
+		"SELECT crdb_internal.unsafe_delete_namespace_entry(\"parentID\", \"parentSchemaID\", name, id) "+
+			"FROM system.namespace2 WHERE id >= %d;\n",
+		keys.MinUserDescID)
+	fmt.Fprintln(out, `COMMIT;`)
+	// Print second transaction, which inserts namespace and descriptor entries.
+	fmt.Fprintln(out, `BEGIN;`)
+	reverseNamespace := make(map[int64][]NamespaceTableRow, len(descTable))
+	for _, row := range namespaceTable {
+		reverseNamespace[row.ID] = append(reverseNamespace[row.ID], row)
+	}
+	for _, descRow := range descTable {
+		if descRow.ID < keys.MinUserDescID {
+			// Skip system descriptors.
+			continue
+		}
+		// Update the descriptor representation to make it safe to insert:
+		// - set the version to 1,
+		// - unset the descriptor modification time,
+		// - unset the descriptor create-as-of time, for table descriptors.
+		updatedDescBytes, err := descriptorModifiedForInsert(descRow)
+		if err != nil {
+			return err
+		}
+		if updatedDescBytes == nil {
+			continue
+		}
+		fmt.Fprintf(out,
+			"SELECT crdb_internal.unsafe_upsert_descriptor(%d, decode('%s', 'hex'), true);\n",
+			descRow.ID, hex.EncodeToString(updatedDescBytes))
+		for _, namespaceRow := range reverseNamespace[descRow.ID] {
+			fmt.Fprintf(out,
+				"SELECT crdb_internal.unsafe_upsert_namespace_entry(%d, %d, '%s', %d, true);\n",
+				namespaceRow.ParentID, namespaceRow.ParentSchemaID, namespaceRow.Name, namespaceRow.ID)
+		}
+	}
+	// Handle dangling namespace entries.
+	for _, namespaceRow := range namespaceTable {
+		if namespaceRow.ParentID == descpb.InvalidID && namespaceRow.ID < keys.MinUserDescID {
+			// Skip system database entries.
+			continue
+		}
+		if namespaceRow.ParentID != descpb.InvalidID && namespaceRow.ParentID < keys.MinUserDescID {
+			// Skip non-database entries with system parent database.
+			continue
+		}
+		if _, found := reverseNamespace[namespaceRow.ID]; found {
+			// Skip entries for existing descriptors.
+			continue
+		}
+		fmt.Fprintf(out,
+			"SELECT crdb_internal.unsafe_upsert_namespace_entry(%d, %d, '%s', %d, true);\n",
+			namespaceRow.ParentID, namespaceRow.ParentSchemaID, namespaceRow.Name, namespaceRow.ID)
+	}
+	fmt.Fprintln(out, `COMMIT;`)
+	return nil
+}
+
+func descriptorModifiedForInsert(r DescriptorTableRow) ([]byte, error) {
+	var descProto descpb.Descriptor
+	if err := protoutil.Unmarshal(r.DescBytes, &descProto); err != nil {
+		return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
+	}
+	b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, r.ModTime)
+	if b == nil {
+		return nil, nil
+	}
+	mut := b.BuildCreatedMutable()
+	switch d := mut.(type) {
+	case catalog.DatabaseDescriptor:
+		d.DatabaseDesc().ModificationTime = hlc.Timestamp{}
+		d.DatabaseDesc().Version = 1
+	case catalog.SchemaDescriptor:
+		d.SchemaDesc().ModificationTime = hlc.Timestamp{}
+		d.SchemaDesc().Version = 1
+	case catalog.TypeDescriptor:
+		d.TypeDesc().ModificationTime = hlc.Timestamp{}
+		d.TypeDesc().Version = 1
+	case catalog.TableDescriptor:
+		d.TableDesc().ModificationTime = hlc.Timestamp{}
+		d.TableDesc().CreateAsOfTime = hlc.Timestamp{}
+		d.TableDesc().Version = 1
+	default:
+		return nil, nil
+	}
+	return protoutil.Marshal(mut.DescriptorProto())
 }

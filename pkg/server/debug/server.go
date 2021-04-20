@@ -17,11 +17,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/http/pprof"
 	"path"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -39,7 +37,6 @@ import (
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"
-	"google.golang.org/grpc/metadata"
 )
 
 func init() {
@@ -49,40 +46,15 @@ func init() {
 	}
 }
 
-// RemoteMode controls who can access /debug/requests.
-type RemoteMode string
-
-const (
-	// RemoteOff disallows access to /debug/requests.
-	RemoteOff RemoteMode = "off"
-	// RemoteLocal allows only host-local access to /debug/requests.
-	RemoteLocal RemoteMode = "local"
-	// RemoteAny allows all access to /debug/requests.
-	RemoteAny RemoteMode = "any"
-)
-
 // Endpoint is the entry point under which the debug tools are housed.
 const Endpoint = "/debug/"
 
-// DebugRemote controls which clients are allowed to access certain
-// confidential debug pages, such as those served under the /debug/ prefix.
-var DebugRemote = func() *settings.StringSetting {
-	s := settings.RegisterValidatedStringSetting(
-		"server.remote_debugging.mode",
-		"set to enable remote debugging, localhost-only or disable (any, local, off)",
-		"local",
-		func(sv *settings.Values, s string) error {
-			switch RemoteMode(strings.ToLower(s)) {
-			case RemoteOff, RemoteLocal, RemoteAny:
-				return nil
-			default:
-				return errors.Errorf("invalid mode: '%s'", s)
-			}
-		},
-	)
-	s.SetReportable(true)
-	s.SetVisibility(settings.Public)
-	return s
+var _ = func() *settings.StringSetting {
+	// This setting definition still exists so as to not break
+	// deployment scripts that set it unconditionally.
+	v := settings.RegisterStringSetting("server.remote_debugging.mode", "unused", "local")
+	v.SetRetired()
+	return v
 }()
 
 // Server serves the /debug/* family of tools.
@@ -252,70 +224,10 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 	return nil
 }
 
-// ServeHTTP serves various tools under the /debug endpoint. It restricts access
-// according to the `server.remote_debugging.mode` cluster variable.
+// ServeHTTP serves various tools under the /debug endpoint.
 func (ds *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if authed := ds.authRequest(r); !authed {
-		http.Error(w, "not allowed (due to the 'server.remote_debugging.mode' setting)",
-			http.StatusForbidden)
-		return
-	}
-
 	handler, _ := ds.mux.Handler(r)
 	handler.ServeHTTP(w, r)
-}
-
-// authRequest restricts access to /debug/*.
-func (ds *Server) authRequest(r *http.Request) bool {
-	return authRequest(r.RemoteAddr, ds.st)
-}
-
-// authRequest restricts access according to the DebugRemote setting.
-func authRequest(remoteAddr string, st *cluster.Settings) bool {
-	switch RemoteMode(strings.ToLower(DebugRemote.Get(&st.SV))) {
-	case RemoteAny:
-		return true
-	case RemoteLocal:
-		return isLocalhost(remoteAddr)
-	default:
-		return false
-	}
-}
-
-// isLocalhost returns true if the remoteAddr represents a client talking to
-// us via localhost.
-func isLocalhost(remoteAddr string) bool {
-	// RemoteAddr is commonly in the form "IP" or "IP:port".
-	// If it is in the form "IP:port", split off the port.
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		host = remoteAddr
-	}
-	switch host {
-	case "localhost", "127.0.0.1", "::1":
-		return true
-	default:
-		return false
-	}
-}
-
-// GatewayRemoteAllowed returns whether a request that has been passed through
-// the grpc gateway should be allowed accessed to privileged debugging
-// information. Because this function assumes the presence of a context field
-// populated by the grpc gateway, it's not applicable for other uses.
-func GatewayRemoteAllowed(ctx context.Context, st *cluster.Settings) bool {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		// This should only happen for direct grpc connections, which are allowed.
-		return true
-	}
-	peerAddr, ok := md["x-forwarded-for"]
-	if !ok || len(peerAddr) == 0 {
-		// This should only happen for direct grpc connections, which are allowed.
-		return true
-	}
-
-	return authRequest(peerAddr[0], st)
 }
 
 func handleLanding(w http.ResponseWriter, r *http.Request) {
