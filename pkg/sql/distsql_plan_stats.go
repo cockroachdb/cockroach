@@ -259,7 +259,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
 	job *jobs.Job,
-	resultRows *RowResultWriter,
+	resultWriter *RowResultWriter,
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
@@ -272,7 +272,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	recv := MakeDistSQLReceiver(
 		ctx,
-		resultRows,
+		resultWriter,
 		tree.DDL,
 		evalCtx.ExecCfg.RangeDescriptorCache,
 		txn,
@@ -284,5 +284,5 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	defer recv.Release()
 
 	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
-	return resultRows.Err()
+	return resultWriter.Err()
 }

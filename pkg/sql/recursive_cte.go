@@ -13,10 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // recursiveCTENode implements the logic for a recursive CTE:
@@ -40,23 +39,21 @@ type recursiveCTENode struct {
 }
 
 type recursiveCTERun struct {
+	// typs is the schema of the rows produced by this CTE.
+	typs []*types.T
 	// workingRows contains the rows produced by the current iteration (aka the
 	// "working" table).
-	workingRows *rowcontainer.RowContainer
-	// nextRowIdx is the index inside workingRows of the next row to be returned
-	// by the operator.
-	nextRowIdx int
+	workingRows rowContainerHelper
+	iterator    *rowContainerIterator
+	currentRow  tree.Datums
 
 	initialDone bool
 	done        bool
 }
 
 func (n *recursiveCTENode) startExec(params runParams) error {
-	n.workingRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
-		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.initial, false /* mut */)),
-	)
-	n.nextRowIdx = 0
+	n.typs = planTypes(n.initial)
+	n.workingRows.init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
 	return nil
 }
 
@@ -65,19 +62,23 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	n.nextRowIdx++
-
 	if !n.initialDone {
-		ok, err := n.initial.Next(params)
-		if err != nil {
-			return false, err
-		}
-		if ok {
-			if _, err = n.workingRows.AddRow(params.ctx, n.initial.Values()); err != nil {
+		// Fully consume the initial rows (we could have read the initial rows
+		// one at a time and return it in the same fashion, but that would
+		// require special-case behavior).
+		for {
+			ok, err := n.initial.Next(params)
+			if err != nil {
 				return false, err
 			}
-			return true, nil
+			if !ok {
+				break
+			}
+			if err = n.workingRows.addRow(params.ctx, n.initial.Values()); err != nil {
+				return false, err
+			}
 		}
+		n.iterator = newRowContainerIterator(params.ctx, n.workingRows, n.typs)
 		n.initialDone = true
 	}
 
@@ -85,52 +86,67 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 
-	if n.workingRows.Len() == 0 {
+	if n.workingRows.len() == 0 {
 		// Last iteration returned no rows.
 		n.done = true
 		return false, nil
 	}
 
-	// There are more rows to return from the last iteration.
-	if n.nextRowIdx <= n.workingRows.Len() {
+	var err error
+	n.currentRow, err = n.iterator.next()
+	if err != nil {
+		return false, err
+	}
+	if n.currentRow != nil {
+		// There are more rows to return from the last iteration.
 		return true, nil
 	}
 
 	// Let's run another iteration.
 
+	n.iterator.close()
+	n.iterator = nil
 	lastWorkingRows := n.workingRows
-	defer lastWorkingRows.Close(params.ctx)
+	defer lastWorkingRows.close(params.ctx)
 
-	n.workingRows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
-		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.initial, false /* mut */)),
-	)
+	n.workingRows = rowContainerHelper{}
+	n.workingRows.init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
 
 	// Set up a bufferNode that can be used as a reference for a scanBufferNode.
 	buf := &bufferNode{
 		// The plan here is only useful for planColumns, so it's ok to always use
 		// the initial plan.
-		plan:         n.initial,
-		bufferedRows: lastWorkingRows,
-		label:        n.label,
+		plan:  n.initial,
+		typs:  n.typs,
+		rows:  lastWorkingRows,
+		label: n.label,
 	}
 	newPlan, err := n.genIterationFn(newExecFactory(params.p), buf)
 	if err != nil {
 		return false, err
 	}
 
-	if err := runPlanInsidePlan(params, newPlan.(*planComponents), n.workingRows); err != nil {
+	if err := runPlanInsidePlan(params, newPlan.(*planComponents), &n.workingRows); err != nil {
 		return false, err
 	}
-	n.nextRowIdx = 1
-	return n.workingRows.Len() > 0, nil
+
+	n.iterator = newRowContainerIterator(params.ctx, n.workingRows, n.typs)
+	n.currentRow, err = n.iterator.next()
+	if err != nil {
+		return false, err
+	}
+	return n.currentRow != nil, nil
 }
 
 func (n *recursiveCTENode) Values() tree.Datums {
-	return n.workingRows.At(n.nextRowIdx - 1)
+	return n.currentRow
 }
 
 func (n *recursiveCTENode) Close(ctx context.Context) {
 	n.initial.Close(ctx)
-	n.workingRows.Close(ctx)
+	n.workingRows.close(ctx)
+	if n.iterator != nil {
+		n.iterator.close()
+		n.iterator = nil
+	}
 }
