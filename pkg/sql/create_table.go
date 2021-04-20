@@ -2041,6 +2041,11 @@ func NewTableDesc(
 				// We will add the unique constraint below.
 				break
 			}
+			// If the index is named, ensure that the name is unique.
+			// Unnamed indexes will be given a unique auto-generated name later on.
+			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
+				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
+			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
