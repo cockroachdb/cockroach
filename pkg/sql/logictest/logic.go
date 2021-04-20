@@ -472,6 +472,63 @@ type testClusterConfig struct {
 
 const threeNodeTenantConfigName = "3node-tenant"
 
+var multiregion9node3region3azsLocalities = map[int]roachpb.Locality{
+	1: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az1"},
+		},
+	},
+	2: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az2"},
+		},
+	},
+	3: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az3"},
+		},
+	},
+	4: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az1"},
+		},
+	},
+	5: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az2"},
+		},
+	},
+	6: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az3"},
+		},
+	},
+	7: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az1"},
+		},
+	},
+	8: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az2"},
+		},
+	},
+	9: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az3"},
+		},
+	},
+}
+
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
 //   # LogicTest: default distsql
@@ -632,62 +689,14 @@ var logicTestConfigs = []testClusterConfig{
 		name:              "multiregion-9node-3region-3azs",
 		numNodes:          9,
 		overrideAutoStats: "false",
-		localities: map[int]roachpb.Locality{
-			1: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ap-southeast-2"},
-					{Key: "availability-zone", Value: "ap-az1"},
-				},
-			},
-			2: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ap-southeast-2"},
-					{Key: "availability-zone", Value: "ap-az2"},
-				},
-			},
-			3: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ap-southeast-2"},
-					{Key: "availability-zone", Value: "ap-az3"},
-				},
-			},
-			4: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ca-central-1"},
-					{Key: "availability-zone", Value: "ca-az1"},
-				},
-			},
-			5: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ca-central-1"},
-					{Key: "availability-zone", Value: "ca-az2"},
-				},
-			},
-			6: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ca-central-1"},
-					{Key: "availability-zone", Value: "ca-az3"},
-				},
-			},
-			7: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "us-east-1"},
-					{Key: "availability-zone", Value: "us-az1"},
-				},
-			},
-			8: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "us-east-1"},
-					{Key: "availability-zone", Value: "us-az2"},
-				},
-			},
-			9: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "us-east-1"},
-					{Key: "availability-zone", Value: "us-az3"},
-				},
-			},
-		},
+		localities:        multiregion9node3region3azsLocalities,
+	},
+	{
+		name:              "multiregion-9node-3region-3azs-vec-off",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities:        multiregion9node3region3azsLocalities,
+		overrideVectorize: "off",
 	},
 }
 

@@ -115,7 +115,7 @@ func TestOrderedSync(t *testing.T) {
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		src, err := makeOrderedSync(c.ordering, evalCtx, sources)
+		src, err := makeSerialSync(c.ordering, evalCtx, sources)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +155,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	o, err := makeOrderedSync(colinfo.ColumnOrdering{}, evalCtx, sources)
+	o, err := makeSerialSync(colinfo.ColumnOrdering{}, evalCtx, sources)
 	if err != nil {
 		t.Fatal(err)
 	}
