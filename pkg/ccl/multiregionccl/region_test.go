@@ -9,6 +9,7 @@
 package multiregionccl_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -158,12 +159,12 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 
 			// Start the second operation.
 			_, err = sqlDB.Exec(tc.secondOp)
+			close(secondOpFinished)
 			if tc.secondOpErr == "" {
 				require.NoError(t, err)
 			} else {
 				require.True(t, testutils.IsError(err, tc.secondOpErr))
 			}
-			close(secondOpFinished)
 
 			<-firstOpFinished
 
@@ -280,7 +281,7 @@ func TestRegionAddDropFailureEnclosingRegionalByRowAlters(t *testing.T) {
 
 	for _, tc := range testCases {
 		for _, regionAlterCmd := range regionAlterCmds {
-			t.Run(regionAlterCmd.name+tc.name, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%s", regionAlterCmd.name, tc.name), func(t *testing.T) {
 
 				_, err := sqlDB.Exec(`
 DROP DATABASE IF EXISTS db;

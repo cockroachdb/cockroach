@@ -1312,12 +1312,61 @@ func (desc *wrapper) validateTableLocalityConfig(
 		if !desc.IsPartitionAllBy() {
 			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
 		}
+		// For REGIONAL BY ROW tables, ensure partitions in the PRIMARY KEY match
+		// the database descriptor. Ensure each public region has a partition,
+		// and each transitioning region name to possibly have a partition.
+		// We do validation that ensures all index partitions are the same on
+		// PARTITION ALL BY.
+		regions, err := regionsEnumDesc.RegionNames()
+		if err != nil {
+			return err
+		}
+		regionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		for _, region := range regions {
+			regionNames[region] = struct{}{}
+		}
+		transitioningRegions, err := regionsEnumDesc.TransitioningRegionNames()
+		if err != nil {
+			return err
+		}
+		transitioningRegionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		for _, region := range transitioningRegions {
+			transitioningRegionNames[region] = struct{}{}
+		}
+
+		for _, partitioning := range desc.GetPrimaryIndex().GetPartitioning().List {
+			regionName := descpb.RegionName(partitioning.Name)
+			// Any transitioning region names may exist.
+			if _, ok := transitioningRegionNames[regionName]; ok {
+				continue
+			}
+			// If a region is not found in any of the region names, we have an unknown
+			// partition.
+			if _, ok := regionNames[regionName]; !ok {
+				return errors.AssertionFailedf(
+					"unknown partition %s on PRIMARY INDEX of table %s",
+					partitioning.Name,
+					desc.GetName(),
+				)
+			}
+			delete(regionNames, regionName)
+		}
+
+		// Any regions that are not deleted from the above loop is missing.
+		for regionName := range regionNames {
+			return errors.AssertionFailedf(
+				"missing partition %s on PRIMARY INDEX of table %s",
+				regionName,
+				desc.GetName(),
+			)
+		}
+
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 
 		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNamesIncludingTransitioning()
+			regions, err := regionsEnumDesc.RegionNamesForValidation()
 			if err != nil {
 				return err
 			}
