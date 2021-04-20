@@ -223,12 +223,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.kvFeedMemMon = kvFeedMemMon
 
 	var err error
-	// TODO(yevgeniy): getSink is getting to be quite a kitchen sink -- refactor.
 	ca.sink, err = getSink(
-		ctx, ca.spec.Feed.SinkURI, ca.flowCtx.EvalCtx.NodeID.SQLInstanceID(), ca.spec.Feed.Opts, ca.spec.Feed.Targets,
-		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User(),
-		kvFeedMemMon.MakeBoundAccount(),
-	)
+		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+		ca.spec.User(), kvFeedMemMon.MakeBoundAccount())
+
 	if err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -989,10 +987,8 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// TODO(yevgeniy): Evaluate if we should introduce changefeed specific monitor.
 	mm := cf.flowCtx.Cfg.BackfillerMonitor
 	cf.sink, err = getSink(
-		ctx, cf.spec.Feed.SinkURI, cf.flowCtx.EvalCtx.NodeID.SQLInstanceID(), cf.spec.Feed.Opts, cf.spec.Feed.Targets,
-		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User(),
-		mm.MakeBoundAccount(),
-	)
+		ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle, cf.spec.User(), mm.MakeBoundAccount())
+
 	if err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)

@@ -16,6 +16,8 @@ go_library(
         "scram_client.go",
         "sink.go",
         "sink_cloudstorage.go",
+        "sink_kafka.go",
+        "sink_sql.go",
         "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl",

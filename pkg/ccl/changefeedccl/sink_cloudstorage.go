@@ -23,8 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -302,9 +305,8 @@ var cloudStorageSinkIDAtomic int64
 
 func makeCloudStorageSink(
 	ctx context.Context,
-	baseURI string,
+	u sinkURL,
 	srcID base.SQLInstanceID,
-	targetMaxFileSize int64,
 	settings *cluster.Settings,
 	opts map[string]string,
 	timestampOracle timestampLowerBoundOracle,
@@ -312,6 +314,15 @@ func makeCloudStorageSink(
 	user security.SQLUsername,
 	acc mon.BoundAccount,
 ) (Sink, error) {
+	var targetMaxFileSize int64 = 16 << 20 // 16MB
+	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
+		var err error
+		if targetMaxFileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
+			return nil, pgerror.Wrapf(err, pgcode.Syntax, `parsing %s`, fileSizeParam)
+		}
+	}
+	u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
+
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
 	const defaultPartitionFormat = `2006-01-02`
@@ -366,7 +377,7 @@ func makeCloudStorageSink(
 	}
 
 	var err error
-	if s.es, err = makeExternalStorageFromURI(ctx, baseURI, user); err != nil {
+	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user); err != nil {
 		return nil, err
 	}
 
@@ -553,6 +564,11 @@ func (s *cloudStorageSink) Close() error {
 	s.files = nil
 	s.mem.Close(context.Background())
 	return s.es.Close()
+}
+
+// Dial implements the Sink interface.
+func (s *cloudStorageSink) Dial() error {
+	return nil
 }
 
 type cloudStorageSinkKey struct {

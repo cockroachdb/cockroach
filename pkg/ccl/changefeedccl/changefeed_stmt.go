@@ -296,15 +296,14 @@ func changefeedPlanHook(
 			return MaybeStripRetryableErrorMarker(err)
 		}
 
-		settings := p.ExecCfg().Settings
 		// Changefeeds are based on the Rangefeed abstraction, which requires the
 		// `kv.rangefeed.enabled` setting to be true.
-		if !kvserver.RangefeedEnabled.Get(&settings.SV) {
+		if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
 			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 				docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 		}
 		if err := utilccl.CheckEnterpriseEnabled(
-			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
 			return err
 		}
@@ -319,9 +318,7 @@ func changefeedPlanHook(
 		{
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
-				ctx, details.SinkURI, p.ExecCfg().NodeID.SQLInstanceID(), details.Opts, details.Targets,
-				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
-				p.User(), mon.BoundAccount{},
+				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle, p.User(), mon.BoundAccount{},
 			)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)

@@ -381,9 +381,9 @@ func TestSQLSink(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	sinkURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
-	sinkURL.Path = `d`
+	pgURL.Path = `d`
 
 	fooTopic := overrideTopic(`foo`)
 	barTopic := overrideTopic(`bar`)
@@ -391,8 +391,10 @@ func TestSQLSink(t *testing.T) {
 		fooTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
 		barTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
 	}
-	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
+	const testTableName = `sink`
+	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets)
 	require.NoError(t, err)
+	require.NoError(t, sink.(*sqlSink).Dial())
 	defer func() { require.NoError(t, sink.Close()) }()
 
 	// Empty
