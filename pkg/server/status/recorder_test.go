@@ -294,6 +294,7 @@ func TestMetricsRecorder(t *testing.T) {
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
+				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 			case "latency":
 				l := metric.NewLatency(metric.Metadata{Name: reg.prefix + data.name}, time.Hour)
 				reg.reg.AddMetric(l)
@@ -303,6 +304,7 @@ func TestMetricsRecorder(t *testing.T) {
 				for _, q := range recordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.suffix, reg.source, 100, data.val, reg.isNode)
 				}
+				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 			default:
 				t.Fatalf("unexpected: %+v", data)
 			}
