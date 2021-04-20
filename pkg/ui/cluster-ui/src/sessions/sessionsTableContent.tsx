@@ -9,107 +9,115 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip2 } from "../tooltip2";
 
 export const SessionTableTitle = {
   id: (
-    <Tooltip style="tableTitle" placement="bottom" content={"Session ID."}>
+    <Tooltip2 tableTitle placement="bottom" title={<>{"Session ID."}</>}>
       Session ID
-    </Tooltip>
+    </Tooltip2>
   ),
   statement: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"Most recent or currently active statement."}
+      title={<>{"Most recent or currently active statement."}</>}
     >
       Statement
-    </Tooltip>
+    </Tooltip2>
   ),
   actions: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"Actions to take on the session."}
+      title={<>{"Actions to take on the session."}</>}
     >
       Actions
-    </Tooltip>
+    </Tooltip2>
   ),
   sessionAge: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"The duration of the session."}
+      title={<>{"The duration of the session."}</>}
     >
       Session Duration
-    </Tooltip>
+    </Tooltip2>
   ),
   txnAge: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"The duration of the open transaction, if there is one."}
+      title={<>{"The duration of the open transaction, if there is one."}</>}
     >
       Transaction Duration
-    </Tooltip>
+    </Tooltip2>
   ),
   statementAge: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"The duration of the active statement, if there is one."}
+      title={<>{"The duration of the active statement, if there is one."}</>}
     >
       Statement Duration
-    </Tooltip>
+    </Tooltip2>
   ),
   memUsage: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={
-        "The current amount of allocated memory on this session and the maximum amount of memory this" +
-        " session has ever allocated."
+      title={
+        <>
+          {"The current amount of allocated memory on this session and the maximum amount of memory this" +
+            " session has ever allocated."}
+        </>
       }
     >
       Memory Usage
-    </Tooltip>
+    </Tooltip2>
   ),
   maxMemUsed: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"The maximum amount of allocated memory this session ever had."}
+      title={
+        <>{"The maximum amount of allocated memory this session ever had."}</>
+      }
     >
       Maximum Memory Usage
-    </Tooltip>
+    </Tooltip2>
   ),
   numRetries: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"The number of times this transaction encountered a retry."}
+      title={<>{"The number of times this transaction encountered a retry."}</>}
     >
       Retries
-    </Tooltip>
+    </Tooltip2>
   ),
   lastActiveStatement: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={"The last statement that was completed on this session."}
+      title={<>{"The last statement that was completed on this session."}</>}
     >
       Last Statement
-    </Tooltip>
+    </Tooltip2>
   ),
   numStmts: (
-    <Tooltip
-      style="tableTitle"
+    <Tooltip2
+      tableTitle
       placement="bottom"
-      content={
-        "Number of statements that have been run in this transaction so far."
+      title={
+        <>
+          {
+            "Number of statements that have been run in this transaction so far."
+          }
+        </>
       }
     >
       Statements Run
-    </Tooltip>
+    </Tooltip2>
   ),
 };
