@@ -1032,6 +1032,58 @@ func SynthesizeRegionConfig(
 	return regionConfig, nil
 }
 
+// blockDiscardOfZoneConfigForMultiRegionObject determines if discarding the
+// zone configuration of a multi-region table, index or partition should be
+// blocked. We only block the discard if the multi-region abstractions have
+// created the zone configuration. Note that this function relies on internal
+// knowledge of which table locality patterns write zone configurations. We do
+// things this way to avoid having to read the zone configurations directly and
+// do a more explicit comparison (with a generated zone configuration). If, down
+// the road, the rules around writing zone configurations change, the tests in
+// multi_region_zone_configs will fail and this function will need updating.
+func blockDiscardOfZoneConfigForMultiRegionObject(
+	zs tree.ZoneSpecifier, tblDesc catalog.TableDescriptor,
+) (bool, error) {
+	needToError := false
+	isIndex := zs.TableOrIndex.Index != ""
+	isPartition := zs.Partition != ""
+
+	if isPartition {
+		// Multi-region abstractions only set partition-level zone configs for
+		// REGIONAL BY ROW tables.
+		if tblDesc.IsLocalityRegionalByRow() {
+			needToError = true
+		}
+	} else if isIndex {
+		// Multi-region will never set a zone config on an index, so no need to
+		// error if the user wants to drop the index zone config.
+		needToError = false
+	} else {
+		// It's a table zone config that the user is trying to discard. This
+		// should only be present on GLOBAL and REGIONAL BY TABLE tables in a
+		// specified region.
+		if tblDesc.IsLocalityGlobal() {
+			needToError = true
+		} else if tblDesc.IsLocalityRegionalByTable() {
+			if tblDesc.GetLocalityConfig().GetRegionalByTable().Region != nil &&
+				tree.Name(*tblDesc.GetLocalityConfig().GetRegionalByTable().Region) !=
+					tree.PrimaryRegionNotSpecifiedName {
+				needToError = true
+			}
+		} else if tblDesc.IsLocalityRegionalByRow() {
+			// For REGIONAL BY ROW tables, no need to error if we're setting a
+			// table level zone config.
+			needToError = false
+		} else {
+			return false, errors.AssertionFailedf(
+				"unknown table locality: %v",
+				tblDesc.GetLocalityConfig(),
+			)
+		}
+	}
+	return needToError, nil
+}
+
 // CheckZoneConfigChangePermittedForMultiRegion checks if a zone config
 // change is permitted for a multi-region database, table, index or partition.
 // The change is permitted iff it is not modifying a protected multi-region
@@ -1044,8 +1096,12 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
+	var err error
+	var tblDesc catalog.TableDescriptor
+	isDB := false
 	// Check if what we're altering is a multi-region entity.
 	if zs.Database != "" {
+		isDB = true
 		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 			ctx,
 			p.txn,
@@ -1063,11 +1119,11 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 		// We're dealing with a table, index, or partition zone configuration
 		// change.  Get the table descriptor so we can determine if this is a
 		// multi-region table/index/partition.
-		table, err := p.resolveTableForZone(ctx, &zs)
+		tblDesc, err = p.resolveTableForZone(ctx, &zs)
 		if err != nil {
 			return err
 		}
-		if table == nil || table.GetLocalityConfig() == nil {
+		if tblDesc == nil || tblDesc.GetLocalityConfig() == nil {
 			// Not a multi-region table, we're done here.
 			return nil
 		}
@@ -1078,13 +1134,27 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 	// The request is to discard the zone configuration. Error in all discard
 	// cases.
 	if options == nil {
-		// User is trying to update a zone config value that's protected for
-		// multi-region databases. Return the constructed error.
-		err := errors.WithDetail(errors.Newf(
-			"attempting to discard the zone configuration of a multi-region entity"),
-			"discarding a multi-region zone configuration may result in sub-optimal performance or behavior",
-		)
-		return errors.WithHint(err, hint)
+		needToError := false
+		// Determine if this zone config that we're trying to discard is
+		// supposed to be there.
+		if isDB {
+			needToError = true
+		} else {
+			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(zs, tblDesc)
+			if err != nil {
+				return err
+			}
+		}
+
+		if needToError {
+			// User is trying to update a zone config value that's protected for
+			// multi-region databases. Return the constructed error.
+			err := errors.WithDetail(errors.Newf(
+				"attempting to discard the zone configuration of a multi-region entity"),
+				"discarding a multi-region zone configuration may result in sub-optimal performance or behavior",
+			)
+			return errors.WithHint(err, hint)
+		}
 	}
 
 	// This is clearly an n^2 operation, but since there are only a single
