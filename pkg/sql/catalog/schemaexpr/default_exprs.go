@@ -91,13 +91,15 @@ func ProcessColumnSet(
 
 	// Add all public or columns in DELETE_AND_WRITE_ONLY state
 	// that satisfy the condition.
+	ret := make([]catalog.Column, 0, len(tableDesc.AllColumns()))
+	ret = append(ret, cols...)
 	for _, col := range tableDesc.WritableColumns() {
 		if inSet(col) {
 			if !colIDSet.Contains(col.GetID()) {
 				colIDSet.Add(col.GetID())
-				cols = append(cols, col)
+				ret = append(ret, col)
 			}
 		}
 	}
-	return cols
+	return ret
 }
