@@ -876,9 +876,10 @@ func (b *propBuf) EvaluatingRequestsCount() int {
 // tok := propbBuf.TrackEvaluatingRequest()
 // defer tok.DoneIfNotMoved()
 // fn(tok.Move())
+//
+// A zero value TrackedRequestToken acts as a no-op.
 type TrackedRequestToken struct {
 	done bool
-	noop bool
 	tok  tracker.RemovalToken
 	b    *propBuf
 }
@@ -892,28 +893,32 @@ type TrackedRequestToken struct {
 // tokens are expected to be destroyed at once by the propBuf (which calls
 // doneLocked).
 func (t *TrackedRequestToken) DoneIfNotMoved(ctx context.Context) {
-	if t.done || t.noop {
+	if t.done {
 		return
 	}
-	t.b.p.locker().Lock()
+	if t.b != nil {
+		t.b.p.locker().Lock()
+		defer t.b.p.locker().Unlock()
+	}
 	t.doneIfNotMovedLocked(ctx)
-	t.b.p.locker().Unlock()
 }
 
 // doneIfNotMovedLocked untrackes the request. It is idempotent; in particular,
 // this is used when wanting to untrack a proposal that might, in fact, be a
 // reproposal.
 func (t *TrackedRequestToken) doneIfNotMovedLocked(ctx context.Context) {
-	if t.done || t.noop {
+	if t.done {
 		return
 	}
 	t.done = true
-	t.b.evalTracker.Untrack(ctx, t.tok)
+	if t.b != nil {
+		t.b.evalTracker.Untrack(ctx, t.tok)
+	}
 }
 
 // stillTracked returns true if no Done* method has been called.
 func (t *TrackedRequestToken) stillTracked() bool {
-	return !(t.done || t.noop)
+	return !t.done
 }
 
 // Move returns a new token which can untrack the request. The original token is
@@ -922,18 +927,9 @@ func (t *TrackedRequestToken) Move(ctx context.Context) TrackedRequestToken {
 	if t.done {
 		log.Fatalf(ctx, "attempting to Move() after Done() call")
 	}
-	if t.noop {
-		return *t
-	}
 	cpy := *t
 	t.done = true
 	return cpy
-}
-
-// SetNoop marks this token as not actually corresponding to a tracked request.
-// Any operation on the token will be a no-op.
-func (t *TrackedRequestToken) SetNoop() {
-	t.noop = true
 }
 
 // TrackEvaluatingRequest atomically starts tracking an evaluating request and
