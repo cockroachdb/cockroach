@@ -333,6 +333,25 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				return t.isTransitioningInCurrentJob(member) && enumMemberIsRemoving(member)
 			})
 
+			// We need to initialize the finalizer before we write the type descriptor.
+			// Otherwise, we run into a chicken and egg problem:
+			// * If we write the type descriptor first, the validator expects all the
+			//   regions in the type enum to be a partition on the table descriptor,
+			//   failing validation.
+			// * We cannot write the partitions first as the members are not yet public.
+			regionChangeFinalizer, err = newDatabaseRegionChangeFinalizer(
+				ctx,
+				txn,
+				t.execCfg,
+				descsCol,
+				typeDesc.GetParentID(),
+				typeDesc.GetID(),
+			)
+			if err != nil {
+				return err
+			}
+			defer regionChangeFinalizer.cleanup()
+
 			b := txn.NewBatch()
 			if err := descsCol.WriteDescToBatch(
 				ctx, true /* kvTrace */, typeDesc, b,
@@ -367,8 +386,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 						return err
 					}
 				}
-				regionChangeFinalizer = newDatabaseRegionChangeFinalizer(typeDesc.GetParentID(), typeDesc.GetID())
-				if err := regionChangeFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
+				if err := regionChangeFinalizer.finalize(ctx, txn); err != nil {
 					return err
 				}
 			}
@@ -459,6 +477,21 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 			return nil
 		}
 
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			regionChangeFinalizer, err = newDatabaseRegionChangeFinalizer(
+				ctx,
+				txn,
+				t.execCfg,
+				descsCol,
+				typeDesc.GetParentID(),
+				typeDesc.GetID(),
+			)
+			if err != nil {
+				return err
+			}
+			defer regionChangeFinalizer.cleanup()
+		}
+
 		// Deal with all members that we initially hoped to remove but now need to
 		// be promoted back to writable.
 		for i := range typeDesc.EnumMembers {
@@ -478,10 +511,8 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 			return err
 		}
 
-		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-			regionChangeFinalizer = newDatabaseRegionChangeFinalizer(typeDesc.GetParentID(), typeDesc.GetID())
-
-			if err := regionChangeFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
+		if regionChangeFinalizer != nil {
+			if err := regionChangeFinalizer.finalize(ctx, txn); err != nil {
 				return err
 			}
 		}
