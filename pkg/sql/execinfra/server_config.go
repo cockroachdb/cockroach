@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -41,14 +41,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
-
-// SettingWorkMemBytes is a cluster setting that determines the maximum amount
-// of RAM that a processor can use.
-var SettingWorkMemBytes = settings.RegisterByteSizeSetting(
-	"sql.distsql.temp_storage.workmem",
-	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
-	64*1024*1024, /* 64MB */
-).WithPublic()
 
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
@@ -261,7 +253,7 @@ func (*TestingKnobs) ModuleTestingKnobs() {}
 
 // GetWorkMemLimit returns the number of bytes determining the amount of RAM
 // available to a single processor or operator.
-func GetWorkMemLimit(config *ServerConfig) int64 {
+func GetWorkMemLimit(config *ServerConfig, sd *sessiondata.SessionData) int64 {
 	if config.TestingKnobs.ForceDiskSpill && config.TestingKnobs.MemoryLimitBytes != 0 {
 		panic(errors.AssertionFailedf("both ForceDiskSpill and MemoryLimitBytes set"))
 	}
@@ -270,5 +262,5 @@ func GetWorkMemLimit(config *ServerConfig) int64 {
 	} else if config.TestingKnobs.MemoryLimitBytes != 0 {
 		return config.TestingKnobs.MemoryLimitBytes
 	}
-	return SettingWorkMemBytes.Get(&config.Settings.SV)
+	return sd.WorkMemLimit
 }

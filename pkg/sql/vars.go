@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -409,6 +410,24 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
+		},
+	},
+
+	// CockroachDB extension.
+	`distsql_workmem`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			limit, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			m.SetDistSQLWorkMem(limit)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return humanizeutil.IBytes(evalCtx.SessionData.WorkMemLimit)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return humanizeutil.IBytes(settingWorkMemBytes.Get(sv))
 		},
 	},
 

@@ -143,7 +143,7 @@ func newWindower(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// windower will overflow to disk if this limit is not enough.
-	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg, flowCtx.EvalCtx.SessionData)
 	if limit < memRequiredByWindower {
 		if !flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes == 0 {
 			return nil, errors.Errorf(

@@ -94,7 +94,7 @@ func NewExternalHashJoiner(
 	// This memory limit will restrict the size of the batches output by the
 	// in-memory hash joiner in the main strategy as well as by the merge joiner
 	// in the fallback strategy.
-	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg, flowCtx.EvalCtx.SessionData)
 	if memoryLimit == 1 {
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we

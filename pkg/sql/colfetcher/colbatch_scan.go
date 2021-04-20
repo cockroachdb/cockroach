@@ -265,7 +265,7 @@ func NewColBatchScan(
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	fetcher.estimatedRowCount = estimatedRowCount
 	if _, _, err := initCRowFetcher(
-		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
+		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx.Cfg, flowCtx.EvalCtx.SessionData),
 		fetcher, table, columnIdxMap, neededColumns, spec, spec.HasSystemColumns,
 	); err != nil {
 		return nil, err

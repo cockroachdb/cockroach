@@ -248,7 +248,7 @@ func newHashBasedPartitioner(
 	}
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, numRequiredActivePartitions)
 	diskQueuesMemUsed := maxNumberActivePartitions * diskQueueCfg.BufferSizeBytes
-	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg, flowCtx.EvalCtx.SessionData)
 	if memoryLimit == 1 {
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
@@ -295,7 +295,7 @@ func calculateMaxNumberActivePartitions(
 	// support the caches of this number of partitions.
 	// TODO(yuzefovich): this number should be tuned.
 	maxNumberActivePartitions := args.FDSemaphore.GetLimit() / 16
-	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	memoryLimit := execinfra.GetWorkMemLimit(flowCtx.Cfg, flowCtx.EvalCtx.SessionData)
 	if args.DiskQueueCfg.BufferSizeBytes > 0 {
 		diskQueuesTotalMemLimit := int(float64(memoryLimit) * hbpDiskQueuesMemFraction)
 		numDiskQueuesThatFit := diskQueuesTotalMemLimit / args.DiskQueueCfg.BufferSizeBytes

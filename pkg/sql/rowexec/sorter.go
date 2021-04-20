@@ -60,7 +60,7 @@ func (s *sorterBase) init(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will overflow to disk if this limit is not enough.
-	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, fmt.Sprintf("%s-limited", processorName))
+	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, flowCtx.EvalCtx.SessionData, fmt.Sprintf("%s-limited", processorName))
 	if err := s.ProcessorBase.Init(
 		self, post, input.OutputTypes(), flowCtx, processorID, output, memMonitor, opts,
 	); err != nil {
