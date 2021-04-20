@@ -40,7 +40,6 @@ const (
 	OptSchemaChangeEvents       = `schema_change_events`
 	OptSchemaChangePolicy       = `schema_change_policy`
 	OptProtectDataFromGCOnPause = `protect_data_from_gc_on_pause`
-	OptSlowSpanLogThreshold     = `slow_span_log_threshold`
 
 	// OptSchemaChangeEventClassColumnChange corresponds to all schema change
 	// events which add or remove any column.
@@ -128,5 +127,4 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
 	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
-	OptSlowSpanLogThreshold:     sql.KVStringOptRequireValue,
 }

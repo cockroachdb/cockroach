@@ -858,10 +858,8 @@ type changeFrontier struct {
 	// lastEmitResolved is the last time a resolved timestamp was emitted.
 	lastEmitResolved time.Time
 
-	// slowSpanLogThreshold is the threshold duration at which we
-	// will log slow spans.
-	slowSpanLogThreshold time.Duration
-	slowLogEveryN        log.EveryN
+	// slowLogEveryN rate-limits the logging of slow spans
+	slowLogEveryN log.EveryN
 
 	// schemaChangeBoundary represents an hlc timestamp at which a schema change
 	// event occurred to a target watched by this frontier. If the changefeed is
@@ -964,14 +962,6 @@ func newChangeFrontierProcessor(
 		}
 	} else {
 		cf.freqEmitResolved = emitNoResolved
-	}
-
-	if r, ok := cf.spec.Feed.Opts[changefeedbase.OptSlowSpanLogThreshold]; ok {
-		threshold, err := time.ParseDuration(r)
-		if err != nil {
-			return nil, err
-		}
-		cf.slowSpanLogThreshold = threshold
 	}
 
 	var err error
@@ -1437,10 +1427,6 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 }
 
 func (cf *changeFrontier) slownessThreshold() time.Duration {
-	if cf.slowSpanLogThreshold > 0 {
-		return cf.slowSpanLogThreshold
-	}
-
 	clusterThreshold := changefeedbase.SlowSpanLogThreshold.Get(&cf.flowCtx.Cfg.Settings.SV)
 	if clusterThreshold > 0 {
 		return clusterThreshold
