@@ -356,6 +356,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
   contentTimestamp(
     timestamp: protos.cockroach.util.hlc.ITimestamp,
+    now: moment.Moment,
   ): RangeTableCellContent {
     if (_.isNil(timestamp) || _.isNil(timestamp.wall_time)) {
       return {
@@ -363,9 +364,16 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         className: ["range-table__cell--warning"],
       };
     }
+    if (FixLong(timestamp.wall_time).isZero()) {
+      return {
+        value: [""],
+        title: ["0"],
+      };
+    }
     const humanized = Print.Timestamp(timestamp);
+    const delta = `(${Print.TimestampDeltaFromNow(timestamp, now)})`;
     return {
-      value: [humanized],
+      value: [humanized, delta],
       title: [humanized, FixLong(timestamp.wall_time).toString()],
     };
   }
@@ -592,6 +600,8 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
 
     const dormantStoreIDs: Set<number> = new Set();
 
+    const now = moment();
+
     // Convert the infos to a simpler object for display purposes. This helps when trying to
     // determine if any warnings should be displayed.
     const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
@@ -654,10 +664,10 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         leaseEpoch: epoch
           ? this.createContent(lease.epoch)
           : rangeTableEmptyContent,
-        leaseStart: this.contentTimestamp(lease.start),
+        leaseStart: this.contentTimestamp(lease.start, now),
         leaseExpiration: epoch
           ? rangeTableEmptyContent
-          : this.contentTimestamp(lease.expiration),
+          : this.contentTimestamp(lease.expiration, now),
         leaseAppliedIndex: this.createContent(
           FixLong(info.state.state.lease_applied_index),
         ),
