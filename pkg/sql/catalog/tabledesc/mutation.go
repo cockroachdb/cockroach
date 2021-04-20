@@ -13,8 +13,6 @@ package tabledesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 var _ catalog.TableElementMaybeMutation = maybeMutation{}
@@ -73,7 +71,6 @@ func (mm maybeMutation) Dropped() bool {
 }
 
 // constraintToUpdate implements the catalog.ConstraintToUpdate interface.
-// It also
 type constraintToUpdate struct {
 	maybeMutation
 	desc *descpb.ConstraintToUpdate
@@ -82,53 +79,6 @@ type constraintToUpdate struct {
 // ConstraintToUpdateDesc returns the underlying protobuf descriptor.
 func (c constraintToUpdate) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
 	return c.desc
-}
-
-// GetName returns the name of this constraint update mutation.
-func (c constraintToUpdate) GetName() string {
-	return c.desc.Name
-}
-
-// IsCheck returns true iff this is an update for a check constraint.
-func (c constraintToUpdate) IsCheck() bool {
-	return c.desc.ConstraintType == descpb.ConstraintToUpdate_CHECK
-}
-
-// Check returns the underlying check constraint, if there is one.
-func (c constraintToUpdate) Check() descpb.TableDescriptor_CheckConstraint {
-	return c.desc.Check
-}
-
-// IsForeignKey returns true iff this is an update for a fk constraint.
-func (c constraintToUpdate) IsForeignKey() bool {
-	return c.desc.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY
-}
-
-// ForeignKey returns the underlying fk constraint, if there is one.
-func (c constraintToUpdate) ForeignKey() descpb.ForeignKeyConstraint {
-	return c.desc.ForeignKey
-}
-
-// IsNotNull returns true iff this is an update for a not-null constraint.
-func (c constraintToUpdate) IsNotNull() bool {
-	return c.desc.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL
-}
-
-// NotNullColumnID returns the underlying not-null column ID, if there is one.
-func (c constraintToUpdate) NotNullColumnID() descpb.ColumnID {
-	return c.desc.NotNullColumn
-}
-
-// IsUniqueWithoutIndex returns true iff this is an update for a unique without
-// index constraint.
-func (c constraintToUpdate) IsUniqueWithoutIndex() bool {
-	return c.desc.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
-}
-
-// UniqueWithoutIndex returns the underlying unique without index constraint, if
-// there is one.
-func (c constraintToUpdate) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
-	return c.desc.UniqueWithoutIndexConstraint
 }
 
 // primaryKeySwap implements the catalog.PrimaryKeySwap interface.
@@ -140,60 +90,6 @@ type primaryKeySwap struct {
 // PrimaryKeySwapDesc returns the underlying protobuf descriptor.
 func (c primaryKeySwap) PrimaryKeySwapDesc() *descpb.PrimaryKeySwap {
 	return c.desc
-}
-
-// NumOldIndexes returns the number of old active indexes to swap out.
-func (c primaryKeySwap) NumOldIndexes() int {
-	return 1 + len(c.desc.OldIndexes)
-}
-
-// ForEachOldIndexIDs iterates through each of the old index IDs.
-// iterutil.Done is supported.
-func (c primaryKeySwap) ForEachOldIndexIDs(fn func(id descpb.IndexID) error) error {
-	return c.forEachIndexIDs(c.desc.OldPrimaryIndexId, c.desc.OldIndexes, fn)
-}
-
-// NumNewIndexes returns the number of new active indexes to swap in.
-func (c primaryKeySwap) NumNewIndexes() int {
-	return 1 + len(c.desc.NewIndexes)
-}
-
-// ForEachNewIndexIDs iterates through each of the new index IDs.
-// iterutil.Done is supported.
-func (c primaryKeySwap) ForEachNewIndexIDs(fn func(id descpb.IndexID) error) error {
-	return c.forEachIndexIDs(c.desc.NewPrimaryIndexId, c.desc.NewIndexes, fn)
-}
-
-func (c primaryKeySwap) forEachIndexIDs(
-	pkID descpb.IndexID, secIDs []descpb.IndexID, fn func(id descpb.IndexID) error,
-) error {
-	err := fn(pkID)
-	if err != nil {
-		if iterutil.Done(err) {
-			return nil
-		}
-		return err
-	}
-	for _, id := range secIDs {
-		err = fn(id)
-		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-// HasLocalityConfig returns true iff the locality config is swapped also.
-func (c primaryKeySwap) HasLocalityConfig() bool {
-	return c.desc.LocalityConfigSwap != nil
-}
-
-// LocalityConfigSwap returns the locality config swap, if there is one.
-func (c primaryKeySwap) LocalityConfigSwap() descpb.PrimaryKeySwap_LocalityConfigSwap {
-	return *c.desc.LocalityConfigSwap
 }
 
 // computedColumnSwap implements the catalog.ComputedColumnSwap interface.
@@ -216,50 +112,6 @@ type materializedViewRefresh struct {
 // MaterializedViewRefreshDesc returns the underlying protobuf descriptor.
 func (c materializedViewRefresh) MaterializedViewRefreshDesc() *descpb.MaterializedViewRefresh {
 	return c.desc
-}
-
-// ShouldBackfill returns true iff the query should be backfilled into the
-// indexes.
-func (c materializedViewRefresh) ShouldBackfill() bool {
-	return c.desc.ShouldBackfill
-}
-
-// AsOf returns the timestamp at which the query should be run.
-func (c materializedViewRefresh) AsOf() hlc.Timestamp {
-	return c.desc.AsOf
-}
-
-// ForEachIndexID iterates through each of the index IDs.
-// iterutil.Done is supported.
-func (c materializedViewRefresh) ForEachIndexID(fn func(id descpb.IndexID) error) error {
-	err := fn(c.desc.NewPrimaryIndex.ID)
-	if err != nil {
-		if iterutil.Done(err) {
-			return nil
-		}
-		return err
-	}
-	for i := range c.desc.NewIndexes {
-		err = fn(c.desc.NewIndexes[i].ID)
-		if err != nil {
-			if iterutil.Done(err) {
-				return nil
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-// TableWithNewIndexes returns a new TableDescriptor based on the old one
-// but with the refreshed indexes put in.
-func (c materializedViewRefresh) TableWithNewIndexes(
-	tbl catalog.TableDescriptor,
-) catalog.TableDescriptor {
-	deepCopy := NewBuilder(tbl.TableDesc()).BuildCreatedMutableTable().TableDesc()
-	deepCopy.PrimaryIndex = c.desc.NewPrimaryIndex
-	deepCopy.Indexes = c.desc.NewIndexes
-	return NewBuilder(deepCopy).BuildImmutableTable()
 }
 
 // mutation implements the

@@ -192,11 +192,11 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	var addedIndexSpans []roachpb.Span
 	var addedIndexes []descpb.IndexID
 
-	var constraintsToDrop []catalog.ConstraintToUpdate
-	var constraintsToAddBeforeValidation []catalog.ConstraintToUpdate
-	var constraintsToValidate []catalog.ConstraintToUpdate
+	var constraintsToDrop []descpb.ConstraintToUpdate
+	var constraintsToAddBeforeValidation []descpb.ConstraintToUpdate
+	var constraintsToValidate []descpb.ConstraintToUpdate
 
-	var viewToRefresh catalog.MaterializedViewRefresh
+	var viewToRefresh *descpb.MaterializedViewRefresh
 
 	// Note that this descriptor is intentionally not leased. If the schema change
 	// held the lease, certain non-mutation related schema changes would not be
@@ -229,59 +229,76 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	log.Infof(ctx, "running backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	needColumnBackfill := false
-	for _, m := range tableDesc.AllMutations() {
-		if m.MutationID() != sc.mutationID {
+	for mutationIdx, m := range tableDesc.Mutations {
+		if m.MutationID != sc.mutationID {
 			break
 		}
 		// If the current mutation is discarded, then
 		// skip over processing.
-		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, m.MutationOrdinal()+1); discarded {
+		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, mutationIdx+1); discarded {
 			continue
 		}
 
-		if m.Adding() {
-			if col := m.AsColumn(); col != nil {
-				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
-			} else if idx := m.AsIndex(); idx != nil {
-				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, idx.GetID()))
-				addedIndexes = append(addedIndexes, idx.GetID())
-			} else if c := m.AsConstraint(); c != nil {
-				isValidating := false
-				if c.IsCheck() {
-					isValidating = c.Check().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsForeignKey() {
-					isValidating = c.ForeignKey().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsUniqueWithoutIndex() {
-					isValidating = c.UniqueWithoutIndex().Validity == descpb.ConstraintValidity_Validating
-				} else if c.IsNotNull() {
+		switch m.Direction {
+		case descpb.DescriptorMutation_ADD:
+			switch t := m.Descriptor_.(type) {
+			case *descpb.DescriptorMutation_Column:
+				if tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
+					needColumnBackfill = true
+				}
+			case *descpb.DescriptorMutation_Index:
+				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, t.Index.ID))
+				addedIndexes = append(addedIndexes, t.Index.ID)
+			case *descpb.DescriptorMutation_Constraint:
+				switch t.Constraint.ConstraintType {
+				case descpb.ConstraintToUpdate_CHECK:
+					if t.Constraint.Check.Validity == descpb.ConstraintValidity_Validating {
+						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+					}
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
+					if t.Constraint.ForeignKey.Validity == descpb.ConstraintValidity_Validating {
+						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+					}
+				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+					if t.Constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
+						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
+					}
+				case descpb.ConstraintToUpdate_NOT_NULL:
 					// NOT NULL constraints are always validated before they can be added
-					isValidating = true
+					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
+					constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 				}
-				if isValidating {
-					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, c)
-					constraintsToValidate = append(constraintsToValidate, c)
-				}
-			} else if mvRefresh := m.AsMaterializedViewRefresh(); mvRefresh != nil {
-				viewToRefresh = mvRefresh
-			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil {
+			case *descpb.DescriptorMutation_PrimaryKeySwap, *descpb.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
-			} else {
-				return errors.AssertionFailedf("unsupported mutation: %+v", m)
+			case *descpb.DescriptorMutation_MaterializedViewRefresh:
+				viewToRefresh = t.MaterializedViewRefresh
+			default:
+				return errors.AssertionFailedf(
+					"unsupported mutation: %+v", m)
 			}
 
-		} else if m.Dropped() {
-			if col := m.AsColumn(); col != nil {
-				needColumnBackfill = catalog.ColumnNeedsBackfill(col)
-			} else if idx := m.AsIndex(); idx != nil {
-				if !canClearRangeForDrop(idx.IndexDesc()) {
-					droppedIndexDescs = append(droppedIndexDescs, *idx.IndexDesc())
+		case descpb.DescriptorMutation_DROP:
+			switch t := m.Descriptor_.(type) {
+			case *descpb.DescriptorMutation_Column:
+				if tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
+					needColumnBackfill = true
 				}
-			} else if c := m.AsConstraint(); c != nil {
-				constraintsToDrop = append(constraintsToDrop, c)
-			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil {
+			case *descpb.DescriptorMutation_Index:
+				if !canClearRangeForDrop(t.Index) {
+					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+				}
+			case *descpb.DescriptorMutation_Constraint:
+				constraintsToDrop = append(constraintsToDrop, *t.Constraint)
+			case *descpb.DescriptorMutation_PrimaryKeySwap,
+				*descpb.DescriptorMutation_ComputedColumnSwap,
+				*descpb.DescriptorMutation_MaterializedViewRefresh:
 				// The backfiller doesn't need to do anything here.
-			} else {
-				return errors.AssertionFailedf("unsupported mutation: %+v", m)
+			default:
+				return errors.AssertionFailedf(
+					"unsupported mutation: %+v", m)
 			}
 		}
 	}
@@ -364,17 +381,16 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 // the given constraint removed from it, and waits until the entire cluster is
 // on the new version of the table descriptor. It returns the new table descs.
 func (sc *SchemaChanger) dropConstraints(
-	ctx context.Context, constraints []catalog.ConstraintToUpdate,
+	ctx context.Context, constraints []descpb.ConstraintToUpdate,
 ) (map[descpb.ID]catalog.TableDescriptor, error) {
 	log.Infof(ctx, "dropping %d constraints", len(constraints))
 
-	fksByBackrefTable := make(map[descpb.ID][]catalog.ConstraintToUpdate)
-	for _, c := range constraints {
-		if c.IsForeignKey() {
-			id := c.ForeignKey().ReferencedTableID
-			if id != sc.descID {
-				fksByBackrefTable[id] = append(fksByBackrefTable[id], c)
-			}
+	fksByBackrefTable := make(map[descpb.ID][]*descpb.ConstraintToUpdate)
+	for i := range constraints {
+		c := &constraints[i]
+		if c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ForeignKey.ReferencedTableID != sc.descID {
+			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
 
@@ -385,11 +401,13 @@ func (sc *SchemaChanger) dropConstraints(
 			return err
 		}
 		b := txn.NewBatch()
-		for _, constraint := range constraints {
-			if constraint.IsCheck() || constraint.IsNotNull() {
+		for i := range constraints {
+			constraint := &constraints[i]
+			switch constraint.ConstraintType {
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 				found := false
 				for j, c := range scTable.Checks {
-					if c.Name == constraint.GetName() {
+					if c.Name == constraint.Name {
 						scTable.Checks = append(scTable.Checks[:j], scTable.Checks[j+1:]...)
 						found = true
 						break
@@ -400,18 +418,18 @@ func (sc *SchemaChanger) dropConstraints(
 						ctx, 2,
 						"backfiller tried to drop constraint %+v but it was not found, "+
 							"presumably due to a retry or rollback",
-						constraint.ConstraintToUpdateDesc(),
+						constraint,
 					)
 				}
-			} else if constraint.IsForeignKey() {
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
-					if def.Name != constraint.GetName() {
+					if def.Name != constraint.Name {
 						continue
 					}
 					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx,
-						constraint.ForeignKey().ReferencedTableID, txn)
+						constraint.ForeignKey.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
@@ -434,13 +452,13 @@ func (sc *SchemaChanger) dropConstraints(
 						ctx, 2,
 						"backfiller tried to drop constraint %+v but it was not found, "+
 							"presumably due to a retry or rollback",
-						constraint.ConstraintToUpdateDesc(),
+						constraint,
 					)
 				}
-			} else if constraint.IsUniqueWithoutIndex() {
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 				found := false
 				for j, c := range scTable.UniqueWithoutIndexConstraints {
-					if c.Name == constraint.GetName() {
+					if c.Name == constraint.Name {
 						scTable.UniqueWithoutIndexConstraints = append(
 							scTable.UniqueWithoutIndexConstraints[:j],
 							scTable.UniqueWithoutIndexConstraints[j+1:]...,
@@ -454,7 +472,7 @@ func (sc *SchemaChanger) dropConstraints(
 						ctx, 2,
 						"backfiller tried to drop constraint %+v but it was not found, "+
 							"presumably due to a retry or rollback",
-						constraint.ConstraintToUpdateDesc(),
+						constraint,
 					)
 				}
 			}
@@ -506,17 +524,16 @@ func (sc *SchemaChanger) dropConstraints(
 // given constraint added to it, and waits until the entire cluster is on
 // the new version of the table descriptor.
 func (sc *SchemaChanger) addConstraints(
-	ctx context.Context, constraints []catalog.ConstraintToUpdate,
+	ctx context.Context, constraints []descpb.ConstraintToUpdate,
 ) error {
 	log.Infof(ctx, "adding %d constraints", len(constraints))
 
-	fksByBackrefTable := make(map[descpb.ID][]catalog.ConstraintToUpdate)
-	for _, c := range constraints {
-		if c.IsForeignKey() {
-			id := c.ForeignKey().ReferencedTableID
-			if id != sc.descID {
-				fksByBackrefTable[id] = append(fksByBackrefTable[id], c)
-			}
+	fksByBackrefTable := make(map[descpb.ID][]*descpb.ConstraintToUpdate)
+	for i := range constraints {
+		c := &constraints[i]
+		if c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ForeignKey.ReferencedTableID != sc.descID {
+			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
 
@@ -530,11 +547,13 @@ func (sc *SchemaChanger) addConstraints(
 		}
 
 		b := txn.NewBatch()
-		for _, constraint := range constraints {
-			if constraint.IsCheck() || constraint.IsNotNull() {
+		for i := range constraints {
+			constraint := &constraints[i]
+			switch constraint.ConstraintType {
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 				found := false
 				for _, c := range scTable.Checks {
-					if c.Name == constraint.GetName() {
+					if c.Name == constraint.Name {
 						log.VEventf(
 							ctx, 2,
 							"backfiller tried to add constraint %+v but found existing constraint %+v, "+
@@ -549,19 +568,19 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !found {
-					scTable.Checks = append(scTable.Checks, &constraint.ConstraintToUpdateDesc().Check)
+					scTable.Checks = append(scTable.Checks, &constraints[i].Check)
 				}
-			} else if constraint.IsForeignKey() {
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
-					if def.Name == constraint.GetName() {
+					if def.Name == constraint.Name {
 						if log.V(2) {
 							log.VEventf(
 								ctx, 2,
 								"backfiller tried to add constraint %+v but found existing constraint %+v, "+
 									"presumably due to a retry or rollback",
-								constraint.ConstraintToUpdateDesc(), def,
+								constraint, def,
 							)
 						}
 						// Ensure the constraint on the descriptor is set to Validating, in
@@ -572,8 +591,8 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !foundExisting {
-					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey())
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey().ReferencedTableID, txn)
+					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
@@ -581,11 +600,11 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = tabledesc.FindFKReferencedUniqueConstraint(backrefTable, constraint.ForeignKey().ReferencedColumnIDs)
+					_, err = tabledesc.FindFKReferencedUniqueConstraint(backrefTable, constraint.ForeignKey.ReferencedColumnIDs)
 					if err != nil {
 						return err
 					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey())
+					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 
 					// Note that this code may add the same descriptor to the batch
 					// multiple times if it is referenced multiple times. That's fine as
@@ -599,15 +618,15 @@ func (sc *SchemaChanger) addConstraints(
 						}
 					}
 				}
-			} else if constraint.IsUniqueWithoutIndex() {
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 				found := false
 				for _, c := range scTable.UniqueWithoutIndexConstraints {
-					if c.Name == constraint.GetName() {
+					if c.Name == constraint.Name {
 						log.VEventf(
 							ctx, 2,
 							"backfiller tried to add constraint %+v but found existing constraint %+v, "+
 								"presumably due to a retry or rollback",
-							constraint.ConstraintToUpdateDesc(), c,
+							constraint, c,
 						)
 						// Ensure the constraint on the descriptor is set to Validating, in
 						// case we're in the middle of rolling back DROP CONSTRAINT
@@ -617,8 +636,9 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !found {
-					scTable.UniqueWithoutIndexConstraints = append(scTable.UniqueWithoutIndexConstraints,
-						constraint.UniqueWithoutIndex())
+					scTable.UniqueWithoutIndexConstraints = append(
+						scTable.UniqueWithoutIndexConstraints, constraints[i].UniqueWithoutIndexConstraint,
+					)
 				}
 			}
 		}
@@ -650,7 +670,7 @@ func (sc *SchemaChanger) addConstraints(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateConstraints(
-	ctx context.Context, constraints []catalog.ConstraintToUpdate,
+	ctx context.Context, constraints []descpb.ConstraintToUpdate,
 ) error {
 	if lease.TestingTableLeasesAreDisabled() {
 		return nil
@@ -711,27 +731,28 @@ func (sc *SchemaChanger) validateConstraints(
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
-				if c.IsCheck() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+				switch c.ConstraintType {
+				case descpb.ConstraintToUpdate_CHECK:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Expr); err != nil {
 						return err
 					}
-				} else if c.IsForeignKey() {
-					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
+					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
-				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.GetName()); err != nil {
+				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
-				} else if c.IsNotNull() {
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check().Expr); err != nil {
+				case descpb.ConstraintToUpdate_NOT_NULL:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Expr); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
 						return errors.Wrap(err, "validation of NOT NULL constraint failed")
 					}
-				} else {
-					return errors.Errorf("unsupported constraint type: %d", c.ConstraintToUpdateDesc().ConstraintType)
+				default:
+					return errors.Errorf("unsupported constraint type: %d", c.ConstraintType)
 				}
 				return nil
 			})
@@ -1954,72 +1975,85 @@ func runSchemaChangesInTxn(
 	// in the world of transactional schema changes.
 
 	// Collect constraint mutations to process later.
-	var constraintAdditionMutations []catalog.ConstraintToUpdate
+	var constraintAdditionMutations []descpb.DescriptorMutation
 
 	// We use a range loop here as the processing of some mutations
 	// such as the primary key swap mutations result in queueing more
 	// mutations that need to be processed.
-	for _, m := range tableDesc.AllMutations() {
+	for i := 0; i < len(tableDesc.Mutations); i++ {
+		m := tableDesc.Mutations[i]
 		// Skip mutations that get canceled by later operations
-		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, m.MutationOrdinal()+1); discarded {
+		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, i+1); discarded {
 			continue
 		}
 
 		immutDesc := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildImmutableTable()
-
-		if m.Adding() {
-			if m.AsPrimaryKeySwap() != nil {
+		switch m.Direction {
+		case descpb.DescriptorMutation_ADD:
+			switch m.Descriptor_.(type) {
+			case *descpb.DescriptorMutation_PrimaryKeySwap:
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
-			} else if m.AsComputedColumnSwap() != nil {
+			case *descpb.DescriptorMutation_ComputedColumnSwap:
 				return AlterColTypeInTxnNotSupportedErr
-			} else if col := m.AsColumn(); col != nil {
-				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
-					if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
-						return err
-					}
-					doneColumnBackfill = true
+			case *descpb.DescriptorMutation_Column:
+				if doneColumnBackfill || !tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
+					break
 				}
-			} else if idx := m.AsIndex(); idx != nil {
+				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
+					return err
+				}
+				doneColumnBackfill = true
+
+			case *descpb.DescriptorMutation_Index:
 				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
 					return err
 				}
-			} else if c := m.AsConstraint(); c != nil {
+
+			case *descpb.DescriptorMutation_Constraint:
 				// This is processed later. Do not proceed to MakeMutationComplete.
-				constraintAdditionMutations = append(constraintAdditionMutations, c)
+				constraintAdditionMutations = append(constraintAdditionMutations, m)
 				continue
-			} else {
-				return errors.AssertionFailedf("unsupported mutation: %+v", m)
+
+			default:
+				return errors.AssertionFailedf(
+					"unsupported mutation: %+v", m)
 			}
-		} else if m.Dropped() {
+
+		case descpb.DescriptorMutation_DROP:
 			// Drop the name and drop the associated data later.
-			if col := m.AsColumn(); col != nil {
-				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
-					if err := columnBackfillInTxn(
-						ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV,
-					); err != nil {
-						return err
-					}
-					doneColumnBackfill = true
+			switch t := m.Descriptor_.(type) {
+			case *descpb.DescriptorMutation_Column:
+				if doneColumnBackfill || !tabledesc.ColumnNeedsBackfill(m.Direction, m.GetColumn()) {
+					break
 				}
-			} else if idx := m.AsIndex(); idx != nil {
-				if err := indexTruncateInTxn(
-					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, idx.IndexDesc(), traceKV,
+				if err := columnBackfillInTxn(
+					ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV,
 				); err != nil {
 					return err
 				}
-			} else if c := m.AsConstraint(); c != nil {
-				if c.IsCheck() || c.IsNotNull() {
+				doneColumnBackfill = true
+
+			case *descpb.DescriptorMutation_Index:
+				if err := indexTruncateInTxn(
+					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, t.Index, traceKV,
+				); err != nil {
+					return err
+				}
+
+			case *descpb.DescriptorMutation_Constraint:
+				switch t.Constraint.ConstraintType {
+				case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 					for i := range tableDesc.Checks {
-						if tableDesc.Checks[i].Name == c.GetName() {
+						if tableDesc.Checks[i].Name == t.Constraint.Name {
 							tableDesc.Checks = append(tableDesc.Checks[:i], tableDesc.Checks[i+1:]...)
 							break
 						}
 					}
-				} else if c.IsForeignKey() {
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
 					for i := range tableDesc.OutboundFKs {
 						fk := &tableDesc.OutboundFKs[i]
-						if fk.Name == c.GetName() {
+						if fk.Name == t.Constraint.Name {
 							if err := planner.removeFKBackReference(ctx, tableDesc, fk); err != nil {
 								return err
 							}
@@ -2027,9 +2061,9 @@ func runSchemaChangesInTxn(
 							break
 						}
 					}
-				} else if c.IsUniqueWithoutIndex() {
+				case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 					for i := range tableDesc.UniqueWithoutIndexConstraints {
-						if tableDesc.UniqueWithoutIndexConstraints[i].Name == c.GetName() {
+						if tableDesc.UniqueWithoutIndexConstraints[i].Name == t.Constraint.Name {
 							tableDesc.UniqueWithoutIndexConstraints = append(
 								tableDesc.UniqueWithoutIndexConstraints[:i],
 								tableDesc.UniqueWithoutIndexConstraints[i+1:]...,
@@ -2037,13 +2071,17 @@ func runSchemaChangesInTxn(
 							break
 						}
 					}
-				} else {
-					return errors.AssertionFailedf("unsupported constraint type: %d", c.ConstraintToUpdateDesc().ConstraintType)
+				default:
+					return errors.AssertionFailedf(
+						"unsupported constraint type: %d", errors.Safe(t.Constraint.ConstraintType))
 				}
-			}
-		}
 
-		if err := tableDesc.MakeMutationComplete(tableDesc.Mutations[m.MutationOrdinal()]); err != nil {
+			default:
+				return errors.AssertionFailedf("unsupported mutation: %+v", m)
+			}
+
+		}
+		if err := tableDesc.MakeMutationComplete(m); err != nil {
 			return err
 		}
 
@@ -2051,14 +2089,15 @@ func runSchemaChangesInTxn(
 		// extra work that needs to be done. Note that we don't need to create
 		// a job to clean up the dropped indexes because those mutations can
 		// get processed in this txn on the new table.
-		if pkSwap := m.AsPrimaryKeySwap(); pkSwap != nil {
+		if pkSwap := m.GetPrimaryKeySwap(); pkSwap != nil {
 			// If any old index had an interleaved parent, remove the
 			// backreference from the parent.
 			// N.B. This logic needs to be kept up to date with the
 			// corresponding piece in (*SchemaChanger).done. It is slightly
 			// different because of how it access tables and how it needs to
 			// write the modified table descriptors explicitly.
-			err := pkSwap.ForEachOldIndexIDs(func(idxID descpb.IndexID) error {
+			for _, idxID := range append(
+				[]descpb.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
 				oldIndex, err := tableDesc.FindIndexWithID(idxID)
 				if err != nil {
 					return err
@@ -2095,42 +2134,27 @@ func runSchemaChangesInTxn(
 						}
 					}
 				}
-				return nil
-			})
-			if err != nil {
-				return err
 			}
 		}
 	}
 	// Clear all the mutations except for adding constraints.
-	tableDesc.Mutations = make([]descpb.DescriptorMutation, len(constraintAdditionMutations))
-	for i, c := range constraintAdditionMutations {
-		tableDesc.Mutations[i] = descpb.DescriptorMutation{
-			Descriptor_: &descpb.DescriptorMutation_Constraint{Constraint: c.ConstraintToUpdateDesc()},
-			Direction:   descpb.DescriptorMutation_ADD,
-			MutationID:  c.MutationID(),
-		}
-		if c.DeleteOnly() {
-			tableDesc.Mutations[i].State = descpb.DescriptorMutation_DELETE_ONLY
-		} else if c.WriteAndDeleteOnly() {
-			tableDesc.Mutations[i].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		}
-	}
+	tableDesc.Mutations = constraintAdditionMutations
 
 	// Now that the table descriptor is in a valid state with all column and index
 	// mutations applied, it can be used for validating check/FK constraints.
-	for _, c := range constraintAdditionMutations {
-		if c.IsCheck() || c.IsNotNull() {
-			check := &c.ConstraintToUpdateDesc().Check
-			if check.Validity == descpb.ConstraintValidity_Validating {
+	for _, m := range constraintAdditionMutations {
+		constraint := m.GetConstraint()
+		switch constraint.ConstraintType {
+		case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+			if constraint.Check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
-					ctx, planner.Descriptors().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, check.Expr,
+					ctx, planner.Descriptors().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, constraint.Check.Expr,
 				); err != nil {
 					return err
 				}
-				check.Validity = descpb.ConstraintValidity_Validated
+				constraint.Check.Validity = descpb.ConstraintValidity_Validated
 			}
-		} else if c.IsForeignKey() {
+		case descpb.ConstraintToUpdate_FOREIGN_KEY:
 			// We can't support adding a validated foreign key constraint in the same
 			// transaction as the CREATE TABLE statement. This would require adding
 			// the backreference to the other table and then validating the constraint
@@ -2143,31 +2167,32 @@ func runSchemaChangesInTxn(
 			// schema change framework eventually.
 			//
 			// For now, just always add the FK as unvalidated.
-			c.ConstraintToUpdateDesc().ForeignKey.Validity = descpb.ConstraintValidity_Unvalidated
-		} else if c.IsUniqueWithoutIndex() {
-			uwi := &c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint
-			if uwi.Validity == descpb.ConstraintValidity_Validating {
+			constraint.ForeignKey.Validity = descpb.ConstraintValidity_Unvalidated
+		case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+			if constraint.UniqueWithoutIndexConstraint.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					ctx, planner.EvalContext(), tableDesc, planner.txn, c.GetName(),
+					ctx, planner.EvalContext(), tableDesc, planner.txn, constraint.Name,
 				); err != nil {
 					return err
 				}
-				uwi.Validity = descpb.ConstraintValidity_Validated
+				constraint.UniqueWithoutIndexConstraint.Validity = descpb.ConstraintValidity_Validated
 			}
-		} else {
-			return errors.AssertionFailedf("unsupported constraint type: %d", c.ConstraintToUpdateDesc().ConstraintType)
+		default:
+			return errors.AssertionFailedf(
+				"unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
 		}
-
 	}
 
 	// Finally, add the constraints. We bypass MakeMutationsComplete (which makes
 	// certain assumptions about the state in the usual schema changer) and just
 	// update the table descriptor directly.
-	for _, c := range constraintAdditionMutations {
-		if c.IsCheck() || c.IsNotNull() {
-			tableDesc.Checks = append(tableDesc.Checks, &c.ConstraintToUpdateDesc().Check)
-		} else if c.IsForeignKey() {
-			fk := c.ConstraintToUpdateDesc().ForeignKey
+	for _, m := range constraintAdditionMutations {
+		constraint := m.GetConstraint()
+		switch constraint.ConstraintType {
+		case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+			tableDesc.Checks = append(tableDesc.Checks, &constraint.Check)
+		case descpb.ConstraintToUpdate_FOREIGN_KEY:
+			fk := constraint.ForeignKey
 			var referencedTableDesc *tabledesc.Mutable
 			// We don't want to lookup/edit a second copy of the same table.
 			selfReference := tableDesc.ID == fk.ReferencedTableID
@@ -2194,12 +2219,13 @@ func runSchemaChangesInTxn(
 					return err
 				}
 			}
-		} else if c.IsUniqueWithoutIndex() {
+		case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 			tableDesc.UniqueWithoutIndexConstraints = append(
-				tableDesc.UniqueWithoutIndexConstraints, c.ConstraintToUpdateDesc().UniqueWithoutIndexConstraint,
+				tableDesc.UniqueWithoutIndexConstraints, constraint.UniqueWithoutIndexConstraint,
 			)
-		} else {
-			return errors.AssertionFailedf("unsupported constraint type: %d", c.ConstraintToUpdateDesc().ConstraintType)
+		default:
+			return errors.AssertionFailedf(
+				"unsupported constraint type: %d", errors.Safe(constraint.ConstraintType))
 		}
 	}
 	tableDesc.Mutations = nil

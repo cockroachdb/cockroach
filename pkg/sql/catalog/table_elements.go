@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
@@ -273,35 +272,6 @@ type ConstraintToUpdate interface {
 
 	// ConstraintToUpdateDesc returns the underlying protobuf descriptor.
 	ConstraintToUpdateDesc() *descpb.ConstraintToUpdate
-
-	// GetName returns the name of this constraint update mutation.
-	GetName() string
-
-	// IsCheck returns true iff this is an update for a check constraint.
-	IsCheck() bool
-
-	// IsForeignKey returns true iff this is an update for a fk constraint.
-	IsForeignKey() bool
-
-	// IsNotNull returns true iff this is an update for a not-null constraint.
-	IsNotNull() bool
-
-	// IsUniqueWithoutIndex returns true iff this is an update for a unique
-	// without index constraint.
-	IsUniqueWithoutIndex() bool
-
-	// Check returns the underlying check constraint, if there is one.
-	Check() descpb.TableDescriptor_CheckConstraint
-
-	// ForeignKey returns the underlying fk constraint, if there is one.
-	ForeignKey() descpb.ForeignKeyConstraint
-
-	// NotNullColumnID returns the underlying not-null column ID, if there is one.
-	NotNullColumnID() descpb.ColumnID
-
-	// UniqueWithoutIndex returns the underlying unique without index constraint, if
-	// there is one.
-	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.
@@ -310,26 +280,6 @@ type PrimaryKeySwap interface {
 
 	// PrimaryKeySwapDesc returns the underlying protobuf descriptor.
 	PrimaryKeySwapDesc() *descpb.PrimaryKeySwap
-
-	// NumOldIndexes returns the number of old active indexes to swap out.
-	NumOldIndexes() int
-
-	// ForEachOldIndexIDs iterates through each of the old index IDs.
-	// iterutil.Done is supported.
-	ForEachOldIndexIDs(fn func(id descpb.IndexID) error) error
-
-	// NumNewIndexes returns the number of new active indexes to swap in.
-	NumNewIndexes() int
-
-	// ForEachNewIndexIDs iterates through each of the new index IDs.
-	// iterutil.Done is supported.
-	ForEachNewIndexIDs(fn func(id descpb.IndexID) error) error
-
-	// HasLocalityConfig returns true iff the locality config is swapped also.
-	HasLocalityConfig() bool
-
-	// LocalityConfigSwap returns the locality config swap, if there is one.
-	LocalityConfigSwap() descpb.PrimaryKeySwap_LocalityConfigSwap
 }
 
 // ComputedColumnSwap is an interface around a computed column swap mutation.
@@ -347,21 +297,6 @@ type MaterializedViewRefresh interface {
 
 	// MaterializedViewRefreshDesc returns the underlying protobuf descriptor.
 	MaterializedViewRefreshDesc() *descpb.MaterializedViewRefresh
-
-	// ShouldBackfill returns true iff the query should be backfilled into the
-	// indexes.
-	ShouldBackfill() bool
-
-	// AsOf returns the timestamp at which the query should be run.
-	AsOf() hlc.Timestamp
-
-	// ForEachIndexID iterates through each of the index IDs.
-	// iterutil.Done is supported.
-	ForEachIndexID(func(id descpb.IndexID) error) error
-
-	// TableWithNewIndexes returns a new TableDescriptor based on the old one
-	// but with the refreshed indexes put in.
-	TableWithNewIndexes(tbl TableDescriptor) TableDescriptor
 }
 
 func isIndexInSearchSet(desc TableDescriptor, opts IndexOpts, idx Index) bool {
@@ -554,27 +489,4 @@ func ColumnTypesWithVirtualCol(columns []Column, virtualCol Column) []*types.T {
 		}
 	}
 	return t
-}
-
-// ColumnNeedsBackfill returns true if adding or dropping (according to
-// the direction) the given column requires backfill.
-func ColumnNeedsBackfill(col Column) bool {
-	if col.IsVirtual() {
-		// Virtual columns are not stored in the primary index, so they do not need
-		// backfill.
-		return false
-	}
-	if col.Dropped() {
-		// In all other cases, DROP requires backfill.
-		return true
-	}
-	// ADD requires backfill for:
-	//  - columns with non-NULL default value
-	//  - computed columns
-	//  - non-nullable columns (note: if a non-nullable column doesn't have a
-	//    default value, the backfill will fail unless the table is empty).
-	if col.ColumnDesc().HasNullDefault() {
-		return false
-	}
-	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
 }

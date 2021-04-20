@@ -12,7 +12,6 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,13 +34,3 @@ func GetPostDeserializationChanges(
 }
 
 var FitColumnToFamily = fitColumnToFamily
-
-func TestingMakeColumn(
-	direction descpb.DescriptorMutation_Direction, desc *descpb.ColumnDescriptor,
-) catalog.Column {
-	return &column{
-		maybeMutation: maybeMutation{mutationDirection: direction},
-		desc:          desc,
-		ordinal:       0,
-	}
-}

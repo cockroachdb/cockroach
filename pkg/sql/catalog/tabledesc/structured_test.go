@@ -446,10 +446,10 @@ func TestColumnNeedsBackfill(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if catalog.ColumnNeedsBackfill(TestingMakeColumn(descpb.DescriptorMutation_ADD, &tc.desc)) != tc.add {
+		if ColumnNeedsBackfill(descpb.DescriptorMutation_ADD, &tc.desc) != tc.add {
 			t.Errorf("expected ColumnNeedsBackfill to be %v for adding %s", tc.add, tc.info)
 		}
-		if catalog.ColumnNeedsBackfill(TestingMakeColumn(descpb.DescriptorMutation_DROP, &tc.desc)) != tc.drop {
+		if ColumnNeedsBackfill(descpb.DescriptorMutation_DROP, &tc.desc) != tc.drop {
 			t.Errorf("expected ColumnNeedsBackfill to be %v for dropping %s", tc.drop, tc.info)
 		}
 	}

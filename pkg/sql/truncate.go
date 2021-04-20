@@ -360,14 +360,19 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 						"dropped which depends on another object", desc.GetName(), col.GetName())
 			}
 		} else if c := m.AsConstraint(); c != nil {
-			if c.IsCheck() || c.IsNotNull() || c.IsForeignKey() || c.IsUniqueWithoutIndex() {
+			switch ct := c.ConstraintToUpdateDesc().ConstraintType; ct {
+			case descpb.ConstraintToUpdate_CHECK,
+				descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX,
+				descpb.ConstraintToUpdate_NOT_NULL,
+				descpb.ConstraintToUpdate_FOREIGN_KEY:
 				return unimplemented.Newf(
 					"TRUNCATE concurrent with ongoing schema change",
 					"cannot perform TRUNCATE on %q which has an ongoing %s "+
-						"constraint change", desc.GetName(), c.ConstraintToUpdateDesc().ConstraintType)
+						"constraint change", desc.GetName(), ct)
+			default:
+				return errors.AssertionFailedf("cannot perform TRUNCATE due to "+
+					"unknown constraint type %v on mutation %d in %v", ct, i, desc)
 			}
-			return errors.AssertionFailedf("cannot perform TRUNCATE due to "+
-				"unknown constraint type %v on mutation %d in %v", c.ConstraintToUpdateDesc().ConstraintType, i, desc)
 		} else if s := m.AsPrimaryKeySwap(); s != nil {
 			return unimplemented.Newf(
 				"TRUNCATE concurrent with ongoing schema change",
