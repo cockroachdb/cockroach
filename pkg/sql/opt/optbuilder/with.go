@@ -104,30 +104,30 @@ func (b *Builder) buildWiths(expr memo.RelExpr, ctes cteSources) memo.RelExpr {
 func (b *Builder) processWiths(
 	with *tree.With, inScope *scope, buildStmt func(inScope *scope) *scope,
 ) *scope {
-	inScope = b.buildCTEs(with, inScope)
+	var correlatedCTEs cteSources
+	inScope, correlatedCTEs = b.buildCTEs(with, inScope)
 	prevAtRoot := inScope.atRoot
 	inScope.atRoot = false
 	outScope := buildStmt(inScope)
+	outScope.expr = b.buildWiths(outScope.expr, correlatedCTEs)
 	inScope.atRoot = prevAtRoot
 	return outScope
 }
 
 // buildCTEs constructs expressions for the CTEs defined by a WITH clause and
-// adds them to the CTE stack.
-func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
+// adds them to the CTE stack. Non-correlated CTEs are set up to be built at
+// the root level. Correlated CTEs are returned and will need to be built at the
+// current scope.
+func (b *Builder) buildCTEs(
+	with *tree.With, inScope *scope,
+) (outScope *scope, correlatedCTEs cteSources) {
 	if with == nil {
-		return inScope
+		return inScope, nil
 	}
 
 	outScope = inScope.push()
 	addedCTEs := make([]cteSource, len(with.CTEList))
 	hasRecursive := false
-
-	// Make a fake subquery to ensure that no CTEs are correlated.
-	// TODO(justin): relax this restriction.
-	outer := b.subquery
-	defer func() { b.subquery = outer }()
-	b.subquery = &subquery{}
 
 	outScope.ctes = make(map[string]*cteSource)
 	for i, cte := range with.CTEList {
@@ -141,11 +141,6 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 					"WITH clause containing a data-modifying statement must be at the top level",
 				),
 			)
-		}
-
-		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
-		if b.subquery != nil && !b.subquery.outerCols.Empty() {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
 		}
 
 		aliasStr := cte.Name.Alias.String()
@@ -168,7 +163,12 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		}
 		cte := &addedCTEs[i]
 		outScope.ctes[cte.name.Alias.String()] = cte
-		b.addCTE(cte)
+
+		if isCorrelated := !cteExpr.Relational().OuterCols.Empty(); isCorrelated {
+			correlatedCTEs = append(correlatedCTEs, cte)
+		} else {
+			b.addCTE(cte)
+		}
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
@@ -176,7 +176,7 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		telemetry.Inc(sqltelemetry.RecursiveCteUseCounter)
 	}
 
-	return outScope
+	return outScope, correlatedCTEs
 }
 
 // buildCTE constructs an expression for a CTE.
