@@ -35,7 +35,7 @@ import {
   DropdownOption as DropdownItem,
 } from "src/dropdown/dropdown";
 import { Button } from "src/button/button";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip2 } from "src/tooltip2";
 
 const cx = classNames.bind(styles);
 
@@ -63,31 +63,31 @@ const SessionLink = (props: { session: ISession }) => {
   const sessionID = byteArrayToUuid(props.session.id);
 
   return (
-    <Tooltip
+    <Tooltip2
       placement="bottom"
-      style="tableTitle"
-      content={<>Session started at {start.format(DATE_FORMAT)}</>}
+      tableTitle
+      title={<>Session started at {start.format(DATE_FORMAT)}</>}
     >
       <Link to={`${base}/${encodeURIComponent(sessionID)}`}>
         <div>{start.fromNow(true)}</div>
       </Link>
-    </Tooltip>
+    </Tooltip2>
   );
 };
 
 const AgeLabel = (props: { start: Moment; thingName: string }) => {
   return (
-    <Tooltip
+    <Tooltip2
       placement="bottom"
-      style="tableTitle"
-      content={
+      tableTitle
+      title={
         <>
           {props.thingName} started at {props.start.format(DATE_FORMAT)}
         </>
       }
     >
       {props.start.fromNow(true)}
-    </Tooltip>
+    </Tooltip2>
   );
 };
 

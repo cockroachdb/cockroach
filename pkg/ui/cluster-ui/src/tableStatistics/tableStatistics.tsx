@@ -5,7 +5,7 @@ import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
 import { ISortedTablePagination } from "../sortedtable";
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip } from "../tooltip";
 import statementStyles from "src/statementDetails/statementDetails.module.scss";
 import tableStatsStyles from "./tableStatistics.module.scss";
 import classNames from "classnames/bind";
@@ -67,7 +67,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
         {activeFilters ? resultsCountAndClear : resultsPerPageLabel}
       </h4>
       <div className={cxStats("flex-display")}>
-        <Tooltip content={toolTipText}>
+        <Tooltip text={toolTipText}>
           <div className={cxStats("tooltip-hover-area")}>
             <Icon iconName={"InfoCircle"} />
           </div>

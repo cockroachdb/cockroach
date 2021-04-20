@@ -12,7 +12,7 @@ import { AggregateStatistics } from "src/statementsTable";
 import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
 
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip2 as Tooltip } from "src/tooltip2";
 import {
   statementDiagnostics,
   statementsRetries,
@@ -39,9 +39,8 @@ export const StatementTableTitle = {
   statements: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"SQL statement "}
             <Anchor href={statementsSql} target="_blank">
@@ -52,7 +51,7 @@ export const StatementTableTitle = {
             To view additional details of a SQL statement fingerprint, click
             this to open the Statement Details page.
           </p>
-        </>
+        </div>
       }
     >
       Statements
@@ -61,9 +60,8 @@ export const StatementTableTitle = {
   executionCount: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {
               "Cumulative number of executions of statements with this fingerprint within the last hour or specified "
@@ -80,7 +78,7 @@ export const StatementTableTitle = {
             </Anchor>
             {" (red) for the SQL statement fingerprint."}
           </p>
-        </>
+        </div>
       }
     >
       Execution Count
@@ -89,9 +87,8 @@ export const StatementTableTitle = {
   rowsRead: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Aggregation of all rows "}
             <Anchor href={readFromDisk} target="_blank">
@@ -109,7 +106,7 @@ export const StatementTableTitle = {
             The gray bar indicates the mean number of rows read from disk. The
             blue bar indicates one standard deviation from the mean.
           </p>
-        </>
+        </div>
       }
     >
       Rows Read
@@ -118,9 +115,8 @@ export const StatementTableTitle = {
   bytesRead: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Aggregation of all bytes "}
             <Anchor href={readFromDisk} target="_blank">
@@ -138,7 +134,7 @@ export const StatementTableTitle = {
             The gray bar indicates the mean number of bytes read from disk. The
             blue bar indicates one standard deviation from the mean.
           </p>
-        </>
+        </div>
       }
     >
       Bytes Read
@@ -147,9 +143,8 @@ export const StatementTableTitle = {
   statementTime: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Average "}
             <Anchor href={planningExecutionTime} target="_blank">
@@ -163,7 +158,7 @@ export const StatementTableTitle = {
             The gray bar indicates the mean latency. The blue bar indicates one
             standard deviation from the mean.
           </p>
-        </>
+        </div>
       }
     >
       Statement Time
@@ -172,9 +167,8 @@ export const StatementTableTitle = {
   transactionTime: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Average "}
             <Anchor href={planningExecutionTime} target="_blank">
@@ -188,7 +182,7 @@ export const StatementTableTitle = {
             The gray bar indicates the mean latency. The blue bar indicates one
             standard deviation from the mean.
           </p>
-        </>
+        </div>
       }
     >
       Transaction Time
@@ -197,9 +191,8 @@ export const StatementTableTitle = {
   contention: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Average time statements with this fingerprint were "}
             <Anchor href={contentionTime} target="_blank">
@@ -215,7 +208,7 @@ export const StatementTableTitle = {
             The gray bar indicates mean contention time. The blue bar indicates
             one standard deviation from the mean.
           </p>
-        </>
+        </div>
       }
     >
       Contention
@@ -224,9 +217,8 @@ export const StatementTableTitle = {
   maxMemUsage: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {
               "Maximum memory used by a statement with this fingerprint at any time during its execution within the last hour or specified "
@@ -240,7 +232,7 @@ export const StatementTableTitle = {
             The gray bar indicates the average max memory usage. The blue bar
             indicates one standard deviation from the mean.
           </p>
-        </>
+        </div>
       }
     >
       Max Memory
@@ -249,9 +241,8 @@ export const StatementTableTitle = {
   networkBytes: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Amount of data "}
             <Anchor href={readsAndWrites} target="_blank">
@@ -273,7 +264,7 @@ export const StatementTableTitle = {
             network. The blue bar indicates one standard deviation from the
             mean.
           </p>
-        </>
+        </div>
       }
     >
       Network
@@ -282,9 +273,8 @@ export const StatementTableTitle = {
   retries: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Cumulative number of "}
             <Anchor href={statementsRetries} target="_blank">
@@ -294,7 +284,7 @@ export const StatementTableTitle = {
               " of statements with this fingerprint within the last hour or specified time interval."
             }
           </p>
-        </>
+        </div>
       }
     >
       Retries
@@ -303,13 +293,14 @@ export const StatementTableTitle = {
   workloadPct: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <p>
-          % of runtime all statements with this fingerprint represent, compared
-          to the cumulative runtime of all queries within the last hour or
-          specified time interval.
-        </p>
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            % of runtime all statements with this fingerprint represent,
+            compared to the cumulative runtime of all queries within the last
+            hour or specified time interval.
+          </p>
+        </div>
       }
     >
       % of all runtime
@@ -318,9 +309,8 @@ export const StatementTableTitle = {
   diagnostics: (
     <Tooltip
       placement="bottom"
-      style="tableTitle"
-      content={
-        <>
+      title={
+        <div className={cx("tooltip__table--title")}>
           <p>
             {"Option to activate "}
             <Anchor href={statementDiagnostics} target="_blank">
@@ -331,7 +321,7 @@ export const StatementTableTitle = {
             }
             <code>WAITING</code>, <code>READY</code>, OR <code>ERROR</code>).
           </p>
-        </>
+        </div>
       }
     >
       Diagnostics
@@ -466,11 +456,12 @@ export const StatementLink = (props: StatementLinkProps) => {
       <div>
         <Tooltip
           placement="bottom"
-          content={
+          title={
             <pre className={cx("cl-table-link__description")}>
               {getHighlightedText(props.statement, props.search)}
             </pre>
           }
+          overlayClassName={cx("cl-table-link__statement-tooltip--fixed-width")}
         >
           <div className="cl-table-link__tooltip-hover-area">
             {getHighlightedText(

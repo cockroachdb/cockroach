@@ -2,7 +2,7 @@ const presets = [
   [
     "@babel/env",
     {
-      "modules": "commonjs"
+      modules: false,
     },
   ],
   "@babel/react",
