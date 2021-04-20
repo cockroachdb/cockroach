@@ -2,7 +2,8 @@ import { scaleLinear } from "d3-scale";
 import { extent as d3Extent } from "d3-array";
 import _ from "lodash";
 import React from "react";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip } from "src/tooltip";
+import { Tooltip2 } from "src/tooltip2";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { NumericStatLegend } from "./numericStatLegend";
@@ -55,9 +56,9 @@ export function barChartFactory<T>(
 
       if (options?.displayNoSamples ? options.displayNoSamples(d) : false) {
         return (
-          <Tooltip
+          <Tooltip2
             placement="bottom"
-            content={
+            title={
               <div className={cx("tooltip__table--title")}>
                 <p>
                   Either the statement sample rate is set to 0, disabling
@@ -69,7 +70,7 @@ export function barChartFactory<T>(
             }
           >
             no samples
-          </Tooltip>
+          </Tooltip2>
         );
       }
 
@@ -118,7 +119,7 @@ export function barChartFactory<T>(
         );
         return (
           <div className={className}>
-            <Tooltip content={titleText} style="light">
+            <Tooltip text={titleText} short>
               <div className={cx("bar-chart__label", options?.classes?.label)}>
                 {formatter(getTotal(d))}
               </div>

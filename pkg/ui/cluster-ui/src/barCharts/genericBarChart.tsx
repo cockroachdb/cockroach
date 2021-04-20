@@ -4,7 +4,7 @@ import { scaleLinear } from "d3-scale";
 import { format as d3Format } from "d3-format";
 
 import { stdDevLong } from "src/util";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip } from "src/tooltip";
 import { NumericStat } from "../util";
 import { clamp, longToInt, normalizeClosedDomain } from "./utils";
 import styles from "./barCharts.module.scss";
@@ -73,7 +73,7 @@ export function genericBarChart(
     const spread = scale(sd + (sd > mean ? mean : sd));
     const title = renderNumericStatLegend(count, mean, sd, format);
     return (
-      <Tooltip content={title} style="light">
+      <Tooltip text={title} short>
         <div className={cx("bar-chart", "bar-chart--breakdown")}>
           <div className={cx("bar-chart__label")}>{format(mean)}</div>
           <div className={cx("bar-chart__multiplebars")}>

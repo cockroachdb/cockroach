@@ -24,5 +24,7 @@ export * from "./table";
 export * from "./store";
 export * from "./transactionsPage";
 export * from "./text";
+export * from "./tooltip";
+export * from "./tooltip2";
 export { util, api };
 export * from "./sessions";
