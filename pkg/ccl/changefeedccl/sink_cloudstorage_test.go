@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/stretchr/testify/require"
 )
@@ -574,5 +575,44 @@ func TestCloudStorageSink(t *testing.T) {
 			err = s.EmitRow(ctx, t1, noKey, []byte("hello"), ts(1))
 		}
 		require.Regexp(t, "memory budget exceeded", err)
+	})
+	t.Run(`memory-accounting`, func(t *testing.T) {
+		before := opts[changefeedbase.OptCompression]
+		// Compression codecs include buffering that interferes with other tests,
+		// e.g. the bucketing test that configures very small flush sizes.
+		defer func() {
+			opts[changefeedbase.OptCompression] = before
+		}()
+
+		// A bit of magic constant: we're using bytes.Buffer internally, which
+		// allocates "small" buffer (64 bytes) initially.  We will try to target
+		// our file size to be less than that value; but we will write
+		// larger amount of data (thus, hopefully causing multiple bytes.Buffer
+		// reallocs, plus a file flush).
+		const targetFileSize = 63
+
+		rnd, _ := randutil.NewPseudoRand()
+		for _, compression := range []string{"", "gzip"} {
+			opts[changefeedbase.OptCompression] = compression
+			t.Run("compress="+compression, func(t *testing.T) {
+				t1 := makeTopic(`t1`)
+				testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+				sf := span.MakeFrontier(testSpan)
+				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+				sinkDir := `memory-accounting`
+				s, err := makeCloudStorageSink(
+					ctx, `nodelocal://0/`+sinkDir, 1, targetFileSize,
+					settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
+				)
+				require.NoError(t, err)
+				defer func() { require.NoError(t, s.Close()) }()
+				s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+
+				data := randutil.RandBytes(rnd, 1+rnd.Intn(targetFileSize))
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, data, ts(0)))
+
+				require.NoError(t, s.Flush(ctx))
+			})
+		}
 	})
 }
