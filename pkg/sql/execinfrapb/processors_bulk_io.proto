@@ -58,8 +58,11 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
+  // WriteAsOf is the time that the backfill entries should be written.
+  // Note: Older nodes may also use this as the read time instead of readAsOf.
+  optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
   // The timestamp to perform index backfill historical scans at.
-  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
 
   reserved 6;
 }

@@ -105,7 +105,7 @@ func (ib *indexBackfiller) prepare(ctx context.Context) error {
 		StepBufferSize: stepSize,
 		SkipDuplicates: ib.ContainsInvertedIndex(),
 	}
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
 	if err != nil {
 		return err
 	}
