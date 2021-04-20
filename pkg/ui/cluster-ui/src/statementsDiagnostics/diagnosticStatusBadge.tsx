@@ -3,7 +3,7 @@ import classNames from "classnames/bind";
 
 import { Badge } from "src/badge";
 import { Anchor } from "src/anchor";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip2 as Tooltip } from "src/tooltip2";
 import { statementDiagnostics } from "src/util";
 import { DiagnosticStatuses } from "./diagnosticStatuses";
 import styles from "./diagnosticStatusBadge.module.scss";
@@ -85,7 +85,7 @@ export function DiagnosticStatusBadge(props: OwnProps) {
   }
 
   return (
-    <Tooltip content={tooltipContent} style="default" placement="left-end">
+    <Tooltip title={tooltipContent} theme="blue" placement="bottomLeft">
       <div className={cx("diagnostic-status-badge__content")}>
         <Badge text={status} status={mapDiagnosticsStatusToBadge(status)} />
       </div>

@@ -26,7 +26,7 @@ import { Loading } from "src/loading";
 import { Button } from "src/button";
 import { SqlBox } from "src/sql";
 import { SortSetting } from "src/sortedtable";
-import { Tooltip } from "@cockroachlabs/ui-components";
+import { Tooltip } from "src/tooltip";
 import { PlanView } from "./planView";
 import { SummaryCard } from "src/summaryCard";
 import {
@@ -654,7 +654,7 @@ export class StatementDetails extends React.Component<
             >
               Execution Latency By Phase
               <div className={cx("numeric-stats-table__tooltip")}>
-                <Tooltip content="The execution latency of this statement, broken down by phase.">
+                <Tooltip text="The execution latency of this statement, broken down by phase.">
                   <div
                     className={cx("numeric-stats-table__tooltip-hover-area")}
                   >
@@ -746,7 +746,7 @@ export class StatementDetails extends React.Component<
             >
               Stats By Node
               <div className={cx("numeric-stats-table__tooltip")}>
-                <Tooltip content="Execution statistics for this statement per gateway node.">
+                <Tooltip text="Execution statistics for this statement per gateway node.">
                   <div
                     className={cx("numeric-stats-table__tooltip-hover-area")}
                   >
