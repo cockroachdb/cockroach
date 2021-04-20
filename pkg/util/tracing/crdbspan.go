@@ -29,6 +29,7 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	rootSpan     *crdbSpan
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
@@ -80,6 +81,10 @@ type crdbSpanMu struct {
 		// remoteSpan contains the list of remote child span recordings that
 		// were manually imported.
 		remoteSpans []tracingpb.RecordedSpan
+
+		// nonEmpty indicates whether this span or any children span
+		// transitively contain any actual recordings.
+		nonEmpty bool
 	}
 
 	// tags are only set when recording. These are tags that have been added to
@@ -178,8 +183,6 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 		return nil // noop span
 	}
 
-	s.mu.Lock()
-
 	if !everyoneIsV211 {
 		// The cluster may contain nodes that are running v20.2. Unfortunately that
 		// version can easily crash when a peer returns a recording that that node
@@ -189,10 +192,20 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 		//
 		// TODO(tbg): remove this in the v21.2 cycle.
 		if s.recordingType() == RecordingOff {
-			s.mu.Unlock()
 			return nil
 		}
 	}
+
+	if !s.rootSpan.isNonEmpty() {
+		return nil
+	}
+
+	s.mu.Lock()
+	// XXX: getRecording, allocates per child. We start at the root, we allocate
+	// for all children recursively, even if all children are recursively empty.
+	// What we should do is only allocate if there's something in the subtree.
+	// For that, when recording, we make sure the subtree knows about it by
+	// marking the rootspan.
 
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
@@ -266,7 +279,28 @@ type sizable interface {
 	Size() int
 }
 
+func (s *crdbSpan) isNonEmpty() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.mu.recording.nonEmpty
+}
+
+func (s *crdbSpan) markNonEmpty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.mu.recording.nonEmpty = true
+}
+
 func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
+	// XXX: Want to walk up the tree of parent spans, and mark where things need
+	// to be marked. What if spans are instantiated with "centered on" aka root
+	// span, and we hold a pointer to that. children created thereon forth pass
+	// along this root reference. recordings are only retrievable from that root
+	// reference?
+	s.rootSpan.markNonEmpty()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

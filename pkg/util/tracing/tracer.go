@@ -396,6 +396,14 @@ func (t *Tracer) startSpanGeneric(
 		netTr:  netTr,
 	}
 
+	// XXX: Each span has a pointer to a root span, if linked. The root span is
+	// where recordings will be ultimately rendered from.
+	rootSpan := opts.deriveRootSpan()
+	if rootSpan == nil {
+		rootSpan = &helper.crdbSpan
+	}
+	helper.crdbSpan.rootSpan = rootSpan
+
 	s := &helper.span
 
 	{
