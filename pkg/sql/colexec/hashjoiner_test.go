@@ -1093,7 +1093,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										hj := colexecjoin.NewHashJoiner(
 											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
-											colexecjoin.HashJoinerInitialNumBuckets, colexecop.DefaultMemoryLimit,
+											colexecjoin.HashJoinerInitialNumBuckets, execinfra.DefaultMemoryLimit,
 										)
 										hj.Init()
 

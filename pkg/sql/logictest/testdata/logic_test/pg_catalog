@@ -2106,6 +2106,7 @@ default_transaction_use_follower_reads                off                 NULL  
 disable_partially_distributed_plans                   off                 NULL      NULL        NULL        string
 disallow_full_table_scans                             off                 NULL      NULL        NULL        string
 distsql                                               off                 NULL      NULL        NULL        string
+distsql_workmem                                       64 MiB              NULL      NULL        NULL        string
 enable_drop_enum_value                                off                 NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
 enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
@@ -2150,7 +2151,7 @@ session_user                                          root                NULL  
 sql_safe_updates                                      off                 NULL      NULL        NULL        string
 standard_conforming_strings                           on                  NULL      NULL        NULL        string
 statement_timeout                                     0                   NULL      NULL        NULL        string
-stub_catalog_tables                           on                  NULL      NULL        NULL        string
+stub_catalog_tables                                   on                  NULL      NULL        NULL        string
 synchronize_seqscans                                  on                  NULL      NULL        NULL        string
 synchronous_commit                                    on                  NULL      NULL        NULL        string
 testing_vectorize_inject_panics                       off                 NULL      NULL        NULL        string
@@ -2186,6 +2187,7 @@ default_transaction_use_follower_reads                off                 NULL  
 disable_partially_distributed_plans                   off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                             off                 NULL  user     NULL      off                 off
 distsql                                               off                 NULL  user     NULL      off                 off
+distsql_workmem                                       64 MiB              NULL  user     NULL      64 MiB              64 MiB
 enable_drop_enum_value                                off                 NULL  user     NULL      off                 off
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
 enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
@@ -2230,7 +2232,7 @@ session_user                                          root                NULL  
 sql_safe_updates                                      off                 NULL  user     NULL      off                 off
 standard_conforming_strings                           on                  NULL  user     NULL      on                  on
 statement_timeout                                     0                   NULL  user     NULL      0s                  0s
-stub_catalog_tables                           on                  NULL  user     NULL      on                  on
+stub_catalog_tables                                   on                  NULL  user     NULL      on                  on
 synchronize_seqscans                                  on                  NULL  user     NULL      on                  on
 synchronous_commit                                    on                  NULL  user     NULL      on                  on
 testing_vectorize_inject_panics                       off                 NULL  user     NULL      off                 off
@@ -2262,6 +2264,7 @@ default_transaction_use_follower_reads                NULL    NULL     NULL     
 disable_partially_distributed_plans                   NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                             NULL    NULL     NULL     NULL        NULL
 distsql                                               NULL    NULL     NULL     NULL        NULL
+distsql_workmem                                       NULL    NULL     NULL     NULL        NULL
 enable_drop_enum_value                                NULL    NULL     NULL     NULL        NULL
 enable_experimental_alter_column_type_general         NULL    NULL     NULL     NULL        NULL
 enable_experimental_stream_replication                NULL    NULL     NULL     NULL        NULL

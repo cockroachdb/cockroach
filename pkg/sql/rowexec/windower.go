@@ -143,12 +143,12 @@ func newWindower(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// windower will overflow to disk if this limit is not enough.
-	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg, flowCtx.EvalCtx.SessionData)
 	if limit < memRequiredByWindower {
 		if !flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes == 0 {
 			return nil, errors.Errorf(
 				"window functions require %d bytes of RAM but only %d are in the budget. "+
-					"Consider increasing sql.distsql.temp_storage.workmem setting",
+					"Consider increasing sql.distsql.temp_storage.workmem setting or distsql_workmem variable",
 				memRequiredByWindower, limit)
 		}
 		// The limit is set very low by the tests, but the windower requires

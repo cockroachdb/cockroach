@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -959,13 +960,17 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 
 // NewLimitedMonitor is a utility function used by processors to create a new
 // limited memory monitor with the given name and start it. The returned
-// monitor must be closed. The limit is determined by SettingWorkMemBytes but
+// monitor must be closed. The limit is determined by sd.WorkmemLimit but
 // overridden to 1 if config.TestingKnobs.ForceDiskSpill is set or
 // config.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
+	ctx context.Context,
+	parent *mon.BytesMonitor,
+	config *ServerConfig,
+	sd *sessiondata.SessionData,
+	name string,
 ) *mon.BytesMonitor {
-	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(config), parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(config, sd), parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return limitedMon
 }
