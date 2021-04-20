@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -157,4 +159,36 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+}
+
+// Regression test to ensure that resolving a type descriptor which is not a
+// type using the DistSQLTypeResolver is properly handled.
+func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE t()`)
+	var id descpb.ID
+	tdb.QueryRow(t, "SELECT ($1)::regclass::int", "t").Scan(&id)
+
+	err := descs.Txn(
+		ctx,
+		s.ClusterSettings(),
+		s.LeaseManager().(*lease.Manager),
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+		s.DB(),
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			tr := descs.NewDistSQLTypeResolver(descriptors, txn)
+			_, _, err := tr.GetTypeDescriptor(ctx, id)
+			return err
+		})
+	require.Regexp(t, `descriptor \d+ is a relation not a type`, err)
+	require.Equal(t, pgcode.WrongObjectType, pgerror.GetPGCode(err))
 }
