@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
@@ -182,8 +181,8 @@ func TestRecordingInRecording(t *testing.T) {
 }
 
 func TestSpan_ImportRemoteSpans(t *testing.T) {
-	// Verify that GetRecording propagates the recording even when the
-	// receiving Span isn't verbose.
+	// Verify that GetRecording propagates the recording even when the receiving
+	// Span isn't verbose during import.
 	tr := NewTracer()
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	ch := tr.StartSpan("child", WithParentAndManualCollection(sp.Meta()))
@@ -393,8 +392,8 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
-	require.Len(t, sp.i.crdb.mu.recording.children, 1)
-	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children[0])
+	require.Equal(t, 1, sp.i.crdb.mu.recording.children.len())
+	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children.get(0))
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
@@ -415,7 +414,7 @@ func TestSpanMaxChildren(t *testing.T) {
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
 		}
-		require.Len(t, sp.i.crdb.mu.recording.children, exp)
+		require.Equal(t, exp, sp.i.crdb.mu.recording.children.len())
 	}
 }
 
@@ -486,26 +485,36 @@ func (i *countingStringer) String() string {
 	return fmt.Sprint(*i)
 }
 
-func TestSpan_GetRecordingTags(t *testing.T) {
-	// Verify that tags are omitted from GetRecording if the span is
-	// not verbose when the recording is pulled. See GetRecording for
-	// details.
+// TestSpanTagsInRecordings verifies that tags are dropped if the span is
+// not verbose.
+func TestSpanTagsInRecordings(t *testing.T) {
 	tr := NewTracer()
 	var counter countingStringer
 	logTags := logtags.SingleTagBuffer("tagfoo", "tagbar")
 	sp := tr.StartSpan("root",
 		WithForceRealSpan(),
-		WithTags(opentracing.Tag{
-			Key:   "foo1",
-			Value: &counter,
-		}),
 		WithLogTags(logTags),
 	)
 	defer sp.Finish()
 
 	require.False(t, sp.IsVerbose())
-	sp.SetTag("foo2", &counter)
+	sp.SetTag("foo1", &counter)
+	sp.Record("dummy recording")
 	rec := sp.GetRecording()
-	require.Empty(t, rec[0].Tags)
-	require.Zero(t, counter)
+	require.Len(t, rec, 0)
+	require.Zero(t, int(counter))
+
+	// Verify that we didn't hold onto anything underneath.
+	sp.SetVerbose(true)
+	rec = sp.GetRecording()
+	require.Len(t, rec, 1)
+	require.Len(t, rec[0].Tags, 3) // _unfinished:1 _verbose:1 tagfoo:tagbar
+	require.Zero(t, int(counter))
+
+	// Verify that subsequent tags are captured.
+	sp.SetTag("foo2", &counter)
+	rec = sp.GetRecording()
+	require.Len(t, rec, 1)
+	require.Len(t, rec[0].Tags, 4)
+	require.Equal(t, 1, int(counter))
 }

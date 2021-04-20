@@ -15,6 +15,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -41,6 +42,14 @@ func (w metadataCarrier) Set(key, val string) {
 	// blindly lowercase the key (which is guaranteed to work in the
 	// Inject/Extract sense per the OpenTracing spec).
 	key = strings.ToLower(key)
+	if (key == fieldNameTraceID || key == fieldNameSpanID) && len(w.MD[key]) == 1 && w.MD[key][0] == "0" {
+		// If the keys being set are tracing internal ones, and the metadata.MD
+		// we're using is one retrieved from grpcMetadataPool, overwrite it
+		// in-place to avoid allocating.
+		w.MD[key][0] = val
+		return
+	}
+
 	w.MD[key] = append(w.MD[key], val)
 }
 
@@ -57,7 +66,7 @@ func (w metadataCarrier) ForEach(fn func(key, val string) error) error {
 	return nil
 }
 
-func extractSpanMeta(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
+func extractSpanMeta(ctx context.Context, tracer *Tracer) (SpanMeta, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		md = metadata.New(nil)
@@ -68,12 +77,12 @@ func extractSpanMeta(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
 // spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
 // of RPCs, deciding for which operations the gRPC opentracing interceptor should
 // create a span.
-func spanInclusionFuncForServer(t *Tracer, spanMeta *SpanMeta) bool {
+func spanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
 	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
 	// configured to always trace, return true. The second part is particularly
 	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
 	// where client is never tracing.
-	return spanMeta != nil || t.AlwaysTrace()
+	return !spanMeta.Empty() || t.AlwaysTrace()
 }
 
 // setSpanTags sets one or more tags on the given span according to the
@@ -129,9 +138,10 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ctx,
 			info.FullMethod,
-			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
+		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 
 		resp, err = handler(ctx, req)
@@ -172,9 +182,10 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		ctx, serverSpan := tracer.StartSpanCtx(
 			ss.Context(),
 			info.FullMethod,
-			WithTags(gRPCComponentTag, ext.SpanKindRPCServer),
 			WithParentAndManualCollection(spanMeta),
 		)
+		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
 			ServerStream: ss,
@@ -211,19 +222,35 @@ func spanInclusionFuncForClient(parent *Span) bool {
 	return parent != nil && !parent.i.isNoop()
 }
 
-func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		md = metadata.New(nil)
-	} else {
-		md = md.Copy()
-	}
-
+func injectSpanMetaInto(
+	ctx context.Context, md metadata.MD, tracer *Tracer, clientSpan *Span,
+) context.Context {
 	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
 		// We have no better place to record an error than the Span itself.
 		clientSpan.Recordf("error: %s", err)
 	}
 	return metadata.NewOutgoingContext(ctx, md)
+}
+
+var grpcMetadataPool = sync.Pool{
+	New: func() interface{} {
+		// We pre-allocate metadata.MD with the two fields we'll always set in
+		// our interceptors.
+		m := map[string]string{fieldNameSpanID: "0", fieldNameTraceID: "0"}
+		return metadata.New(m)
+	},
+}
+
+func getPooledMetadata() (md metadata.MD, putBack func(md metadata.MD)) {
+	md = grpcMetadataPool.Get().(metadata.MD)
+	putBack = func(md metadata.MD) {
+		if md.Len() == 2 && len(md[fieldNameTraceID]) == 1 && len(md[fieldNameSpanID]) == 1 {
+			md[fieldNameTraceID][0] = "0"
+			md[fieldNameSpanID][0] = "0"
+			grpcMetadataPool.Put(md)
+		}
+	}
+	return md, putBack
 }
 
 // ClientInterceptor returns a grpc.UnaryClientInterceptor suitable
@@ -259,12 +286,25 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		clientSpan := tracer.StartSpan(
 			method,
 			WithParentAndAutoCollection(parent),
-			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
+		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		defer clientSpan.Finish()
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-		err := invoker(ctx, method, req, resp, cc, opts...)
+
+		md, ok := metadata.FromOutgoingContext(ctx)
+		if !ok {
+			var putBack func(metadata.MD)
+			md, putBack = getPooledMetadata()
+			defer putBack(md)
+		} else {
+			md = md.Copy()
+		}
+		// invokeCtx (wraps around the incoming ctx) holds onto a reference to
+		// the (likely) pooled metadata.MD. Seeing as how invokeCtx's scope
+		// extends as far as our use of the metadata, it's safe to pool here.
+		invokeCtx := injectSpanMetaInto(ctx, md, tracer, clientSpan)
+		err := invoker(invokeCtx, method, req, resp, cc, opts...)
 		if err != nil {
 			setSpanTags(clientSpan, err, true)
 			clientSpan.Recordf("error: %s", err)
@@ -308,11 +348,24 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 		clientSpan := tracer.StartSpan(
 			method,
 			WithParentAndAutoCollection(parent),
-			WithTags(gRPCComponentTag, ext.SpanKindRPCClient),
 		)
+		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
+		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-		cs, err := streamer(ctx, desc, cc, method, opts...)
+
+		md, ok := metadata.FromOutgoingContext(ctx)
+		if !ok {
+			// We pre-allocate metadata.MD with the two fields we'll always set
+			// in our interceptors. We can't use pooled metadata.MD objects here
+			// because we have no way of guaranteeing that the client stream
+			// won't read the metadata we're putting into streamerCtx below.
+			m := map[string]string{fieldNameSpanID: "0", fieldNameTraceID: "0"}
+			md = metadata.New(m)
+		} else {
+			md = md.Copy()
+		}
+		streamerCtx := injectSpanMetaInto(ctx, md, tracer, clientSpan)
+		cs, err := streamer(streamerCtx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
 			setSpanTags(clientSpan, err, true)
