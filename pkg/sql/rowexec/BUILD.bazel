@@ -57,7 +57,6 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/flowinfra",
         "//pkg/sql/inverted",
         "//pkg/sql/opt/invertedexpr",
         "//pkg/sql/opt/invertedidx",

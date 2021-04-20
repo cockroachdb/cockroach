@@ -322,7 +322,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
-	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
+	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		}
 	}
 
-	rightValuesSpec, err := execinfra.GenerateValuesSpec(typs, rightRows, 10 /* rows per chunk */)
+	rightValuesSpec, err := execinfra.GenerateValuesSpec(typs, rightRows)
 	if err != nil {
 		t.Fatal(err)
 	}
