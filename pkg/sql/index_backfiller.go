@@ -65,11 +65,14 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 		return err
 	}
 
+	// TODO(dt): persist a write ts, don't rescan above.
+	backfillWriteTimestamp := backfillReadTimestamp
+
 	resumeSpans, err := tracker.GetResumeSpans(ctx, descriptor.GetID(), source)
 	if err != nil {
 		return err
 	}
-	run, err := ib.plan(ctx, descriptor, backfillReadTimestamp, backfillReadTimestamp, resumeSpans, toBackfill, func(
+	run, err := ib.plan(ctx, descriptor, backfillReadTimestamp, backfillWriteTimestamp, backfillReadTimestamp, resumeSpans, toBackfill, func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
 		// TODO(ajwerner): Hook up the jobs tracking stuff.
@@ -114,7 +117,7 @@ var _ scexec.IndexBackfiller = (*IndexBackfillPlanner)(nil)
 func (ib *IndexBackfillPlanner) plan(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	nowTimestamp, readAsOf hlc.Timestamp,
+	nowTimestamp, writeAsOf, readAsOf hlc.Timestamp,
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
@@ -131,7 +134,7 @@ func (ib *IndexBackfillPlanner) plan(
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
-		spec, err := initIndexBackfillerSpec(*td.TableDesc(), readAsOf, chunkSize, indexesToBackfill)
+		spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, chunkSize, indexesToBackfill)
 		if err != nil {
 			return err
 		}

@@ -59,7 +59,9 @@ message BackfillerSpec {
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
   // The timestamp to perform index backfill historical scans at.
-  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
+
+  optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
 
   // IndexesToBackfill is the set of indexes to backfill. This is populated only
   // starting in 21.1, prior to that the implied index set are those containing
