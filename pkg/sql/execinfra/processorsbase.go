@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -986,16 +987,36 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 }
 
 // NewLimitedMonitor is a utility function used by processors to create a new
-// limited memory monitor with the given name and start it. The returned
-// monitor must be closed. The limit is determined by SettingWorkMemBytes but
-// overridden to 1 if config.TestingKnobs.ForceDiskSpill is set or
-// config.TestingKnobs.MemoryLimitBytes if not.
+// limited memory monitor with the given name and start it. The returned monitor
+// must be closed. The limit is determined by SessionData.WorkMemLimit (stored
+// inside of the flowCtx) but overridden to 1 if
+// ServerConfig.TestingKnobs.ForceDiskSpill is set or
+// ServerConfig.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name string,
 ) *mon.BytesMonitor {
-	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(config), parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return limitedMon
+}
+
+// NewLimitedMonitorNoFlowCtx is the same as NewLimitedMonitor and should be
+// used when the caller doesn't have an access to *FlowCtx.
+func NewLimitedMonitorNoFlowCtx(
+	ctx context.Context,
+	parent *mon.BytesMonitor,
+	config *ServerConfig,
+	sd *sessiondata.SessionData,
+	name string,
+) *mon.BytesMonitor {
+	// Create a fake FlowCtx populating only the required fields.
+	flowCtx := &FlowCtx{
+		Cfg: config,
+		EvalCtx: &tree.EvalContext{
+			SessionData: sd,
+		},
+	}
+	return NewLimitedMonitor(ctx, parent, flowCtx, name)
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with

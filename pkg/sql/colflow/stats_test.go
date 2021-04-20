@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -116,7 +117,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			nil, /* inputStatsCollectors */
 		)
 		mergeJoiner, err := colexecjoin.NewMergeJoinOp(
-			tu.testAllocator, colexecop.DefaultMemoryLimit, queueCfg,
+			tu.testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 			colexecop.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},

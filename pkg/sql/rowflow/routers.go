@@ -270,7 +270,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		// to take the mutex.
 		evalCtx := flowCtx.NewEvalCtx()
 		rb.outputs[i].memoryMonitor = execinfra.NewLimitedMonitor(
-			ctx, evalCtx.Mon, flowCtx.Cfg,
+			ctx, evalCtx.Mon, flowCtx,
 			fmt.Sprintf("router-limited-%d", rb.outputs[i].streamID),
 		)
 		rb.outputs[i].diskMonitor = execinfra.NewMonitor(

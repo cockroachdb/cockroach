@@ -56,6 +56,9 @@ message SessionData {
   // SeqState gives access to the SQL sequences that have been manipulated by
   // the session.
   SequenceState seq_state = 11 [(gogoproto.nullable) = false];
+  // WorkMemLimit determines how much RAM (in bytes) a single operation of a
+  // single query can use before it has to spill to disk.
+  int64 WorkMemLimit = 12;
 }
 
 // DataConversionConfig contains the parameters that influence the conversion
