@@ -395,6 +395,14 @@ var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	true,
 )
 
+// settingWorkMemBytes is a cluster setting that determines the maximum amount
+// of RAM that a processor can use.
+var settingWorkMemBytes = settings.RegisterByteSizeSetting(
+	"sql.distsql.temp_storage.workmem",
+	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
+	execinfra.DefaultMemoryLimit, /* 64MiB */
+).WithPublic()
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2216,6 +2224,10 @@ func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
+}
+
+func (m *sessionDataMutator) SetDistSQLWorkMem(val int64) {
+	m.data.WorkMemLimit = val
 }
 
 func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {

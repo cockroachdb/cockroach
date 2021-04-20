@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -319,8 +320,6 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	require.Equal(t, 0, len(directories))
 }
 
-const defaultMemoryLimit = 64 << 20 /* 64 MiB */
-
 // TestSpillingQueueMemoryAccounting is a simple check of the memory accounting
 // of the spilling queue that performs a series of Enqueue() and Dequeue()
 // operations and verifies that the reported memory usage is as expected.
@@ -358,7 +357,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 			newQueueArgs := &NewSpillingQueueArgs{
 				UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 				Types:              typs,
-				MemoryLimit:        defaultMemoryLimit,
+				MemoryLimit:        execinfra.DefaultMemoryLimit,
 				DiskQueueCfg:       queueCfg,
 				FDSemaphore:        colexecop.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
