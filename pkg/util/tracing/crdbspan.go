@@ -77,7 +77,8 @@ type crdbSpanMu struct {
 
 		// children contains the list of child spans started after this Span
 		// started recording.
-		children []*crdbSpan
+		preAllocatedChildren [4]*crdbSpan
+		children             []*crdbSpan
 		// remoteSpan contains the list of remote child span recordings that
 		// were manually imported.
 		remoteSpans []tracingpb.RecordedSpan
@@ -156,7 +157,9 @@ func (s *crdbSpan) resetRecording() {
 	s.mu.recording.logs.Reset()
 	s.mu.recording.structured.Reset()
 	s.mu.recording.dropped = false
-
+	for i := 0; i < len(s.mu.recording.preAllocatedChildren); i++ {
+		s.mu.recording.preAllocatedChildren[i] = nil
+	}
 	s.mu.recording.children = nil
 	s.mu.recording.remoteSpans = nil
 }
@@ -211,11 +214,18 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 	// there are.
 	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
 	// Shallow-copy the children so we can process them without the lock.
+	preAllocatedChildren := s.mu.recording.preAllocatedChildren
 	children := s.mu.recording.children
 	result = append(result, s.getRecordingLocked(wantTags))
 	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
 
+	for _, child := range preAllocatedChildren {
+		if child == nil {
+			continue
+		}
+		result = append(result, child.getRecording(everyoneIsV211, wantTags)...)
+	}
 	for _, child := range children {
 		result = append(result, child.getRecording(everyoneIsV211, wantTags)...)
 	}
@@ -299,6 +309,8 @@ func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
 	// span, and we hold a pointer to that. children created thereon forth pass
 	// along this root reference. recordings are only retrievable from that root
 	// reference?
+	// XXX: Could be a pointer to an atomic value, instead of the whole rootSpan
+	// object.
 	s.rootSpan.markNonEmpty()
 
 	s.mu.Lock()
@@ -439,11 +451,21 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 
 func (s *crdbSpan) addChild(child *crdbSpan) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// XXX: What if we pre-allocate a fixed size array, assuming, like, 4
+	// children in the general case?
+	for i := 0; i < len(s.mu.recording.preAllocatedChildren); i++ {
+		if s.mu.recording.preAllocatedChildren[i] == nil {
+			s.mu.recording.preAllocatedChildren[i] = child
+			return
+		}
+	}
+
 	// Only record the child if the parent still has room.
 	if len(s.mu.recording.children) < maxChildrenPerSpan {
 		s.mu.recording.children = append(s.mu.recording.children, child)
 	}
-	s.mu.Unlock()
 }
 
 // setVerboseRecursively sets the verbosity of the crdbSpan appropriately and
@@ -456,9 +478,15 @@ func (s *crdbSpan) setVerboseRecursively(to bool) {
 	}
 
 	s.mu.Lock()
+	preAllocatedChildren := s.mu.recording.preAllocatedChildren
 	children := s.mu.recording.children
 	s.mu.Unlock()
 
+	for _, child := range preAllocatedChildren {
+		if child == nil {
+			continue
+		}
+	}
 	for _, child := range children {
 		child.setVerboseRecursively(to)
 	}
