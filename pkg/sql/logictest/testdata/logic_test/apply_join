@@ -36,6 +36,32 @@ EXECUTE a
 4  four   4  four
 5  five   5  five
 
+# A test case when the right side produces no columns.
+statement ok
+PREPARE right_no_cols AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "") ])
+      [ (Eq (Var "k") (Const 2 "int") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str")
+  (NoOrdering)
+)'
+
+query IT
+EXECUTE right_no_cols
+----
+2  two
+2  two
+2  two
+2  two
+2  two
+
 # LeftJoinApply tests.
 
 statement ok

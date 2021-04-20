@@ -17,12 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,7 +56,7 @@ type checkOperation interface {
 	Start(params runParams) error
 
 	// Next will return the next check result. The datums returned have
-	// the column types specified by scrubTypes, which are the valeus
+	// the column types specified by scrubTypes, which are the values
 	// returned to the user.
 	//
 	// Next is not called if Done() is false.
@@ -475,15 +473,14 @@ func createConstraintCheckOperations(
 	return results, nil
 }
 
-// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
-// RowContainer is returned, the caller must close it.
+// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If non-nil
+// rowContainerHelper is returned, the caller must close it.
 func scrubRunDistSQL(
 	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []*types.T,
-) (*rowcontainer.RowContainer, error) {
-	ci := colinfo.ColTypeInfoFromColTypes(columnTypes)
-	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
-	rows := rowcontainer.NewRowContainer(acc, ci)
-	rowResultWriter := NewRowResultWriter(rows)
+) (*rowContainerHelper, error) {
+	var rowContainer rowContainerHelper
+	rowContainer.init(columnTypes, &p.extendedEvalCtx, "scrub" /* opName */)
+	rowResultWriter := NewRowResultWriter(&rowContainer)
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
@@ -503,11 +500,12 @@ func scrubRunDistSQL(
 		planCtx, p.txn, plan, recv, &evalCtxCopy, nil, /* finishedSetupFn */
 	)()
 	if rowResultWriter.Err() != nil {
-		return rows, rowResultWriter.Err()
-	} else if rows.Len() == 0 {
-		rows.Close(ctx)
+		rowContainer.close(ctx)
+		return nil, rowResultWriter.Err()
+	} else if rowContainer.len() == 0 {
+		rowContainer.close(ctx)
 		return nil, nil
 	}
 
-	return rows, nil
+	return &rowContainer, nil
 }
