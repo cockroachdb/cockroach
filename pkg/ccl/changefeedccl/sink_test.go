@@ -391,8 +391,10 @@ func TestSQLSink(t *testing.T) {
 		fooTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
 		barTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
 	}
-	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
+	const testTableName = `sink`
+	sink, err := makeSQLSink(&sinkURL, testTableName, targets)
 	require.NoError(t, err)
+	require.NoError(t, sink.(*sqlSink).Dial())
 	defer func() { require.NoError(t, sink.Close()) }()
 
 	// Empty
