@@ -33,6 +33,14 @@ jobs:
         env:
           REGEX_OUT: ${{ steps.regex-match.outputs.match }}
 
+      # TODO:
+      # break single job into multiple jobs:
+      # Check if the PR was merged
+      # Check the PR body and commit messages for release note strings
+      #   Add step with get-commit-messages
+      # Create the issue in cockroachdb/docs
+      #   This is also where we'd add step with an action to create a docs JIRA
+
       - uses:        maxkomarychev/oction-create-issue@v0.7.1
         if:          ${{ startsWith(steps.regex-match.outputs.group3,'None') != true && steps.regex-match.outputs.match != '' }}
         id:          create-issue
