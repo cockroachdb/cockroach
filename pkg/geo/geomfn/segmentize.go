@@ -26,6 +26,9 @@ import (
 // between given two-points such that each segment has length less
 // than or equal to given maximum segment length.
 func Segmentize(g geo.Geometry, segmentMaxLength float64) (geo.Geometry, error) {
+	if math.IsNaN(segmentMaxLength) || math.IsInf(segmentMaxLength, 1 /* sign */) {
+		return g, nil
+	}
 	geometry, err := g.AsGeomT()
 	if err != nil {
 		return geo.Geometry{}, err
