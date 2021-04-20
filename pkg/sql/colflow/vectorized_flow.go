@@ -720,7 +720,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
 	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns,
-		execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg, s.fdSemaphore,
+		execinfra.GetWorkMemLimit(flowCtx), s.diskQueueCfg, s.fdSemaphore,
 		diskAccounts, getStats, metadataSources, toClose,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
@@ -884,7 +884,7 @@ func (s *vectorizedFlowCreator) setupInput(
 		if input.Type == execinfrapb.InputSyncSpec_ORDERED {
 			os, err := colexec.NewOrderedSynchronizer(
 				colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
-				execinfra.GetWorkMemLimit(flowCtx.Cfg), inputStreamOps,
+				execinfra.GetWorkMemLimit(flowCtx), inputStreamOps,
 				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
 			)
 			if err != nil {
