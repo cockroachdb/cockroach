@@ -1237,9 +1237,13 @@ func (cf *changeFrontier) handleFrontierChanged(isBehind bool) error {
 		cf.metrics.mu.resolved[cf.metricsID] = newResolved
 	}
 	cf.metrics.mu.Unlock()
+
+	checkpointStart := timeutil.Now()
 	if err := cf.checkpointResolvedTimestamp(newResolved, isBehind); err != nil {
 		return err
 	}
+	cf.metrics.CheckpointHistNanos.RecordValue(time.Since(checkpointStart).Nanoseconds())
+
 	if err := cf.maybeEmitResolved(newResolved); err != nil {
 		return err
 	}
