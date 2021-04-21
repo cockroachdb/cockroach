@@ -63,16 +63,7 @@ func (l *LogicalSchemaAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc catalog.DatabaseDescriptor, err error) {
-	var found bool
-	if flags.RequireMutable {
-		found, desc, err = l.tc.GetMutableDatabaseByName(ctx, txn, name, flags)
-	} else {
-		found, desc, err = l.tc.GetImmutableDatabaseByName(ctx, txn, name, flags)
-	}
-	if err != nil || !found {
-		return nil, err
-	}
-	return desc, err
+	return l.tc.GetDatabaseDesc(ctx, txn, codec, name, flags)
 }
 
 // GetSchema implements the Accessor interface.
