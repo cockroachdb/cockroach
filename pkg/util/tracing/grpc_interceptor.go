@@ -15,6 +15,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -41,6 +42,13 @@ func (w metadataCarrier) Set(key, val string) {
 	// blindly lowercase the key (which is guaranteed to work in the
 	// Inject/Extract sense per the OpenTracing spec).
 	key = strings.ToLower(key)
+	if (key == fieldNameTraceID || key == fieldNameSpanID) && len(w.MD[key]) == 1 {
+		// XXX: check if the key being set is one of fieldSpanID, or fieldTracing
+		// ID, and if the len of MD fields == 1, just over-write it in-place.
+		w.MD[key][0] = val
+		return
+	}
+
 	w.MD[key] = append(w.MD[key], val)
 }
 
@@ -213,19 +221,33 @@ func spanInclusionFuncForClient(parent *Span) bool {
 	return parent != nil && !parent.i.isNoop()
 }
 
-func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
-	md, ok := metadata.FromOutgoingContext(ctx)
-	if !ok {
-		md = metadata.New(nil)
-	} else {
-		md = md.Copy()
-	}
-
+func injectSpanMetaInto(ctx context.Context, md metadata.MD, tracer *Tracer, clientSpan *Span) context.Context {
 	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
 		// We have no better place to record an error than the Span itself.
 		clientSpan.Recordf("error: %s", err)
 	}
 	return metadata.NewOutgoingContext(ctx, md)
+}
+
+var grpcMetadataPool = sync.Pool{
+	New: func() interface{} {
+		// XXX: How do we make sure setting the metadata would not allocate
+		// again? We want to pre-allocate the map, so set doesn't have to.
+		m := map[string]string{fieldNameSpanID: "0", fieldNameTraceID: "0"}
+		return metadata.New(m)
+	},
+}
+
+func getPooledMetadata() (md metadata.MD, putBack func(md metadata.MD)) {
+	md = grpcMetadataPool.Get().(metadata.MD)
+	putBack = func(md metadata.MD) {
+		if md.Len() == 2 && len(md[fieldNameTraceID]) == 1 && len(md[fieldNameSpanID]) == 1 {
+			md[fieldNameTraceID][0] = "0"
+			md[fieldNameSpanID][0] = "0"
+			grpcMetadataPool.Put(md)
+		}
+	}
+	return md, putBack
 }
 
 // ClientInterceptor returns a grpc.UnaryClientInterceptor suitable
@@ -266,7 +288,17 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		defer clientSpan.Finish()
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
+
+		md, ok := metadata.FromOutgoingContext(ctx)
+		if !ok {
+			var putBack func(metadata.MD)
+			md, putBack = getPooledMetadata()
+			defer putBack(md)
+		} else {
+			md = md.Copy()
+		}
+		ctx = injectSpanMetaInto(ctx, md, tracer, clientSpan)
+
 		err := invoker(ctx, method, req, resp, cc, opts...)
 		if err != nil {
 			setSpanTags(clientSpan, err, true)
@@ -315,7 +347,17 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
 		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
+
+		md, ok := metadata.FromOutgoingContext(ctx)
+		if !ok {
+			var putBack func(metadata.MD)
+			md, putBack = getPooledMetadata()
+			defer putBack(md)
+		} else {
+			md = md.Copy()
+		}
+		ctx = injectSpanMetaInto(ctx, md, tracer, clientSpan)
+
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
