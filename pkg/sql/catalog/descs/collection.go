@@ -543,7 +543,8 @@ func (tc *Collection) getObjectByName(
 		objectName == systemschema.RoleOptionsTable.GetName() ||
 		objectName == systemschema.UsersTable.GetName() ||
 		objectName == systemschema.JobsTable.GetName() ||
-		objectName == systemschema.EventLogTable.GetName()
+		objectName == systemschema.EventLogTable.GetName() ||
+		objectName == systemschema.RangeEventTable.GetName()
 	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
 		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {
