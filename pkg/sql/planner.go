@@ -448,7 +448,7 @@ func internalExtendedEvalCtx(
 }
 
 // LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
-func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
+func (p *planner) Accessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors
 }
 

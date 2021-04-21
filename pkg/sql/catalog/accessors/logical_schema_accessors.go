@@ -13,9 +13,7 @@ package accessors
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -51,23 +49,14 @@ type LogicalSchemaAccessor struct {
 // Use GetMutableDatabaseByName() and GetImmutableDatabaseByName() on
 // descs.Collection instead when possible.
 func (l *LogicalSchemaAccessor) GetDatabaseDesc(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	name string,
-	flags tree.DatabaseLookupFlags,
+	ctx context.Context, txn *kv.Txn, dbName string, flags tree.DatabaseLookupFlags,
 ) (desc catalog.DatabaseDescriptor, err error) {
-	return l.tc.GetDatabaseDesc(ctx, txn, codec, name, flags)
+	return l.tc.GetDatabaseDesc(ctx, txn, dbName, flags)
 }
 
 // GetSchema implements the Accessor interface.
 func (l *LogicalSchemaAccessor) GetSchemaByName(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	dbID descpb.ID,
-	scName string,
-	flags tree.SchemaLookupFlags,
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags,
 ) (bool, catalog.ResolvedSchema, error) {
 	return l.tc.GetSchemaByName(ctx, txn, dbID, scName, flags)
 }
@@ -76,22 +65,16 @@ func (l *LogicalSchemaAccessor) GetSchemaByName(
 func (l *LogicalSchemaAccessor) GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
-	codec keys.SQLCodec,
-	dbDesc catalog.DatabaseDescriptor,
+	db catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, descpb.IDs, error) {
-	return l.tc.GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, flags)
+	return l.tc.GetObjectNamesAndIDs(ctx, txn, db, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
-	ctx context.Context,
-	txn *kv.Txn,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	db, schema, object string,
-	flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
 ) (desc catalog.Descriptor, err error) {
-	return l.tc.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
+	return l.tc.GetObjectDesc(ctx, txn, db, schema, object, flags)
 }
