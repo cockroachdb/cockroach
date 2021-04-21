@@ -1383,8 +1383,7 @@ func (t *T) Name() string {
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
 	case TupleFamily:
-		// Tuple types are currently anonymous, with no name.
-		return ""
+		return "record"
 
 	case EnumFamily:
 		if t.Oid() == oid.T_anyenum {
