@@ -19,6 +19,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -556,11 +557,11 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 	// regular messages since it doesn't have Key set.
 	// We bypass majority of EmitResolvedTimestamp logic since we don't have
 	// a real kafka client instantiated.  Instead, we call emitMessage directly.
-	reg := makeTestSchemaRegistry()
+	reg := cdctest.MakeTestSchemaRegistry()
 	defer reg.Close()
 	opts := map[string]string{
 		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
-		changefeedbase.OptConfluentSchemaRegistry: reg.server.URL,
+		changefeedbase.OptConfluentSchemaRegistry: reg.URL(),
 	}
 	encoder, err := newConfluentAvroEncoder(opts, makeChangefeedTargets("t"))
 	require.NoError(t, err)
