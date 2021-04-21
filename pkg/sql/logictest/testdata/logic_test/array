@@ -1745,3 +1745,39 @@ INSERT INTO t VALUES (
   '{192.168.100.128, ::ffff:10.4.3.2}',
   '{0101, 11}',
   '{12.34, 45.67}');
+
+# Test for #32715: able to distribute queries with arrays of tuples.
+
+statement ok
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v STRING
+);
+INSERT INTO kv VALUES (1, 'one'), (2, 'two'), (3, 'three'), (4, 'four'), (5, null)
+
+query T rowsort
+SELECT ARRAY[(k, k)] FROM kv
+----
+{"(1,1)"}
+{"(2,2)"}
+{"(3,3)"}
+{"(4,4)"}
+{"(5,5)"}
+
+query T rowsort
+SELECT ARRAY[(k, k), (1, 2)] FROM kv
+----
+{"(1,1)","(1,2)"}
+{"(2,2)","(1,2)"}
+{"(3,3)","(1,2)"}
+{"(4,4)","(1,2)"}
+{"(5,5)","(1,2)"}
+
+query T rowsort
+SELECT ARRAY[(k, 'foo'), (1, v)] FROM kv
+----
+{"(1,foo)","(1,one)"}
+{"(2,foo)","(1,two)"}
+{"(3,foo)","(1,three)"}
+{"(4,foo)","(1,four)"}
+{"(5,foo)","(1,)"}

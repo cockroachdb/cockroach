@@ -4071,9 +4071,10 @@ var errNonHomogeneousArray = pgerror.New(pgcode.ArraySubscript, "multidimensiona
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.
 func (d *DArray) Append(v Datum) error {
-	if v != DNull && !d.ParamTyp.Equivalent(v.ResolvedType()) {
-		return errors.AssertionFailedf("cannot append %s to array containing %s", d.ParamTyp,
-			v.ResolvedType())
+	// v.ResolvedType() must be the left-hand side because EquivalentOrNull
+	// only allows null tuple elements on the left-hand side.
+	if !v.ResolvedType().EquivalentOrNull(d.ParamTyp, true /* allowNullTupleEquivalence */) {
+		return errors.AssertionFailedf("cannot append %s to array containing %s", v.ResolvedType(), d.ParamTyp)
 	}
 	if d.Len() >= maxArrayLength {
 		return errors.WithStack(errArrayTooLongError)
