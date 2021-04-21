@@ -101,6 +101,10 @@ func TestDBAddSSTable(t *testing.T) {
 	})
 }
 
+const ingestAsWrites, ingestAsSST = true, false
+
+var nilStats *enginepb.MVCCStats
+
 // if store != nil, assume it is on-disk and check ingestion semantics.
 func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kvserver.Store) {
 	{
@@ -112,13 +116,13 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 
 		// Key is before the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "d", "e", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+			ctx, "d", "e", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
 		if err := db.AddSSTable(
-			ctx, "a", "b", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+			ctx, "a", "b", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
@@ -127,7 +131,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 		defer cancel()
 		if err := db.AddSSTable(
-			ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+			ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -170,7 +174,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 		}
 
 		if err := db.AddSSTable(
-			ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+			ctx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -207,7 +211,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 			defer cancel()
 
 			if err := db.AddSSTable(
-				ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 			); err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -262,7 +266,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 			defer cancel()
 
 			if err := db.AddSSTable(
-				ingestCtx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, true, /* ingestAsWrites */
+				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsWrites, hlc.Timestamp{},
 			); err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -302,7 +306,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *kv.DB, store *kv
 		}
 
 		if err := db.AddSSTable(
-			ctx, "b", "c", data, false /* disallowShadowing */, nil /* stats */, false, /* ingestAsWrites */
+			ctx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
 		); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}
