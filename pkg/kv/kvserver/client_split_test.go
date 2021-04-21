@@ -3576,16 +3576,57 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Detect splits and merges over the global read ranges. Assert that the split
+	// and merge transactions commit with synthetic timestamps, and that the
+	// commit-wait sleep for these transactions is performed before running their
+	// commit triggers instead of run on the kv client. For details on why this is
+	// necessary, see CommitWaitBeforeIntentResolutionError.
+	var clock atomic.Value
+	var splitsWithSyntheticTS, mergesWithSyntheticTS int64
+	respFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		if req, ok := ba.GetArg(roachpb.EndTxn); ok {
+			endTxn := req.(*roachpb.EndTxnRequest)
+			if br.Txn.Status == roachpb.COMMITTED && br.Txn.WriteTimestamp.Synthetic {
+				if ct := endTxn.InternalCommitTrigger; ct != nil {
+					// The server-side commit-wait sleep should ensure that the commit
+					// triggers are only run after the commit timestamp is below present
+					// time.
+					now := clock.Load().(*hlc.Clock).Now()
+					require.True(t, br.Txn.WriteTimestamp.Less(now))
+
+					switch {
+					case ct.SplitTrigger != nil:
+						atomic.AddInt64(&splitsWithSyntheticTS, 1)
+					case ct.MergeTrigger != nil:
+						atomic.AddInt64(&mergesWithSyntheticTS, 1)
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	// Count the number of CommitWaitBeforeIntentResolutionError that we see.
+	var commitWaitErrs int64
+	concurrencyRetryFilter := func(_ context.Context, _ roachpb.BatchRequest, pErr *roachpb.Error) {
+		if _, ok := pErr.GetDetail().(*roachpb.CommitWaitBeforeIntentResolutionError); ok {
+			atomic.AddInt64(&commitWaitErrs, 1)
+		}
+	}
+
 	ctx := context.Background()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
+				DisableMergeQueue:             true,
+				TestingResponseFilter:         respFilter,
+				TestingConcurrencyRetryFilter: concurrencyRetryFilter,
 			},
 		},
 	})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
+	clock.Store(s.Clock())
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	config.TestingSetupZoneConfigHook(s.Stopper())
@@ -3612,6 +3653,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	splitArgs := adminSplitArgs(splitKey)
 	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
+	require.Equal(t, int64(1), atomic.LoadInt64(&commitWaitErrs))
+	require.Equal(t, int64(1), atomic.LoadInt64(&splitsWithSyntheticTS))
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
@@ -3620,6 +3663,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	mergeArgs := adminMergeArgs(descKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 	require.Nil(t, pErr)
+	require.Equal(t, int64(2), atomic.LoadInt64(&commitWaitErrs))
+	require.Equal(t, int64(1), atomic.LoadInt64(&mergesWithSyntheticTS))
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())

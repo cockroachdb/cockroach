@@ -14,6 +14,7 @@ import (
 	"context"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1061,5 +1062,105 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		} else {
 			require.Equal(t, txn.IgnoredSeqNums, txnRec.IgnoredSeqNums)
 		}
+	})
+}
+
+// TestCommitWaitBeforeIntentResolutionIfCommitTrigger tests that an EndTxn that
+// carries a commit trigger and needs to commit-wait because it has a commit
+// timestamp in the future will return a CommitWaitBeforeIntentResolutionError
+// to ensure that it performs the commit-wait sleep before running its commit
+// trigger and before resolving intents. The test contains a subtest for each
+// of the combinations of the following boolean options:
+//
+// - commitTrigger: configures whether or not the EndTxn request contains a
+//     commit trigger.
+//
+// - syntheticCommitTime: configures whether or not EndTxn request is sent on
+//     behalf of a transaction with a synthetic commit timestamp.
+//
+// - futureCommitTime: configures whether or not EndTxn request is sent on
+//     behalf of a transaction with a synthetic commit timestamp that leads the
+//     current HLC clock.
+//
+func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	run := func(t *testing.T, commitTrigger, syntheticCommitTime, futureCommitTime bool) {
+		ctx := context.Background()
+		db := storage.NewDefaultInMemForTesting()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+
+		manual := hlc.NewManualClock(123)
+		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+		desc := roachpb.RangeDescriptor{
+			RangeID:  99,
+			StartKey: roachpb.RKey("a"),
+			EndKey:   roachpb.RKey("z"),
+		}
+
+		now := clock.Now()
+		commitTS := now
+		txn := roachpb.MakeTransaction("test", desc.StartKey.AsRawKey(), 0, now, 0)
+		if syntheticCommitTime {
+			// The transaction was at some point pushed into the future.
+			commitTS = commitTS.WithSynthetic(true)
+		}
+		if futureCommitTime {
+			// The transaction's commit timestamp is still in the future.
+			commitTS = commitTS.Add(100, 0)
+		}
+		txn.ReadTimestamp = commitTS
+		txn.WriteTimestamp = commitTS
+
+		// Issue the end txn command.
+		req := roachpb.EndTxnRequest{
+			RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+			Commit:        true,
+		}
+		if commitTrigger {
+			req.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+				ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{SystemConfigSpan: true},
+			}
+		}
+		var resp roachpb.EndTxnResponse
+		_, err := EndTxn(ctx, batch, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				Desc:  &desc,
+				Clock: clock,
+				CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+					return true, hlc.Timestamp{}, 0
+				},
+			}).EvalContext(),
+			Args: &req,
+			Header: roachpb.Header{
+				Timestamp: commitTS,
+				Txn:       &txn,
+			},
+		}, &resp)
+
+		// If the EndTxn carried a commit trigger and its transaction will need to
+		// commit-wait because the transaction has a future-time commit timestamp,
+		// evaluating the request should return an error. Otherwise, it should
+		// succeed.
+		if commitTrigger && syntheticCommitTime && futureCommitTime {
+			require.Equal(t, roachpb.NewCommitWaitBeforeIntentResolutionError(commitTS), err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
+
+	testutils.RunTrueAndFalse(t, "commitTrigger", func(t *testing.T, commitTrigger bool) {
+		testutils.RunTrueAndFalse(t, "syntheticCommitTime", func(t *testing.T, syntheticCommitTime bool) {
+			testutils.RunTrueAndFalse(t, "futureCommitTime", func(t *testing.T, futureCommitTime bool) {
+				if futureCommitTime && !syntheticCommitTime {
+					t.Log("if commit time in future, it must be synthetic")
+					return
+				}
+				run(t, commitTrigger, syntheticCommitTime, futureCommitTime)
+			})
+		})
 	})
 }

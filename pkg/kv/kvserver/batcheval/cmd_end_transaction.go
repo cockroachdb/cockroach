@@ -366,7 +366,7 @@ func EndTxn(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
 		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+			return result.Result{}, err
 		}
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
@@ -634,15 +634,66 @@ func RunCommitTrigger(
 		return result.Result{}, nil
 	}
 
+	// The transaction is committing with a commit trigger. This means that it has
+	// side-effects beyond those of the intents that it has written.
+
+	// If the transaction has a commit timestamp in the future of present time, it
+	// will need to commit-wait before acknowledging the client. Typically, this
+	// is performed in the TxnCoordSender after the transaction has committed and
+	// resolved its intents (see TxnCoordSender.maybeCommitWait). It is safe to
+	// wait after a future-time transaction has committed and resolved intents
+	// without compromising linearizability because the uncertainty interval of
+	// concurrent and later readers ensures atomic visibility of the effects of
+	// the transaction. In other words, all of the transaction's intents will
+	// become visible and will remain visible at once, which is sometimes called
+	// "monotonic reads". This is true even if the resolved intents are at a high
+	// enough timestamp such that they are not visible to concurrent readers
+	// immediately after they are resolved, but only become visible sometime
+	// during the writer's commit-wait sleep. This property is central to the
+	// correctness of non-blocking transactions. See:
+	//   https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200811_non_blocking_txns.md
+	//
+	// However, if a transaction has a commit trigger, the side-effects of the
+	// trigger will go into effect immediately (see below). This poses a problem,
+	// because we do not want part of a transaction's effects (e.g. its commit
+	// trigger) to become visible to onlookers before the rest of its effects do
+	// (e.g. its intent writes). To avoid this problem, we perform the commit-wait
+	// stage of a transaction with a commit trigger early, before its commit
+	// triggers fire. This results in the transaction waiting longer to commit and
+	// resolve its intents, but is otherwise safe and effective.
+	//
+	// NOTE: just like in TxnCoordSender.maybeCommitWait, we only need to perform
+	// a commit-wait sleep if the commit timestamp is "synthetic". Otherwise, it
+	// is known not to be in advance of present time.
+	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
+		// We return a CommitWaitBeforeIntentResolutionError instead of sleeping
+		// here because we don't want to sleep while holding latches and blocking
+		// other requests. So instead, we let the Replica-level retry loop in
+		// Replica.executeBatchWithConcurrencyRetries catch this error, drop
+		// latches, perform the commit-wait, re-acquire latches, and retry this
+		// request.
+		return result.Result{}, roachpb.NewCommitWaitBeforeIntentResolutionError(txn.WriteTimestamp)
+	}
+
+	// Stage the commit trigger's side-effects so that they will go into effect on
+	// each Replica when the corresponding Raft log entry is applied. Only one
+	// commit trigger can be set.
 	if ct.GetSplitTrigger() != nil {
-		newMS, trigger, err := splitTrigger(
+		newMS, res, err := splitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
 		*ms = newMS
-		return trigger, err
+		return res, nil
 	}
 	if mt := ct.GetMergeTrigger(); mt != nil {
-		return mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
+		return res, nil
 	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		// TODO(tbg): once we support atomic replication changes, check that

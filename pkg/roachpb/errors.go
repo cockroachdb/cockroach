@@ -318,6 +318,7 @@ const (
 	RangeFeedRetryErrType                   ErrorDetailType = 38
 	IndeterminateCommitErrType              ErrorDetailType = 39
 	InvalidLeaseErrType                     ErrorDetailType = 40
+	CommitWaitBeforeIntentResolutionErrType ErrorDetailType = 41
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -327,7 +328,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 41
+	NumErrors int = 42
 )
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -1256,3 +1257,25 @@ func (e *InvalidLeaseError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &InvalidLeaseError{}
+
+// NewCommitWaitBeforeIntentResolutionError initializes a new CommitWaitBeforeIntentResolutionError.
+func NewCommitWaitBeforeIntentResolutionError(
+	waitUntil hlc.Timestamp,
+) *CommitWaitBeforeIntentResolutionError {
+	return &CommitWaitBeforeIntentResolutionError{WaitUntil: waitUntil}
+}
+
+func (e *CommitWaitBeforeIntentResolutionError) Error() string {
+	return e.message(nil)
+}
+
+func (e *CommitWaitBeforeIntentResolutionError) message(_ *Error) string {
+	return fmt.Sprintf("commit-wait until %s and then retry EndTxn request", e.WaitUntil)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *CommitWaitBeforeIntentResolutionError) Type() ErrorDetailType {
+	return CommitWaitBeforeIntentResolutionErrType
+}
+
+var _ ErrorDetailInterface = &CommitWaitBeforeIntentResolutionError{}

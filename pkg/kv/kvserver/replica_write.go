@@ -553,7 +553,7 @@ func (r *Replica) evaluate1PC(
 		if err != nil {
 			return onePCResult{
 				success: onePCFailed,
-				pErr:    roachpb.NewErrorf("failed to run commit trigger: %s", err),
+				pErr:    roachpb.NewError(errors.Wrap(err, "failed to run commit trigger")),
 			}
 		}
 		if err := res.MergeAndDestroy(innerResult); err != nil {

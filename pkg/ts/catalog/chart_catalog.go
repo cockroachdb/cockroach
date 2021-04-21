@@ -332,6 +332,7 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"distsender.rpc.err.ambiguousresulterrtype",
 					"distsender.rpc.err.batchtimestampbeforegcerrtype",
+					"distsender.rpc.err.commitwaitbeforeintentresolutionerrtype",
 					"distsender.rpc.err.communicationerrtype",
 					"distsender.rpc.err.conditionfailederrtype",
 					"distsender.rpc.err.errordetailtype(0)",

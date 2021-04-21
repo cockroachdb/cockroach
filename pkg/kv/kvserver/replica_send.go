@@ -307,6 +307,14 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
+		case *roachpb.CommitWaitBeforeIntentResolutionError:
+			// Drop latches and lock wait-queues.
+			r.concMgr.FinishReq(g)
+			g = nil
+			// Then perform the commit-wait sleep.
+			if pErr := r.handleCommitWaitBeforeIntentResolutionError(ctx, ba, pErr, t); pErr != nil {
+				return nil, pErr
+			}
 		case *roachpb.InvalidLeaseError:
 			// Drop latches and lock wait-queues.
 			r.concMgr.FinishReq(g)
@@ -355,6 +363,13 @@ func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 		// the pushee is aborted or committed, so the request must kick off the
 		// "transaction recovery procedure" to resolve this ambiguity before
 		// retrying.
+	case *roachpb.CommitWaitBeforeIntentResolutionError:
+		// If a request hits a CommitWaitBeforeIntentResolutionError, it attempted
+		// to move a transaction to a COMMITTED status, but the transaction wanted
+		// to perform a commit-wait before committing and resolving intents. We
+		// don't want to do so while holding latches, so we threw the error to up
+		// here so the retry loop can drop latches, commit-wait, re-acquire latches,
+		// and retry the request.
 	case *roachpb.InvalidLeaseError:
 		// If a request hits an InvalidLeaseError, the replica it is being
 		// evaluated against does not have a valid lease under which it can
@@ -446,6 +461,25 @@ func (r *Replica) handleIndeterminateCommitError(
 		return newPErr
 	}
 	// We've recovered the transaction that blocked the push; retry command.
+	return nil
+}
+
+func (r *Replica) handleCommitWaitBeforeIntentResolutionError(
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	pErr *roachpb.Error,
+	t *roachpb.CommitWaitBeforeIntentResolutionError,
+) *roachpb.Error {
+	before := r.Clock().PhysicalTime()
+	est := t.WaitUntil.GoTime().Sub(before)
+	log.VEventf(ctx, 1, "performing commit-wait sleep for ~%s", est)
+
+	r.Clock().SleepUntil(t.WaitUntil)
+
+	after := r.Clock().PhysicalTime()
+	log.VEventf(ctx, 1, "completed commit-wait sleep, took %s", after.Sub(before))
+
+	// We've performed the desired commit-wait; retry command.
 	return nil
 }
 

@@ -486,6 +486,18 @@ message IndeterminateCommitError {
 message InvalidLeaseError {
 }
 
+// A CommitWaitBeforeIntentResolutionError indicates that the request attempted
+// to move a transaction to a COMMITTED status, but that the transaction wanted
+// to perform a commit-wait before committing and resolving intents. This error
+// is used by transactions with commit triggers to ensure that their commit
+// trigger does not fire and go into effect before the rest of the transaction's
+// effects (i.e. its intent writes) will be visible upon resolution.
+//
+// This error is handled by the Store and should not escape to higher levels.
+message CommitWaitBeforeIntentResolutionError {
+  optional util.hlc.Timestamp wait_until = 1 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   reserved 15, 19, 20, 21, 22, 23, 24, 25, 29, 30, 33;
@@ -524,6 +536,7 @@ message ErrorDetail {
     RangeFeedRetryError rangefeed_retry = 38;
     IndeterminateCommitError indeterminate_commit = 39;
     InvalidLeaseError invalid_lease_error = 40;
+    CommitWaitBeforeIntentResolutionError commit_wait_before_intent_resolution = 41;
   }
 }
 

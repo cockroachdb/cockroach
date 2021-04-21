@@ -70,6 +70,8 @@ func (ru ErrorDetail) GetInner() error {
 		return t.IndeterminateCommit
 	case *ErrorDetail_InvalidLeaseError:
 		return t.InvalidLeaseError
+	case *ErrorDetail_CommitWaitBeforeIntentResolution:
+		return t.CommitWaitBeforeIntentResolution
 	default:
 		return nil
 	}
@@ -332,6 +334,8 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 		union = &ErrorDetail_IndeterminateCommit{t}
 	case *InvalidLeaseError:
 		union = &ErrorDetail_InvalidLeaseError{t}
+	case *CommitWaitBeforeIntentResolutionError:
+		union = &ErrorDetail_CommitWaitBeforeIntentResolution{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}
