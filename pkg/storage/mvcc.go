@@ -1373,7 +1373,7 @@ func replayTransactionalWrite(
 // Note that, when writing transactionally, the txn's timestamps
 // dictate the timestamp of the operation, and the timestamp parameter
 // is redundant. Specifically, the intent is written at the txn's
-// provisional commit timestamp, txn.Timestamp, unless it is
+// provisional commit timestamp, txn.WriteTimestamp, unless it is
 // forwarded by an existing committed value above that timestamp.
 // However, reads (e.g., for a ConditionalPut) are performed at the
 // txn's read timestamp (txn.ReadTimestamp) to ensure that the
@@ -1472,9 +1472,9 @@ func mvccPutInternal(
 
 	// Determine the read and write timestamps for the write. For a
 	// non-transactional write, these will be identical. For a transactional
-	// write, we read at the transaction's original timestamp (forwarded by any
-	// refresh timestamp) but write intents at its provisional commit timestamp.
-	// See the comment on the txn.Timestamp field definition for rationale.
+	// write, we read at the transaction's read timestamp but write intents at its
+	// provisional commit timestamp. See the comment on the txn.WriteTimestamp field
+	// definition for rationale.
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
 	if txn != nil {
