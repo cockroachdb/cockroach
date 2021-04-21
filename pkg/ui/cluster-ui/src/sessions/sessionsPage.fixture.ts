@@ -43,10 +43,12 @@ export const idleSession: SessionInfo = {
     last_active_query_anon: "SHOW database",
     alloc_bytes: Long.fromNumber(0),
     max_alloc_bytes: Long.fromNumber(10240),
+    active_queries: [],
+    toJSON: () => ({}),
   },
 };
 
-export const idleTransactionSession = {
+export const idleTransactionSession: SessionInfo = {
   session: {
     node_id: 1,
     username: "root",
@@ -78,6 +80,8 @@ export const idleTransactionSession = {
       num_auto_retries: 3,
     },
     last_active_query_anon: "SHOW database",
+    active_queries: [],
+    toJSON: () => ({}),
   },
 };
 
@@ -128,6 +132,7 @@ export const activeSession: SessionInfo = {
       num_auto_retries: 3,
     },
     last_active_query_anon: "SHOW database",
+    toJSON: () => ({}),
   },
 };
 
