@@ -594,7 +594,7 @@ type CommonLookupFlags struct {
 	IncludeDropped bool
 }
 
-// SchemaLookupFlags is the flag struct suitable for GetSchema().
+// SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
 type SchemaLookupFlags = CommonLookupFlags
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
