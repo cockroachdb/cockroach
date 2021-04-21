@@ -9,11 +9,12 @@
 package backupccl
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -39,8 +40,8 @@ func makeBackupManifest(
 ) BackupManifest {
 	// We only care about the files' span.
 	files := make([]BackupManifest_File, 0)
-	for _, span := range append(spans, introducedSpans...) {
-		files = append(files, BackupManifest_File{Span: span})
+	for i, span := range append(spans, introducedSpans...) {
+		files = append(files, BackupManifest_File{Span: span, Path: fmt.Sprintf("%d.sst", i)})
 	}
 
 	return BackupManifest{
