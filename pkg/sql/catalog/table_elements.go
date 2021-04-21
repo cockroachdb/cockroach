@@ -137,9 +137,7 @@ type Index interface {
 	IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool
 	IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool
 
-	GetPartitioning() descpb.PartitioningDescriptor
-	FindPartitionByName(name string) descpb.PartitioningDescriptor
-	PartitionNames() []string
+	GetPartitioning() Partitioning
 
 	ExplicitColumnStartIdx() int
 
@@ -362,6 +360,55 @@ type MaterializedViewRefresh interface {
 	// TableWithNewIndexes returns a new TableDescriptor based on the old one
 	// but with the refreshed indexes put in.
 	TableWithNewIndexes(tbl TableDescriptor) TableDescriptor
+}
+
+// Partitioning is an interface around an index partitioning.
+type Partitioning interface {
+
+	// PartitioningDesc returns the underlying protobuf descriptor.
+	PartitioningDesc() *descpb.PartitioningDescriptor
+
+	// DeepCopy returns a deep copy of the receiver.
+	DeepCopy() Partitioning
+
+	// FindPartitionByName recursively searches the partitioning for a partition
+	// whose name matches the input and returns it, or nil if no match is found.
+	FindPartitionByName(name string) Partitioning
+
+	// ForEachPartitionName applies fn on each of the partition names in this
+	// partition and recursively in its subpartitions.
+	// Supports iterutil.Done.
+	ForEachPartitionName(fn func(name string) error) error
+
+	// ForEachList applies fn on each list element of the wrapped partitioning.
+	// Supports iterutil.Done.
+	ForEachList(fn func(name string, values [][]byte, subPartitioning Partitioning) error) error
+
+	// ForEachRange applies fn on each range element of the wrapped partitioning.
+	// Supports iterutil.Done.
+	ForEachRange(fn func(name string, from, to []byte) error) error
+
+	// NumColumns is how large of a prefix of the columns in an index are used in
+	// the function mapping column values to partitions. If this is a
+	// subpartition, this is offset to start from the end of the parent
+	// partition's columns. If NumColumns is 0, then there is no partitioning.
+	NumColumns() int
+
+	// NumImplicitColumns specifies the number of columns that implicitly prefix a
+	// given index. This occurs if a user specifies a PARTITION BY which is not a
+	// prefix of the given index, in which case the ColumnIDs are added in front
+	// of the index and this field denotes the number of columns added as a
+	// prefix.
+	// If NumImplicitColumns is 0, no implicit columns are defined for the index.
+	NumImplicitColumns() int
+
+	// NumList returns the number of list elements in the underlying partitioning
+	// descriptor.
+	NumList() int
+
+	// NumRange returns the number of range elements in the underlying
+	// partitioning descriptor.
+	NumRange() int
 }
 
 func isIndexInSearchSet(desc TableDescriptor, opts IndexOpts, idx Index) bool {

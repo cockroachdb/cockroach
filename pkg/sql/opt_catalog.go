@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -816,11 +817,11 @@ func newOptTable(
 		}
 
 		// Add unique constraints for implicitly partitioned unique indexes.
-		if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns > 0 {
+		if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 {
 			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
 				name:         idx.GetName(),
 				table:        ot.ID(),
-				columns:      idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns:],
+				columns:      idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
 				withoutIndex: true,
 				predicate:    idx.GetPredicate(),
 				// TODO(rytaft): will we ever support an unvalidated unique constraint
@@ -1206,36 +1207,38 @@ func (oi *optIndex) init(
 
 	// Collect information about the partitions.
 	idxPartitioning := idx.GetPartitioning()
-	oi.partitions = make([]optPartition, len(idxPartitioning.List))
-	for i := range idxPartitioning.List {
-		p := &idxPartitioning.List[i]
-		oi.partitions[i] = optPartition{
-			name:   p.Name,
+	oi.partitions = make([]optPartition, 0, idxPartitioning.NumList())
+	_ = idxPartitioning.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+		op := optPartition{
+			name:   name,
 			zone:   &zonepb.ZoneConfig{},
-			datums: make([]tree.Datums, 0, len(p.Values)),
+			datums: make([]tree.Datums, 0, len(values)),
 		}
 
 		// Get the zone.
-		if zone, ok := partZones[p.Name]; ok {
-			oi.partitions[i].zone = zone
+		if zone, ok := partZones[name]; ok {
+			op.zone = zone
 		}
 
 		// Get the partition values.
 		var a rowenc.DatumAlloc
-		for _, valueEncBuf := range p.Values {
+		for _, valueEncBuf := range values {
 			t, _, err := rowenc.DecodePartitionTuple(
-				&a, oi.tab.codec, oi.tab.desc, oi.idx, &oi.idx.IndexDesc().Partitioning,
+				&a, oi.tab.codec, oi.tab.desc, oi.idx, oi.idx.GetPartitioning(),
 				valueEncBuf, nil, /* prefixDatums */
 			)
 			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+				log.Fatalf(context.TODO(), "error while decoding partition tuple: %v", err)
 			}
-			oi.partitions[i].datums = append(oi.partitions[i].datums, t.Datums)
+			op.datums = append(op.datums, t.Datums)
 			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
 			// Note that this functionality should be kept in sync with the test catalog
 			// implementation (test_catalog.go).
 		}
-	}
+
+		oi.partitions = append(oi.partitions, op)
+		return nil
+	})
 
 	if idx.IsUnique() {
 		notNull := true
@@ -1384,7 +1387,7 @@ func (oi *optIndex) Ordinal() int {
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (oi *optIndex) ImplicitPartitioningColumnCount() int {
-	return int(oi.idx.GetPartitioning().NumImplicitColumns)
+	return oi.idx.GetPartitioning().NumImplicitColumns()
 }
 
 // InterleaveAncestorCount is part of the cat.Index interface.

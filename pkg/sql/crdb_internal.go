@@ -2077,7 +2077,7 @@ CREATE TABLE crdb_internal.create_statements (
 			createNofk = stmt
 		}
 		hasPartitions := nil != catalog.FindIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) bool {
-			return idx.GetPartitioning().NumColumns != 0
+			return idx.GetPartitioning().NumColumns() != 0
 		})
 		return addRow(
 			dbDescID,
@@ -3576,7 +3576,7 @@ func addPartitioningRows(
 	database string,
 	table catalog.TableDescriptor,
 	index catalog.Index,
-	partitioning *descpb.PartitioningDescriptor,
+	partitioning catalog.Partitioning,
 	parentName tree.Datum,
 	colOffset int,
 	addRow func(...tree.Datum) error,
@@ -3591,10 +3591,10 @@ func addPartitioningRows(
 
 	tableID := tree.NewDInt(tree.DInt(table.GetID()))
 	indexID := tree.NewDInt(tree.DInt(index.GetID()))
-	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
+	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns()))
 
 	var buf bytes.Buffer
-	for i := uint32(colOffset); i < uint32(colOffset)+partitioning.NumColumns; i++ {
+	for i := uint32(colOffset); i < uint32(colOffset+partitioning.NumColumns()); i++ {
 		if i != uint32(colOffset) {
 			buf.WriteString(`, `)
 		}
@@ -3612,9 +3612,9 @@ func addPartitioningRows(
 	}
 
 	// This produces the list_value column.
-	for _, l := range partitioning.List {
+	err := partitioning.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
 		var buf bytes.Buffer
-		for j, values := range l.Values {
+		for j, values := range values {
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
@@ -3628,11 +3628,11 @@ func addPartitioningRows(
 		}
 
 		partitionValue := tree.NewDString(buf.String())
-		name := tree.NewDString(l.Name)
+		nameDString := tree.NewDString(name)
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, l.Name, false /* getInheritedDefault */)
+			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -3649,7 +3649,7 @@ func addPartitioningRows(
 			tableID,
 			indexID,
 			parentName,
-			name,
+			nameDString,
 			numColumns,
 			colNames,
 			partitionValue,
@@ -3659,18 +3659,18 @@ func addPartitioningRows(
 		); err != nil {
 			return err
 		}
-		err = addPartitioningRows(ctx, p, database, table, index, &l.Subpartitioning, name,
-			colOffset+int(partitioning.NumColumns), addRow)
-		if err != nil {
-			return err
-		}
+		return addPartitioningRows(ctx, p, database, table, index, subPartitioning, nameDString,
+			colOffset+partitioning.NumColumns(), addRow)
+	})
+	if err != nil {
+		return err
 	}
 
 	// This produces the range_value column.
-	for _, r := range partitioning.Range {
+	err = partitioning.ForEachRange(func(name string, from, to []byte) error {
 		var buf bytes.Buffer
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
-			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, r.FromInclusive, fakePrefixDatums,
+			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, from, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
@@ -3678,7 +3678,7 @@ func addPartitioningRows(
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
-			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, r.ToExclusive, fakePrefixDatums,
+			&datumAlloc, p.ExecCfg().Codec, table, index, partitioning, to, fakePrefixDatums,
 		)
 		if err != nil {
 			return err
@@ -3688,7 +3688,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, r.Name, false /* getInheritedDefault */)
+			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -3701,23 +3701,21 @@ func addPartitioningRows(
 			}
 		}
 
-		if err := addRow(
+		return addRow(
 			tableID,
 			indexID,
 			parentName,
-			tree.NewDString(r.Name),
+			tree.NewDString(name),
 			numColumns,
 			colNames,
 			tree.DNull, /* null value for partition list */
 			partitionRange,
 			tree.NewDInt(tree.DInt(zoneID)),
 			tree.NewDInt(tree.DInt(subzoneID)),
-		); err != nil {
-			return err
-		}
-	}
+		)
+	})
 
-	return nil
+	return err
 }
 
 // crdbInternalPartitionsTable decodes and exposes the partitions of each
@@ -3751,7 +3749,7 @@ CREATE TABLE crdb_internal.partitions (
 					return catalog.ForEachIndex(table, catalog.IndexOpts{
 						AddMutations: true,
 					}, func(index catalog.Index) error {
-						return addPartitioningRows(ctx, p, dbName, table, index, &index.IndexDesc().Partitioning,
+						return addPartitioningRows(ctx, p, dbName, table, index, index.GetPartitioning(),
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})
 				})

@@ -85,12 +85,6 @@ type PostDeserializationTableDescriptorChanges struct {
 	UpgradedForeignKeyRepresentation bool
 }
 
-// FindIndexPartitionByName searches this index descriptor for a partition whose name
-// is the input and returns it, or nil if no match is found.
-func FindIndexPartitionByName(idx catalog.Index, name string) *descpb.PartitioningDescriptor {
-	return idx.IndexDesc().Partitioning.FindPartitionByName(name)
-}
-
 // DescriptorType returns the type of this descriptor.
 func (desc *wrapper) DescriptorType() catalog.DescriptorType {
 	return catalog.Table
@@ -2190,16 +2184,6 @@ func (desc *wrapper) GetFamilyOfColumn(
 	}
 
 	return nil, errors.Newf("no column family found for column id %v", colID)
-}
-
-// PartitionNames returns a slice containing the name of every partition and
-// subpartition in an arbitrary order.
-func (desc *wrapper) PartitionNames() []string {
-	var names []string
-	for _, index := range desc.NonDropIndexes() {
-		names = append(names, index.PartitionNames()...)
-	}
-	return names
 }
 
 // SetAuditMode configures the audit mode on the descriptor.

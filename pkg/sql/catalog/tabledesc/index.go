@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -112,20 +113,8 @@ func (w index) GetType() descpb.IndexDescriptor_Type {
 }
 
 // GetPartitioning returns the partitioning descriptor of the index.
-func (w index) GetPartitioning() descpb.PartitioningDescriptor {
-	return w.desc.Partitioning
-}
-
-// FindPartitionByName searches the index's partitioning descriptor for a
-// partition whose name is the input and returns it, or nil if no match is found.
-func (w index) FindPartitionByName(name string) descpb.PartitioningDescriptor {
-	return *w.desc.Partitioning.FindPartitionByName(name)
-}
-
-// PartitionNames returns a slice containing the name of every partition and
-// subpartition in an arbitrary order.
-func (w index) PartitionNames() []string {
-	return w.desc.Partitioning.PartitionNames()
+func (w index) GetPartitioning() catalog.Partitioning {
+	return &partitioning{desc: &w.desc.Partitioning}
 }
 
 // ExplicitColumnStartIdx returns the first index in which the column is
@@ -294,6 +283,131 @@ func (w index) NumCompositeColumns() int {
 // composite column.
 func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID {
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
+}
+
+// partitioning is the backing struct for a catalog.Partitioning interface.
+type partitioning struct {
+	desc *descpb.PartitioningDescriptor
+}
+
+// PartitioningDesc returns the underlying protobuf descriptor.
+func (p partitioning) PartitioningDesc() *descpb.PartitioningDescriptor {
+	return p.desc
+}
+
+// DeepCopy returns a deep copy of the receiver.
+func (p partitioning) DeepCopy() catalog.Partitioning {
+	return &partitioning{desc: protoutil.Clone(p.desc).(*descpb.PartitioningDescriptor)}
+}
+
+// FindPartitionByName recursively searches the partitioning for a partition
+// whose name matches the input and returns it, or nil if no match is found.
+func (p partitioning) FindPartitionByName(name string) (found catalog.Partitioning) {
+	_ = p.forEachPartitionName(func(partitioning catalog.Partitioning, currentName string) error {
+		if name == currentName {
+			found = partitioning
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return found
+}
+
+// ForEachPartitionName applies fn on each of the partition names in this
+// partition and recursively in its subpartitions.
+// Supports iterutil.Done.
+func (p partitioning) ForEachPartitionName(fn func(name string) error) error {
+	err := p.forEachPartitionName(func(_ catalog.Partitioning, name string) error {
+		return fn(name)
+	})
+	if iterutil.Done(err) {
+		return nil
+	}
+	return err
+}
+
+func (p partitioning) forEachPartitionName(
+	fn func(partitioning catalog.Partitioning, name string) error,
+) error {
+	for _, l := range p.desc.List {
+		err := fn(p, l.Name)
+		if err != nil {
+			return err
+		}
+		err = partitioning{desc: &l.Subpartitioning}.forEachPartitionName(fn)
+		if err != nil {
+			return err
+		}
+	}
+	for _, r := range p.desc.Range {
+		err := fn(p, r.Name)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NumList returns the number of list elements in the underlying partitioning
+// descriptor.
+func (p partitioning) NumList() int {
+	return len(p.desc.List)
+}
+
+// NumRange returns the number of range elements in the underlying
+// partitioning descriptor.
+func (p partitioning) NumRange() int {
+	return len(p.desc.Range)
+}
+
+// ForEachList applies fn on each list element of the wrapped partitioning.
+// Supports iterutil.Done.
+func (p partitioning) ForEachList(
+	fn func(name string, values [][]byte, subPartitioning catalog.Partitioning) error,
+) error {
+	for _, l := range p.desc.List {
+		subp := partitioning{desc: &l.Subpartitioning}
+		err := fn(l.Name, l.Values, subp)
+		if err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ForEachRange applies fn on each range element of the wrapped partitioning.
+// Supports iterutil.Done.
+func (p partitioning) ForEachRange(fn func(name string, from, to []byte) error) error {
+	for _, r := range p.desc.Range {
+		err := fn(r.Name, r.FromInclusive, r.ToExclusive)
+		if err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// NumColumns is how large of a prefix of the columns in an index are used in
+// the function mapping column values to partitions. If this is a
+// subpartition, this is offset to start from the end of the parent
+// partition's columns. If NumColumns is 0, then there is no partitioning.
+func (p partitioning) NumColumns() int {
+	return int(p.desc.NumColumns)
+}
+
+// NumImplicitColumns specifies the number of columns that implicitly prefix a
+// given index. This occurs if a user specifies a PARTITION BY which is not a
+// prefix of the given index, in which case the ColumnIDs are added in front of
+// the index and this field denotes the number of columns added as a prefix.
+// If NumImplicitColumns is 0, no implicit columns are defined for the index.
+func (p partitioning) NumImplicitColumns() int {
+	return int(p.desc.NumImplicitColumns)
 }
 
 // indexCache contains precomputed slices of catalog.Index interfaces.

@@ -407,7 +407,7 @@ func (desc *wrapper) validateInboundFK(
 
 func (desc *wrapper) matchingPartitionbyAll(indexI catalog.Index) bool {
 	primaryIndexPartitioning := desc.PrimaryIndex.ColumnIDs[:desc.PrimaryIndex.Partitioning.NumColumns]
-	indexPartitioning := indexI.IndexDesc().ColumnIDs[:indexI.GetPartitioning().NumColumns]
+	indexPartitioning := indexI.IndexDesc().ColumnIDs[:indexI.GetPartitioning().NumColumns()]
 	if len(primaryIndexPartitioning) != len(indexPartitioning) {
 		return false
 	}
@@ -1021,18 +1021,18 @@ func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor
 func (desc *wrapper) validatePartitioningDescriptor(
 	a *rowenc.DatumAlloc,
 	idx catalog.Index,
-	partDesc *descpb.PartitioningDescriptor,
+	part catalog.Partitioning,
 	colOffset int,
 	partitionNames map[string]string,
 ) error {
-	if partDesc.NumImplicitColumns > partDesc.NumColumns {
+	if part.NumImplicitColumns() > part.NumColumns() {
 		return errors.Newf(
 			"cannot have implicit partitioning columns (%d) > partitioning columns (%d)",
-			partDesc.NumImplicitColumns,
-			partDesc.NumColumns,
+			part.NumImplicitColumns(),
+			part.NumColumns(),
 		)
 	}
-	if partDesc.NumColumns == 0 {
+	if part.NumColumns() == 0 {
 		return nil
 	}
 
@@ -1055,10 +1055,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 		fakePrefixDatums[i] = tree.DNull
 	}
 
-	if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
+	if part.NumList() == 0 && part.NumRange() == 0 {
 		return fmt.Errorf("at least one of LIST or RANGE partitioning must be used")
 	}
-	if len(partDesc.List) > 0 && len(partDesc.Range) > 0 {
+	if part.NumList() > 0 && part.NumRange() > 0 {
 		return fmt.Errorf("only one LIST or RANGE partitioning may used")
 	}
 
@@ -1066,8 +1066,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// This should only happen at read time and descriptors should not become
 	// invalid at read time, only at write time.
 	{
-		numColumns := int(partDesc.NumColumns)
-		for i := colOffset; i < colOffset+numColumns; i++ {
+		for i := colOffset; i < colOffset+part.NumColumns(); i++ {
 			// The partitioning descriptor may be invalid and refer to columns
 			// not stored in the index. In that case, skip this check as the
 			// validation will fail later.
@@ -1103,23 +1102,23 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// so it's fine to ignore the tenant ID prefix.
 	codec := keys.SystemSQLCodec
 
-	if len(partDesc.List) > 0 {
-		listValues := make(map[string]struct{}, len(partDesc.List))
-		for _, p := range partDesc.List {
-			if err := checkName(p.Name); err != nil {
+	if part.NumList() > 0 {
+		listValues := make(map[string]struct{}, part.NumList())
+		err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+			if err := checkName(name); err != nil {
 				return err
 			}
 
-			if len(p.Values) == 0 {
-				return fmt.Errorf("PARTITION %s: must contain values", p.Name)
+			if len(values) == 0 {
+				return fmt.Errorf("PARTITION %s: must contain values", name)
 			}
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
-			for _, valueEncBuf := range p.Values {
+			for _, valueEncBuf := range values {
 				tuple, keyPrefix, err := rowenc.DecodePartitionTuple(
-					a, codec, desc, idx, partDesc, valueEncBuf, fakePrefixDatums)
+					a, codec, desc, idx, part, valueEncBuf, fakePrefixDatums)
 				if err != nil {
-					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
+					return fmt.Errorf("PARTITION %s: %v", name, err)
 				}
 				if _, exists := listValues[string(keyPrefix)]; exists {
 					return fmt.Errorf("%s cannot be present in more than one partition", tuple)
@@ -1127,48 +1126,53 @@ func (desc *wrapper) validatePartitioningDescriptor(
 				listValues[string(keyPrefix)] = struct{}{}
 			}
 
-			newColOffset := colOffset + int(partDesc.NumColumns)
-			if err := desc.validatePartitioningDescriptor(
-				a, idx, &p.Subpartitioning, newColOffset, partitionNames,
-			); err != nil {
-				return err
-			}
+			newColOffset := colOffset + part.NumColumns()
+			return desc.validatePartitioningDescriptor(
+				a, idx, subPartitioning, newColOffset, partitionNames,
+			)
+		})
+		if err != nil {
+			return err
 		}
 	}
 
-	if len(partDesc.Range) > 0 {
+	if part.NumRange() > 0 {
 		tree := interval.NewTree(interval.ExclusiveOverlapper)
-		for _, p := range partDesc.Range {
-			if err := checkName(p.Name); err != nil {
+		err := part.ForEachRange(func(name string, from, to []byte) error {
+			if err := checkName(name); err != nil {
 				return err
 			}
 
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
 			fromDatums, fromKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idx, partDesc, p.FromInclusive, fakePrefixDatums)
+				a, codec, desc, idx, part, from, fakePrefixDatums)
 			if err != nil {
-				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
+				return fmt.Errorf("PARTITION %s: %v", name, err)
 			}
 			toDatums, toKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idx, partDesc, p.ToExclusive, fakePrefixDatums)
+				a, codec, desc, idx, part, to, fakePrefixDatums)
 			if err != nil {
-				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
+				return fmt.Errorf("PARTITION %s: %v", name, err)
 			}
-			pi := partitionInterval{p.Name, fromKey, toKey}
+			pi := partitionInterval{name, fromKey, toKey}
 			if overlaps := tree.Get(pi.Range()); len(overlaps) > 0 {
 				return fmt.Errorf("partitions %s and %s overlap",
-					overlaps[0].(partitionInterval).name, p.Name)
+					overlaps[0].(partitionInterval).name, name)
 			}
 			if err := tree.Insert(pi, false /* fast */); errors.Is(err, interval.ErrEmptyRange) {
 				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
-					p.Name, fromDatums, toDatums)
+					name, fromDatums, toDatums)
 			} else if errors.Is(err, interval.ErrInvertedRange) {
 				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
-					p.Name, fromDatums, toDatums)
+					name, fromDatums, toDatums)
 			} else if err != nil {
-				return errors.Wrapf(err, "PARTITION %s", p.Name)
+				return errors.Wrapf(err, "PARTITION %s", name)
 			}
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 	}
 
@@ -1199,7 +1203,7 @@ func (desc *wrapper) validatePartitioning() error {
 	a := &rowenc.DatumAlloc{}
 	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
 		return desc.validatePartitioningDescriptor(
-			a, idx, &idx.IndexDesc().Partitioning, 0 /* colOffset */, partitionNames,
+			a, idx, idx.GetPartitioning(), 0 /* colOffset */, partitionNames,
 		)
 	})
 }
@@ -1336,22 +1340,27 @@ func (desc *wrapper) validateTableLocalityConfig(
 			transitioningRegionNames[region] = struct{}{}
 		}
 
-		for _, partitioning := range desc.GetPrimaryIndex().GetPartitioning().List {
-			regionName := descpb.RegionName(partitioning.Name)
+		part := desc.GetPrimaryIndex().GetPartitioning()
+		err = part.ForEachList(func(name string, _ [][]byte, _ catalog.Partitioning) error {
+			regionName := descpb.RegionName(name)
 			// Any transitioning region names may exist.
 			if _, ok := transitioningRegionNames[regionName]; ok {
-				continue
+				return nil
 			}
 			// If a region is not found in any of the region names, we have an unknown
 			// partition.
 			if _, ok := regionNames[regionName]; !ok {
 				return errors.AssertionFailedf(
 					"unknown partition %s on PRIMARY INDEX of table %s",
-					partitioning.Name,
+					name,
 					desc.GetName(),
 				)
 			}
 			delete(regionNames, regionName)
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 
 		// Any regions that are not deleted from the above loop is missing.

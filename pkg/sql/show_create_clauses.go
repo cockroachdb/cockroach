@@ -372,7 +372,7 @@ func ShowCreatePartitioning(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
-	partDesc *descpb.PartitioningDescriptor,
+	part catalog.Partitioning,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
@@ -380,7 +380,7 @@ func ShowCreatePartitioning(
 	isPrimaryKeyOfPartitionAllByTable :=
 		tableDesc.IsPartitionAllBy() && tableDesc.GetPrimaryIndexID() == idx.GetID() && colOffset == 0
 
-	if partDesc.NumColumns == 0 && !isPrimaryKeyOfPartitionAllByTable {
+	if part.NumColumns() == 0 && !isPrimaryKeyOfPartitionAllByTable {
 		return nil
 	}
 	// Do not print PARTITION BY clauses of non-primary indexes belonging to a table
@@ -409,18 +409,18 @@ func ShowCreatePartitioning(
 		buf.WriteString(`ALL `)
 	}
 	buf.WriteString(`BY `)
-	if len(partDesc.List) > 0 {
+	if part.NumList() > 0 {
 		buf.WriteString(`LIST`)
-	} else if len(partDesc.Range) > 0 {
+	} else if part.NumRange() > 0 {
 		buf.WriteString(`RANGE`)
 	} else if isPrimaryKeyOfPartitionAllByTable {
 		buf.WriteString(`NOTHING`)
 		return nil
 	} else {
-		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
+		return errors.Errorf(`invalid partition descriptor: %v`, part.PartitioningDesc())
 	}
 	buf.WriteString(` (`)
-	for i := 0; i < int(partDesc.NumColumns); i++ {
+	for i := 0; i < part.NumColumns(); i++ {
 		if i != 0 {
 			buf.WriteString(", ")
 		}
@@ -428,58 +428,65 @@ func ShowCreatePartitioning(
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i := range partDesc.List {
-		part := &partDesc.List[i]
-		if i != 0 {
+	isFirst := true
+	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+		if !isFirst {
 			buf.WriteString(`, `)
 		}
+		isFirst = false
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		fmtCtx.FormatNameP(&part.Name)
+		fmtCtx.FormatNameP(&name)
 		_, _ = fmtCtx.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
-		for j, values := range part.Values {
+		for j, values := range values {
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
 			tuple, _, err := rowenc.DecodePartitionTuple(
-				a, codec, tableDesc, idx, partDesc, values, fakePrefixDatums)
+				a, codec, tableDesc, idx, part, values, fakePrefixDatums)
 			if err != nil {
 				return err
 			}
 			buf.WriteString(tuple.String())
 		}
 		buf.WriteString(`)`)
-		if err := ShowCreatePartitioning(
-			a, codec, tableDesc, idx, &part.Subpartitioning, buf, indent+1,
-			colOffset+int(partDesc.NumColumns),
-		); err != nil {
-			return err
-		}
+		return ShowCreatePartitioning(
+			a, codec, tableDesc, idx, subPartitioning, buf, indent+1, colOffset+part.NumColumns(),
+		)
+	})
+	if err != nil {
+		return err
 	}
-	for i, part := range partDesc.Range {
-		if i != 0 {
+	isFirst = true
+	err = part.ForEachRange(func(name string, from, to []byte) error {
+		if !isFirst {
 			buf.WriteString(`, `)
 		}
+		isFirst = false
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		buf.WriteString(part.Name)
+		buf.WriteString(name)
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idx, partDesc, part.FromInclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(fromTuple.String())
 		buf.WriteString(" TO ")
 		toTuple, _, err := rowenc.DecodePartitionTuple(
-			a, codec, tableDesc, idx, partDesc, part.ToExclusive, fakePrefixDatums)
+			a, codec, tableDesc, idx, part, to, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
 		buf.WriteString(toTuple.String())
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	buf.WriteString("\n")
 	buf.WriteString(indentStr)

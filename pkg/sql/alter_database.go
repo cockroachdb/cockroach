@@ -758,7 +758,7 @@ func addDefaultLocalityConfigToAllTables(
 func checkCanConvertTableToMultiRegion(
 	dbDesc catalog.DatabaseDescriptor, tableDesc catalog.TableDescriptor,
 ) error {
-	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns() > 0 {
 		return errors.WithDetailf(
 			pgerror.Newf(
 				pgcode.ObjectNotInPrerequisiteState,
@@ -770,7 +770,7 @@ func checkCanConvertTableToMultiRegion(
 		)
 	}
 	for _, idx := range tableDesc.AllIndexes() {
-		if idx.GetPartitioning().NumColumns > 0 {
+		if idx.GetPartitioning().NumColumns() > 0 {
 			return errors.WithDetailf(
 				pgerror.Newf(
 					pgcode.ObjectNotInPrerequisiteState,

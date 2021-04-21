@@ -178,15 +178,16 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		}
 		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
 
-		// oldPartitioningDescs saves the old partitioning descriptors for each
+		// oldPartitionings saves the old partitionings for each
 		// index that is repartitioned. This is later used to remove zone
 		// configurations from any partitions that are removed.
-		oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
+		oldPartitionings := make(map[descpb.IndexID]catalog.Partitioning)
 
 		// Update the partitioning on all indexes of the table that aren't being
 		// dropped.
 		for _, index := range tableDesc.NonDropIndexes() {
-			newIdx, err := CreatePartitioning(
+			oldPartitionings[index.GetID()] = index.GetPartitioning().DeepCopy()
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				ctx,
 				r.localPlanner.extendedEvalCtx.Settings,
 				r.localPlanner.EvalContext(),
@@ -199,11 +200,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 			if err != nil {
 				return err
 			}
-
-			oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
-
-			// Update the index descriptor proto's partitioning.
-			index.IndexDesc().Partitioning = newIdx.Partitioning
+			tabledesc.UpdateIndexPartitioning(index.IndexDesc(), newImplicitCols, newPartitioning)
 		}
 
 		// Remove zone configurations that applied to partitions that were removed
@@ -216,8 +213,6 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		// remove the partition from all indexes before trying to delete zone
 		// configurations.
 		for _, index := range tableDesc.NonDropIndexes() {
-			oldPartitioning := oldPartitioningDescs[index.GetID()]
-
 			// Remove zone configurations that reference partition values we removed
 			// in the previous step.
 			if err = deleteRemovedPartitionZoneConfigs(
@@ -225,8 +220,8 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 				txn,
 				tableDesc,
 				index.GetID(),
-				&oldPartitioning,
-				&index.IndexDesc().Partitioning,
+				oldPartitionings[index.GetID()],
+				index.GetPartitioning(),
 				r.localPlanner.ExecCfg(),
 			); err != nil {
 				return err

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -427,7 +426,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		var indexes []catalog.Index
 		for _, idx := range table.NonDropIndexes() {
-			if tabledesc.FindIndexPartitionByName(idx, partitionName) != nil {
+			if idx.GetPartitioning().FindPartitionByName(partitionName) != nil {
 				indexes = append(indexes, idx)
 			}
 		}
@@ -453,7 +452,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	if n.zoneSpecifier.TargetsPartition() && n.allIndexes {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.AlterAllPartitions)
 		for _, idx := range table.NonDropIndexes() {
-			if p := tabledesc.FindIndexPartitionByName(idx, string(n.zoneSpecifier.Partition)); p != nil {
+			if idx.GetPartitioning().FindPartitionByName(string(n.zoneSpecifier.Partition)) != nil {
 				zs := n.zoneSpecifier
 				zs.TableOrIndex.Index = tree.UnrestrictedName(idx.GetName())
 				specifiers = append(specifiers, zs)

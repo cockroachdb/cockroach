@@ -1772,12 +1772,12 @@ func ValidateForwardIndexes(
 
 					// For implicitly partitioned unique indexes, we need to independently
 					// validate that the non-implicitly partitioned columns are unique.
-					if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns > 0 && !skipUniquenessChecks {
+					if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 && !skipUniquenessChecks {
 						if err := validateUniqueConstraint(
 							ctx,
 							tableDesc,
 							idx.GetName(),
-							idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns:],
+							idx.IndexDesc().ColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
 							idx.GetPredicate(),
 							ie,
 							txn,

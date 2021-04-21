@@ -13,7 +13,6 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +24,7 @@ func partitionByFromTableDesc(
 	codec keys.SQLCodec, tableDesc *tabledesc.Mutable,
 ) (*tree.PartitionBy, error) {
 	idx := tableDesc.GetPrimaryIndex()
-	return partitionByFromTableDescImpl(codec, tableDesc, idx, &idx.IndexDesc().Partitioning, 0)
+	return partitionByFromTableDescImpl(codec, tableDesc, idx, idx.GetPartitioning(), 0)
 }
 
 // partitionByFromTableDescImpl contains the inner logic of partitionByFromTableDesc.
@@ -35,10 +34,10 @@ func partitionByFromTableDescImpl(
 	codec keys.SQLCodec,
 	tableDesc *tabledesc.Mutable,
 	idx catalog.Index,
-	partDesc *descpb.PartitioningDescriptor,
+	part catalog.Partitioning,
 	colOffset int,
 ) (*tree.PartitionBy, error) {
-	if partDesc.NumColumns == 0 {
+	if part.NumColumns() == 0 {
 		return nil, nil
 	}
 
@@ -50,87 +49,81 @@ func partitionByFromTableDescImpl(
 	}
 
 	partitionBy := &tree.PartitionBy{
-		Fields: make(tree.NameList, partDesc.NumColumns),
-		List:   make([]tree.ListPartition, len(partDesc.List)),
-		Range:  make([]tree.RangePartition, len(partDesc.Range)),
+		Fields: make(tree.NameList, part.NumColumns()),
+		List:   make([]tree.ListPartition, 0, part.NumList()),
+		Range:  make([]tree.RangePartition, 0, part.NumRange()),
 	}
-	for i := 0; i < int(partDesc.NumColumns); i++ {
+	for i := 0; i < part.NumColumns(); i++ {
 		partitionBy.Fields[i] = tree.Name(idx.GetColumnName(colOffset + i))
 	}
 
 	// Copy the LIST of the PARTITION BY clause.
 	a := &rowenc.DatumAlloc{}
-	for i := range partDesc.List {
-		part := &partDesc.List[i]
-		partitionBy.List[i].Name = tree.UnrestrictedName(part.Name)
-		partitionBy.List[i].Exprs = make(tree.Exprs, len(part.Values))
-		for j, values := range part.Values {
+	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) (err error) {
+		lp := tree.ListPartition{
+			Name:  tree.UnrestrictedName(name),
+			Exprs: make(tree.Exprs, len(values)),
+		}
+		for j, values := range values {
 			tuple, _, err := rowenc.DecodePartitionTuple(
 				a,
 				codec,
 				tableDesc,
 				idx,
-				partDesc,
+				part,
 				values,
 				fakePrefixDatums,
 			)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			exprs, err := partitionTupleToExprs(tuple)
 			if err != nil {
-				return nil, err
+				return err
 			}
-			partitionBy.List[i].Exprs[j] = &tree.Tuple{
+			lp.Exprs[j] = &tree.Tuple{
 				Exprs: exprs,
 			}
 		}
-		var err error
-		if partitionBy.List[i].Subpartition, err = partitionByFromTableDescImpl(
+		lp.Subpartition, err = partitionByFromTableDescImpl(
 			codec,
 			tableDesc,
 			idx,
-			&part.Subpartitioning,
-			colOffset+int(partDesc.NumColumns),
-		); err != nil {
-			return nil, err
-		}
+			subPartitioning,
+			colOffset+part.NumColumns(),
+		)
+		partitionBy.List = append(partitionBy.List, lp)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Copy the RANGE of the PARTITION BY clause.
-	for i, part := range partDesc.Range {
-		partitionBy.Range[i].Name = tree.UnrestrictedName(part.Name)
+	err = part.ForEachRange(func(name string, from, to []byte) error {
+		rp := tree.RangePartition{Name: tree.UnrestrictedName(name)}
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
-			a,
-			codec,
-			tableDesc,
-			idx,
-			partDesc,
-			part.FromInclusive,
-			fakePrefixDatums,
-		)
+			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if partitionBy.Range[i].From, err = partitionTupleToExprs(fromTuple); err != nil {
-			return nil, err
+		rp.From, err = partitionTupleToExprs(fromTuple)
+		if err != nil {
+			return err
 		}
 		toTuple, _, err := rowenc.DecodePartitionTuple(
-			a,
-			codec,
-			tableDesc,
-			idx,
-			partDesc,
-			part.ToExclusive,
-			fakePrefixDatums,
-		)
+			a, codec, tableDesc, idx, part, to, fakePrefixDatums)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if partitionBy.Range[i].To, err = partitionTupleToExprs(toTuple); err != nil {
-			return nil, err
-		}
+		rp.To, err = partitionTupleToExprs(toTuple)
+		partitionBy.Range = append(partitionBy.Range, rp)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
+
 	return partitionBy, nil
 }
 

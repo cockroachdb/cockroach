@@ -79,8 +79,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot change the partitioning of an index if the table has PARTITION ALL BY defined",
 				)
 			}
-			existingIndexDesc := n.index.IndexDescDeepCopy()
-			if existingIndexDesc.Partitioning.NumImplicitColumns > 0 {
+			if n.index.GetPartitioning().NumImplicitColumns() > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
 					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",
@@ -88,12 +87,13 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			}
 			allowImplicitPartitioning := params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
 				n.tableDesc.IsLocalityRegionalByRow()
-			newIndexDesc, err := CreatePartitioning(
+			alteredIndexDesc := n.index.IndexDescDeepCopy()
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				params.ctx,
 				params.extendedEvalCtx.Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				existingIndexDesc,
+				alteredIndexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
 				allowImplicitPartitioning,
@@ -101,31 +101,39 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if newIndexDesc.Partitioning.NumImplicitColumns > 0 {
+			if newPartitioning.NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
 					"cannot ALTER INDEX and change the partitioning to contain implicit columns",
 				)
 			}
-			descriptorChanged = !existingIndexDesc.Equal(&newIndexDesc)
-			if err = deleteRemovedPartitionZoneConfigs(
-				params.ctx,
-				params.p.txn,
-				n.tableDesc,
-				n.index.GetID(),
-				&existingIndexDesc.Partitioning,
-				&newIndexDesc.Partitioning,
-				params.extendedEvalCtx.ExecCfg,
-			); err != nil {
-				return err
+			isIndexAltered := tabledesc.UpdateIndexPartitioning(&alteredIndexDesc, newImplicitCols, newPartitioning)
+			if isIndexAltered {
+				oldPartitioning := n.index.GetPartitioning().DeepCopy()
+				if n.index.Primary() {
+					n.tableDesc.SetPrimaryIndex(alteredIndexDesc)
+				} else {
+					n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), alteredIndexDesc)
+				}
+				n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+				descriptorChanged = true
+				if err := deleteRemovedPartitionZoneConfigs(
+					params.ctx,
+					params.p.txn,
+					n.tableDesc,
+					n.index.GetID(),
+					oldPartitioning,
+					n.index.GetPartitioning(),
+					params.extendedEvalCtx.ExecCfg,
+				); err != nil {
+					return err
+				}
 			}
-			// Update value to make sure it doesn't become stale.
-			n.index = n.tableDesc.AllIndexes()[n.index.Ordinal()]
-			*n.index.IndexDesc() = newIndexDesc
 		default:
 			return errors.AssertionFailedf(
 				"unsupported alter command: %T", cmd)
 		}
+
 	}
 
 	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
