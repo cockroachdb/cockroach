@@ -68,6 +68,9 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		var kvDB *kv.DB
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				AllowDeclarativeSchemaChanger: true,
+			},
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
 					// Only block in job 2.
