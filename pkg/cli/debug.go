@@ -1274,7 +1274,9 @@ func init() {
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
-	debugDoctorCmd.AddCommand(debugDoctorCmds...)
+	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
+	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
+	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
 	f := debugSyncBenchCmd.Flags()
