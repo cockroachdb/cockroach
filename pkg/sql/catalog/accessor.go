@@ -65,7 +65,8 @@ type Accessor interface {
 	// TODO(ajwerner): clarify the purpose of the transaction here. It's used in
 	// some cases for some lookups but not in others. For example, if a mutable
 	// descriptor is requested, it will be utilized however if an immutable
-	// descriptor is requested then it will only be used for its timestamp.
+	// descriptor is requested then it will only be used for its timestamp and to
+	// set the deadline.
 	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, codec keys.SQLCodec,
 		db, schema, object string, flags tree.ObjectLookupFlags) (Descriptor, error)
 }

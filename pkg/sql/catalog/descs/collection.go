@@ -499,6 +499,83 @@ func (tc *Collection) getDatabaseByName(
 	return true, db, nil
 }
 
+// GetObjectDesc looks up an object by name and returns both its
+// descriptor and that of its parent database. If the object is not
+// found and flags.required is true, an error is returned, otherwise
+// a nil reference is returned.
+//
+// TODO(ajwerner): clarify the purpose of the transaction here. It's used in
+// some cases for some lookups but not in others. For example, if a mutable
+// descriptor is requested, it will be utilized however if an immutable
+// descriptor is requested then it will only be used for its timestamp and to
+// set the deadline.
+func (tc *Collection) GetObjectDesc(
+	ctx context.Context,
+	txn *kv.Txn,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	db, schema, object string,
+	flags tree.ObjectLookupFlags,
+) (desc catalog.Descriptor, err error) {
+	if isVirtual, desc, err := tc.maybeGetVirtualObjectDesc(
+		schema, object, flags, db,
+	); isVirtual || err != nil {
+		return desc, err
+	}
+	// Resolve type aliases which are usually available in the PostgreSQL as an extension
+	// on the public schema.
+	// TODO(ajwerner): Pull this underneath type resolution.
+	if schema == tree.PublicSchema && flags.DesiredObjectKind == tree.TypeObject {
+		if alias, ok := types.PublicSchemaAliases[object]; ok {
+			if flags.RequireMutable {
+				return nil, errors.AssertionFailedf(
+					"cannot use mutable descriptor of aliased type %s.%s", schema, object)
+			}
+			return typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
+		}
+	}
+	// Fall back to physical descriptor access.
+	switch flags.DesiredObjectKind {
+	case tree.TypeObject:
+		typeName := tree.MakeNewQualifiedTypeName(db, schema, object)
+		_, desc, err := tc.getTypeByName(ctx, txn, &typeName, flags, flags.RequireMutable)
+		return desc, err
+	case tree.TableObject:
+		tableName := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
+		_, desc, err := tc.getTableByName(ctx, txn, &tableName, flags, flags.RequireMutable)
+		return desc, err
+	default:
+		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
+	}
+}
+
+func (tc *Collection) maybeGetVirtualObjectDesc(
+	schema string, object string, flags tree.ObjectLookupFlags, db string,
+) (isVirtual bool, _ catalog.Descriptor, _ error) {
+	if tc.virtualSchemas == nil {
+		return false, nil, nil
+	}
+	scEntry, ok := tc.virtualSchemas.GetVirtualSchema(schema)
+	if !ok {
+		return false, nil, nil
+	}
+	desc, err := scEntry.GetObjectByName(object, flags)
+	if err != nil {
+		return true, nil, err
+	}
+	if desc == nil {
+		if flags.Required {
+			obj := tree.NewQualifiedObjectName(db, schema, object, flags.DesiredObjectKind)
+			return true, nil, sqlerrors.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
+		}
+		return true, nil, nil
+	}
+	if flags.RequireMutable {
+		return true, nil, catalog.NewMutableAccessToVirtualSchemaError(scEntry, object)
+	}
+	return true, desc.Desc(), nil
+}
+
 func (tc *Collection) getObjectByName(
 	ctx context.Context,
 	txn *kv.Txn,
