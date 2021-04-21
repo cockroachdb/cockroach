@@ -67,7 +67,7 @@ func (l *LogicalSchemaAccessor) GetDatabaseDesc(
 }
 
 // GetSchema implements the Accessor interface.
-func (l *LogicalSchemaAccessor) GetSchema(
+func (l *LogicalSchemaAccessor) GetSchemaByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
