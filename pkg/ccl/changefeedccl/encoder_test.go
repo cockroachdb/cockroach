@@ -11,12 +11,7 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
-	"encoding/binary"
-	gojson "encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
@@ -30,11 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
-	"github.com/cockroachdb/errors"
-	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,9 +194,9 @@ func TestEncoders(t *testing.T) {
 				rowStringFn = func(k, v []byte) string { return fmt.Sprintf(`%s->%s`, k, v) }
 				resolvedStringFn = func(r []byte) string { return string(r) }
 			case string(changefeedbase.OptFormatAvro):
-				reg := makeTestSchemaRegistry()
+				reg := cdctest.MakeTestSchemaRegistry()
 				defer reg.Close()
-				o[changefeedbase.OptConfluentSchemaRegistry] = reg.server.URL
+				o[changefeedbase.OptConfluentSchemaRegistry] = reg.URL()
 				rowStringFn = func(k, v []byte) string {
 					key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
 					return fmt.Sprintf(`%s->%s`, key, value)
@@ -265,92 +257,13 @@ func TestEncoders(t *testing.T) {
 	}
 }
 
-type testSchemaRegistry struct {
-	server *httptest.Server
-	mu     struct {
-		syncutil.Mutex
-		idAlloc  int32
-		schemas  map[int32]string
-		subjects map[string]int32
-	}
-}
-
-func makeTestSchemaRegistry() *testSchemaRegistry {
-	r := &testSchemaRegistry{}
-	r.mu.schemas = make(map[int32]string)
-	r.mu.subjects = make(map[string]int32)
-	r.server = httptest.NewServer(http.HandlerFunc(r.Register))
-	return r
-}
-
-func (r *testSchemaRegistry) Close() {
-	r.server.Close()
-}
-
-func (r *testSchemaRegistry) Register(hw http.ResponseWriter, hr *http.Request) {
-	type confluentSchemaVersionRequest struct {
-		Schema string `json:"schema"`
-	}
-	type confluentSchemaVersionResponse struct {
-		ID int32 `json:"id"`
-	}
-	if err := func() error {
-		defer hr.Body.Close()
-		var req confluentSchemaVersionRequest
-		if err := gojson.NewDecoder(hr.Body).Decode(&req); err != nil {
-			return err
-		}
-
-		r.mu.Lock()
-		subject := strings.Split(hr.URL.Path, "/")[2]
-		id := r.mu.idAlloc
-		r.mu.idAlloc++
-		r.mu.schemas[id] = req.Schema
-		r.mu.subjects[subject] = id
-		r.mu.Unlock()
-
-		res, err := gojson.Marshal(confluentSchemaVersionResponse{ID: id})
-		if err != nil {
-			return err
-		}
-
-		hw.Header().Set(`Content-type`, `application/json`)
-		_, _ = hw.Write(res)
-		return nil
-	}(); err != nil {
-		http.Error(hw, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func (r *testSchemaRegistry) encodedAvroToNative(b []byte) (interface{}, error) {
-	if len(b) == 0 || b[0] != confluentAvroWireFormatMagic {
-		return ``, errors.Errorf(`bad magic byte`)
-	}
-	b = b[1:]
-	if len(b) < 4 {
-		return ``, errors.Errorf(`missing registry id`)
-	}
-	id := int32(binary.BigEndian.Uint32(b[:4]))
-	b = b[4:]
-
-	r.mu.Lock()
-	jsonSchema := r.mu.schemas[id]
-	r.mu.Unlock()
-	codec, err := goavro.NewCodec(jsonSchema)
-	if err != nil {
-		return ``, err
-	}
-	native, _, err := codec.NativeFromBinary(b)
-	return native, err
-}
-
 func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
-		reg := makeTestSchemaRegistry()
+		reg := cdctest.MakeTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -362,7 +275,7 @@ func TestAvroEncoder(t *testing.T) {
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"bar"}}},"before":null}`,
@@ -375,7 +288,7 @@ func TestAvroEncoder(t *testing.T) {
 
 		fooUpdated := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, updated`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, fooUpdated)
 		// Skip over the first two rows since we don't know the statement timestamp.
 		_, err := fooUpdated.Next()
@@ -405,7 +318,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := makeTestSchemaRegistry()
+		reg := cdctest.MakeTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -417,7 +330,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, movrFeed)
 
 		assertPayloadsAvro(t, reg, movrFeed, []string{
@@ -431,7 +344,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 		fqnFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, full_table_name`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, fqnFeed)
 
 		assertPayloadsAvro(t, reg, fqnFeed, []string{
@@ -447,7 +360,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 		prefixFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, prefixFeed)
 
 		assertPayloadsAvro(t, reg, prefixFeed, []string{
@@ -465,7 +378,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 		prefixFQNFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super, full_table_name`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, prefixFQNFeed)
 
 		assertPayloadsAvro(t, reg, prefixFQNFeed, []string{
@@ -484,8 +397,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		//Both changes to the subject are also reflected in the schema name in the posted schemas
-		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`supermovr.public.drivers-key`]], `supermovr`)
-		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`supermovr.public.drivers-value`]], `supermovr`)
+		require.Contains(t, reg.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
+		require.Contains(t, reg.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
 	}
 
 	t.Run(`enterprise`, enterpriseTest(testFn))
@@ -496,7 +409,7 @@ func TestAvroSchemaNamespace(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := makeTestSchemaRegistry()
+		reg := cdctest.MakeTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -508,7 +421,7 @@ func TestAvroSchemaNamespace(t *testing.T) {
 
 		noNamespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, noNamespaceFeed)
 
 		assertPayloadsAvro(t, reg, noNamespaceFeed, []string{
@@ -517,17 +430,17 @@ func TestAvroSchemaNamespace(t *testing.T) {
 
 		namespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, namespaceFeed)
 
 		assertPayloadsAvro(t, reg, namespaceFeed, []string{
 			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
-		require.NotContains(t, reg.mu.schemas[reg.mu.subjects[`drivers-key`]], `namespace`)
-		require.NotContains(t, reg.mu.schemas[reg.mu.subjects[`drivers-value`]], `namespace`)
-		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`superdrivers-key`]], `"namespace":"super"`)
-		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`superdrivers-value`]], `"namespace":"super"`)
+		require.NotContains(t, reg.SchemaForSubject(`drivers-key`), `namespace`)
+		require.NotContains(t, reg.SchemaForSubject(`drivers-value`), `namespace`)
+		require.Contains(t, reg.SchemaForSubject(`superdrivers-key`), `"namespace":"super"`)
+		require.Contains(t, reg.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
 	}
 
 	t.Run(`enterprise`, enterpriseTest(testFn))
@@ -538,7 +451,7 @@ func TestTableNameCollision(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := makeTestSchemaRegistry()
+		reg := cdctest.MakeTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -555,17 +468,17 @@ func TestTableNameCollision(t *testing.T) {
 
 		movrFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, movrFeed)
 
 		printrFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, printrFeed)
 
 		comboFeed := feed(t, f, `CREATE CHANGEFEED FOR printr.drivers, movr.drivers `+
 			`WITH format=$1, confluent_schema_registry=$2, diff, resolved, full_table_name`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, comboFeed)
 
 		assertPayloadsAvro(t, reg, movrFeed, []string{
@@ -594,7 +507,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := makeTestSchemaRegistry()
+		reg := cdctest.MakeTestSchemaRegistry()
 		defer reg.Close()
 
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -603,7 +516,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
 			`WITH format=$1, confluent_schema_registry=$2`,
-			changefeedbase.OptFormatAvro, reg.server.URL)
+			changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, foo)
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1}}}}`,
@@ -625,7 +538,7 @@ func TestAvroLedger(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		reg := makeTestSchemaRegistry()
+		reg := cdctest.MakeTestSchemaRegistry()
 		defer reg.Close()
 
 		ctx := context.Background()
@@ -636,7 +549,7 @@ func TestAvroLedger(t *testing.T) {
 
 		ledger := feed(t, f, `CREATE CHANGEFEED FOR customer, transaction, entry, session
 	                       WITH format=$1, confluent_schema_registry=$2
-	               `, changefeedbase.OptFormatAvro, reg.server.URL)
+	               `, changefeedbase.OptFormatAvro, reg.URL())
 		defer closeFeed(t, ledger)
 
 		assertPayloadsAvro(t, reg, ledger, []string{

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cdctest",
     srcs = [
+        "avro.go",
         "nemeses.go",
         "testfeed.go",
         "validator.go",
@@ -10,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
@@ -24,10 +26,12 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx//:pgx",
+        "@com_github_linkedin_goavro_v2//:goavro",
     ],
 )
 

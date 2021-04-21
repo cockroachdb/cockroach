@@ -191,7 +191,6 @@ go_test(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_linkedin_goavro_v2//:goavro",
         "@com_github_shopify_sarama//:sarama",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
