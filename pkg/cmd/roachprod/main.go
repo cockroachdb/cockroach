@@ -87,7 +87,6 @@ var (
 	listDetails       bool
 	listJSON          bool
 	listMine          bool
-	clusterType       = "cockroach"
 	secure            = false
 	nodeEnv           = []string{
 		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
@@ -158,22 +157,15 @@ Available clusters:
 		return nil, err
 	}
 
-	switch clusterType {
-	case "cockroach":
-		c.Impl = install.Cockroach{}
-		if numRacks > 0 {
-			for i := range c.Localities {
-				rack := fmt.Sprintf("rack=%d", i%numRacks)
-				if c.Localities[i] != "" {
-					rack = "," + rack
-				}
-				c.Localities[i] += rack
+	c.Impl = install.Cockroach{}
+	if numRacks > 0 {
+		for i := range c.Localities {
+			rack := fmt.Sprintf("rack=%d", i%numRacks)
+			if c.Localities[i] != "" {
+				rack = "," + rack
 			}
+			c.Localities[i] += rack
 		}
-	case "cassandra":
-		c.Impl = install.Cassandra{}
-	default:
-		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
 	}
 
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
@@ -1995,8 +1987,6 @@ func main() {
 				&nodeArgs, "args", "a", nil, "node arguments")
 			cmd.Flags().StringArrayVarP(
 				&nodeEnv, "env", "e", nodeEnv, "node environment variables")
-			cmd.Flags().StringVarP(
-				&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 			cmd.Flags().BoolVar(
 				&install.StartOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
 			cmd.Flags().BoolVar(
