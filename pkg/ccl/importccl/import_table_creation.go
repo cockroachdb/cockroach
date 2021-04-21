@@ -323,7 +323,7 @@ func (r *fkResolver) Txn() *kv.Txn {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r *fkResolver) LogicalSchemaAccessor() catalog.Accessor {
+func (r *fkResolver) Accessor() catalog.Accessor {
 	return nil
 }
 

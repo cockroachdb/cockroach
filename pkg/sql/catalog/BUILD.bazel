@@ -21,7 +21,6 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
