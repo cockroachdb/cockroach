@@ -1063,7 +1063,11 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	if quote {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.Decimal.String())
+	if ctx.HasFlags(FmtPgwireText) {
+		ctx.WriteString(d.Decimal.Text('f'))
+	} else {
+		ctx.WriteString(d.Decimal.String())
+	}
 	if quote {
 		ctx.WriteByte('\'')
 	}

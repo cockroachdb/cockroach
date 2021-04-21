@@ -35,3 +35,36 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"0"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s1", "Query": "SELECT 10000::decimal, $1::decimal"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [1], "Parameters": [[0, 1, 0, 1, 0, 0, 0, 0, 0, 1]]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10000"},{"text":"10000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# ResultFormatCodes [1] = FormatBinary
+send
+Parse {"Name": "s2", "Query": "SELECT 10000::decimal, $1::decimal"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [[0, 1, 0, 1, 0, 0, 0, 0, 0, 1]], "ResultFormatCodes": [1,1]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00010001000000000001"},{"binary":"00010001000000000001"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
