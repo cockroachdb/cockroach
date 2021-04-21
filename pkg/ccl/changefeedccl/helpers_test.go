@@ -118,11 +118,11 @@ func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) 
 	assertPayloadsBase(t, f, expected, true)
 }
 
-func avroToJSON(t testing.TB, reg *testSchemaRegistry, avroBytes []byte) []byte {
+func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []byte {
 	if len(avroBytes) == 0 {
 		return nil
 	}
-	native, err := reg.encodedAvroToNative(avroBytes)
+	native, err := reg.EncodedAvroToNative(avroBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func avroToJSON(t testing.TB, reg *testSchemaRegistry, avroBytes []byte) []byte 
 }
 
 func assertPayloadsAvro(
-	t testing.TB, reg *testSchemaRegistry, f cdctest.TestFeed, expected []string,
+	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed, expected []string,
 ) {
 	t.Helper()
 
@@ -164,15 +164,10 @@ func assertPayloadsAvro(
 	}
 }
 
-func assertRegisteredSubjects(t testing.TB, reg *testSchemaRegistry, expected []string) {
+func assertRegisteredSubjects(t testing.TB, reg *cdctest.SchemaRegistry, expected []string) {
 	t.Helper()
 
-	actual := make([]string, 0, len(reg.mu.subjects))
-
-	for subject := range reg.mu.subjects {
-		actual = append(actual, subject)
-	}
-
+	actual := reg.Subjects()
 	sort.Strings(expected)
 	sort.Strings(actual)
 	if !reflect.DeepEqual(expected, actual) {
@@ -225,7 +220,7 @@ func extractResolvedTimestamp(t testing.TB, m *cdctest.TestFeedMessage) hlc.Time
 }
 
 func expectResolvedTimestampAvro(
-	t testing.TB, reg *testSchemaRegistry, f cdctest.TestFeed,
+	t testing.TB, reg *cdctest.SchemaRegistry, f cdctest.TestFeed,
 ) hlc.Timestamp {
 	t.Helper()
 	m, err := f.Next()
@@ -241,7 +236,7 @@ func expectResolvedTimestampAvro(
 	if m.Resolved == nil {
 		t.Fatal(`expected a resolved timestamp notification`)
 	}
-	resolvedNative, err := reg.encodedAvroToNative(m.Resolved)
+	resolvedNative, err := reg.EncodedAvroToNative(m.Resolved)
 	if err != nil {
 		t.Fatal(err)
 	}
