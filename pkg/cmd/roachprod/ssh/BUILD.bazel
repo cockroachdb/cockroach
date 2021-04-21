@@ -8,13 +8,4 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cmd/roachprod/config",
-        "//pkg/util/syncutil",
-        "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//oserror",
-        "@org_golang_x_crypto//ssh",
-        "@org_golang_x_crypto//ssh/agent",
-        "@org_golang_x_crypto//ssh/knownhosts",
-    ],
 )
