@@ -1541,3 +1541,126 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
 
 statement ok
 CREATE VIEW v AS SELECT v FROM kv
+
+# Verify that we can use CREATE TABLE AS from a REGIONAL BY ROW table, and
+# end up with something that resembles a REGIONAL BY ROW table.  Note that
+# this is not simple, as we need to explicitly select the crdb_region
+# column, and then convert that column to be generated and hidden.
+subtest create_table_as_regional_by_row
+
+statement ok
+CREATE DATABASE "mr-create-table-as" PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ca-central-1", "us-east-1";
+USE "mr-create-table-as"
+
+statement ok
+CREATE TABLE t (i int PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO t VALUES (1),(2),(3)
+
+statement ok
+CREATE TABLE t_as AS SELECT i, crdb_region FROM t
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t_as]
+----
+create_statement
+CREATE TABLE public.t_as (
+                                                i INT8 NULL,
+                                                crdb_region public.crdb_internal_region NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                                FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+
+statement error cannot use column crdb_region for REGIONAL BY ROW table as it may contain NULL values
+ALTER TABLE t_as SET LOCALITY REGIONAL BY ROW AS crdb_region
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN crdb_region SET NOT NULL
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN crdb_region SET NOT VISIBLE
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region
+
+statement ok
+ALTER TABLE t_as SET LOCALITY REGIONAL BY ROW AS crdb_region
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t_as]
+----
+create_statement
+CREATE TABLE public.t_as (
+                                           i INT8 NULL,
+                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                           CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                                           FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY ROW AS crdb_region
+
+query TI colnames
+SELECT crdb_region, i FROM t_as
+----
+crdb_region     i
+ap-southeast-2  1
+ap-southeast-2  2
+ap-southeast-2  3
+
+statement ok
+INSERT INTO t_as VALUES (4)
+
+# Validate that hidden column works
+query TI colnames
+SELECT crdb_region, i FROM t_as
+----
+crdb_region     i
+ap-southeast-2  1
+ap-southeast-2  2
+ap-southeast-2  3
+ap-southeast-2  4
+
+statement ok
+ALTER TABLE t_as ALTER COLUMN i SET NOT NULL
+
+statement ok
+ALTER TABLE t_as ALTER PRIMARY KEY USING COLUMNS (i)
+
+statement ok
+SET sql_safe_updates = false;
+ALTER TABLE t_as DROP COLUMN rowid;
+SET sql_safe_updates = true
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t_as]
+----
+create_statement
+CREATE TABLE public.t_as (
+                                           i INT8 NOT NULL,
+                                           crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                           CONSTRAINT "primary" PRIMARY KEY (i ASC),
+                                           FAMILY "primary" (i, crdb_region)
+) LOCALITY REGIONAL BY ROW AS crdb_region
+
+query T colnames
+SELECT create_statement from [SHOW CREATE TABLE t]
+----
+create_statement
+CREATE TABLE public.t (
+                            i INT8 NOT NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (i ASC),
+                            FAMILY "primary" (i, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+# Declare victory, as this is the closest we can get.
+statement ok
+DROP TABLE t;
+DROP TABLE t_as
+
+statement ok
+SET sql_safe_updates = false;
+DROP DATABASE "mr-create-table-as";
+SET sql_safe_updates = true
