@@ -13,14 +13,13 @@ package catalog
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// Accessor provides access to sql object descriptors.
+// Accessor provides access to descriptors.
+// It is implemented by the collection.
 type Accessor interface {
 
 	// GetDatabaseDesc looks up a database by name and returns its
@@ -31,17 +30,14 @@ type Accessor interface {
 	// accommodate the existing resolver.SchemaResolver interface (see #58228).
 	// Use GetMutableDatabaseByName() and GetImmutableDatabaseByName() on
 	// descs.Collection instead when possible.
-	GetDatabaseDesc(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbName string, flags tree.DatabaseLookupFlags) (DatabaseDescriptor, error)
+	GetDatabaseDesc(
+		ctx context.Context, txn *kv.Txn, dbName string, flags tree.DatabaseLookupFlags,
+	) (DatabaseDescriptor, error)
 
 	// GetSchema returns true and a ResolvedSchema object if the target schema
 	// exists under the target database.
 	GetSchemaByName(
-		ctx context.Context,
-		txn *kv.Txn,
-		codec keys.SQLCodec,
-		dbID descpb.ID,
-		scName string,
-		flags tree.SchemaLookupFlags,
+		ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags,
 	) (bool, ResolvedSchema, error)
 
 	// GetObjectNamesAndIDs returns the list of all objects in the given
@@ -53,8 +49,8 @@ type Accessor interface {
 	// are fundamentally sometimes ambiguous (see GRANT and the ambiguity between
 	// tables and types). Furthermore, the fact that this buffers everything
 	// in ram in unfortunate.
-	GetObjectNamesAndIDs(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-		db DatabaseDescriptor, scName string, flags tree.DatabaseListFlags,
+	GetObjectNamesAndIDs(
+		ctx context.Context, txn *kv.Txn, db DatabaseDescriptor, scName string, flags tree.DatabaseListFlags,
 	) (tree.TableNames, descpb.IDs, error)
 
 	// GetObjectDesc looks up an object by name and returns both its
@@ -67,6 +63,7 @@ type Accessor interface {
 	// descriptor is requested, it will be utilized however if an immutable
 	// descriptor is requested then it will only be used for its timestamp and to
 	// set the deadline.
-	GetObjectDesc(ctx context.Context, txn *kv.Txn, settings *cluster.Settings, codec keys.SQLCodec,
-		db, schema, object string, flags tree.ObjectLookupFlags) (Descriptor, error)
+	GetObjectDesc(
+		ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
+	) (Descriptor, error)
 }

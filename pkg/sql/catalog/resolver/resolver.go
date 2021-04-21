@@ -42,8 +42,10 @@ type SchemaResolver interface {
 	tree.ObjectNameTargetResolver
 	tree.QualifiedNameResolver
 
+	// Accessor is a crufty name and interface that wraps the *descs.Collection.
+	Accessor() catalog.Accessor
+
 	Txn() *kv.Txn
-	LogicalSchemaAccessor() catalog.Accessor
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
@@ -70,11 +72,10 @@ func GetObjectNamesAndIDs(
 	scName string,
 	explicitPrefix bool,
 ) (tree.TableNames, descpb.IDs, error) {
-	return sc.LogicalSchemaAccessor().GetObjectNamesAndIDs(ctx, txn, codec, dbDesc, scName,
-		tree.DatabaseListFlags{
-			CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
-			ExplicitPrefix:    explicitPrefix,
-		})
+	return sc.Accessor().GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, tree.DatabaseListFlags{
+		CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
+		ExplicitPrefix:    explicitPrefix,
+	})
 }
 
 // ResolveExistingTableObject looks up an existing object.
