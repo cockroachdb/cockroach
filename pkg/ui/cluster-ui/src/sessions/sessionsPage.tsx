@@ -44,10 +44,12 @@ import {
 } from "src/store/terminateQuery";
 
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
-import styles from "src/statementsPage/statementsPage.module.scss";
+import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
+import sessionPageStyles from "./sessionPage.module.scss";
 
 const sortableTableCx = classNames.bind(sortedTableStyles);
-const cx = classNames.bind(styles);
+const statementsPageCx = classNames.bind(statementsPageStyles);
+const sessionsPageCx = classNames.bind(sessionPageStyles);
 
 interface OwnProps {
   sessions: SessionInfo[];
@@ -161,10 +163,10 @@ export class SessionsPage extends React.Component<
     const { pagination } = this.state;
 
     return (
-      <div>
+      <>
         <section className={sortableTableCx("cl-table-container")}>
-          <div>
-            <h4>
+          <div className={statementsPageCx("cl-table-statistic")}>
+            <h4 className={statementsPageCx("cl-count-title")}>
               <ResultsPerPageLabel
                 pagination={{
                   ...pagination,
@@ -205,7 +207,7 @@ export class SessionsPage extends React.Component<
           total={sessionsData.length}
           onChange={this.onChangePage}
         />
-      </div>
+      </>
     );
   };
 
@@ -213,11 +215,11 @@ export class SessionsPage extends React.Component<
     const { match, cancelSession, cancelQuery } = this.props;
     const app = getMatchParamByName(match, appAttr);
     return (
-      <div>
+      <div className={sessionsPageCx("sessions-page")}>
         <Helmet title={app ? `${app} App | Sessions` : "Sessions"} />
 
-        <section className={cx("section")}>
-          <h1 className={cx("base-heading")}>Sessions</h1>
+        <section className={statementsPageCx("section")}>
+          <h1 className={statementsPageCx("base-heading")}>Sessions</h1>
         </section>
 
         <Loading
