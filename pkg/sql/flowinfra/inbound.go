@@ -26,12 +26,12 @@ import (
 
 // InboundStreamHandler is a handler of an inbound stream.
 type InboundStreamHandler interface {
-	// run is called once a FlowStream RPC is handled and a stream is obtained to
+	// Run is called once a FlowStream RPC is handled and a stream is obtained to
 	// make this stream accessible to the rest of the flow.
 	Run(
 		ctx context.Context, stream execinfrapb.DistSQL_FlowStreamServer, firstMsg *execinfrapb.ProducerMessage, f *FlowBase,
 	) error
-	// timeout is called with an error, which results in the teardown of the
+	// Timeout is called with an error, which results in the teardown of the
 	// stream strategy with the given error.
 	// WARNING: timeout may block.
 	Timeout(err error)
