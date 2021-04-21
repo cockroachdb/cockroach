@@ -349,7 +349,7 @@ func resolveSubzone(
 
 	partitionName := string(zs.Partition)
 	if partitionName != "" {
-		if partitioning := tabledesc.FindIndexPartitionByName(index, partitionName); partitioning == nil {
+		if index.GetPartitioning().FindPartitionByName(partitionName) == nil {
 			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
 		}
 	}
@@ -362,20 +362,22 @@ func deleteRemovedPartitionZoneConfigs(
 	txn *kv.Txn,
 	tableDesc catalog.TableDescriptor,
 	indexID descpb.IndexID,
-	oldPartDesc *descpb.PartitioningDescriptor,
-	newPartDesc *descpb.PartitioningDescriptor,
+	oldPart catalog.Partitioning,
+	newPart catalog.Partitioning,
 	execCfg *ExecutorConfig,
 ) error {
 	newNames := map[string]struct{}{}
-	for _, n := range newPartDesc.PartitionNames() {
-		newNames[n] = struct{}{}
-	}
-	removedNames := []string{}
-	for _, n := range oldPartDesc.PartitionNames() {
-		if _, exists := newNames[n]; !exists {
-			removedNames = append(removedNames, n)
+	_ = newPart.ForEachPartitionName(func(newName string) error {
+		newNames[newName] = struct{}{}
+		return nil
+	})
+	removedNames := make([]string, 0, len(newNames))
+	_ = oldPart.ForEachPartitionName(func(oldName string) error {
+		if _, exists := newNames[oldName]; !exists {
+			removedNames = append(removedNames, oldName)
 		}
-	}
+		return nil
+	})
 	if len(removedNames) == 0 {
 		return nil
 	}
