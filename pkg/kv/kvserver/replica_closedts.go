@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -208,7 +207,7 @@ type sidetransportReceiver interface {
 	) (hlc.Timestamp, ctpb.LAI)
 }
 
-func (st *sidetransportAccess) init(receiver *sidetransport.Receiver, rangeID roachpb.RangeID) {
+func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roachpb.RangeID) {
 	if receiver != nil {
 		// Avoid st.receiver becoming a typed nil.
 		st.receiver = receiver
