@@ -20,8 +20,7 @@ import React from "react";
 import { Moment } from "moment";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-//import ISession = cockroach.server.serverpb.ISession;
-type ISession = any;
+type ISession = cockroach.server.serverpb.Session;
 
 import { TerminateSessionModalRef } from "./terminateSessionModal";
 import { TerminateQueryModalRef } from "./terminateQueryModal";
@@ -57,10 +56,12 @@ export function byteArrayToUuid(array: Uint8Array) {
   ].join("-");
 }
 
-const SessionLink = (props: { session: ISession }) => {
+const SessionLink = (props: { session: ISession; onClick?: () => void }) => {
+  const { session, onClick } = props;
+
   const base = `/session`;
-  const start = TimestampToMoment(props.session.start);
-  const sessionID = byteArrayToUuid(props.session.id);
+  const start = TimestampToMoment(session.start);
+  const sessionID = byteArrayToUuid(session.id);
 
   return (
     <div className={cx("sessionLink")}>
@@ -69,8 +70,8 @@ const SessionLink = (props: { session: ISession }) => {
         tableTitle
         title={<>Session started at {start.format(DATE_FORMAT)}</>}
       >
-        <Link to={`${base}/${encodeURIComponent(sessionID)}`}>
-          {start.fromNow(true)}
+        <Link onClick={onClick} to={`${base}/${encodeURIComponent(sessionID)}`}>
+          <div>{start.fromNow(true)}</div>
         </Link>
       </Tooltip2>
     </div>
@@ -96,13 +97,17 @@ const AgeLabel = (props: { start: Moment; thingName: string }) => {
 export function makeSessionsColumns(
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
+  onSessionClick?: () => void,
+  onTerminateSessionClick?: () => void,
+  onTerminateStatementClick?: () => void,
 ): ColumnDescriptor<SessionInfo>[] {
   return [
     {
       name: "1",
       title: SessionTableTitle.sessionAge,
       className: cx("cl-table__col-session-age"),
-      cell: session => SessionLink({ session: session.session }),
+      cell: session =>
+        SessionLink({ session: session.session, onClick: onSessionClick }),
       sort: session => TimestampToMoment(session.session.start).valueOf(),
     },
     {
@@ -194,6 +199,7 @@ export function makeSessionsColumns(
         ) => {
           switch (value) {
             case "terminateSession":
+              onTerminateSessionClick && onTerminateSessionClick();
               terminateSessionRef?.current?.showModalFor({
                 session_id: session.id,
                 node_id: session.node_id.toString(),
@@ -201,6 +207,7 @@ export function makeSessionsColumns(
               break;
             case "terminateStatement":
               if (session.active_queries?.length > 0) {
+                onTerminateStatementClick && onTerminateStatementClick();
                 terminateQueryRef?.current?.showModalFor({
                   query_id: session.active_queries[0].id,
                   node_id: session.node_id.toString(),
