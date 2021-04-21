@@ -1333,7 +1333,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 					ForceProductionBatchSizes:       serverArgs.forceProductionBatchSizes,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DeterministicExplain: true,
+					DeterministicExplain:  true,
+					AllowNewSchemaChanger: true,
 				},
 			},
 			ClusterName:   "testclustername",

@@ -35,6 +35,7 @@ go_test(
         "kv_test.go",
         "main_test.go",
         "monotonic_insert_test.go",
+        "new_schema_changer_knob_test.go",
         "random_schema_test.go",
         "rename_column_test.go",
         "repair_test.go",
