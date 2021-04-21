@@ -186,6 +186,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		MaxBufferSize:  maxBufferSize,
 		StepBufferSize: stepSize,
 		SkipDuplicates: ib.ContainsInvertedIndex(),
+		BatchTimestamp: ib.spec.ReadAsOf,
 	}
 	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
 	if err != nil {
