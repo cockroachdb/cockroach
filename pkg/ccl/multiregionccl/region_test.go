@@ -10,6 +10,7 @@ package multiregionccl_test
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -467,50 +468,220 @@ CREATE TABLE db.rbr(k INT PRIMARY KEY, v INT NOT NULL) LOCALITY REGIONAL BY ROW;
 				close(rbrOpFinished)
 				require.NoError(t, err)
 
+				<-typeChangeFinished
+
 				testutils.SucceedsSoon(t, func() error {
-					rows, err := sqlDB.Query("SELECT index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE db.rbr] ORDER BY partition_name")
+					return multiregionccltestutils.TestingEnsureCorrectPartitioning(
+						sqlDB, regionAlterCmd.expectedPartitions, tc.expectedIndexes, "db.rbr", /* tableFQN */
+					)
+				})
+			})
+		}
+	}
+}
+
+// TestAlterRegionalByRowEnclosingRegionAddDrop tests altering a
+// (which may or may not succeed) with a concurrent operation on a regional by
+// row table. The sketch of the test is as follows:
+// - Client 1 performs an ALTER TABLE ... SET LOCALITY REGIONAL BY ROW TABLE.
+// Let the user txn commit.
+// - Block in the (table) schema changer.
+// - Client 2 performs an ALTER ADD / DROP REGION. Let the operation complete
+// (succeed or fail, depending on the particular setup).
+// - Resume the ALTER operation in the schema changer.
+// Currently, this ALTER operation is bound to fail because of
+// https://github.com/cockroachdb/cockroach/issues/64011. This test ensures that
+// the rollback completes successfully. Once the issue is addressed, this test
+// should be updated to assert the correct partitioning values (in all cases).
+func TestAlterRegionalByRowEnclosingRegionAddDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	// If the schema change succeeds, the alter may fail. The reason for the alter
+	// failing is dependent on the particular region change operation being
+	// performed. That is why we have the `expectedErrorRe` field on this struct.
+	// See https://github.com/cockroachdb/cockroach/issues/64011 for more details.
+	regionAlterCmds := []struct {
+		name               string
+		cmd                string
+		shouldSucceed      bool
+		expectedPartitions []string
+		expectedErrorRE    string
+	}{
+		{
+			name:               "drop-region-fail",
+			cmd:                `ALTER DATABASE db DROP REGION "us-east3"`,
+			shouldSucceed:      false,
+			expectedPartitions: []string{"us-east1", "us-east2", "us-east3"},
+		},
+		{
+			name:               "drop-region-succeed",
+			cmd:                `ALTER DATABASE db DROP REGION "us-east3"`,
+			shouldSucceed:      true,
+			expectedPartitions: []string{"us-east1", "us-east2"},
+			expectedErrorRE:    "in enum \"public.crdb_internal_region\"",
+		},
+		{
+			name:               "add-region-fail",
+			cmd:                `ALTER DATABASE db ADD REGION "us-east4"`,
+			shouldSucceed:      false,
+			expectedPartitions: []string{"us-east1", "us-east2", "us-east3"},
+		},
+		{
+			name:               "add-region-succeed",
+			cmd:                `ALTER DATABASE db ADD REGION "us-east4"`,
+			shouldSucceed:      true,
+			expectedPartitions: []string{"us-east1", "us-east2", "us-east3", "us-east4"},
+			expectedErrorRE:    "missing partition us-east4 on PRIMARY INDEX of table t",
+		},
+	}
+
+	testCases := []struct {
+		name  string
+		setup string
+	}{
+		{
+			name:  "alter-from-global",
+			setup: `CREATE TABLE db.t () LOCALITY GLOBAL`,
+		},
+		{
+			name:  "alter-from-explicit-regional",
+			setup: `CREATE TABLE db.t () LOCALITY REGIONAL IN "us-east2"`,
+		},
+		{
+			name:  "alter-from-regional",
+			setup: `CREATE TABLE db.t () LOCALITY REGIONAL IN PRIMARY REGION`,
+		},
+		// TODO(arul): Add a test for RBR -> RBR transition here. That test is more
+		// complex because unlike the other scenarios, the region change job is
+		// bound to fail in this test setup. This is because region finalization
+		// tries to re-partition tables but is unable to create the partitioning.
+		// Not sure what's going on there completely.
+	}
+
+	for _, tc := range testCases {
+		for _, regionAlterCmd := range regionAlterCmds {
+			t.Run(tc.name+"-"+regionAlterCmd.name, func(t *testing.T) {
+				var mu syncutil.Mutex
+				alterStarted := make(chan struct{})
+				alterFinished := make(chan struct{})
+				regionAlterFinished := make(chan struct{})
+
+				knobs := base.TestingKnobs{
+					SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+						RunBeforeEnumMemberPromotion: func() error {
+							if regionAlterCmd.shouldSucceed {
+								return nil
+							}
+							return errors.New("boom")
+						},
+					},
+					SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+						RunBeforePublishWriteAndDelete: func() {
+							mu.Lock()
+							defer mu.Unlock()
+							if alterStarted != nil {
+								close(alterStarted)
+								alterStarted = nil
+							}
+							<-regionAlterFinished
+						},
+					},
+				}
+
+				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+					t, 4 /* numServers */, knobs, nil, /* baseDir */
+				)
+				defer cleanup()
+
+				_, err := sqlDB.Exec(`
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+`)
+				require.NoError(t, err)
+
+				_, err = sqlDB.Exec(tc.setup)
+				require.NoError(t, err)
+
+				go func() {
+					defer func() {
+						close(alterFinished)
+					}()
+					_, err = sqlDB.Exec(`ALTER TABLE db.t SET LOCALITY REGIONAL BY ROW`)
+					if !testutils.IsError(err, regionAlterCmd.expectedErrorRE) {
+						t.Errorf("unexpected error; exected %q, got %v", regionAlterCmd.expectedErrorRE, err)
+					}
+				}()
+
+				<-alterStarted
+
+				_, err = sqlDB.Exec(regionAlterCmd.cmd)
+				close(regionAlterFinished)
+				if regionAlterCmd.shouldSucceed {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.True(t, testutils.IsError(err, "boom"))
+				}
+				<-alterFinished
+
+				testutils.SucceedsSoon(t, func() error {
+					rows := sqlDB.QueryRow("SELECT status, error FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'")
+					var jobStatus, jobErr string
+					if err := rows.Scan(&jobStatus, &jobErr); err != nil {
+						return err
+					}
+
+					if regionAlterCmd.expectedErrorRE != "" {
+						matched, err := regexp.MatchString("failed", jobStatus)
+						if err != nil {
+							return err
+						}
+						if !matched {
+							return errors.Newf("expected job to fail, but got status %q", jobStatus)
+						}
+
+						matched, err = regexp.MatchString(regionAlterCmd.expectedErrorRE, jobErr)
+						if err != nil {
+							return err
+						}
+						if !matched {
+							return errors.Newf(
+								"expected jobErr %q but got %q",
+								regionAlterCmd.expectedErrorRE,
+								jobErr,
+							)
+						}
+
+						// Ensure that a manual cleanup isn't required.
+						matched, err = regexp.MatchString("manual cleanup", jobErr)
+						if err != nil {
+							return err
+						}
+						if matched {
+							return errors.Newf("should not require manual cleanup, but got %q", jobErr)
+						}
+						return nil
+					}
+
+					matched, err := regexp.MatchString("succeeded", jobStatus)
 					if err != nil {
 						return err
 					}
-					defer rows.Close()
-
-					indexPartitions := make(map[string][]string)
-					for rows.Next() {
-						var indexName string
-						var partitionName string
-						if err := rows.Scan(&indexName, &partitionName); err != nil {
-							return err
-						}
-
-						indexPartitions[indexName] = append(indexPartitions[indexName], partitionName)
+					if !matched {
+						return errors.Newf("expected job to succeed, but found %q", jobStatus)
 					}
-
-					for _, expectedIndex := range tc.expectedIndexes {
-						partitions, found := indexPartitions[expectedIndex]
-						if !found {
-							return errors.AssertionFailedf("did not find index %s", expectedIndex)
-						}
-
-						if len(partitions) != len(regionAlterCmd.expectedPartitions) {
-							return errors.AssertionFailedf(
-								"unexpected number of partitions; expected %d, found %d",
-								len(partitions),
-								len(regionAlterCmd.expectedPartitions),
-							)
-						}
-						for i, expectedPartition := range regionAlterCmd.expectedPartitions {
-							if expectedPartition != partitions[i] {
-								return errors.AssertionFailedf(
-									"unexpected partitions; expected %v, found %v",
-									regionAlterCmd.expectedPartitions,
-									partitions,
-								)
-							}
-						}
-					}
-					return nil
+					return multiregionccltestutils.TestingEnsureCorrectPartitioning(
+						sqlDB,
+						regionAlterCmd.expectedPartitions,
+						[]string{"t@primary"}, /* expectedIndexes */
+						"db.t",                /* tableFQN */
+					)
 				})
-				<-typeChangeFinished
 			})
 		}
 	}
