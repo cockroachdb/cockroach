@@ -13,12 +13,14 @@ package kvserver
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -136,4 +138,72 @@ func (r *mockReceiver) GetClosedTimestamp(
 	ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
 ) (hlc.Timestamp, ctpb.LAI) {
 	return r.closed, r.lai
+}
+
+func (r *mockReceiver) HTML() string {
+	return ""
+}
+
+// Test that r.ClosedTimestampV2() mixes its sources of information correctly.
+func TestReplicaClosedTimestampV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+
+	for _, test := range []struct {
+		name                string
+		applied             ctpb.LAI
+		raftClosed          hlc.Timestamp
+		sidetransportClosed hlc.Timestamp
+		sidetransportLAI    ctpb.LAI
+		expClosed           hlc.Timestamp
+	}{
+		{
+			name:                "raft closed ahead",
+			applied:             10,
+			raftClosed:          ts2,
+			sidetransportClosed: ts1,
+			sidetransportLAI:    5,
+			expClosed:           ts2,
+		},
+		{
+			name:                "sidetrans closed ahead",
+			applied:             10,
+			raftClosed:          ts1,
+			sidetransportClosed: ts2,
+			sidetransportLAI:    5,
+			expClosed:           ts2,
+		},
+		{
+			name:                "sidetrans ahead but replication behind",
+			applied:             10,
+			raftClosed:          ts1,
+			sidetransportClosed: ts2,
+			sidetransportLAI:    11,
+			expClosed:           ts1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			receiver := &mockReceiver{
+				closed: test.sidetransportClosed,
+				lai:    test.sidetransportLAI,
+			}
+			var tc testContext
+			tc.manualClock = hlc.NewManualClock(123) // required by StartWithStoreConfig
+			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+			cfg.TestingKnobs.DontCloseTimestamps = true
+			cfg.ClosedTimestampReceiver = receiver
+			tc.StartWithStoreConfig(t, stopper, cfg)
+			tc.repl.mu.Lock()
+			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
+			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
+			tc.repl.mu.Unlock()
+			require.Equal(t, test.expClosed, tc.repl.ClosedTimestampV2(ctx))
+		})
+	}
 }
