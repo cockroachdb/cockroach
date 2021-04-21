@@ -15,12 +15,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
@@ -38,16 +36,22 @@ type mockScatterer struct {
 	numNodes int
 }
 
+var _ splitAndScatterer = &mockScatterer{}
+
 // This mock implementation of the split and scatterer simulates a scattering of
 // ranges.
-func (s *mockScatterer) splitAndScatterKey(
-	_ context.Context, _ keys.SQLCodec, _ *kv.DB, _ *storageccl.KeyRewriter, _ roachpb.Key, _ bool,
+func (s *mockScatterer) scatter(
+	_ context.Context, _ keys.SQLCodec, _ roachpb.Key,
 ) (roachpb.NodeID, error) {
 	s.Lock()
 	defer s.Unlock()
 	targetNodeID := roachpb.NodeID(s.curNode + 1)
 	s.curNode = (s.curNode + 1) % s.numNodes
 	return targetNodeID, nil
+}
+
+func (s *mockScatterer) split(_ context.Context, _ keys.SQLCodec, _ roachpb.Key) error {
+	return nil
 }
 
 // TestSplitAndScatterProcessor does not test the underlying split and scatter
@@ -62,6 +66,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	testCases := []struct {
+		name     string
 		procSpec execinfrapb.SplitAndScatterSpec
 		// The number of output streams.
 		numStreams int
@@ -73,40 +78,9 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 		// expectedDistribution is a mapping from stream to the expected number of
 		// rows we expect to receive on this stream.
 		expectedDistribution map[int]int
-		// If there is more than one chunk in the test case, we may not be able to
-		// deterministically determine where each row ends up since chunks are
-		// scattered in parallel with the entries, but we can expect a range of
-		// distributions. For an example, see the second test case below.
-		allowedDelta int
 	}{
 		{
-			procSpec: execinfrapb.SplitAndScatterSpec{
-				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{
-					{
-						Entries: []execinfrapb.RestoreSpanEntry{
-							{Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
-							{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
-							{Span: roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}},
-							{Span: roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}},
-							{Span: roachpb.Span{Key: roachpb.Key("i"), EndKey: roachpb.Key("j")}},
-							{Span: roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("l")}},
-							{Span: roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}},
-						},
-					},
-				},
-			},
-			numStreams: 4,
-			numNodes:   4,
-			// Expect a round-robin distribution, but the first scatter request will
-			// go to scattering the chunk.
-			expectedDistribution: map[int]int{
-				0: 1, // Chunk 1 (not counted), Entry 4
-				1: 2, // Entry 1, Entry 5
-				2: 2, // Entry 2, Entry 6
-				3: 2, // Entry 3, Entry 7
-			},
-		},
-		{
+			name: "chunks-roundrobin",
 			procSpec: execinfrapb.SplitAndScatterSpec{
 				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{
 					{
@@ -132,31 +106,54 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			numStreams: 4,
 			numNodes:   4,
 			expectedDistribution: map[int]int{
-				0: 2,
-				1: 2,
-				2: 2,
-				3: 2,
+				0: 7, // all entries from chunk 1
+				1: 3, // all entries from chunk 2
+				2: 0,
+				3: 0,
 			},
-			// Allow each stream to have received 1-3 rows.
-			// We have 2 chunks and 10 entries across 4 streams, we expect every
-			// stream to get between 1 and 3 entries. We have 12 scatters, when
-			// distributed in a round robin evenly produces the distribution (3,3,3,3)
-			// and the chunk scatters are not counted, so we'll see 2 streams only
-			// receive 2 rows or 1 stream only receive 1 row, rather than all 3.
-			allowedDelta: 1,
 		},
 		{
+			name: "more-chunks-than-processors-with-redirect",
 			procSpec: execinfrapb.SplitAndScatterSpec{
 				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{
 					{
 						Entries: []execinfrapb.RestoreSpanEntry{
 							{Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
+							{Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
 							{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
+							{Span: roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("e")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
 							{Span: roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
+							{Span: roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("g")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
 							{Span: roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}},
-							{Span: roachpb.Span{Key: roachpb.Key("i"), EndKey: roachpb.Key("j")}},
-							{Span: roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("l")}},
-							{Span: roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}},
+						},
+					},
+					{
+						Entries: []execinfrapb.RestoreSpanEntry{
+							{Span: roachpb.Span{Key: roachpb.Key("h"), EndKey: roachpb.Key("i")}},
 						},
 					},
 				},
@@ -170,39 +167,11 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			// to plan a specific processor on a node (perhaps due to incompatible
 			// distsql versions).
 			expectedDistribution: map[int]int{
-				0: 2, // Chunk (doesn't emit a row), Entry 4 (redirected here), Entry 5
-				1: 2, // Entry 1, Entry 6
-				2: 2, // Entry 2, Entry 7
-				3: 1, // Entry 3
+				0: 3, // Entry 1, Entry 5 (redirected here), Entry 6
+				1: 2, // Entry 2, Entry 7
+				2: 2, // Entry 3, Entry 8
+				3: 1, // Entry 4
 				// 4: 0 // Entry 4 gets redirected to stream 0 since stream 4 does not exist.
-			},
-		},
-		{
-			procSpec: execinfrapb.SplitAndScatterSpec{
-				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{
-					{
-						Entries: []execinfrapb.RestoreSpanEntry{
-							{Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
-							{Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}},
-							{Span: roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}},
-							{Span: roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}},
-							{Span: roachpb.Span{Key: roachpb.Key("i"), EndKey: roachpb.Key("j")}},
-							{Span: roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("l")}},
-							{Span: roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}},
-						},
-					},
-				},
-			},
-			numStreams: 4,
-			numNodes:   3,
-			// Expect a round-robin distribution, but the first scatter request will
-			// go to scattering the chunk. We also expect the last stream to get no
-			// entries.
-			expectedDistribution: map[int]int{
-				0: 2, // Chunk (doesn't emit a row), Entry 3, Entry 6
-				1: 3, // Entry 1, Entry 4, Entry 7
-				2: 2, // Entry 2, Entry 5
-				3: 0, // No scatterings to this stream, since we only have 3 nodes.
 			},
 		},
 	}
@@ -210,7 +179,11 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 	ctx := context.Background()
 
 	for _, c := range testCases {
-		t.Run(fmt.Sprintf("%d-streams/%d-chunks", c.numStreams, len(c.procSpec.Chunks)), func(t *testing.T) {
+		testName := c.name
+		if len(testName) == 0 {
+			testName = fmt.Sprintf("%d-streams/%d-chunks", c.numStreams, len(c.procSpec.Chunks))
+		}
+		t.Run(testName, func(t *testing.T) {
 			defaultStream := int32(0)
 			rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
 				Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
@@ -305,7 +278,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 					streamDistribution[streamID]++
 				}
 			}
-			require.InDeltaMapValues(t, c.expectedDistribution, streamDistribution, float64(c.allowedDelta))
+			require.Equal(t, c.expectedDistribution, streamDistribution)
 
 			// Check that the number of entries that we receive is the same as the
 			// number we specified.
