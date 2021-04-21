@@ -49,6 +49,9 @@ const sessionDetailsPropsBase: SessionDetailsProps = {
   cancelQuery: (req: CancelQueryRequestMessage) => {},
   refreshNodes: () => {},
   refreshNodesLiveness: () => {},
+  uiConfig: {
+    showGatewayNodeLink: true,
+  },
 };
 
 export const sessionDetailsIdlePropsFixture: SessionDetailsProps = {

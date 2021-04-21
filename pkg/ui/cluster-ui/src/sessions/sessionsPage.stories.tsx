@@ -11,7 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import { withRouterProvider } from "src/storybook/decorators";
+import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { SessionsPage } from "./sessionsPage";
 import {
   sessionsPagePropsEmptyFixture,
@@ -20,6 +20,7 @@ import {
 
 storiesOf("Sessions Page", module)
   .addDecorator(withRouterProvider)
+  .addDecorator(withBackground)
   .add("Overview Page", () => <SessionsPage {...sessionsPagePropsFixture} />)
   .add("Empty Overview Page", () => (
     <SessionsPage {...sessionsPagePropsEmptyFixture} />
