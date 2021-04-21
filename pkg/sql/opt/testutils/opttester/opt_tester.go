@@ -291,6 +291,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Builds a query that has placeholders (with normalization enabled), then
 //    assigns placeholders to the given query arguments and fully optimizes it.
 //
+//  - placeholder-fast-path [flags]
+//
+//    Builds an expression tree from a SQL query which contains placeholders and
+//    attempts to use the placeholder fast path to obtain a fully optimized
+//    expression with placeholders.
+//
 //  - build-cascades [flags]
 //
 //    Builds a query and then recursively builds cascading queries. Outputs all
@@ -535,6 +541,16 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
+		return ot.FormatExpr(e)
+
+	case "placeholder-fast-path":
+		e, ok, err := ot.PlaceholderFastPath()
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		if !ok {
+			return "no fast path"
+		}
 		return ot.FormatExpr(e)
 
 	case "build-cascades":
@@ -985,9 +1001,6 @@ func (ot *OptTester) OptNorm() (opt.Expr, error) {
 		}
 		return true
 	})
-	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
-		ot.appliedRules.Add(int(ruleName))
-	})
 	if !ot.Flags.NoStableFolds {
 		o.Factory().FoldingControl().AllowStableFolds()
 	}
@@ -1001,13 +1014,6 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
-	})
-	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
-		// Exploration rules are marked as "applied" if they generate one or
-		// more new expressions.
-		if target != nil {
-			ot.appliedRules.Add(int(ruleName))
-		}
 	})
 	o.Factory().FoldingControl().AllowStableFolds()
 	return ot.optimizeExpr(o)
@@ -1058,6 +1064,9 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 	}
 	ot.evalCtx.Placeholders = &ot.semaCtx.Placeholders
 
+	// We want expect/expect-not to refer only to rules that run during
+	// AssignPlaceholders.
+	ot.appliedRules = RuleSet{}
 	// Now assign placeholders.
 	o = ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
@@ -1069,15 +1078,27 @@ func (ot *OptTester) AssignPlaceholders(queryArgs []string, explore bool) (opt.E
 		}
 		return true
 	})
-	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
-		ot.appliedRules.Add(int(ruleName))
-	})
 
 	o.Factory().FoldingControl().AllowStableFolds()
 	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
 		return nil, err
 	}
 	return o.Optimize()
+}
+
+// PlaceholderFastPath tests TryPlaceholderFastPath; it should be used on
+// queries with placeholders.
+func (ot *OptTester) PlaceholderFastPath() (_ opt.Expr, ok bool, _ error) {
+	o := ot.makeOptimizer()
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return !ot.Flags.DisableRules.Contains(int(ruleName))
+	})
+
+	err := ot.buildExpr(o.Factory())
+	if err != nil {
+		return nil, false, err
+	}
+	return o.TryPlaceholderFastPath()
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
@@ -1742,9 +1763,18 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	return b.Build()
 }
 
+// makeOptimizer initializes a new optimizer and sets up an applied rule
+// notifier that updates ot.appliedRules.
 func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	var o xform.Optimizer
 	o.Init(&ot.evalCtx, ot.catalog)
+	o.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
+		// Exploration rules are marked as "applied" if they generate one or
+		// more new expressions.
+		if target != nil {
+			ot.appliedRules.Add(int(ruleName))
+		}
+	})
 	return &o
 }
 
