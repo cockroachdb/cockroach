@@ -144,6 +144,8 @@ func (s *benchSink) EmitResolvedTimestamp(ctx context.Context, e Encoder, ts hlc
 }
 func (s *benchSink) Flush(_ context.Context) error { return nil }
 func (s *benchSink) Close() error                  { return nil }
+func (s *benchSink) Dial() error                   { return nil }
+
 func (s *benchSink) emit(bytes int64) error {
 	s.Lock()
 	defer s.Unlock()

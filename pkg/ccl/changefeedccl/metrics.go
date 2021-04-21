@@ -33,6 +33,7 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 	return m
 }
 
+// EmitRow implements Sink interface.
 func (s *metricsSink) EmitRow(
 	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
@@ -46,6 +47,7 @@ func (s *metricsSink) EmitRow(
 	return err
 }
 
+// EmitResolvedTimestamp implements Sink interface.
 func (s *metricsSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
@@ -61,6 +63,7 @@ func (s *metricsSink) EmitResolvedTimestamp(
 	return err
 }
 
+// Flush implements Sink interface.
 func (s *metricsSink) Flush(ctx context.Context) error {
 	start := timeutil.Now()
 	err := s.wrapped.Flush(ctx)
@@ -71,8 +74,14 @@ func (s *metricsSink) Flush(ctx context.Context) error {
 	return err
 }
 
+// Close implements Sink interface.
 func (s *metricsSink) Close() error {
 	return s.wrapped.Close()
+}
+
+// Dial implements Sink interface.
+func (s *metricsSink) Dial() error {
+	return s.wrapped.Dial()
 }
 
 var (
