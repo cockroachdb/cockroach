@@ -241,6 +241,7 @@ func (i *Inbox) Init(ctx context.Context) {
 		// by the connection issues. It is expected that such an error can
 		// occur. The Inbox must still be closed.
 		i.close()
+		log.VEventf(ctx, 1, "Inbox encountered an error in Init: %v", err)
 		colexecerror.ExpectedError(err)
 	}
 }
@@ -257,10 +258,15 @@ func (i *Inbox) Next() coldata.Batch {
 		// Catch any panics that occur and close the Inbox in order to not leak
 		// the goroutine listening for context cancellation. The Inbox must
 		// still be closed during normal termination.
-		if err := recover(); err != nil {
+		if panicObj := recover(); panicObj != nil {
 			// Only close the Inbox here in case of an ungraceful termination.
 			i.close()
-			colexecerror.InternalError(logcrash.PanicAsError(0, err))
+			err := logcrash.PanicAsError(0, panicObj)
+			log.Warningf(i.Ctx, "Inbox encountered an error in Next: %v", err)
+			// Note that here we use InternalError to propagate the error
+			// consciously - the code below is careful to mark all expected
+			// errors as "expected", and we want to keep that distinction.
+			colexecerror.InternalError(err)
 		}
 	}()
 
@@ -277,12 +283,10 @@ func (i *Inbox) Next() coldata.Batch {
 				i.close()
 				return coldata.ZeroBatch
 			}
-			// Note that here err can be stream's context cancellation. If it
-			// was caused by the internal cancellation of the parallel
-			// unordered synchronizer, it'll get swallowed by the synchronizer
-			// goroutine. Regardless of the cause we want to propagate such
-			// error in all cases so that the caller could decide on how to
-			// handle it.
+			// Note that here err can be stream's context cancellation.
+			// Regardless of the cause we want to propagate such an error as
+			// expected on in all cases so that the caller could decide on how
+			// to handle it.
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}
@@ -293,9 +297,9 @@ func (i *Inbox) Next() coldata.Batch {
 					continue
 				}
 				if meta.Err != nil {
-					// If an error was encountered, it needs to be propagated immediately.
-					// All other metadata will simply be buffered and returned in
-					// DrainMeta.
+					// If an error was encountered, it needs to be propagated
+					// immediately. All other metadata will simply be buffered
+					// and returned in DrainMeta.
 					colexecerror.ExpectedError(meta.Err)
 				}
 				i.bufferedMeta = append(i.bufferedMeta, meta)
