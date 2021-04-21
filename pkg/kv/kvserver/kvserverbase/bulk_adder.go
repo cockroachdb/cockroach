@@ -58,6 +58,11 @@ type BulkAdderOptions struct {
 	// DisallowShadowing controls whether shadowing of existing keys is permitted
 	// when the SSTables produced by this adder are ingested.
 	DisallowShadowing bool
+
+	// BatchTimestamp is the timestamp to use on AddSSTable requests (which can be
+	// different from the timestamp used to construct the adder which is what is
+	// actually applied to each key).
+	BatchTimestamp hlc.Timestamp
 }
 
 // DisableExplicitSplits can be returned by a SplitAndScatterAfter function to

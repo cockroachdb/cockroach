@@ -140,7 +140,7 @@ func benchmarkAddSSTable(b *testing.B, dir string, tables []tableSSTable) {
 		for _, t := range tables {
 			totalBytes += int64(len(t.sstData))
 			require.NoError(b, kvDB.AddSSTable(
-				ctx, t.span.Key, t.span.EndKey, t.sstData, true /* disallowShadowing */, nil /* stats */, false, /*ingestAsWrites */
+				ctx, t.span.Key, t.span.EndKey, t.sstData, true /* disallowShadowing */, nil /* stats */, false /*ingestAsWrites */, hlc.Timestamp{},
 			))
 		}
 		b.StopTimer()
