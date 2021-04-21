@@ -755,6 +755,15 @@ func (sc *SchemaChanger) validateConstraints(
 	return nil
 }
 
+func (sc *SchemaChanger) newCollection() *descs.Collection {
+	return descs.NewCollection(
+		sc.settings,
+		sc.leaseMgr,
+		nil, // leaseManager
+		nil, // virtualSchemas
+	)
+}
+
 // getTableVersion retrieves the descriptor for the table being
 // targeted by the schema changer using the provided txn, and asserts
 // that the retrieved descriptor is at the given version. An error is
@@ -879,7 +888,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				tc := sc.newCollection()
 				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
