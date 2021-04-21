@@ -93,7 +93,7 @@ func declareKeysPushTransaction(
 // Push can proceed: the pushee's transaction record is modified and
 // rewritten, based on the value of args.PushType. If args.PushType
 // is PUSH_ABORT, txn.Status is set to ABORTED. If args.PushType is
-// PUSH_TIMESTAMP, txn.Timestamp is set to just after args.PushTo.
+// PUSH_TIMESTAMP, txn.WriteTimestamp is set to just after args.PushTo.
 //
 // If the pushee is aborted, its timestamp will be forwarded to match
 // its last client activity timestamp (i.e. last heartbeat), if available.

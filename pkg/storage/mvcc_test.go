@@ -2988,7 +2988,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 			tsEarly := txn.WriteTimestamp
 			txn.TxnMeta.WriteTimestamp.Forward(tsEarly.Add(10, 0))
 
-			// Write an intent which has txn.Timestamp > meta.timestamp.
+			// Write an intent which has txn.WriteTimestamp > meta.timestamp.
 			if err := MVCCPut(ctx, engine, nil, testKey1, tsEarly, value1, txn); err != nil {
 				t.Fatal(err)
 			}
