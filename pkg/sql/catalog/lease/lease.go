@@ -1270,7 +1270,7 @@ func makeNameCacheKey(parentID descpb.ID, parentSchemaID descpb.ID, name string)
 // API. The descriptor acquired needs to be released. A transaction
 // can use a descriptor as long as its timestamp is within the
 // validity window for the descriptor:
-// descriptor.ModificationTime <= txn.Timestamp < expirationTime
+// descriptor.ModificationTime <= txn.ReadTimestamp < expirationTime
 //
 // Exported only for testing.
 //
