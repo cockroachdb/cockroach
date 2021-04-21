@@ -421,6 +421,28 @@ func (c *CustomFuncs) tryFoldComputedCol(
 // correctness reasons; although values are unlikely to exist between defined
 // partitions, they may exist and so the constraints of the scan must incorporate
 // these spans.
+//
+// For example, if we have:
+//   PARTITION BY LIST (a, b) (
+//     PARTITION a VALUES IN ((1, 10)),
+//     PARTITION b VALUES IN ((2, 20)),
+//   )
+// The in-between filters are:
+//   (a, b) < (1, 10) OR
+//   ((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
+//   (a, b) > (2, 20)
+//
+// When passed as optional filters to index constrains, these filters generate
+// the desired spans:
+//   [ - /1/10), (/1/10 - /2/20), (2/20 - ].
+//
+// TODO(radu,mgartner): technically these filters are not correct with respect
+// to NULL values - we would want the tuple comparisons to treat NULLs as the
+// smallest value. We compensate for this by adding an (a IS NULL) disjunct if
+// column `a` is nullable; in addition, we know that these filters will only be
+// used for span generation, and the span generation currently doesn't exclude
+// NULLs on any columns other than the first in the tuple. This is fragile and
+// would break if we improve the span generation for tuple inequalities.
 func (c *CustomFuncs) inBetweenFilters(
 	tabID opt.TableID, index cat.Index, partitionValues []tree.Datums,
 ) memo.FiltersExpr {
@@ -434,6 +456,31 @@ func (c *CustomFuncs) inBetweenFilters(
 	sort.Slice(partitionValues, func(i, j int) bool {
 		return partitionValues[i].Compare(c.e.evalCtx, partitionValues[j]) < 0
 	})
+
+	// The beginExpr created below will not include NULL values for the first
+	// column. For example, with an index on (a, b) and partition values of
+	// {'foo', 'bar'}, beginExpr would be (a, b) < ('foo', 'bar') which
+	// evaluates to NULL if a is NULL. The index constraint span generated for
+	// beginExpr expression would be (/NULL - /'foo'/'bar'), which excludes NULL
+	// values for a. Any rows where a is NULL would not be scanned, producing
+	// incorrect query results.
+	//
+	// Therefore, if the first column in the index is nullable, we add an IS
+	// NULL expression so that NULL values are included in the index constraint
+	// span generated later on. In the same example above, the constraint span
+	// above becomes [/NULL - /'foo'/'bar'), which includes NULL values for a.
+	//
+	// This is only required for the first column in the index because the index
+	// constraint spans built for tuple inequalities only exclude NULL values
+	// for the first element in the tuple.
+	firstCol := index.Column(0)
+	if firstCol.IsNullable() {
+		nullExpr := c.e.f.ConstructIs(
+			c.e.f.ConstructVariable(tabID.ColumnID(firstCol.Ordinal())),
+			memo.NullSingleton,
+		)
+		inBetween = append(inBetween, nullExpr)
+	}
 
 	// Add the beginning span.
 	beginExpr := c.columnComparison(tabID, index, partitionValues[0], -1)
