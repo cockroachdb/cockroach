@@ -12,7 +12,11 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AppState } from "src/store";
 import { SessionDetails } from ".";
-import { actions as sessionsActions, selectSession } from "src/store/sessions";
+import {
+  actions as sessionsActions,
+  selectSession,
+  selectSessionDetailsUiConfig,
+} from "src/store/sessions";
 import { actions as terminateQueryActions } from "src/store/terminateQuery";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as nodesLivenessActions } from "src/store/liveness";
@@ -25,6 +29,7 @@ export const SessionDetailsPageConnected = withRouter(
       nodeNames: nodeDisplayNameByIDSelector(state),
       session: selectSession(state, props),
       sessionError: state.adminUI.sessions.lastError,
+      uiConfig: selectSessionDetailsUiConfig(state),
     }),
     {
       refreshSessions: sessionsActions.refresh,
