@@ -66,7 +66,9 @@ func (e *SyntaxError) Error() string {
 	}
 
 	// Print a cursor pointing to the token where the problem occurred.
-	err += strLinePrefix + e.wkt[snipStart:snipEnd] + strLineSuffix
+	snippet := e.wkt[snipStart:snipEnd]
+	snippet = strings.ReplaceAll(snippet, "\t", " ")
+	err += strLinePrefix + snippet + strLineSuffix
 	err += fmt.Sprintf("%s^", strings.Repeat(" ", len(strLinePrefix)+snipPos))
 
 	// Print a hint, if applicable.
