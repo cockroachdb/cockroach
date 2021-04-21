@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -94,7 +95,7 @@ type extendedEvalContext struct {
 	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
 	SchemaChangeJobCache map[descpb.ID]*jobs.Job
 
-	schemaAccessors *schemaInterface
+	schemaAccessors catalog.Accessor
 
 	sqlStatsCollector *sqlStatsCollector
 
@@ -125,12 +126,6 @@ func (evalCtx *extendedEvalContext) QueueJob(
 	}
 	*evalCtx.Jobs = append(*evalCtx.Jobs, jobID)
 	return job, nil
-}
-
-// schemaInterface provides access to the database and table descriptors.
-// See schema_accessors.go.
-type schemaInterface struct {
-	logical catalog.Accessor
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -442,14 +437,14 @@ func internalExtendedEvalCtx(
 		NodesStatusServer: execCfg.NodesStatusServer,
 		Descs:             tables,
 		ExecCfg:           execCfg,
-		schemaAccessors:   newSchemaInterface(tables, execCfg.VirtualSchemas),
+		schemaAccessors:   accessors.NewLogicalAccessor(tables, execCfg.VirtualSchemas),
 		DistSQLPlanner:    execCfg.DistSQLPlanner,
 	}
 }
 
 // LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
 func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
-	return p.extendedEvalCtx.schemaAccessors.logical
+	return p.extendedEvalCtx.schemaAccessors
 }
 
 // SemaCtx provides access to the planner's SemaCtx.
