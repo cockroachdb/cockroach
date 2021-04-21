@@ -1286,7 +1286,8 @@ func (ns *prepStmtNamespace) resetTo(
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) error {
 	ex.extraTxnState.jobs = nil
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	if ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.NewSchemaChanger) {
+	if ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.NewSchemaChanger) &&
+		ex.server.cfg.TestingKnobs.AllowNewSchemaChanger {
 		ex.extraTxnState.schemaChangerState = SchemaChangerState{
 			mode: ex.sessionData.NewSchemaChangerMode,
 		}

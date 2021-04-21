@@ -992,6 +992,10 @@ type ExecutorTestingKnobs struct {
 	// return, possibly nil, a callback that will be called every time
 	// DistSQLReceiver.Push is called.
 	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
+
+	// AllowNewSchemaChanger is used to allow enabling the new schema changer.
+	// It cannot be enabled without this testing knob in 21.1.
+	AllowNewSchemaChanger bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
