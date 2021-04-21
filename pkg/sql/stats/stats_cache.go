@@ -503,7 +503,12 @@ func (sc *TableStatisticsCache) parseStats(
 			// will need to start writing a timestamp on the stats objects and request
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				collection := descs.NewCollection(sc.Settings, sc.LeaseMgr, nil /* hydratedTables */)
+				collection := descs.NewCollection(
+					sc.Settings,
+					sc.LeaseMgr,
+					nil, // hydratedTables
+					nil, // virtualSchemas
+				)
 				defer collection.ReleaseAll(ctx)
 				resolver := descs.NewDistSQLTypeResolver(collection, txn)
 				var err error

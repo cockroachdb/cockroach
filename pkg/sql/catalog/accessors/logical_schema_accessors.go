@@ -75,15 +75,7 @@ func (l *LogicalSchemaAccessor) GetSchema(
 	scName string,
 	flags tree.SchemaLookupFlags,
 ) (bool, catalog.ResolvedSchema, error) {
-	if _, ok := l.vs.GetVirtualSchema(scName); ok {
-		return true, catalog.ResolvedSchema{Kind: catalog.SchemaVirtual, Name: scName}, nil
-	}
-
-	// Fallthrough.
-	if flags.RequireMutable {
-		return l.tc.GetMutableSchemaByName(ctx, txn, dbID, scName, flags)
-	}
-	return l.tc.GetImmutableSchemaByName(ctx, txn, dbID, scName, flags)
+	return l.tc.GetSchemaByName(ctx, txn, dbID, scName, flags)
 }
 
 // GetObjectNamesAndIDs implements the DatabaseLister interface.

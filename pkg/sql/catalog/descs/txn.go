@@ -42,7 +42,12 @@ func Txn(
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
 ) error {
-	descsCol := NewCollection(settings, leaseMgr, nil /* hydratedTables */)
+	descsCol := NewCollection(
+		settings,
+		leaseMgr,
+		nil, // hydratedTables
+		nil, // virtualSchemas
+	)
 	for {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			defer descsCol.ReleaseAll(ctx)
