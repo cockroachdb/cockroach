@@ -106,8 +106,6 @@ func (r *Replica) executeWriteBatch(
 		var minTS2 hlc.Timestamp
 		minTS2, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
 		minTS.Forward(minTS2)
-	} else {
-		tok.SetNoop()
 	}
 	defer tok.DoneIfNotMoved(ctx)
 
