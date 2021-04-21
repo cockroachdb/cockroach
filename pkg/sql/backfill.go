@@ -705,7 +705,7 @@ func (sc *SchemaChanger) validateConstraints(
 				evalCtx.Txn = txn
 				// Use the DistSQLTypeResolver because we need to resolve types by ID.
 				semaCtx := tree.MakeSemaContext()
-				collection := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				collection := sc.newCollection()
 				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
@@ -741,6 +741,15 @@ func (sc *SchemaChanger) validateConstraints(
 	}
 	log.Info(ctx, "finished validating new constraints")
 	return nil
+}
+
+func (sc *SchemaChanger) newCollection() *descs.Collection {
+	return descs.NewCollection(
+		sc.settings,
+		sc.leaseMgr,
+		nil, // leaseManager
+		nil, // virtualSchemas
+	)
 }
 
 // getTableVersion retrieves the descriptor for the table being
@@ -867,7 +876,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+				tc := sc.newCollection()
 				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
@@ -1029,7 +1038,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+		tc := sc.newCollection()
 		// It is okay to release the lease on the descriptor before running the
 		// index backfill flow because any schema change that would invalidate the
 		// index being backfilled, would be queued behind the backfill in the
@@ -1300,7 +1309,7 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := descs.NewCollection(sc.settings, sc.leaseMgr, nil /* hydratedTables */)
+			tc := sc.newCollection()
 			// Use a leased table descriptor for the backfill.
 			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
