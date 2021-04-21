@@ -1536,6 +1536,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
 		}
+		r.store.enqueueRaftUpdateCheck(r.RangeID)
 	}
 }
 
