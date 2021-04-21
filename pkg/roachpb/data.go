@@ -861,6 +861,24 @@ func (v Value) PrettyPrint() string {
 	return buf.String()
 }
 
+// Kind returns the kind of commit trigger as a string.
+func (ct InternalCommitTrigger) Kind() string {
+	switch {
+	case ct.SplitTrigger != nil:
+		return "split"
+	case ct.MergeTrigger != nil:
+		return "merge"
+	case ct.ChangeReplicasTrigger != nil:
+		return "change-replicas"
+	case ct.ModifiedSpanTrigger != nil:
+		return "modified-span"
+	case ct.StickyBitTrigger != nil:
+		return "sticky-bit"
+	default:
+		panic("unknown commit trigger kind")
+	}
+}
+
 // IsFinalized determines whether the transaction status is in a finalized
 // state. A finalized state is terminal, meaning that once a transaction
 // enters one of these states, it will never leave it.
