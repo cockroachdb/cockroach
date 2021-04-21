@@ -58,6 +58,10 @@ interface OwnProps {
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   onPageChanged?: (newPage: number) => void;
+  onSortingChange?: (columnName: string, tableName: string) => void;
+  onSessionClick?: () => void;
+  onTerminateSessionClick?: () => void;
+  onTerminateStatementClick?: () => void;
 }
 
 export interface SessionsPageState {
@@ -123,6 +127,9 @@ export class SessionsPage extends React.Component<
   };
 
   changeSortSetting = (ss: SortSetting) => {
+    const { onSortingChange } = this.props;
+    onSortingChange && onSortingChange("Sessions", ss.columnTitle);
+
     this.setState({
       sortSetting: ss,
     });
@@ -183,6 +190,9 @@ export class SessionsPage extends React.Component<
             columns={makeSessionsColumns(
               this.terminateSessionRef,
               this.terminateQueryRef,
+              this.props.onSessionClick,
+              this.props.onTerminateStatementClick,
+              this.props.onTerminateSessionClick,
             )}
             renderNoResult={
               <EmptyTable
