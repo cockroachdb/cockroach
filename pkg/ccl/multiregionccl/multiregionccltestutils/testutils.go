@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/errors"
 )
 
 // TestingCreateMultiRegionCluster creates a test cluster with numServers number
@@ -59,4 +60,58 @@ func TestingCreateMultiRegionCluster(
 	sqlDB := tc.ServerConn(0)
 
 	return tc, sqlDB, cleanup
+}
+
+// TestingEnsureCorrectPartitioning ensures that the table referenced by the
+// supplied FQN has the expected indexes and that all of those indexes have the
+// expected partitions.
+func TestingEnsureCorrectPartitioning(
+	sqlDB *gosql.DB, expectedPartitions []string, expectedIndexes []string, tableFQN string,
+) error {
+	rows, err := sqlDB.Query(
+		fmt.Sprintf(
+			"SELECT index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE %s] ORDER BY partition_name",
+			tableFQN,
+		),
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	indexPartitions := make(map[string][]string)
+	for rows.Next() {
+		var indexName string
+		var partitionName string
+		if err := rows.Scan(&indexName, &partitionName); err != nil {
+			return err
+		}
+
+		indexPartitions[indexName] = append(indexPartitions[indexName], partitionName)
+	}
+
+	for _, expectedIndex := range expectedIndexes {
+		partitions, found := indexPartitions[expectedIndex]
+		if !found {
+			return errors.AssertionFailedf("did not find index %s", expectedIndex)
+		}
+
+		if len(partitions) != len(expectedPartitions) {
+			return errors.AssertionFailedf(
+				"unexpected number of partitions; expected %d, found %d",
+				len(partitions),
+				len(expectedPartitions),
+			)
+		}
+		for i, expectedPartition := range expectedPartitions {
+			if expectedPartition != partitions[i] {
+				return errors.AssertionFailedf(
+					"unexpected partitions; expected %v, found %v",
+					expectedPartitions,
+					partitions,
+				)
+			}
+		}
+	}
+	return nil
 }

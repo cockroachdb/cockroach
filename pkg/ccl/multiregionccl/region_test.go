@@ -308,40 +308,12 @@ CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"
 				require.NoError(t, err)
 
 				testutils.SucceedsSoon(t, func() error {
-					rows, err := sqlDB.Query("SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE db.t] ORDER BY partition_name")
-					if err != nil {
-						return err
-					}
-					defer rows.Close()
-
-					var partitionNames []string
-					for rows.Next() {
-						var partitionName string
-						if err := rows.Scan(&partitionName); err != nil {
-							return err
-						}
-
-						partitionNames = append(partitionNames, partitionName)
-					}
-
-					expectedPartitions := []string{"us-east1", "us-east2", "us-east3"}
-					if len(partitionNames) != len(expectedPartitions) {
-						return errors.AssertionFailedf(
-							"unexpected number of partitions; expected %d, found %d",
-							len(expectedPartitions),
-							len(partitionNames),
-						)
-					}
-					for i := range expectedPartitions {
-						if expectedPartitions[i] != partitionNames[i] {
-							return errors.AssertionFailedf(
-								"unexpected partitions; expected %v, found %v",
-								expectedPartitions,
-								partitionNames,
-							)
-						}
-					}
-					return nil
+					return multiregionccltestutils.TestingEnsureCorrectPartitioning(
+						sqlDB,
+						[]string{"us-east1", "us-east2", "us-east3"}, /* expectedPartitions */
+						[]string{"t@primary"},                        /* expectedIndexes */
+						"db.t",                                       /* tableFQN */
+					)
 				})
 				<-typeChangeFinished
 			})
