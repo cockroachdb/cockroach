@@ -37,7 +37,7 @@ LIMIT 1
 ----
 SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
 
-statement error duplicate constraint name: "foo"
+statement error pgcode 42P07 duplicate index name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -1804,3 +1804,11 @@ query T noticetrace
 CREATE TABLE IF NOT EXISTS new_table();
 ----
 NOTICE: relation "new_table" already exists, skipping
+
+subtest unique_index_duplicate_name
+
+statement ok
+CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
+
+statement error pgcode 42P07 duplicate index name: \"idx\"
+ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
