@@ -1087,12 +1087,6 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Poll Request Time",
-				Metrics: []string{
-					"changefeed.poll_request_nanos",
-				},
-			},
-			{
 				Title: "Currently Running",
 				Metrics: []string{
 					"changefeed.running",
