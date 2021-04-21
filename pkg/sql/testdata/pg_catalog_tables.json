@@ -7411,5 +7411,16 @@
         "expectedDataType": null
       }
     }
+  },
+  "unimplementedTypes": {
+    "1034": "_aclitem",
+    "194": "pg_node_tree",
+    "2275": "cstring",
+    "2277": "anyarray",
+    "28": "xid",
+    "3220": "pg_lsn",
+    "3361": "pg_ndistinct",
+    "3402": "pg_dependencies",
+    "5017": "pg_mcv_list"
   }
 }
