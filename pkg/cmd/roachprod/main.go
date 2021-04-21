@@ -170,10 +170,6 @@ Available clusters:
 				c.Localities[i] += rack
 			}
 		}
-	case "cassandra":
-		c.Impl = install.Cassandra{}
-	default:
-		return nil, fmt.Errorf("unknown cluster type: %s", clusterType)
 	}
 
 	nodes, err := install.ListNodes(nodeNames, len(c.VMs))
