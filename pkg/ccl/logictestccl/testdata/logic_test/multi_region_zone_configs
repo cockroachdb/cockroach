@@ -1326,3 +1326,22 @@ DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE
 
 statement ok
 DROP TABLE tbl6
+
+# Ensure that when using INHERIT FROM PARENT, blocks still apply.
+subtest inherit_from_parent
+
+statement ok
+CREATE TABLE tbl7 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER TABLE tbl7 CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER INDEX tbl7@tbl7_i_idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER PARTITION "us-east-1" OF INDEX tbl7@tbl7_i_idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
