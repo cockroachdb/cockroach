@@ -303,45 +303,17 @@ CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"
 
 				<-typeChangeStarted
 
-				_, err = sqlDB.Exec(`BEGIN; SET TRANSACTION PRIORITY HIGH; ALTER TABLE db.t SET LOCALITY REGIONAL BY ROW; COMMIT;`)
+				_, err = sqlDB.Exec(`ALTER TABLE db.t SET LOCALITY REGIONAL BY ROW`)
 				rbrOpFinished <- struct{}{}
 				require.NoError(t, err)
 
 				testutils.SucceedsSoon(t, func() error {
-					rows, err := sqlDB.Query("SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE db.t] ORDER BY partition_name")
-					if err != nil {
-						return err
-					}
-					defer rows.Close()
-
-					var partitionNames []string
-					for rows.Next() {
-						var partitionName string
-						if err := rows.Scan(&partitionName); err != nil {
-							return err
-						}
-
-						partitionNames = append(partitionNames, partitionName)
-					}
-
-					expectedPartitions := []string{"us-east1", "us-east2", "us-east3"}
-					if len(partitionNames) != len(expectedPartitions) {
-						return errors.AssertionFailedf(
-							"unexpected number of partitions; expected %d, found %d",
-							len(expectedPartitions),
-							len(partitionNames),
-						)
-					}
-					for i := range expectedPartitions {
-						if expectedPartitions[i] != partitionNames[i] {
-							return errors.AssertionFailedf(
-								"unexpected partitions; expected %v, found %v",
-								expectedPartitions,
-								partitionNames,
-							)
-						}
-					}
-					return nil
+					return multiregionccltestutils.TestingEnsureCorrectPartitioning(
+						sqlDB,
+						"db",                  /* dbName */
+						"t",                   /* tableName */
+						[]string{"t@primary"}, /* expectedIndexes */
+					)
 				})
 				<-typeChangeFinished
 			})
@@ -368,34 +340,29 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 	defer sqltestutils.SetTestJobsAdoptInterval()()
 
 	regionAlterCmds := []struct {
-		name               string
-		cmd                string
-		shouldSucceed      bool
-		expectedPartitions []string
+		name          string
+		cmd           string
+		shouldSucceed bool
 	}{
 		{
-			name:               "drop-region-fail",
-			cmd:                `ALTER DATABASE db DROP REGION "us-east3"`,
-			shouldSucceed:      false,
-			expectedPartitions: []string{"us-east1", "us-east2", "us-east3"},
+			name:          "drop-region-fail",
+			cmd:           `ALTER DATABASE db DROP REGION "us-east3"`,
+			shouldSucceed: false,
 		},
 		{
-			name:               "drop-region-succeed",
-			cmd:                `ALTER DATABASE db DROP REGION "us-east3"`,
-			shouldSucceed:      true,
-			expectedPartitions: []string{"us-east1", "us-east2"},
+			name:          "drop-region-succeed",
+			cmd:           `ALTER DATABASE db DROP REGION "us-east3"`,
+			shouldSucceed: true,
 		},
 		{
-			name:               "add-region",
-			cmd:                `ALTER DATABASE db ADD REGION "us-east4"`,
-			shouldSucceed:      false,
-			expectedPartitions: []string{"us-east1", "us-east2", "us-east3"},
+			name:          "add-region",
+			cmd:           `ALTER DATABASE db ADD REGION "us-east4"`,
+			shouldSucceed: false,
 		},
 		{
-			name:               "add-region",
-			cmd:                `ALTER DATABASE db ADD REGION "us-east4"`,
-			shouldSucceed:      true,
-			expectedPartitions: []string{"us-east1", "us-east2", "us-east3", "us-east4"},
+			name:          "add-region",
+			cmd:           `ALTER DATABASE db ADD REGION "us-east4"`,
+			shouldSucceed: true,
 		},
 	}
 
@@ -496,47 +463,9 @@ CREATE TABLE db.rbr(k INT PRIMARY KEY, v INT NOT NULL) LOCALITY REGIONAL BY ROW;
 				require.NoError(t, err)
 
 				testutils.SucceedsSoon(t, func() error {
-					rows, err := sqlDB.Query("SELECT index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE db.rbr] ORDER BY partition_name")
-					if err != nil {
-						return err
-					}
-					defer rows.Close()
-
-					indexPartitions := make(map[string][]string)
-					for rows.Next() {
-						var indexName string
-						var partitionName string
-						if err := rows.Scan(&indexName, &partitionName); err != nil {
-							return err
-						}
-
-						indexPartitions[indexName] = append(indexPartitions[indexName], partitionName)
-					}
-
-					for _, expectedIndex := range tc.expectedIndexes {
-						partitions, found := indexPartitions[expectedIndex]
-						if !found {
-							return errors.AssertionFailedf("did not find index %s", expectedIndex)
-						}
-
-						if len(partitions) != len(regionAlterCmd.expectedPartitions) {
-							return errors.AssertionFailedf(
-								"unexpected number of partitions; expected %d, found %d",
-								len(partitions),
-								len(regionAlterCmd.expectedPartitions),
-							)
-						}
-						for i, expectedPartition := range regionAlterCmd.expectedPartitions {
-							if expectedPartition != partitions[i] {
-								return errors.AssertionFailedf(
-									"unexpected partitions; expected %v, found %v",
-									regionAlterCmd.expectedPartitions,
-									partitions,
-								)
-							}
-						}
-					}
-					return nil
+					return multiregionccltestutils.TestingEnsureCorrectPartitioning(
+						sqlDB, "db" /* dbName */, "rbr" /* tableName */, tc.expectedIndexes,
+					)
 				})
 				<-typeChangeFinished
 			})
