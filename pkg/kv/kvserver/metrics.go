@@ -294,6 +294,15 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Server-side transaction metrics.
+	metaCommitWaitBeforeCommitTriggerCount = metric.Metadata{
+		Name: "txn.commit_waits.before_commit_trigger",
+		Help: "Number of KV transactions that had to commit-wait on the server " +
+			"before committing because they had a commit trigger",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// RocksDB metrics.
 	metaRdbBlockCacheHits = metric.Metadata{
 		Name:        "rocksdb.block.cache.hits",
@@ -1084,6 +1093,9 @@ type StoreMetrics struct {
 	// Follower read metrics.
 	FollowerReadsCount *metric.Counter
 
+	// Server-side transaction metrics.
+	CommitWaitsBeforeCommitTrigger *metric.Counter
+
 	// RocksDB metrics.
 	RdbBlockCacheHits           *metric.Gauge
 	RdbBlockCacheMisses         *metric.Gauge
@@ -1454,6 +1466,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
+
+		// Server-side transaction metrics.
+		CommitWaitsBeforeCommitTrigger: metric.NewCounter(metaCommitWaitBeforeCommitTriggerCount),
 
 		// RocksDB metrics.
 		RdbBlockCacheHits:           metric.NewGauge(metaRdbBlockCacheHits),

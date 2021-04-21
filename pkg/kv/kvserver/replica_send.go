@@ -70,6 +70,9 @@ func (r *Replica) sendWithRangeID(
 	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	if err := r.maybeCommitWaitBeforeCommitTrigger(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// NB: must be performed before collecting request spans.
 	ba, err := maybeStripInFlightWrites(ba)
@@ -122,6 +125,94 @@ func (r *Replica) sendWithRangeID(
 
 	r.recordImpactOnRateLimiter(ctx, br)
 	return br, pErr
+}
+
+// maybeCommitWaitBeforeCommitTrigger detects batches that are attempting to
+// commit a transaction with a commit trigger and that will need to perform a
+// commit-wait at some point. For reasons described below, transactions with
+// commit triggers need to perform their commit wait sleep before their trigger
+// runs, so this function eagerly performs that sleep before the batch moves on
+// to evaluation. The function guarantees that if the transaction ends up
+// committing with its current provisional commit timestamp, it will not need to
+// commit wait any further.
+func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) error {
+	args, hasET := ba.GetArg(roachpb.EndTxn)
+	if !hasET {
+		return nil
+	}
+	et := args.(*roachpb.EndTxnRequest)
+	if !et.Commit || et.InternalCommitTrigger == nil {
+		// Not committing with a commit trigger.
+		return nil
+	}
+	txn := ba.Txn
+	if txn.ReadTimestamp != txn.WriteTimestamp && !ba.CanForwardReadTimestamp {
+		// The commit can not succeed.
+		return nil
+	}
+
+	// A transaction is committing with a commit trigger. This means that it has
+	// side-effects beyond those of the intents that it has written.
+	//
+	// If the transaction has a commit timestamp in the future of present time, it
+	// will need to commit-wait before acknowledging the client. Typically, this
+	// is performed in the TxnCoordSender after the transaction has committed and
+	// resolved its intents (see TxnCoordSender.maybeCommitWait). It is safe to
+	// wait after a future-time transaction has committed and resolved intents
+	// without compromising linearizability because the uncertainty interval of
+	// concurrent and later readers ensures atomic visibility of the effects of
+	// the transaction. In other words, all of the transaction's intents will
+	// become visible and will remain visible at once, which is sometimes called
+	// "monotonic reads". This is true even if the resolved intents are at a high
+	// enough timestamp such that they are not visible to concurrent readers
+	// immediately after they are resolved, but only become visible sometime
+	// during the writer's commit-wait sleep. This property is central to the
+	// correctness of non-blocking transactions. See:
+	//   https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20200811_non_blocking_txns.md
+	//
+	// However, if a transaction has a commit trigger, the side-effects of the
+	// trigger will go into effect immediately after the EndTxn's Raft command is
+	// applied to the Raft state machine. This poses a problem, because we do not
+	// want part of a transaction's effects (e.g. its commit trigger) to become
+	// visible to onlookers before the rest of its effects do (e.g. its intent
+	// writes). To avoid this problem, we perform the commit-wait stage of a
+	// transaction with a commit trigger early, before its commit triggers fire.
+	// This results in the transaction waiting longer to commit and resolve its
+	// intents, but is otherwise safe and effective.
+	//
+	// NOTE: it would be easier to perform this wait during the evaluation of the
+	// corresponding EndTxn request instead of detecting the case here. However,
+	// we intentionally do not commit wait during evaluation because we do not
+	// want to sleep while holding latches and blocking other requests. So
+	// instead, we commit wait here and then assert that transactions with commit
+	// triggers do not need to commit wait further by the time they reach command
+	// evaluation.
+	//
+	// NOTE: just like in TxnCoordSender.maybeCommitWait, we only need to perform
+	// a commit-wait sleep if the commit timestamp is "synthetic". Otherwise, it
+	// is known not to be in advance of present time.
+	if !txn.WriteTimestamp.Synthetic {
+		return nil
+	}
+	if !r.Clock().Now().Less(txn.WriteTimestamp) {
+		return nil
+	}
+
+	waitUntil := txn.WriteTimestamp
+	before := r.Clock().PhysicalTime()
+	est := waitUntil.GoTime().Sub(before)
+	log.VEventf(ctx, 1, "performing server-side commit-wait sleep for ~%s", est)
+
+	if err := r.Clock().SleepUntil(ctx, waitUntil); err != nil {
+		return err
+	}
+
+	after := r.Clock().PhysicalTime()
+	log.VEventf(ctx, 1, "completed server-side commit-wait sleep, took %s", after.Sub(before))
+	r.store.metrics.CommitWaitsBeforeCommitTrigger.Inc(1)
+	return nil
 }
 
 // maybeAddRangeInfoToResponse populates br.RangeInfo if the client doesn't

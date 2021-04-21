@@ -967,6 +967,7 @@ var charts = []sectionDescription{
 					"txn.commits1PC",
 					"txn.parallelcommits",
 					"txn.commit_waits",
+					"txn.commit_waits.before_commit_trigger",
 				},
 			},
 			{
