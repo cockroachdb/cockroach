@@ -10,14 +10,19 @@
 
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-import { AppState } from "src/store";
+import { analyticsActions, AppState } from "src/store";
 import { SessionsState } from "src/store/sessions";
 
 import { createSelector } from "reselect";
 import { SessionsPage } from "./index";
 
 import { actions as sessionsActions } from "src/store/sessions";
-import { actions as TerminateQueryActions } from "src/store/terminateQuery";
+import {
+  actions as terminateQueryActions,
+  ICancelQueryRequest,
+  ICancelSessionRequest,
+} from "src/store/terminateQuery";
+import { Dispatch } from "redux";
 
 export const selectSessions = createSelector(
   (state: AppState) => state.adminUI.sessions,
@@ -37,10 +42,42 @@ export const SessionsPageConnected = withRouter(
       sessions: selectSessions(state),
       sessionsError: state.adminUI.sessions.lastError,
     }),
-    {
-      refreshSessions: sessionsActions.refresh,
-      cancelSession: TerminateQueryActions.terminateSession,
-      cancelQuery: TerminateQueryActions.terminateQuery,
-    },
+    (dispatch: Dispatch) => ({
+      refreshSessions: () => dispatch(sessionsActions.refresh()),
+      cancelSession: (payload: ICancelSessionRequest) =>
+        dispatch(terminateQueryActions.terminateSession(payload)),
+      cancelQuery: (payload: ICancelQueryRequest) =>
+        dispatch(terminateQueryActions.terminateQuery(payload)),
+      onSortingChange: (columnName: string, tableName: string) => {
+        dispatch(
+          analyticsActions.track({
+            name: "Column Sorted",
+            page: "Sessions",
+            columnName,
+            tableName,
+          }),
+        );
+      },
+      onSessionClick: () => {
+        dispatch(
+          analyticsActions.track({
+            name: "Session Clicked",
+            page: "Sessions",
+          }),
+        );
+      },
+      onTerminateSessionClick: () =>
+        analyticsActions.track({
+          name: "Session Actions Clicked",
+          page: "Sessions",
+          action: "Terminate Session",
+        }),
+      onTerminateStatementClick: () =>
+        analyticsActions.track({
+          name: "Session Actions Clicked",
+          page: "Sessions",
+          action: "Terminate Statement",
+        }),
+    }),
   )(SessionsPage),
 );

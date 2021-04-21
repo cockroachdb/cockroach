@@ -1,7 +1,11 @@
 import { createAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 
-type Page = "Statements" | "Statement Details";
+type Page =
+  | "Statements"
+  | "Statement Details"
+  | "Sessions"
+  | "Sessions Details";
 
 type SearchEvent = {
   name: "Keyword Searched";
@@ -37,6 +41,17 @@ type StatementClicked = {
   page: Page;
 };
 
+type SessionClicked = {
+  name: "Session Clicked";
+  page: Page;
+};
+
+type SessionActionsClicked = {
+  name: "Session Actions Clicked";
+  page: Page;
+  action: "Terminate Statement" | "Terminate Session";
+};
+
 type FilterEvent = {
   name: "Filter Clicked";
   page: Page;
@@ -51,7 +66,9 @@ type AnalyticsEvent =
   | TabChangedEvent
   | BackButtonClick
   | FilterEvent
-  | StatementClicked;
+  | StatementClicked
+  | SessionClicked
+  | SessionActionsClicked;
 
 const PREFIX = `${DOMAIN_NAME}/analytics`;
 

@@ -63,6 +63,10 @@ interface OwnProps {
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   uiConfig?: UIConfigState["pages"]["sessionDetails"];
+  onBackButtonClick?: () => void;
+  onTerminateSessionClick?: () => void;
+  onTerminateStatementClick?: () => void;
+  onStatementClick?: () => void;
 }
 
 export type SessionDetailsProps = OwnProps & RouteComponentProps;
@@ -112,7 +116,8 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
   }
 
   backToSessionsPage = () => {
-    const { history, location } = this.props;
+    const { history, location, onBackButtonClick } = this.props;
+    onBackButtonClick && onBackButtonClick();
     history.push({
       ...location,
       pathname: "/sessions",
@@ -121,7 +126,13 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
 
   render() {
     const sessionID = getMatchParamByName(this.props.match, sessionAttr);
-    const { sessionError, cancelSession, cancelQuery } = this.props;
+    const {
+      sessionError,
+      cancelSession,
+      cancelQuery,
+      onTerminateSessionClick,
+      onTerminateStatementClick,
+    } = this.props;
     const session = this.props.session?.session;
     const showActionButtons = !!session && !sessionError;
     return (
@@ -150,6 +161,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
                 <Button
                   disabled={session.active_queries?.length === 0}
                   onClick={() => {
+                    onTerminateStatementClick && onTerminateStatementClick();
                     if (session.active_queries?.length > 0) {
                       this.terminateQueryRef?.current?.showModalFor({
                         query_id: session.active_queries[0].id,
@@ -163,12 +175,13 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
                   Cancel query
                 </Button>
                 <Button
-                  onClick={() =>
+                  onClick={() => {
+                    onTerminateSessionClick && onTerminateSessionClick();
                     this.terminateSessionRef?.current?.showModalFor({
                       session_id: session.id,
                       node_id: session.node_id.toString(),
-                    })
-                  }
+                    });
+                  }}
                   type="secondary"
                   size="small"
                 >
@@ -302,6 +315,9 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
                     app: "",
                     search: "",
                   })}
+                  onClick={() =>
+                    this.props.onStatementClick && this.props.onStatementClick()
+                  }
                 >
                   View Statement Details
                 </Link>
