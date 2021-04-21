@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1074,18 +1075,7 @@ func (p *Pebble) NewBatch() Batch {
 
 // NewReadOnly implements the Engine interface.
 func (p *Pebble) NewReadOnly() ReadWriter {
-	// TODO(sumeer): a sync.Pool for pebbleReadOnly would save on allocations
-	// for the underlying pebbleIterators.
-	return &pebbleReadOnly{
-		parent: p,
-		// Defensively set reusable=true. One has to be careful about this since
-		// an accidental false value would cause these iterators, that are value
-		// members of pebbleReadOnly, to be put in the pebbleIterPool.
-		prefixIter:       pebbleIterator{reusable: true},
-		normalIter:       pebbleIterator{reusable: true},
-		prefixEngineIter: pebbleIterator{reusable: true},
-		normalEngineIter: pebbleIterator{reusable: true},
-	}
+	return newPebbleReadOnly(p)
 }
 
 // NewUnindexedBatch implements the Engine interface.
@@ -1273,6 +1263,37 @@ type pebbleReadOnly struct {
 
 var _ ReadWriter = &pebbleReadOnly{}
 
+var pebbleReadOnlyPool = sync.Pool{
+	New: func() interface{} {
+		return &pebbleReadOnly{
+			// Defensively set reusable=true. One has to be careful about this since
+			// an accidental false value would cause these iterators, that are value
+			// members of pebbleReadOnly, to be put in the pebbleIterPool.
+			prefixIter:       pebbleIterator{reusable: true},
+			normalIter:       pebbleIterator{reusable: true},
+			prefixEngineIter: pebbleIterator{reusable: true},
+			normalEngineIter: pebbleIterator{reusable: true},
+		}
+	},
+}
+
+// Instantiates a new pebbleReadOnly.
+func newPebbleReadOnly(parent *Pebble) *pebbleReadOnly {
+	p := pebbleReadOnlyPool.Get().(*pebbleReadOnly)
+	// When p is a reused pebbleReadOnly from the pool, the iter fields preserve
+	// the original reusable=true that was set above in pebbleReadOnlyPool.New(),
+	// and some buffers that are safe to reuse. Everything else has been reset by
+	// pebbleIterator.destroy().
+	*p = pebbleReadOnly{
+		parent:           parent,
+		prefixIter:       p.prefixIter,
+		normalIter:       p.normalIter,
+		prefixEngineIter: p.prefixEngineIter,
+		normalEngineIter: p.normalEngineIter,
+	}
+	return p
+}
+
 func (p *pebbleReadOnly) Close() {
 	if p.closed {
 		panic("closing an already-closed pebbleReadOnly")
@@ -1285,6 +1306,8 @@ func (p *pebbleReadOnly) Close() {
 	p.normalIter.destroy()
 	p.prefixEngineIter.destroy()
 	p.normalEngineIter.destroy()
+
+	pebbleReadOnlyPool.Put(p)
 }
 
 func (p *pebbleReadOnly) Closed() bool {
