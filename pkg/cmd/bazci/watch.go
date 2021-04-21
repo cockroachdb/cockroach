@@ -17,6 +17,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -132,43 +133,20 @@ func (w watcher) stageTestArtifacts(phase Phase) error {
 		// relDir is the directory under bazel-testlogs where the test
 		// output files can be found.
 		relDir := strings.ReplaceAll(strings.TrimPrefix(test, "//"), ":", "/")
-		// First, copy the log file verbatim.
-		relLogFilePath := path.Join(relDir, "test.log")
-		err := w.maybeStageArtifact(testlogsSourceDir, relLogFilePath, 0666, phase,
-			copyContentTo)
-		if err != nil {
-			return err
-		}
-		// Munge and copy the xml file.
-		relXMLFilePath := path.Join(relDir, "test.xml")
-		err = w.maybeStageArtifact(testlogsSourceDir, relXMLFilePath, 0666, phase,
-			func(srcContent []byte, outFile io.Writer) error {
-				// Parse the XML into a testSuites struct.
-				suites := testSuites{}
-				err := xml.Unmarshal(srcContent, &suites)
-				// Note that we return an error if parsing fails. This isn't
-				// unexpected -- if we read the XML file before it's been
-				// completely written to disk, that will happen. Returning the
-				// error will cancel the write to disk, which is exactly what we
-				// want.
-				if err != nil {
-					return err
-				}
-				// We only want the first test suite in the list of suites.
-				munged, err := xml.MarshalIndent(&suites.Suites[0], "", "\t")
-				if err != nil {
-					return err
-				}
-				_, err = outFile.Write(munged)
-				if err != nil {
-					return err
-				}
-				// Insert a newline just to make our lives a little easier.
-				_, err = outFile.Write([]byte("\n"))
+		for _, tup := range []struct {
+			relPath string
+			stagefn func(srcContent []byte, outFile io.Writer) error
+		}{
+			{path.Join(relDir, "test.log"), copyContentTo},
+			{path.Join(relDir, "*", "test.log"), copyContentTo},
+			{path.Join(relDir, "test.xml"), mungeTestXML},
+			{path.Join(relDir, "*", "test.xml"), mungeTestXML},
+		} {
+			err := w.maybeStageArtifact(testlogsSourceDir, tup.relPath, 0666, phase,
+				tup.stagefn)
+			if err != nil {
 				return err
-			})
-		if err != nil {
-			return err
+			}
 		}
 	}
 	return nil
@@ -235,6 +213,35 @@ func copyContentTo(srcContent []byte, outFile io.Writer) error {
 	return err
 }
 
+// mungeTestXML parses and slightly munges the XML in the source file and writes
+// it to the output file. Helper function meant to be used with
+// maybeStageArtifact.
+func mungeTestXML(srcContent []byte, outFile io.Writer) error {
+	// Parse the XML into a testSuites struct.
+	suites := testSuites{}
+	err := xml.Unmarshal(srcContent, &suites)
+	// Note that we return an error if parsing fails. This isn't
+	// unexpected -- if we read the XML file before it's been
+	// completely written to disk, that will happen. Returning the
+	// error will cancel the write to disk, which is exactly what we
+	// want.
+	if err != nil {
+		return err
+	}
+	// We only want the first test suite in the list of suites.
+	munged, err := xml.MarshalIndent(&suites.Suites[0], "", "\t")
+	if err != nil {
+		return err
+	}
+	_, err = outFile.Write(munged)
+	if err != nil {
+		return err
+	}
+	// Insert a newline just to make our lives a little easier.
+	_, err = outFile.Write([]byte("\n"))
+	return err
+}
+
 // cancelableWriter is an io.WriteCloser with the following properties:
 // 1. The entire contents of the file is accumulated in memory in the `buf`.
 // 2. The file is written to disk when Close() is called...
@@ -277,39 +284,41 @@ func (w *cancelableWriter) Close() error {
 	return nil
 }
 
-// maybeStageArtifact stages a build or test artifact in the artifactsDir unless
-// the cache indicates the file is already up-to-date. maybeStageArtifact stages
-// the file from the given `root` (e.g. either `bazel-testlogs` or `bazel-bin`)
-// and at the given relative path. If maybeStageArtifact determines that a file
-// needs to be staged, it is created in the artifactsDir at the same `root` and
-// `relPath` with the given `perm`, and the `stagefn` is called to populate the
-// contents of the newly staged file. If the source artifact does not exist,
-// or has not been updated since the last time it was staged, maybeStageArtifact
-// does nothing. If the `stagefn` returns a non-nil error, then the artifact is
-// not staged. (Errors will not be propagated back up to the caller of
-// maybeStageArtifact unless we're in the "finalize" phase -- errors can happen
-// sporadically if we're not finalizing, especially if we read an artifact while
-// it's in the process of being written.)
+// maybeStageArtifact stages one or more build or test artifacts in the
+// artifactsDir unless the cache indicates the file to be staged is already
+// up-to-date. maybeStageArtifact stages all files in the given `root` (e.g.
+// either `bazel-testlogs` or `bazel-bin`) matching the given `pattern`.
+// `filepath.Glob()` is used to determine which files match the given pattern.
+// If maybeStageArtifact determines that a file needs to be staged, it is
+// created in the artifactsDir at the same `root` and relative path with the
+// given `perm`, and the `stagefn` is called to populate the contents of the
+// newly staged file. If the source artifact does not exist, or has not been
+// updated since the last time it was staged, maybeStageArtifact does nothing.
+// If the `stagefn` returns a non-nil error, then the artifact is not staged.
+// (Errors will not be propagated back up to the caller of maybeStageArtifact
+// unless we're in the "finalize" phase -- errors can happen sporadically if
+// we're not finalizing, especially if we read an artifact while it's in the
+// process of being written.)
 //
 // In the intialCachingPhase, NO artifacts will be staged, but
 // maybeStageArtifact will still stat the source file and cache its metadata.
 // This is important because Bazel aggressively caches build and test artifacts,
 // so just because a file exists, doesn't necessarily mean that it should be
-// staged. For example -- if we're running //pkg/server:server_test, and
-// bazel-testlogs/pkg/server/server_test/test.xml exists, it may just be because
-// that file was created by a PREVIOUS run of :server_test. Staging it right
-// away makes no sense in this case -- the XML will contain old data. Instead,
-// we note the file metadata so that we know to re-stage it when the file is
-// updated. Meanwhile, we force-stage everything that hasn't yet been staged
-// once in the finalizePhase, to cover cases where Bazel reused the old
+// staged. For example -- if we're running //pkg/settings:settings_test, and
+// bazel-testlogs/pkg/settings/settings_test/test.xml exists, it may just be
+// because that file was created by a PREVIOUS run of :settings_test. Staging
+// it right away makes no sense in this case -- the XML will contain old data.
+// Instead, we note the file metadata so that we know to re-stage it when the
+// file is updated. Meanwhile, we force-stage everything that hasn't yet been
+// staged once in the finalizePhase, to cover cases where Bazel reused the old
 // cached artifact.
 //
-// For example, one might stage a log file with a call like:
-// w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/test.log",
+// For example, one might stage a set of log files with a call like:
+// w.maybeStageArtifact(testlogsSourceDir, "pkg/server/server_test/*/test.log",
 //                      0666, incrementalUpdatePhase, copycontentTo)
 func (w watcher) maybeStageArtifact(
 	root SourceDir,
-	relPath string,
+	pattern string,
 	perm os.FileMode,
 	phase Phase,
 	stagefn func(srcContent []byte, outFile io.Writer) error,
@@ -324,11 +333,7 @@ func (w watcher) maybeStageArtifact(
 		rootPath = w.info.binDir
 		artifactsSubdir = "bazel-bin"
 	}
-	// Fully qualified source and destination paths.
-	srcPath := path.Join(rootPath, relPath)
-	destPath := path.Join(artifactsDir, artifactsSubdir, relPath)
-
-	stage := func() error {
+	stage := func(srcPath, destPath string) error {
 		contents, err := ioutil.ReadFile(srcPath)
 		if err != nil {
 			return err
@@ -356,8 +361,24 @@ func (w watcher) maybeStageArtifact(
 		return nil
 	}
 
-	stat, err := os.Stat(srcPath)
-	if err == nil {
+	matches, err := filepath.Glob(path.Join(rootPath, pattern))
+	if err != nil {
+		return err
+	}
+	for _, srcPath := range matches {
+		relPath, err := filepath.Rel(rootPath, srcPath)
+		if err != nil {
+			return err
+		}
+		destPath := path.Join(artifactsDir, artifactsSubdir, relPath)
+
+		stat, err := os.Stat(srcPath)
+		// stat errors can simply be ignored -- if the file doesn't
+		// exist, we skip it. (Note that this is unlikely, but due to a
+		// race could occur.)
+		if err != nil {
+			continue
+		}
 		meta := fileMetadata{size: stat.Size(), modTime: stat.ModTime()}
 		oldMeta, oldMetaOk := w.fileToMeta[srcPath]
 		// If we don't have metadata for this file yet, or if the
@@ -369,14 +390,14 @@ func (w watcher) maybeStageArtifact(
 				// metadata.
 			case incrementalUpdatePhase, finalizePhase:
 				_, staged := w.fileToStaged[srcPath]
-				// This is not a great situation: we've been
-				// asked to stage a file that was already
-				// staged. Do it again, but print a warning.
-				if staged {
+				// This is not a great situation: we've been asked to stage a file
+				// that was already staged. Do it again, but print a warning. Log
+				// files are OK, since TC doesn't parse them.
+				if staged && !strings.HasSuffix(destPath, ".log") {
 					log.Printf("WARNING: re-staging already-staged file at %s",
 						destPath)
 				}
-				err := stage()
+				err := stage(srcPath, destPath)
 				if err != nil {
 					return err
 				}
@@ -387,13 +408,11 @@ func (w watcher) maybeStageArtifact(
 		// During the finalize phase, stage EVERYTHING that hasn't been
 		// staged yet. This is our last chance!
 		if !staged && phase == finalizePhase {
-			err := stage()
+			err := stage(srcPath, destPath)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	// stat errors can simply be ignored -- if the file doesn't exist, we
-	// skip it.
 	return nil
 }

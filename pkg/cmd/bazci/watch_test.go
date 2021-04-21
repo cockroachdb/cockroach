@@ -27,6 +27,14 @@ func assertFileCopiedVerbatim(t *testing.T, relPath string) {
 	assert.Equal(t, actual, expected)
 }
 
+func assertFilesIdentical(t *testing.T, actualPath, expectedPath string) {
+	actual, err := ioutil.ReadFile(actualPath)
+	assert.Nil(t, err)
+	expected, err := ioutil.ReadFile(expectedPath)
+	assert.Nil(t, err)
+	assert.Equal(t, actual, expected)
+}
+
 func TestWatch(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -36,7 +44,7 @@ func TestWatch(t *testing.T) {
 		binDir:      path.Join(testdata, "bazel-bin"),
 		testlogsDir: path.Join(testdata, "bazel-testlogs"),
 		goBinaries:  []string{"//pkg/cmd/fake_bin:fake_bin"},
-		tests:       []string{"//pkg/rpc:rpc_test"},
+		tests:       []string{"//pkg/rpc:rpc_test", "//pkg/server:server_test"},
 	}
 	completion := make(chan error, 1)
 	completion <- nil
@@ -45,12 +53,14 @@ func TestWatch(t *testing.T) {
 
 	assert.Nil(t, err)
 	assertFileCopiedVerbatim(t, "bazel-testlogs/pkg/rpc/rpc_test/test.log")
+	assertFileCopiedVerbatim(t, "bazel-testlogs/pkg/server/server_test/shard_1_of_16/test.log")
+	assertFileCopiedVerbatim(t, "bazel-testlogs/pkg/server/server_test/shard_2_of_16/test.log")
 	assertFileCopiedVerbatim(t, "bazel-bin/pkg/cmd/fake_bin/fake_bin_/fake_bin")
 	// check the xml file was munged correctly.
-	actual, err := ioutil.ReadFile(
-		path.Join(artifactsDir, "bazel-testlogs/pkg/rpc/rpc_test/test.xml"))
-	assert.Nil(t, err)
-	expected, err := ioutil.ReadFile(path.Join(testdata, "expected/test.xml"))
-	assert.Nil(t, err)
-	assert.Equal(t, actual, expected)
+	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-testlogs/pkg/rpc/rpc_test/test.xml"),
+		path.Join(testdata, "expected/rpc_test.xml"))
+	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-testlogs/pkg/server/server_test/shard_1_of_16/test.xml"),
+		path.Join(testdata, "expected/server_1_test.xml"))
+	assertFilesIdentical(t, path.Join(artifactsDir, "bazel-testlogs/pkg/server/server_test/shard_2_of_16/test.xml"),
+		path.Join(testdata, "expected/server_2_test.xml"))
 }
