@@ -270,6 +270,7 @@ func (m mockSender) AddSSTable(
 	disallowShadowing bool,
 	_ *enginepb.MVCCStats,
 	ingestAsWrites bool,
+	batchTS hlc.Timestamp,
 ) error {
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
