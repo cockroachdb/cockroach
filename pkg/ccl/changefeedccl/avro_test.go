@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -677,4 +678,118 @@ func TestDecimalRatRoundtrip(t *testing.T) {
 			t.Errorf(`%s != %s`, dec, &roundtrip)
 		}
 	})
+}
+
+func benchmarkEncodeType(b *testing.B, typ *types.T, encRow rowenc.EncDatumRow) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	tableDesc, err := parseTableDesc(
+		fmt.Sprintf(`CREATE TABLE bench_table (bench_field %s)`, typ.SQLString()))
+	require.NoError(b, err)
+	schema, err := tableToAvroSchema(tableDesc, "suffix", "namespace")
+	require.NoError(b, err)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := schema.BinaryFromRow(nil, encRow)
+		require.NoError(b, err)
+	}
+}
+
+// returns random EncDatum row where the first column is of specified
+// type and the second one an types.Int, corresponding to a row id.
+func randEncDatumRow(typ *types.T) rowenc.EncDatumRow {
+	const allowNull = true
+	const notNull = false
+	rnd, _ := randutil.NewTestPseudoRand()
+	return rowenc.EncDatumRow{
+		rowenc.DatumToEncDatum(typ, randgen.RandDatum(rnd, typ, allowNull)),
+		rowenc.DatumToEncDatum(types.Int, randgen.RandDatum(rnd, types.Int, notNull)),
+	}
+}
+
+func BenchmarkEncodeInt(b *testing.B) {
+	benchmarkEncodeType(b, types.Int, randEncDatumRow(types.Int))
+}
+
+func BenchmarkEncodeBool(b *testing.B) {
+	benchmarkEncodeType(b, types.Bool, randEncDatumRow(types.Bool))
+}
+
+func BenchmarkEncodeFloat(b *testing.B) {
+	benchmarkEncodeType(b, types.Float, randEncDatumRow(types.Float))
+}
+
+func BenchmarkEncodeBox2D(b *testing.B) {
+	benchmarkEncodeType(b, types.Box2D, randEncDatumRow(types.Box2D))
+}
+
+func BenchmarkEncodeGeography(b *testing.B) {
+	benchmarkEncodeType(b, types.Geography, randEncDatumRow(types.Geography))
+}
+
+func BenchmarkEncodeGeometry(b *testing.B) {
+	benchmarkEncodeType(b, types.Geometry, randEncDatumRow(types.Geometry))
+}
+
+func BenchmarkEncodeBytes(b *testing.B) {
+	benchmarkEncodeType(b, types.Bytes, randEncDatumRow(types.Bytes))
+}
+
+func BenchmarkEncodeString(b *testing.B) {
+	benchmarkEncodeType(b, types.String, randEncDatumRow(types.String))
+}
+
+func BenchmarkEncodeDate(b *testing.B) {
+	// RandDatum could return "interesting" dates (infinite past, etc).  Alas, avro
+	// doesn't support those yet, so override it to something we do support.
+	encRow := randEncDatumRow(types.Date)
+	if d, ok := encRow[0].Datum.(*tree.DDate); ok && !d.IsFinite() {
+		d.Date = pgdate.LowDate
+	}
+	benchmarkEncodeType(b, types.Date, encRow)
+}
+
+func BenchmarkEncodeTime(b *testing.B) {
+	benchmarkEncodeType(b, types.Time, randEncDatumRow(types.Time))
+}
+
+func BenchmarkEncodeTimeTZ(b *testing.B) {
+	benchmarkEncodeType(b, types.TimeTZ, randEncDatumRow(types.TimeTZ))
+}
+
+func BenchmarkEncodeTimestamp(b *testing.B) {
+	benchmarkEncodeType(b, types.Timestamp, randEncDatumRow(types.Timestamp))
+}
+
+func BenchmarkEncodeTimestampTZ(b *testing.B) {
+	benchmarkEncodeType(b, types.TimestampTZ, randEncDatumRow(types.TimestampTZ))
+}
+
+func BenchmarkEncodeDecimal(b *testing.B) {
+	typ := types.MakeDecimal(10, 4)
+	encRow := randEncDatumRow(typ)
+
+	// rowenc.RandDatum generates all possible datums. We just want small subset
+	// to fit in our specified precision/scale.
+	d := &tree.DDecimal{}
+	coeff := int64(rand.Uint64()) % 10000
+	d.Decimal.SetFinite(coeff, 2)
+	encRow[0] = rowenc.DatumToEncDatum(typ, d)
+	benchmarkEncodeType(b, typ, encRow)
+}
+
+func BenchmarkEncodeUUID(b *testing.B) {
+	benchmarkEncodeType(b, types.Uuid, randEncDatumRow(types.Uuid))
+}
+
+func BenchmarkEncodeINet(b *testing.B) {
+	benchmarkEncodeType(b, types.INet, randEncDatumRow(types.INet))
+}
+
+func BenchmarkEncodeJSON(b *testing.B) {
+	benchmarkEncodeType(b, types.Jsonb, randEncDatumRow(types.Jsonb))
 }

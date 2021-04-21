@@ -1968,10 +1968,6 @@ func planProjectionOperators(
 		typs = appendOneType(typs, outputType)
 		return op, resultIdx, typs, err
 	case *tree.CaseExpr:
-		if t.Expr != nil {
-			return nil, resultIdx, typs, errors.New("CASE <expr> WHEN expressions unsupported")
-		}
-
 		allocator := colmem.NewAllocator(ctx, acc, factory)
 		caseOutputType := t.ResolvedType()
 		if typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family()) == types.BytesFamily {
@@ -2014,6 +2010,25 @@ func planProjectionOperators(
 			)
 			if err != nil {
 				return nil, resultIdx, typs, err
+			}
+			if t.Expr != nil {
+				// If we have 'CASE <expr> WHEN ...' form, then we need to
+				// evaluate the equality between '<expr>' and whatever has been
+				// projected by this WHEN arm. We do so by constructing the
+				// corresponding comparison expr and letting the planning do its
+				// job.
+				left := t.Expr.(tree.TypedExpr)
+				// The result of evaluation of this WHEN arm is put at position
+				// resultIdx, so we simply create an ordinal referencing that
+				// column.
+				right := tree.NewTypedOrdinalReference(resultIdx, whenTyped.ResolvedType())
+				cmpExpr := tree.NewTypedComparisonExpr(tree.EQ, left, right)
+				caseOps[i], resultIdx, typs, err = planProjectionOperators(
+					ctx, evalCtx, cmpExpr, typs, caseOps[i], acc, factory,
+				)
+				if err != nil {
+					return nil, resultIdx, typs, err
+				}
 			}
 			caseOps[i], err = colexecutils.BoolOrUnknownToSelOp(caseOps[i], typs, resultIdx)
 			if err != nil {
