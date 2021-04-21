@@ -225,6 +225,8 @@ type Collection struct {
 	skipValidationOnWrite bool
 }
 
+var _ catalog.Accessor = (*Collection)(nil)
+
 // allDescriptors is an abstraction to capture the complete set of descriptors
 // read from the store. It is used to accelerate repeated invocations of virtual
 // tables which utilize descriptors. It tends to get used to build a
@@ -424,11 +426,7 @@ func (tc *Collection) GetImmutableDatabaseByName(
 // TODO(ajwerner): This exists to support the SchemaResolver interface and
 // should be removed or adjusted.
 func (tc *Collection) GetDatabaseDesc(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	name string,
-	flags tree.DatabaseLookupFlags,
+	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (desc catalog.DatabaseDescriptor, err error) {
 	_, desc, err = tc.getDatabaseByName(ctx, txn, name, flags, flags.RequireMutable)
 	return desc, err
@@ -510,12 +508,7 @@ func (tc *Collection) getDatabaseByName(
 // descriptor is requested then it will only be used for its timestamp and to
 // set the deadline.
 func (tc *Collection) GetObjectDesc(
-	ctx context.Context,
-	txn *kv.Txn,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	db, schema, object string,
-	flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
 ) (desc catalog.Descriptor, err error) {
 	if isVirtual, desc, err := tc.maybeGetVirtualObjectDesc(
 		schema, object, flags, db,
