@@ -19,7 +19,7 @@ import { SessionDetailsPageConnected } from "./sessionDetailsConnected";
 import { AppState, sagas, rootReducer } from "../store";
 import { Route } from "react-router-dom";
 
-const TEST_ID = "165f9819-2feb-40f0-0000-000000000001";
+const TEST_ID = "1673deaf-76af-ea86-0000-000000000001";
 
 const history = createMemoryHistory({
   initialEntries: [`/session/${TEST_ID}`],
