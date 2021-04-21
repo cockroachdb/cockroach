@@ -87,22 +87,6 @@ func (l *LogicalSchemaAccessor) GetObjectNamesAndIDs(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, descpb.IDs, error) {
-	if entry, ok := l.vs.GetVirtualSchema(scName); ok {
-		names := make(tree.TableNames, 0, entry.NumTables())
-		IDs := make(descpb.IDs, 0, entry.NumTables())
-		schemaDesc := entry.Desc()
-		entry.VisitTables(func(table catalog.VirtualObject) {
-			name := tree.MakeTableNameWithSchema(
-				tree.Name(dbDesc.GetName()), tree.Name(schemaDesc.GetName()), tree.Name(table.Desc().GetName()))
-			name.ExplicitCatalog = flags.ExplicitPrefix
-			name.ExplicitSchema = flags.ExplicitPrefix
-			names = append(names, name)
-			IDs = append(IDs, table.Desc().GetID())
-		})
-		return names, IDs, nil
-	}
-
-	// Fallthrough.
 	return l.tc.GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, flags)
 }
 

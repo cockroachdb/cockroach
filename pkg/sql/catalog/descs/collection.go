@@ -1871,6 +1871,12 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, descpb.IDs, error) {
+	if ok, names, ds := tc.maybeGetVirtualObjectNamesAndIDs(
+		scName, dbDesc, flags,
+	); ok {
+		return names, ds, nil
+	}
+
 	schemaFlags := tree.SchemaLookupFlags{
 		Required:       flags.Required,
 		AvoidCached:    flags.RequireMutable || flags.AvoidCached,
@@ -1962,6 +1968,31 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	}
 
 	return tableNames, tableIDs, nil
+}
+
+func (tc *Collection) maybeGetVirtualObjectNamesAndIDs(
+	scName string, dbDesc catalog.DatabaseDescriptor, flags tree.DatabaseListFlags,
+) (isVirtual bool, _ tree.TableNames, _ descpb.IDs) {
+	if tc.virtualSchemas == nil {
+		return false, nil, nil
+	}
+	entry, ok := tc.virtualSchemas.GetVirtualSchema(scName)
+	if !ok {
+		return false, nil, nil
+	}
+	names := make(tree.TableNames, 0, entry.NumTables())
+	IDs := make(descpb.IDs, 0, entry.NumTables())
+	schemaDesc := entry.Desc()
+	entry.VisitTables(func(table catalog.VirtualObject) {
+		name := tree.MakeTableNameWithSchema(
+			tree.Name(dbDesc.GetName()), tree.Name(schemaDesc.GetName()), tree.Name(table.Desc().GetName()))
+		name.ExplicitCatalog = flags.ExplicitPrefix
+		name.ExplicitSchema = flags.ExplicitPrefix
+		names = append(names, name)
+		IDs = append(IDs, table.Desc().GetID())
+	})
+	return true, names, IDs
+
 }
 
 // releaseAllDescriptors releases the cached slice of all descriptors
