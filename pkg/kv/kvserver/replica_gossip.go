@@ -64,20 +64,23 @@ func (r *Replica) shouldGossip(ctx context.Context) bool {
 	return r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp())
 }
 
-// MaybeGossipSystemConfig scans the entire SystemConfig span and gossips it.
-// Further calls come from the trigger on EndTxn or range lease acquisition.
+// MaybeGossipSystemConfigRaftMuLocked scans the entire SystemConfig span and
+// gossips it. Further calls come from the trigger on EndTxn or range lease
+// acquisition.
 //
-// Note that MaybeGossipSystemConfig gossips information only when the
-// lease is actually held. The method does not request a range lease
-// here since RequestLease and applyRaftCommand call the method and we
-// need to avoid deadlocking in redirectOnOrAcquireLease.
+// Note that MaybeGossipSystemConfigRaftMuLocked gossips information only when
+// the lease is actually held. The method does not request a range lease here
+// since RequestLease and applyRaftCommand call the method and we need to avoid
+// deadlocking in redirectOnOrAcquireLease.
 //
-// MaybeGossipSystemConfig must only be called from Raft commands
-// (which provide the necessary serialization to avoid data races).
+// MaybeGossipSystemConfigRaftMuLocked must only be called from Raft commands
+// while holding the raftMu (which provide the necessary serialization to avoid
+// data races).
 //
-// TODO(nvanbenschoten,bdarnell): even though this is best effort, we
-// should log louder when we continually fail to gossip system config.
-func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
+// TODO(nvanbenschoten,bdarnell): even though this is best effort, we should log
+// louder when we continually fail to gossip system config.
+func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error {
+	r.raftMu.AssertHeld()
 	if r.store.Gossip() == nil {
 		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
 		return nil
@@ -124,30 +127,36 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 	return nil
 }
 
-// MaybeGossipSystemConfigIfHaveFailure is a trigger to gossip the system config
-// due to an abort of a transaction keyed in the system config span. It will
-// call MaybeGossipSystemConfig if failureToGossipSystemConfig is true.
-func (r *Replica) MaybeGossipSystemConfigIfHaveFailure(ctx context.Context) error {
+// MaybeGossipSystemConfigIfHaveFailureRaftMuLocked is a trigger to gossip the
+// system config due to an abort of a transaction keyed in the system config
+// span. It will call MaybeGossipSystemConfigRaftMuLocked if
+// failureToGossipSystemConfig is true.
+func (r *Replica) MaybeGossipSystemConfigIfHaveFailureRaftMuLocked(ctx context.Context) error {
 	r.mu.RLock()
 	failed := r.mu.failureToGossipSystemConfig
 	r.mu.RUnlock()
 	if !failed {
 		return nil
 	}
-	return r.MaybeGossipSystemConfig(ctx)
+	return r.MaybeGossipSystemConfigRaftMuLocked(ctx)
 }
 
-// MaybeGossipNodeLiveness gossips information for all node liveness
-// records stored on this range. To scan and gossip, this replica
-// must hold the lease to a range which contains some or all of the
-// node liveness records. After scanning the records, it checks
-// against what's already in gossip and only gossips records which
-// are out of date.
-func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span) error {
+// MaybeGossipNodeLivenessRaftMuLocked gossips information for all node liveness
+// records stored on this range. To scan and gossip, this replica must hold the
+// lease to a range which contains some or all of the node liveness records.
+// After scanning the records, it checks against what's already in gossip and
+// only gossips records which are out of date.
+//
+// MaybeGossipNodeLivenessRaftMuLocked must only be called from Raft commands
+// while holding the raftMu (which provide the necessary serialization to avoid
+// data races).
+func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
+	ctx context.Context, span roachpb.Span,
+) error {
+	r.raftMu.AssertHeld()
 	if r.store.Gossip() == nil || !r.IsInitialized() {
 		return nil
 	}
-
 	if !r.ContainsKeyRange(span.Key, span.EndKey) || !r.shouldGossip(ctx) {
 		return nil
 	}
