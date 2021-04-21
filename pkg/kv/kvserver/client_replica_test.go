@@ -3211,7 +3211,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 					_, r := getFirstStoreReplica(t, s, tableKey)
 					if _, z := r.DescAndZone(); z.GC.TTLSeconds != int32(exp) {
 						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
-						require.NoError(t, sysCfg.MaybeGossipSystemConfig(ctx))
+						sysCfg.RaftLock()
+						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
+						sysCfg.RaftUnlock()
 						return errors.Errorf("expected %d, got %d", exp, z.GC.TTLSeconds)
 					}
 				}
@@ -3225,7 +3227,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s, r := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 					if kvserver.StrictGCEnforcement.Get(&s.ClusterSettings().SV) != val {
-						require.NoError(t, r.MaybeGossipSystemConfig(ctx))
+						r.RaftLock()
+						require.NoError(t, r.MaybeGossipSystemConfigRaftMuLocked(ctx))
+						r.RaftUnlock()
 						return errors.Errorf("expected %v, got %v", val, !val)
 					}
 				}
