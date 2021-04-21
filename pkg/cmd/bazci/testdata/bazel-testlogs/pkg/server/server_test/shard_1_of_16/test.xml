@@ -1,0 +1,15 @@
+<testsuites>
+	<testsuite errors="0" failures="0" skipped="0" tests="11" time="16.885" name="github.com/cockroachdb/cockroach/pkg/server">
+		<testcase classname="server" name="TestAdminAPITableStats" time="2.690"></testcase>
+		<testcase classname="server" name="TestAdminAPIZoneDetails" time="0.690"></testcase>
+		<testcase classname="server" name="TestAllVersionsAgree" time="2.090"></testcase>
+		<testcase classname="server" name="TestEndpointTelemetryBasic" time="0.310"></testcase>
+		<testcase classname="server" name="TestGraphite" time="0.670"></testcase>
+		<testcase classname="server" name="TestInitializeFromConfig" time="5.940"></testcase>
+		<testcase classname="server" name="TestMetricsRecording" time="0.630"></testcase>
+		<testcase classname="server" name="TestNodeJoin" time="1.110"></testcase>
+		<testcase classname="server" name="TestPlainHTTPServer" time="0.570"></testcase>
+		<testcase classname="server" name="TestRemoteDebugModeSetting" time="0.870"></testcase>
+		<testcase classname="server" name="TestSettingsRefresh" time="0.770"></testcase>
+	</testsuite>
+</testsuites>
