@@ -90,9 +90,9 @@ const (
 
 // geomToGeoJSONCRS converts a geom to its CRS GeoJSON form.
 func geomToGeoJSONCRS(t geom.T, long bool) (*geojson.CRS, error) {
-	projection, ok := geoprojbase.Projection(geopb.SRID(t.SRID()))
-	if !ok {
-		return nil, errors.Newf("unknown SRID: %d", t.SRID())
+	projection, err := geoprojbase.Projection(geopb.SRID(t.SRID()))
+	if err != nil {
+		return nil, err
 	}
 	var prop string
 	if long {

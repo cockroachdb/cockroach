@@ -143,7 +143,7 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 	proj4text varchar(2048)
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		for _, projection := range geoprojbase.Projections {
+		for _, projection := range geoprojbase.AllProjections() {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(projection.SRID)),
 				tree.NewDString(projection.AuthName),

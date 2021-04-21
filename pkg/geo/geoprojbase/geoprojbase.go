@@ -15,9 +15,11 @@ package geoprojbase
 
 import (
 	"bytes"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/errors"
 )
 
 // Proj4Text is the text representation of a PROJ4 transformation.
@@ -78,9 +80,40 @@ type ProjInfo struct {
 	Spheroid *geographiclib.Spheroid
 }
 
-// Projection returns the ProjInfo identifier for the given SRID, as well as an bool
-// indicating whether the projection exists.
-func Projection(srid geopb.SRID) (ProjInfo, bool) {
-	p, exists := Projections[srid]
-	return p, exists
+// ErrProjectionNotFound indicates a project was not found.
+var ErrProjectionNotFound error = errors.New("projection not found")
+
+// Projection returns the ProjInfo identifier for the given SRID, as well as an
+// error if the projection does not exist.
+func Projection(srid geopb.SRID) (ProjInfo, error) {
+	p, exists := projections[srid]
+	if !exists {
+		return ProjInfo{}, errors.Mark(
+			errors.Newf("projection for SRID %d does not exist", srid),
+			ErrProjectionNotFound,
+		)
+	}
+	return p, nil
+}
+
+// MustProjection returns the ProjInfo for the given SRID, panicking if the
+// projection does not exist.
+func MustProjection(srid geopb.SRID) ProjInfo {
+	ret, err := Projection(srid)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+// AllProjections returns a sorted list of all projections.
+func AllProjections() []ProjInfo {
+	ret := make([]ProjInfo, 0, len(projections))
+	for _, p := range projections {
+		ret = append(ret, p)
+	}
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].SRID < ret[j].SRID
+	})
+	return ret
 }
