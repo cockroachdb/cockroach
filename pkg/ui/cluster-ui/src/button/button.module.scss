@@ -11,6 +11,7 @@
   cursor: pointer;
   width: max-content;
   @include icon-color();
+  font-family: $font-family--semi-bold;
 }
 
 .crl-button--type-flat {

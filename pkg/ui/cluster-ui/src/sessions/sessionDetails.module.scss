@@ -10,6 +10,11 @@
 
 @import "../core/index.module.scss";
 
+.sessions-details{
+  all: initial;
+  font-family: $font-family--base;
+}
+
 .heading-with-controls {
   display: flex;
   flex-direction: row;

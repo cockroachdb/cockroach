@@ -7,6 +7,9 @@ export type UIConfigState = {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
     };
+    sessionDetails: {
+      showGatewayNodeLink: boolean;
+    };
   };
 };
 
@@ -14,6 +17,9 @@ const initialState: UIConfigState = {
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: true,
+    },
+    sessionDetails: {
+      showGatewayNodeLink: false,
     },
   },
 };

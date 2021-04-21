@@ -63,15 +63,17 @@ const SessionLink = (props: { session: ISession }) => {
   const sessionID = byteArrayToUuid(props.session.id);
 
   return (
-    <Tooltip2
-      placement="bottom"
-      tableTitle
-      title={<>Session started at {start.format(DATE_FORMAT)}</>}
-    >
-      <Link to={`${base}/${encodeURIComponent(sessionID)}`}>
-        <div>{start.fromNow(true)}</div>
-      </Link>
-    </Tooltip2>
+    <div className={cx("sessionLink")}>
+      <Tooltip2
+        placement="bottom"
+        tableTitle
+        title={<>Session started at {start.format(DATE_FORMAT)}</>}
+      >
+        <Link to={`${base}/${encodeURIComponent(sessionID)}`}>
+          {start.fromNow(true)}
+        </Link>
+      </Tooltip2>
+    </div>
   );
 };
 

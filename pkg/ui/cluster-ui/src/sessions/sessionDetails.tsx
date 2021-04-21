@@ -18,8 +18,6 @@ import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 
 import { SessionInfo } from "./sessionsTable";
 
-import styles from "./sessionDetails.module.scss";
-import classNames from "classnames/bind";
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
 
 import { TimestampToMoment } from "src/util/convert";
@@ -45,6 +43,15 @@ import {
   ICancelQueryRequest,
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
+import { UIConfigState } from "src/store";
+
+import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
+import styles from "./sessionDetails.module.scss";
+import classNames from "classnames/bind";
+
+const cx = classNames.bind(styles);
+const statementsPageCx = classNames.bind(statementsPageStyles);
+
 interface OwnProps {
   id?: string;
   nodeNames: { [nodeId: string]: string };
@@ -55,9 +62,9 @@ interface OwnProps {
   refreshNodesLiveness: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
+  uiConfig?: UIConfigState["pages"]["sessionDetails"];
 }
 
-const cx = classNames.bind(styles);
 export type SessionDetailsProps = OwnProps & RouteComponentProps;
 
 function yesOrNo(b: boolean) {
@@ -80,6 +87,7 @@ export const MemoryUsageItem: React.FC<{
 export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
   terminateSessionRef: React.RefObject<TerminateSessionModalRef>;
   terminateQueryRef: React.RefObject<TerminateQueryModalRef>;
+  static defaultProps = { uiConfig: { showGatewayNodeLink: true } };
 
   componentDidMount() {
     this.props.refreshNodes();
@@ -117,9 +125,9 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
     const session = this.props.session?.session;
     const showActionButtons = !!session && !sessionError;
     return (
-      <div>
+      <div className={cx("sessions-details")}>
         <Helmet title={`Details | ${sessionID} | Sessions`} />
-        <div className={cx("section", "page--header")}>
+        <div className={`${statementsPageCx("section")} ${cx("page--header")}`}>
           <Button
             onClick={this.backToSessionsPage}
             type="unstyled-link"
@@ -130,7 +138,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
             Sessions
           </Button>
           <div className={cx("heading-with-controls")}>
-            <h1 className={cx("base-heading", "page--header__title")}>
+            <h1
+              className={`${statementsPageCx("base-heading")} ${cx(
+                "page--header__title",
+              )}`}
+            >
               Session details
             </h1>
             {showActionButtons && (
@@ -166,7 +178,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
             )}
           </div>
         </div>
-        <section className={cx("section", "section--container")}>
+        <section
+          className={`${statementsPageCx("section")} ${cx(
+            "section--container",
+          )}`}
+        >
           <Loading
             loading={_.isNil(this.props.session)}
             error={this.props.sessionError}
@@ -317,10 +333,14 @@ export class SessionDetails extends React.Component<SessionDetailsProps, {}> {
               <SummaryCardItem
                 label={"Gateway Node"}
                 value={
-                  <NodeLink
-                    nodeId={session.node_id.toString()}
-                    nodeNames={this.props.nodeNames}
-                  />
+                  this.props.uiConfig.showGatewayNodeLink ? (
+                    <NodeLink
+                      nodeId={session.node_id.toString()}
+                      nodeNames={this.props.nodeNames}
+                    />
+                  ) : (
+                    session.node_id.toString()
+                  )
                 }
                 className={cx("details-item")}
               />
