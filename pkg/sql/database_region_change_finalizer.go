@@ -183,9 +183,8 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		// configurations from any partitions that are removed.
 		oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
 
-		// Update the partitioning on all indexes of the table that aren't being
-		// dropped.
-		for _, index := range tableDesc.NonDropIndexes() {
+		// Update the partitioning on all indexes of the table.
+		for _, index := range tableDesc.AllIndexes() {
 			newIdx, err := CreatePartitioning(
 				ctx,
 				r.localPlanner.extendedEvalCtx.Settings,
@@ -215,7 +214,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		// the type descriptor (removed enum values obviously aren't), so we must
 		// remove the partition from all indexes before trying to delete zone
 		// configurations.
-		for _, index := range tableDesc.NonDropIndexes() {
+		for _, index := range tableDesc.AllIndexes() {
 			oldPartitioning := oldPartitioningDescs[index.GetID()]
 
 			// Remove zone configurations that reference partition values we removed
