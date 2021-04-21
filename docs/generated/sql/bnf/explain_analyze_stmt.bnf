@@ -1,7 +1,7 @@
 explain_stmt ::=
-	'EXPLAIN' preparable_stmt
-	| 'EXPLAIN' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' preparable_stmt
-	| 'EXPLAIN' 'ANALYZE' preparable_stmt
-	| 'EXPLAIN' 'ANALYSE' preparable_stmt
-	| 'EXPLAIN' 'ANALYZE' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' preparable_stmt
-	| 'EXPLAIN' 'ANALYSE' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' preparable_stmt
+	'EXPLAIN' explainable_stmt
+	| 'EXPLAIN' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' '(' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ( ( ',' ( 'PLAN' | 'DISTSQL' | 'DEBUG' ) ) )* ')' explainable_stmt

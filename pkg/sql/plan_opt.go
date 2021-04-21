@@ -395,12 +395,24 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 			return nil, pgerror.Newf(pgcode.Syntax,
 				"placeholders are not supported with PREPARE AS OPT PLAN")
 		}
-		// With a canned plan, the memo is already optimized.
+		// With a canned plan, we don't want to optimize the memo.
+		return opc.optimizer.DetachMemo(), nil
+	}
+
+	if f.Memo().HasPlaceholders() {
+		// Try the placeholder fast path.
+		_, ok, err := opc.optimizer.TryPlaceholderFastPath()
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			opc.log(ctx, "placeholder fast path")
+		}
 	} else {
 		// If the memo doesn't have placeholders and did not encounter any stable
 		// operators that can be constant folded, then fully optimize it now - it
 		// can be reused without further changes to build the execution tree.
-		if !f.Memo().HasPlaceholders() && !f.FoldingControl().PreventedStableFold() {
+		if !f.FoldingControl().PreventedStableFold() {
 			opc.log(ctx, "optimizing (no placeholders)")
 			if _, err := opc.optimizer.Optimize(); err != nil {
 				return nil, err
@@ -424,7 +436,8 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized if there were no
-		// placeholders (see buildReusableMemo).
+		// placeholders or the placeholder fast path succeeded (see
+		// buildReusableMemo).
 		return cachedMemo, nil
 	}
 	f := opc.optimizer.Factory()

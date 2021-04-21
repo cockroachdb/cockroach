@@ -294,9 +294,9 @@ func BenchmarkPhases(b *testing.B) {
 			})
 			b.Run("Prepared", func(b *testing.B) {
 				phases := PreparedPhases
-				if !h.prepMemo.HasPlaceholders() {
-					// If the query has no placeholders, the only phase which does
-					// something is ExecBuild.
+				if h.prepMemo.IsOptimized() {
+					// If the query has no placeholders or the placeholder fast path
+					// succeeded, the only phase which does something is ExecBuild.
 					phases = []Phase{ExecBuild}
 				}
 				for _, phase := range phases {
@@ -356,6 +356,10 @@ func newHarness(tb testing.TB, query benchQuery) *harness {
 	// If there are no placeholders, we explore during PREPARE.
 	if len(query.args) == 0 {
 		if _, err := h.optimizer.Optimize(); err != nil {
+			tb.Fatalf("%v", err)
+		}
+	} else {
+		if _, _, err := h.optimizer.TryPlaceholderFastPath(); err != nil {
 			tb.Fatalf("%v", err)
 		}
 	}
@@ -447,7 +451,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 	h.optimizer.Init(&h.evalCtx, h.testCat)
 
-	if h.prepMemo.HasPlaceholders() {
+	if !h.prepMemo.IsOptimized() {
 		if phase == AssignPlaceholdersNoNorm {
 			h.optimizer.DisableOptimizations()
 		}
@@ -462,8 +466,9 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 	}
 
 	var execMemo *memo.Memo
-	if !h.prepMemo.HasPlaceholders() {
-		// No placeholders, we already did the exploration at prepare time.
+	if h.prepMemo.IsOptimized() {
+		// No placeholders or the placeholder fast path succeeded; we already did
+		// the exploration at prepare time.
 		execMemo = h.prepMemo
 	} else {
 		if _, err := h.optimizer.Optimize(); err != nil {

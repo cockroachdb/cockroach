@@ -58,7 +58,8 @@ select
  │    ├── key: (1-3)
  │    └── fd: (1-3)-->(4)
  └── filters
-      └── (a:1, b:2) IN ((1, 2),) [outer=(1,2), constraints=(/1/2: [/1/2 - /1/2]; /2: [/2 - /2]; tight), fd=()-->(1,2)]
+      ├── a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── b:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
 
 # The normalized expression above can be explored into a constrained scan.
 opt

@@ -148,12 +148,12 @@ drop_stmt ::=
 	| drop_schedule_stmt
 
 explain_stmt ::=
-	'EXPLAIN' preparable_stmt
-	| 'EXPLAIN' '(' explain_option_list ')' preparable_stmt
-	| 'EXPLAIN' 'ANALYZE' preparable_stmt
-	| 'EXPLAIN' 'ANALYSE' preparable_stmt
-	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' preparable_stmt
-	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' preparable_stmt
+	'EXPLAIN' explainable_stmt
+	| 'EXPLAIN' '(' explain_option_list ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' explainable_stmt
 
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
@@ -491,6 +491,10 @@ drop_role_stmt ::=
 drop_schedule_stmt ::=
 	'DROP' 'SCHEDULE' a_expr
 	| 'DROP' 'SCHEDULES' select_stmt
+
+explainable_stmt ::=
+	preparable_stmt
+	| execute_stmt
 
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
