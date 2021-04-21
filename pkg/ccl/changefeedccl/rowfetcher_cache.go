@@ -60,7 +60,7 @@ func newRowFetcherCache(
 	return &rowFetcherCache{
 		codec:      codec,
 		leaseMgr:   leaseMgr,
-		collection: descs.NewCollection(settings, leaseMgr, hydratedTables),
+		collection: descs.NewCollection(settings, leaseMgr, hydratedTables, nil /* virtualSchemas */),
 		db:         db,
 		fetchers:   make(map[idVersion]*row.Fetcher),
 	}
