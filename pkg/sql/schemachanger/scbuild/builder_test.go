@@ -49,7 +49,13 @@ func TestBuilderAlterTable(t *testing.T) {
 	ctx := context.Background()
 
 	datadriven.Walk(t, filepath.Join("testdata"), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					AllowDeclarativeSchemaChanger: true,
+				},
+			},
+		})
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)

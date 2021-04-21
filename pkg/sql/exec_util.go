@@ -1302,6 +1302,11 @@ type ExecutorTestingKnobs struct {
 
 	// OnTxnRetry, if set, will be called if there is a transaction retry.
 	OnTxnRetry func(autoRetryReason error, evalCtx *tree.EvalContext)
+
+	// AllowDeclarativeSchemaChanger is used to allow enabling the new,
+	// declarative schema changer. It cannot be enabled without this testing knob
+	// in 21.2.
+	AllowDeclarativeSchemaChanger bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

@@ -52,7 +52,16 @@ type testInfra struct {
 }
 
 func setupTestInfra(t testing.TB) *testInfra {
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	knobs := base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			AllowDeclarativeSchemaChanger: true,
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+	})
 	return &testInfra{
 		tc:       tc,
 		settings: tc.Server(0).ClusterSettings(),
