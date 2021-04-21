@@ -375,8 +375,9 @@ var specs = []stmtSpec{
 		unlink: []string{"name", "password"},
 	},
 	{
-		name:    "alter_sequence_options_stmt",
-		inline:  []string{"sequence_option_list", "sequence_option_elem"},
+		name:    "alter_sequence",
+		stmt:    "alter_sequence_stmt",
+		inline:  []string{"alter_rename_sequence_stmt", "alter_sequence_options_stmt", "alter_sequence_set_schema_stmt", "alter_sequence_owner_stmt", "sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer", "column_path": "column_name"},
 		unlink:  []string{"integer", "sequence_name", "column_path"},
 		nosplit: true,
@@ -401,8 +402,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_view",
-		stmt:    "alter_rename_view_stmt",
-		inline:  []string{"opt_transaction"},
+		stmt:    "alter_view_stmt",
+		inline:  []string{"alter_rename_view_stmt", "alter_view_set_schema_stmt", "alter_view_owner_stmt", "opt_transaction"},
 		replace: map[string]string{"relation_expr": "view_name", "qualified_name": "name"}, unlink: []string{"view_name", "name"},
 	},
 	{
