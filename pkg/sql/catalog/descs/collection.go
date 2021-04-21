@@ -536,14 +536,16 @@ func (tc *Collection) getObjectByName(
 	// disabling caching of system.eventlog, system.rangelog, and
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except role_members, role_options, and users
-	// (i.e., the ones used during authn/authz flows).
+	// (i.e., the ones used during authn/authz flows) and the event tables
+	// (i.e. rangelog and eventlog).
 	// TODO (lucy): Reevaluate the above. We have many more system tables now and
 	// should be able to lease most of them.
 	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.GetName() ||
 		objectName == systemschema.RoleOptionsTable.GetName() ||
 		objectName == systemschema.UsersTable.GetName() ||
 		objectName == systemschema.JobsTable.GetName() ||
-		objectName == systemschema.EventLogTable.GetName()
+		objectName == systemschema.EventLogTable.GetName() ||
+		objectName == systemschema.RangeEventTable.GetName()
 	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
 		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {
