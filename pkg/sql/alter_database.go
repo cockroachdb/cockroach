@@ -746,7 +746,7 @@ func checkCanConvertTableToMultiRegion(
 			tableDesc.GetName(),
 		)
 	}
-	for _, idx := range tableDesc.NonDropIndexes() {
+	for _, idx := range tableDesc.AllIndexes() {
 		if idx.GetPartitioning().NumColumns > 0 {
 			return errors.WithDetailf(
 				pgerror.Newf(

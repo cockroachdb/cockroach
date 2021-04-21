@@ -240,9 +240,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		return interleaveOnRegionalByRowError()
 	}
 
-	for _, idx := range n.tableDesc.NonDropIndexes() {
+	for _, idx := range n.tableDesc.AllIndexes() {
 		if idx.IsSharded() {
-			return pgerror.New(pgcode.FeatureNotSupported, "cannot convert a table to REGIONAL BY ROW if table table contains hash sharded indexes")
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot convert %s to REGIONAL BY ROW as the table contains hash sharded indexes",
+				tree.Name(n.tableDesc.GetName()),
+			)
 		}
 	}
 
