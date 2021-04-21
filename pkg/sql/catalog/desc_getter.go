@@ -12,6 +12,7 @@ package catalog
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
@@ -61,6 +62,16 @@ func MakeMapDescGetter() MapDescGetter {
 		Descriptors: make(map[descpb.ID]Descriptor),
 		Namespace:   make(map[descpb.NameInfo]descpb.ID),
 	}
+}
+
+// OrderedDescriptors returns the descriptors ordered by ID.
+func (m MapDescGetter) OrderedDescriptors() []Descriptor {
+	ret := make([]Descriptor, 0, len(m.Descriptors))
+	for _, d := range m.Descriptors {
+		ret = append(ret, d)
+	}
+	sort.Sort(Descriptors(ret))
+	return ret
 }
 
 // GetDesc implements the DescGetter interface.
