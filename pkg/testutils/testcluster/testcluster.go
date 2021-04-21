@@ -1177,7 +1177,10 @@ func (tc *TestCluster) WaitForFullReplication() error {
 // store in the cluster.
 func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 	testutils.SucceedsSoon(t, func() error {
-		client := tc.GetStatusClient(context.Background(), t, 0)
+		client, err := tc.GetStatusClient(context.Background(), t, 0)
+		if err != nil {
+			return err
+		}
 		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
 		if err != nil {
 			return err
@@ -1474,25 +1477,25 @@ func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.R
 // GetAdminClient gets the severpb.AdminClient for the specified server.
 func (tc *TestCluster) GetAdminClient(
 	ctx context.Context, t testing.TB, serverIdx int,
-) serverpb.AdminClient {
+) (serverpb.AdminClient, error) {
 	srv := tc.Server(serverIdx)
 	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
 	if err != nil {
-		t.Fatalf("failed to create an admin client because of %s", err)
+		return nil, errors.Wrap(err, "failed to create an admin client")
 	}
-	return serverpb.NewAdminClient(cc)
+	return serverpb.NewAdminClient(cc), nil
 }
 
 // GetStatusClient gets the severpb.StatusClient for the specified server.
 func (tc *TestCluster) GetStatusClient(
 	ctx context.Context, t testing.TB, serverIdx int,
-) serverpb.StatusClient {
+) (serverpb.StatusClient, error) {
 	srv := tc.Server(serverIdx)
 	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
 	if err != nil {
-		t.Fatalf("failed to create a status client because of %s", err)
+		return nil, errors.Wrap(err, "failed to create a status client")
 	}
-	return serverpb.NewStatusClient(cc)
+	return serverpb.NewStatusClient(cc), nil
 }
 
 type testClusterFactoryImpl struct{}

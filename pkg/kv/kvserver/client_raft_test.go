@@ -3110,9 +3110,11 @@ func TestDecommission(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	k := tc.ScratchRange(t)
-	admin := tc.GetAdminClient(ctx, t, 0)
+	admin, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err)
+
 	// Decommission the first node, which holds most of the leases.
-	_, err := admin.Decommission(
+	_, err = admin.Decommission(
 		ctx, &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{1},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
