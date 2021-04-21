@@ -19,13 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -99,68 +93,5 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	db, schema, object string,
 	flags tree.ObjectLookupFlags,
 ) (desc catalog.Descriptor, err error) {
-	if scEntry, ok := l.vs.GetVirtualSchema(schema); ok {
-		desc, err := scEntry.GetObjectByName(object, flags)
-		if err != nil {
-			return nil, err
-		}
-		if desc == nil {
-			if flags.Required {
-				obj := tree.NewQualifiedObjectName(db, schema, object, flags.DesiredObjectKind)
-				return nil, sqlerrors.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
-			}
-			return nil, nil
-		}
-		if flags.RequireMutable {
-			return nil, newMutableAccessToVirtualSchemaError(scEntry, object)
-		}
-		return desc.Desc(), nil
-	}
-
-	// Resolve type aliases which are usually available in the PostgreSQL as an extension
-	// on the public schema.
-	if schema == tree.PublicSchema && flags.DesiredObjectKind == tree.TypeObject {
-		if alias, ok := types.PublicSchemaAliases[object]; ok {
-			if flags.RequireMutable {
-				return nil, errors.Newf("cannot use mutable descriptor of aliased type %s.%s", schema, object)
-			}
-			return typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
-		}
-	}
-
-	// Fall back to physical descriptor access.
-	var found bool
-	switch flags.DesiredObjectKind {
-	case tree.TypeObject:
-		typeName := tree.MakeNewQualifiedTypeName(db, schema, object)
-		if flags.RequireMutable {
-			found, desc, err = l.tc.GetMutableTypeByName(ctx, txn, &typeName, flags)
-		} else {
-			found, desc, err = l.tc.GetImmutableTypeByName(ctx, txn, &typeName, flags)
-		}
-	case tree.TableObject:
-		tableName := tree.MakeTableNameWithSchema(tree.Name(db), tree.Name(schema), tree.Name(object))
-		if flags.RequireMutable {
-			found, desc, err = l.tc.GetMutableTableByName(ctx, txn, &tableName, flags)
-		} else {
-			found, desc, err = l.tc.GetImmutableTableByName(ctx, txn, &tableName, flags)
-		}
-	default:
-		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
-	}
-	if err != nil || !found {
-		return nil, err
-	}
-	return desc, nil
-}
-
-func newMutableAccessToVirtualSchemaError(entry catalog.VirtualSchema, object string) error {
-	switch entry.Desc().GetName() {
-	case "pg_catalog":
-		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"%s is a system catalog", tree.ErrNameString(object))
-	default:
-		return pgerror.Newf(pgcode.WrongObjectType,
-			"%s is a virtual object and cannot be modified", tree.ErrNameString(object))
-	}
+	return l.tc.GetObjectDesc(ctx, txn, settings, codec, db, schema, object, flags)
 }
