@@ -78,3 +78,35 @@ scan tab42147@id
  ├── cardinality: [0 - 1]
  ├── key: ()
  └── fd: ()-->(1)
+
+# Regression test for #63733. Index spans for in-between values should include
+# NULL values for the first index column if the column is nullable.
+exec-ddl
+CREATE TABLE t63733 (
+    k INT PRIMARY KEY,
+    a STRING,
+    b STRING,
+    INDEX idx (a, b ASC) PARTITION BY LIST (a, b) (
+       PARTITION us_west VALUES IN (('foo', 'bar'))
+    )
+)
+----
+
+opt
+SELECT k FROM t63733@idx WHERE k = 1;
+----
+select
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── scan t63733@idx
+ │    ├── columns: k:1!null
+ │    ├── constraint: /2/3/1
+ │    │    ├── [/NULL - /'foo'/'bar')
+ │    │    ├── [/'foo'/'bar'/1 - /'foo'/'bar'/1]
+ │    │    └── [/'foo'/e'bar\x00'/1 - ]
+ │    ├── flags: force-index=idx
+ │    └── key: (1)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
