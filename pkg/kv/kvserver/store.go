@@ -652,7 +652,7 @@ type StoreConfig struct {
 
 	ClosedTimestamp         *container.Container
 	ClosedTimestampSender   *sidetransport.Sender
-	ClosedTimestampReceiver *sidetransport.Receiver
+	ClosedTimestampReceiver sidetransportReceiver
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor

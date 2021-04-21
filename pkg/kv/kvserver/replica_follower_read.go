@@ -196,6 +196,9 @@ func (r *Replica) ClosedTimestampV2(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	leaseholder := r.mu.state.Lease.Replica.NodeID
+	raftClosed := r.mu.state.RaftClosedTimestamp
 	r.mu.RUnlock()
-	return r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, hlc.Timestamp{} /* sufficient */)
+	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, hlc.Timestamp{} /* sufficient */)
+	raftClosed.Forward(sideTransportClosed)
+	return raftClosed
 }
