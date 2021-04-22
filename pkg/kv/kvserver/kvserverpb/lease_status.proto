@@ -90,6 +90,8 @@ message LeaseStatus {
   util.hlc.Timestamp request_time = 5 [(gogoproto.nullable) = false];
   // State of the lease at now for a request at request_time.
   LeaseState state = 3;
+  // If state == ERROR, this provides more info about the error.
+  string err_info = 6;
   // Liveness if this is an epoch-based lease.
   kv.kvserver.liveness.livenesspb.Liveness liveness = 4 [(gogoproto.nullable) = false];
 }

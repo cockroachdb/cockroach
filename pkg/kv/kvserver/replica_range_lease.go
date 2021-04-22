@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -606,14 +607,19 @@ func (r *Replica) leaseStatus(
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
+			var msg redact.StringBuilder
 			if !ok {
-				if leaseStatusLogLimiter.ShouldLog() {
-					ctx = r.AnnotateCtx(ctx)
-					log.Warningf(ctx, "can't determine lease status of %s due to node liveness error: %+v",
-						lease.Replica, liveness.ErrRecordCacheMiss)
-				}
+				msg.Printf("can't determine lease status of %s due to node liveness error: %+v",
+					lease.Replica, liveness.ErrRecordCacheMiss)
+			} else {
+				msg.Printf("can't determine lease status of %s because node liveness info for n%d is stale. lease: %s, liveness: %s",
+					lease.Replica, lease.Replica.NodeID, lease, l.Liveness)
+			}
+			if leaseStatusLogLimiter.ShouldLog() {
+				log.Infof(ctx, "%s", msg)
 			}
 			status.State = kvserverpb.LeaseState_ERROR
+			status.ErrInfo = msg.String()
 			return status
 		}
 		if status.Liveness.Epoch > lease.Epoch {
@@ -1096,10 +1102,13 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
 				// Lease state couldn't be determined.
-				log.VEventf(ctx, 2, "lease state couldn't be determined")
+				msg := status.ErrInfo
+				if msg == "" {
+					msg = "lease state could not be determined"
+				}
+				log.VEventf(ctx, 2, "%s", msg)
 				return nil, false, roachpb.NewError(
-					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
-						"lease state couldn't be determined"))
+					newNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc, msg))
 
 			case kvserverpb.LeaseState_VALID, kvserverpb.LeaseState_UNUSABLE:
 				if !status.Lease.OwnedBy(r.store.StoreID()) {
