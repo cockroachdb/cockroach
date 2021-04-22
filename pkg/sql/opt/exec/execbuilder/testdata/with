@@ -165,3 +165,41 @@ vectorized: true
               columns: (column1)
               size: 1 column, 1 row
               row 0, expr 0: 1
+
+# Tests with correlated CTEs.
+query T
+EXPLAIN
+  SELECT (
+    WITH foo AS MATERIALIZED (SELECT x.a FROM x WHERE x.a = y.a)
+    SELECT * FROM foo
+  ) FROM y
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • distinct
+    │ distinct on: rowid
+    │ error on duplicate
+    │
+    └── • apply join (left outer)
+        │
+        └── • scan
+              missing stats
+              table: y@primary
+              spans: FULL SCAN
+
+query T
+EXPLAIN
+  SELECT * FROM
+    (VALUES (1), (2), (10)) AS v(x),
+    LATERAL (WITH foo AS MATERIALIZED (SELECT a FROM y WHERE y.a <= x) SELECT * FROM foo)
+----
+distribution: local
+vectorized: true
+·
+• apply join
+│
+└── • values
+      size: 1 column, 3 rows

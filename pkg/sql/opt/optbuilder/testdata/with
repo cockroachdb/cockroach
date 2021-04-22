@@ -536,12 +536,6 @@ with &1 (t)
                      │         └──  y.a:5 => a:8
                      └── x.a:1
 
-# Using a correlated subquery inside a CTE
-build
-SELECT (WITH t AS (SELECT * FROM y WHERE x.a = y.a) SELECT * FROM t LIMIT 1) FROM x
-----
-error (0A000): CTEs may not be correlated
-
 # Rename columns
 build
 WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
@@ -741,17 +735,6 @@ with &1 (t)
                                          └── mapping:
                                               └──  x.a:1 => a:13
 
-# Correlated WITH is not allowed.
-
-build
-SELECT (WITH foo AS (SELECT x.a FROM x WHERE x.a = y.a) SELECT a FROM foo) FROM y
-----
-error (0A000): CTEs may not be correlated
-
-build
-SELECT (WITH foo AS (SELECT (SELECT y.a) FROM x) SELECT a FROM foo) FROM y
-----
-error (0A000): CTEs may not be correlated
 
 # Regression test for #40407.
 exec-ddl
@@ -1696,15 +1679,6 @@ with &1 (b)
            └── projections
                 └── unique_rowid() [as=column7:7]
 
-build
-SELECT
-    *
-FROM
-    (VALUES (1), (2)) AS v (x),
-    LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
-----
-error (0A000): CTEs may not be correlated
-
 # Subquery as a whole is correlated, but the WITH is not.
 build
 SELECT (WITH foo as (VALUES (1)) SELECT x) FROM (VALUES (1)) AS v(x)
@@ -1854,3 +1828,176 @@ with &1 (cte)
       ├── columns: "?column?":6
       └── mapping:
            └──  "?column?":5 => "?column?":6
+
+# Tests with correlated subqueries inside a CTE.
+build
+SELECT (WITH foo AS (SELECT x.a FROM x WHERE x.a = y.a) SELECT a FROM foo) FROM y
+----
+project
+ ├── columns: a:9
+ ├── scan y
+ │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3
+ └── projections
+      └── subquery [as=a:9]
+           └── max1-row
+                ├── columns: a:8!null
+                └── with &1 (foo)
+                     ├── columns: a:8!null
+                     ├── project
+                     │    ├── columns: x.a:4!null
+                     │    └── select
+                     │         ├── columns: x.a:4!null b:5 x.rowid:6!null x.crdb_internal_mvcc_timestamp:7
+                     │         ├── scan x
+                     │         │    └── columns: x.a:4 b:5 x.rowid:6!null x.crdb_internal_mvcc_timestamp:7
+                     │         └── filters
+                     │              └── x.a:4 = y.a:1
+                     └── with-scan &1 (foo)
+                          ├── columns: a:8!null
+                          └── mapping:
+                               └──  x.a:4 => a:8
+
+build
+SELECT (WITH foo AS (SELECT (SELECT y.a) FROM x) SELECT a FROM foo) FROM y
+----
+project
+ ├── columns: a:11
+ ├── scan y
+ │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3
+ └── projections
+      └── subquery [as=a:11]
+           └── max1-row
+                ├── columns: a:10
+                └── with &1 (foo)
+                     ├── columns: a:10
+                     ├── project
+                     │    ├── columns: a:9
+                     │    ├── scan x
+                     │    │    └── columns: x.a:4 b:5 x.rowid:6!null x.crdb_internal_mvcc_timestamp:7
+                     │    └── projections
+                     │         └── subquery [as=a:9]
+                     │              └── max1-row
+                     │                   ├── columns: a:8
+                     │                   └── project
+                     │                        ├── columns: a:8
+                     │                        ├── values
+                     │                        │    └── ()
+                     │                        └── projections
+                     │                             └── y.a:1 [as=a:8]
+                     └── with-scan &1 (foo)
+                          ├── columns: a:10
+                          └── mapping:
+                               └──  a:9 => a:10
+
+build
+SELECT * FROM
+  (VALUES (1), (2)) AS v(x),
+  LATERAL (SELECT * FROM (WITH foo AS (SELECT 1 + x) SELECT * FROM foo))
+----
+inner-join-apply
+ ├── columns: x:1!null "?column?":3
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ ├── with &1 (foo)
+ │    ├── columns: "?column?":3
+ │    ├── project
+ │    │    ├── columns: "?column?":2
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── 1 + column1:1 [as="?column?":2]
+ │    └── with-scan &1 (foo)
+ │         ├── columns: "?column?":3
+ │         └── mapping:
+ │              └──  "?column?":2 => "?column?":3
+ └── filters (true)
+
+
+# In this test, foo is correlated and cannot be hoisted up; bar and baz depend
+# on foo, so they can't be hoisted up either. But qux can be hoisted up.
+build
+SELECT * FROM y, LATERAL (
+  WITH foo AS (SELECT (SELECT y.a) FROM x),
+       bar AS (SELECT 1 FROM foo),
+       baz AS (SELECT 2 FROM bar),
+       qux AS (SELECT 3 FROM y)
+  SELECT * FROM foo, bar, baz, qux
+)
+----
+with &4 (qux)
+ ├── columns: a:1 a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+ ├── project
+ │    ├── columns: "?column?":17!null
+ │    ├── scan y
+ │    │    └── columns: y.a:14 y.rowid:15!null y.crdb_internal_mvcc_timestamp:16
+ │    └── projections
+ │         └── 3 [as="?column?":17]
+ └── project
+      ├── columns: y.a:1 a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+      └── inner-join-apply
+           ├── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3 a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+           ├── scan y
+           │    └── columns: y.a:1 y.rowid:2!null y.crdb_internal_mvcc_timestamp:3
+           ├── with &1 (foo)
+           │    ├── columns: a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+           │    ├── project
+           │    │    ├── columns: a:9
+           │    │    ├── scan x
+           │    │    │    └── columns: x.a:4 b:5 x.rowid:6!null x.crdb_internal_mvcc_timestamp:7
+           │    │    └── projections
+           │    │         └── subquery [as=a:9]
+           │    │              └── max1-row
+           │    │                   ├── columns: a:8
+           │    │                   └── project
+           │    │                        ├── columns: a:8
+           │    │                        ├── values
+           │    │                        │    └── ()
+           │    │                        └── projections
+           │    │                             └── y.a:1 [as=a:8]
+           │    └── with &2 (bar)
+           │         ├── columns: a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+           │         ├── project
+           │         │    ├── columns: "?column?":11!null
+           │         │    ├── with-scan &1 (foo)
+           │         │    │    ├── columns: a:10
+           │         │    │    └── mapping:
+           │         │    │         └──  a:9 => a:10
+           │         │    └── projections
+           │         │         └── 1 [as="?column?":11]
+           │         └── with &3 (baz)
+           │              ├── columns: a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+           │              ├── project
+           │              │    ├── columns: "?column?":13!null
+           │              │    ├── with-scan &2 (bar)
+           │              │    │    ├── columns: "?column?":12!null
+           │              │    │    └── mapping:
+           │              │    │         └──  "?column?":11 => "?column?":12
+           │              │    └── projections
+           │              │         └── 2 [as="?column?":13]
+           │              └── inner-join (cross)
+           │                   ├── columns: a:18 "?column?":19!null "?column?":20!null "?column?":21!null
+           │                   ├── with-scan &1 (foo)
+           │                   │    ├── columns: a:18
+           │                   │    └── mapping:
+           │                   │         └──  a:9 => a:18
+           │                   ├── inner-join (cross)
+           │                   │    ├── columns: "?column?":19!null "?column?":20!null "?column?":21!null
+           │                   │    ├── with-scan &2 (bar)
+           │                   │    │    ├── columns: "?column?":19!null
+           │                   │    │    └── mapping:
+           │                   │    │         └──  "?column?":11 => "?column?":19
+           │                   │    ├── inner-join (cross)
+           │                   │    │    ├── columns: "?column?":20!null "?column?":21!null
+           │                   │    │    ├── with-scan &3 (baz)
+           │                   │    │    │    ├── columns: "?column?":20!null
+           │                   │    │    │    └── mapping:
+           │                   │    │    │         └──  "?column?":13 => "?column?":20
+           │                   │    │    ├── with-scan &4 (qux)
+           │                   │    │    │    ├── columns: "?column?":21!null
+           │                   │    │    │    └── mapping:
+           │                   │    │    │         └──  "?column?":17 => "?column?":21
+           │                   │    │    └── filters (true)
+           │                   │    └── filters (true)
+           │                   └── filters (true)
+           └── filters (true)
