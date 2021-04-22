@@ -54,9 +54,7 @@ CREATE DATABASE foo;
 CREATE TABLE foo.kv (k INT PRIMARY KEY, v BYTES);
 `)
 	require.NoError(t, err)
-	_, err = sqlDB.Exec(`
-SET CLUSTER SETTING sql.distsql.temp_storage.workmem=$1;
-`, fmt.Sprintf("%dB", workmemLimit))
+	_, err = sqlDB.Exec(`SET distsql_workmem=$1;`, fmt.Sprintf("%dB", workmemLimit))
 	require.NoError(t, err)
 
 	// Insert many rows with unique values - this is needed so that there were

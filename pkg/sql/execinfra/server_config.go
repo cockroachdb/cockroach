@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,14 +40,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
-
-// SettingWorkMemBytes is a cluster setting that determines the maximum amount
-// of RAM that a processor can use.
-var SettingWorkMemBytes = settings.RegisterByteSizeSetting(
-	"sql.distsql.temp_storage.workmem",
-	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
-	64*1024*1024, /* 64MB */
-).WithPublic()
 
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
@@ -259,16 +250,24 @@ const (
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
 
+// DefaultMemoryLimit is the default value of
+// sql.distsql.temp_storage.workmem cluster setting.
+const DefaultMemoryLimit = 64 << 20 /* 64 MiB */
+
 // GetWorkMemLimit returns the number of bytes determining the amount of RAM
 // available to a single processor or operator.
-func GetWorkMemLimit(config *ServerConfig) int64 {
-	if config.TestingKnobs.ForceDiskSpill && config.TestingKnobs.MemoryLimitBytes != 0 {
+func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
+	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
 		panic(errors.AssertionFailedf("both ForceDiskSpill and MemoryLimitBytes set"))
 	}
-	if config.TestingKnobs.ForceDiskSpill {
+	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		return 1
-	} else if config.TestingKnobs.MemoryLimitBytes != 0 {
-		return config.TestingKnobs.MemoryLimitBytes
+	} else if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
+		return flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 	}
-	return SettingWorkMemBytes.Get(&config.Settings.SV)
+	if flowCtx.EvalCtx.SessionData.WorkMemLimit <= 0 {
+		// If for some reason workmem limit is not set, use the default value.
+		return DefaultMemoryLimit
+	}
+	return flowCtx.EvalCtx.SessionData.WorkMemLimit
 }
