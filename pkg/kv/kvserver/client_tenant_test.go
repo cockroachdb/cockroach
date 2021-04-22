@@ -80,7 +80,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		var aggregateStats enginepb.MVCCStats
 		var seen int
 		store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
-			ri := replica.State()
+			ri := replica.State(ctx)
 			if ri.TenantID != tenantID.ToUint64() {
 				return true
 			}

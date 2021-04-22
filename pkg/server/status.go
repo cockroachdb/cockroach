@@ -1633,7 +1633,7 @@ func (s *statusServer) rangesHelper(
 			span.StartKey = omittedKeyStr
 			span.EndKey = omittedKeyStr
 		}
-		state := rep.State()
+		state := rep.State(ctx)
 		if !includeRawKeys {
 			state.ReplicaState.Desc.StartKey = nil
 			state.ReplicaState.Desc.EndKey = nil
