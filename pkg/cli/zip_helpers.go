@@ -262,6 +262,59 @@ func (r *rangeSelection) items() map[int]struct{} {
 	return s
 }
 
+// fileSelection is used to define a subset of the files on the command line.
+type fileSelection struct {
+	includePatterns []string
+	excludePatterns []string
+}
+
+// validate checks that all specified patterns are valid.
+func (fs *fileSelection) validate() error {
+	for _, p := range append(fs.includePatterns, fs.excludePatterns...) {
+		if _, err := filepath.Match(p, ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// retrievalPatterns returns the list of glob patterns to send to the
+// server, when listing which files are remotely available. We perform
+// this filtering server-side so that the inclusion pattern can be
+// used to reduce the amount of data retrieved in the "get file list"
+// response.
+func (fs *fileSelection) retrievalPatterns() []string {
+	if len(fs.includePatterns) == 0 {
+		// No include pattern defined: retrieve all files.
+		return []string{"*"}
+	}
+	return fs.includePatterns
+}
+
+// isIncluded determine whether the given file name is included in the selection.
+func (fs *fileSelection) isIncluded(filename string) bool {
+	// To be included, a file must be included in at least one of the retrieval patterns.
+	included := false
+	for _, p := range fs.retrievalPatterns() {
+		if matched, _ := filepath.Match(p, filename); matched {
+			included = true
+			break
+		}
+	}
+	if !included {
+		return false
+	}
+	// Then it must not match any of the exclusion patterns.
+	for _, p := range fs.excludePatterns {
+		if matched, _ := filepath.Match(p, filename); matched {
+			included = false
+			break
+		}
+	}
+
+	return included
+}
+
 // to prevent interleaved output.
 var zipReportingMu syncutil.Mutex
 
