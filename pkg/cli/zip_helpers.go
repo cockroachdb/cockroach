@@ -286,9 +286,9 @@ type zipReporter struct {
 	inItem bool
 }
 
-func newZipReporter(format string, args ...interface{}) *zipReporter {
+func (zc *zipContext) newZipReporter(format string, args ...interface{}) *zipReporter {
 	return &zipReporter{
-		flowing: zipCtx.concurrency == 1,
+		flowing: zc.concurrency == 1,
 		prefix:  "[" + fmt.Sprintf(format, args...) + "]",
 		newline: true,
 		inItem:  false,
