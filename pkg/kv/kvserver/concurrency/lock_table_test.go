@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 )
@@ -146,11 +147,11 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				lt = &lockTableImpl{
-					enabled:    true,
-					enabledSeq: 1,
-					maxLocks:   int64(maxLocks),
-				}
+				ltImpl := newLockTable(int64(maxLocks))
+				ltImpl.enabled = true
+				ltImpl.enabledSeq = 1
+				ltImpl.minLocks = 0
+				lt = ltImpl
 				txnsByName = make(map[string]*enginepb.TxnMeta)
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
@@ -523,6 +524,131 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
+func TestLockTableMaxLocks(t *testing.T) {
+	lt := newLockTable(5)
+	lt.minLocks = 0
+	lt.enabled = true
+	var keys []roachpb.Key
+	var guards []lockTableGuard
+	var reqs []Request
+	// 10 requests, each with 10 discovered locks. Only 1 will be considered
+	// notRemovable per request.
+	for i := 0; i < 10; i++ {
+		spans := &spanset.SpanSet{}
+		for j := 0; j < 20; j++ {
+			k := roachpb.Key(fmt.Sprintf("%08d", i*20+j))
+			keys = append(keys, k)
+			spans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: k}, hlc.Timestamp{WallTime: 1})
+		}
+		req := Request{
+			Timestamp:  hlc.Timestamp{WallTime: 1},
+			LatchSpans: spans,
+			LockSpans:  spans,
+		}
+		reqs = append(reqs, req)
+		ltg := lt.ScanAndEnqueue(req, nil)
+		require.Nil(t, ltg.ResolveBeforeScanning())
+		require.False(t, ltg.ShouldWait())
+		guards = append(guards, ltg)
+	}
+	for i := range guards {
+		for j := 0; j < 10; j++ {
+			k := i*20 + j
+			added, err := lt.AddDiscoveredLock(
+				&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[k]}},
+				0, guards[i])
+			require.True(t, added)
+			require.NoError(t, err)
+		}
+	}
+	// Only the notRemovable locks survive after addition.
+	require.Equal(t, int64(10), lt.lockCountForTesting())
+	// Two guards are dequeued.
+	lt.Dequeue(guards[0])
+	lt.Dequeue(guards[1])
+	require.Equal(t, int64(10), lt.lockCountForTesting())
+	// Two guards do ScanAndEnqueue.
+	for i := 2; i < 4; i++ {
+		guards[i] = lt.ScanAndEnqueue(reqs[i], guards[i])
+		require.True(t, guards[i].ShouldWait())
+	}
+	require.Equal(t, int64(10), lt.lockCountForTesting())
+	// Add another discovered lock, to trigger tryClearLocks.
+	added, err := lt.AddDiscoveredLock(
+		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+10]}},
+		0, guards[9])
+	require.True(t, added)
+	require.NoError(t, err)
+	// The 6 notRemovable locks remain.
+	require.Equal(t, int64(6), lt.lockCountForTesting())
+	require.Equal(t, int64(101), int64(lt.locks[spanset.SpanGlobal].lockIDSeqNum))
+	// Add another discovered lock, to trigger tryClearLocks.
+	added, err = lt.AddDiscoveredLock(
+		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+11]}},
+		0, guards[9])
+	require.True(t, added)
+	require.NoError(t, err)
+	// Still the 6 notRemovable locks remain.
+	require.Equal(t, int64(6), lt.lockCountForTesting())
+	require.Equal(t, int64(102), int64(lt.locks[spanset.SpanGlobal].lockIDSeqNum))
+	// Two more guards are dequeued, so we are down to 4 notRemovable locks.
+	lt.Dequeue(guards[4])
+	lt.Dequeue(guards[5])
+	// Bump up the enforcement interval manually.
+	lt.locks[spanset.SpanGlobal].lockAddMaxLocksCheckInterval = 2
+	// Add another discovered lock.
+	added, err = lt.AddDiscoveredLock(
+		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+12]}},
+		0, guards[9])
+	require.True(t, added)
+	require.NoError(t, err)
+	// This notRemovable=false lock is also added, since enforcement not done.
+	require.Equal(t, int64(7), lt.lockCountForTesting())
+	// Add another discovered lock, to trigger tryClearLocks.
+	added, err = lt.AddDiscoveredLock(
+		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+13]}},
+		0, guards[9])
+	require.True(t, added)
+	require.NoError(t, err)
+	// Now enforcement is done, so only 4 remain.
+	require.Equal(t, int64(4), lt.lockCountForTesting())
+	// Bump down the enforcement interval manually, and bump up minLocks
+	lt.locks[spanset.SpanGlobal].lockAddMaxLocksCheckInterval = 1
+	lt.minLocks = 2
+	// Three more guards dequeued.
+	lt.Dequeue(guards[6])
+	lt.Dequeue(guards[7])
+	lt.Dequeue(guards[8])
+	// Add another discovered lock.
+	added, err = lt.AddDiscoveredLock(
+		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+14]}},
+		0, guards[9])
+	require.True(t, added)
+	require.NoError(t, err)
+	require.Equal(t, int64(5), lt.lockCountForTesting())
+	// Add another discovered lock, to trigger tryClearLocks, and push us over 5
+	// locks.
+	added, err = lt.AddDiscoveredLock(
+		&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+15]}},
+		0, guards[9])
+	require.True(t, added)
+	require.NoError(t, err)
+	// Enforcement keeps the 1 notRemovable lock, and another, since minLocks=2.
+	require.Equal(t, int64(2), lt.lockCountForTesting())
+	// Restore minLocks to 0.
+	lt.minLocks = 0
+	// Add locks to push us over 5 locks.
+	for i := 16; i < 20; i++ {
+		added, err = lt.AddDiscoveredLock(
+			&roachpb.Intent{Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+i]}},
+			0, guards[9])
+		require.True(t, added)
+		require.NoError(t, err)
+	}
+	// Only the 1 notRemovable lock remains.
+	require.Equal(t, int64(1), lt.lockCountForTesting())
+}
+
 type workItem struct {
 	// Contains one of request or intents.
 
@@ -691,12 +817,12 @@ type workloadExecutor struct {
 }
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
+	const maxLocks = 100000
+	lt := newLockTable(maxLocks)
+	lt.enabled = true
 	return &workloadExecutor{
-		lm: spanlatch.Manager{},
-		lt: &lockTableImpl{
-			enabled:  true,
-			maxLocks: 100000,
-		},
+		lm:           spanlatch.Manager{},
+		lt:           lt,
 		items:        items,
 		transactions: make(map[uuid.UUID]*transactionState),
 		doneWork:     make(chan *workItem),
@@ -1254,12 +1380,12 @@ func BenchmarkLockTable(b *testing.B) {
 					func(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
+						const maxLocks = 100000
+						lt := newLockTable(maxLocks)
+						lt.enabled = true
 						env := benchEnv{
-							lm: &spanlatch.Manager{},
-							lt: &lockTableImpl{
-								enabled:  true,
-								maxLocks: 100000,
-							},
+							lm:                &spanlatch.Manager{},
+							lt:                lt,
 							numRequestsWaited: &numRequestsWaited,
 							numScanCalls:      &numScanCalls,
 						}
