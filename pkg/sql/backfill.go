@@ -987,35 +987,11 @@ func (sc *SchemaChanger) distIndexBackfill(
 	addedIndexes []descpb.IndexID,
 	filter backfill.MutationFilter,
 ) error {
-	readAsOf := sc.clock.Now()
 
 	// Variables to track progress of the index backfill.
 	origNRanges := -1
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
-
-	// Index backfilling ingests SSTs that don't play nicely with running txns
-	// since they just add their keys blindly. Running a Scan of the target
-	// spans at the time the SSTs' keys will be written will calcify history up
-	// to then since the scan will resolve intents and populate tscache to keep
-	// anything else from sneaking under us. Since these are new indexes, these
-	// spans should be essentially empty, so this should be a pretty quick and
-	// cheap scan.
-	const pageSize = 10000
-	noop := func(_ []kv.KeyValue) error { return nil }
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		for _, span := range targetSpans {
-			// TODO(dt): a Count() request would be nice here if the target isn't
-			// empty, since we don't need to drag all the results back just to
-			// then ignore them -- we just need the iteration on the far end.
-			if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
 
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
@@ -1034,6 +1010,56 @@ func (sc *SchemaChanger) distIndexBackfill(
 	if todoSpans == nil {
 		return nil
 	}
+
+	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
+	if writeAsOf.IsEmpty() {
+		if err := sc.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus("scanning target index for in-progress transactions"), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
+		}
+		writeAsOf = sc.clock.Now()
+		log.Infof(ctx, "starting scan of target index as of %v...", writeAsOf)
+		// Index backfilling ingests SSTs that don't play nicely with running txns
+		// since they just add their keys blindly. Running a Scan of the target
+		// spans at the time the SSTs' keys will be written will calcify history up
+		// to then since the scan will resolve intents and populate tscache to keep
+		// anything else from sneaking under us. Since these are new indexes, these
+		// spans should be essentially empty, so this should be a pretty quick and
+		// cheap scan.
+		const pageSize = 10000
+		noop := func(_ []kv.KeyValue) error { return nil }
+		if err := sc.fixedTimestampTxn(ctx, writeAsOf, func(ctx context.Context, txn *kv.Txn) error {
+			for _, span := range targetSpans {
+				// TODO(dt): a Count() request would be nice here if the target isn't
+				// empty, since we don't need to drag all the results back just to
+				// then ignore them -- we just need the iteration on the far end.
+				if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		log.Infof(ctx, "persisting target safe write time %v...", writeAsOf)
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			details := sc.job.Details().(jobspb.SchemaChangeDetails)
+			details.WriteTimestamp = writeAsOf
+			return sc.job.SetDetails(ctx, txn, details)
+		}); err != nil {
+			return err
+		}
+		if err := sc.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return RunningStatusBackfill, nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
+		}
+	} else {
+		log.Infof(ctx, "writing at persisted safe write time %v...", writeAsOf)
+	}
+
+	readAsOf := sc.clock.Now()
 
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
@@ -1063,7 +1089,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			true /* distribute */)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize, addedIndexes)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, chunkSize, addedIndexes)
 		if err != nil {
 			return err
 		}
