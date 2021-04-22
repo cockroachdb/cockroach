@@ -657,13 +657,8 @@ RANGE default  ALTER RANGE default CONFIGURE ZONE USING
                constraints = '[]',
                lease_preferences = '[]'
 
-statement error attempting to discard the zone configuration of a multi-region entity
-ALTER INDEX regional_by_row@primary CONFIGURE ZONE DISCARD
-
 statement ok
-SET override_multi_region_zone_config = true;
-ALTER INDEX regional_by_row@primary CONFIGURE ZONE DISCARD;
-SET override_multi_region_zone_config = false
+ALTER INDEX regional_by_row@primary CONFIGURE ZONE DISCARD
 
 statement error attempting to discard the zone configuration of a multi-region entity
 ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@primary CONFIGURE ZONE DISCARD
@@ -922,3 +917,431 @@ SET override_multi_region_zone_config = false
 
 statement ok
 ALTER TABLE tbl2 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+DROP TABLE tbl2
+
+# Test all cases where DISCARD is used to remove a zone configuration from a
+# REGIONAL BY ROW table.
+subtest discard_regional_by_row
+
+statement ok
+CREATE TABLE tbl3 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER INDEX tbl3@tbl3_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER INDEX tbl3@tbl3_i_idx CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl3@tbl3_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl3@tbl3_i_idx
+----
+INDEX tbl3@tbl3_i_idx  ALTER INDEX tbl3@tbl3_i_idx CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 10,
+                       num_voters = 3,
+                       constraints = '{+region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an index zone config on a RBR table should succeed without override.
+statement ok
+ALTER INDEX tbl3@tbl3_i_idx CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl3@tbl3_i_idx
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARDing a partition's zone configuration on a RBR table should fail.
+statement error attempting to discard the zone configuration of a multi-region entity
+ALTER partition "us-east-1" of index tbl3@tbl3_i_idx CONFIGURE ZONE DISCARD
+
+# ...but we should be able to override.
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER partition "us-east-1" of index tbl3@tbl3_i_idx CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+# Try a similar test but on the table zone configuration.
+statement ok
+ALTER TABLE tbl3 CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER TABLE tbl3 CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl3 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl3
+----
+TABLE tbl3  ALTER TABLE tbl3 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 10,
+            num_replicas = 10,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an table zone config on a RBR table should succeed without override.
+statement ok
+ALTER TABLE tbl3 CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl3
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+DROP TABLE tbl3
+
+# Test all cases where DISCARD is used to remove a zone configuration from a
+# REGIONAL BY TABLE IN PRIMARY REGION table.
+subtest discard_regional_by_table_in_primary_region
+
+statement ok
+CREATE TABLE tbl4 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER INDEX tbl4@tbl4_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER INDEX tbl4@tbl4_i_idx CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl4@tbl4_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl4@tbl4_i_idx
+----
+INDEX tbl4@tbl4_i_idx  ALTER INDEX tbl4@tbl4_i_idx CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 10,
+                       num_voters = 3,
+                       constraints = '{+region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an index zone config on a RBT table should succeed without override.
+statement ok
+ALTER INDEX tbl4@tbl4_i_idx CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl4@tbl4_i_idx
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER TABLE tbl4 CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER TABLE tbl4 CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl4 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl4
+----
+TABLE tbl4  ALTER TABLE tbl4 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 10,
+            num_replicas = 10,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an table zone config on a RBT table should succeed without override.
+statement ok
+ALTER TABLE tbl4 CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl4
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+# Test all cases where DISCARD is used to remove a zone configuration from a
+# REGIONAL BY TABLE IN REGION <region> table.
+subtest discard_regional_by_table_in_region
+
+statement ok
+CREATE TABLE tbl5 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+statement ok
+ALTER INDEX tbl5@tbl5_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER INDEX tbl5@tbl5_i_idx CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl5@tbl5_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl5@tbl5_i_idx
+----
+INDEX tbl5@tbl5_i_idx  ALTER INDEX tbl5@tbl5_i_idx CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 10,
+                       num_voters = 3,
+                       constraints = '{+region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an index zone config on a RBT table should succeed without override.
+statement ok
+ALTER INDEX tbl5@tbl5_i_idx CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl5@tbl5_i_idx
+----
+TABLE tbl5  ALTER TABLE tbl5 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 90000,
+            num_replicas = 3,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER TABLE tbl5 CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER TABLE tbl5 CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl5 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl5
+----
+TABLE tbl5  ALTER TABLE tbl5 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 10,
+            num_replicas = 10,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an table zone config on a RBT table should fail without override.
+statement error attempting to discard the zone configuration of a multi-region entity
+ALTER TABLE tbl5 CONFIGURE ZONE DISCARD
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl5 CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl5
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+DROP TABLE tbl5
+
+# Test all cases where DISCARD is used to remove a zone configuration from a
+# GLOBAL table.
+subtest discard_global
+
+statement ok
+CREATE TABLE tbl6 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY GLOBAL
+
+statement ok
+ALTER INDEX tbl6@tbl6_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER INDEX tbl6@tbl6_i_idx CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER INDEX tbl6@tbl6_i_idx CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl6@tbl6_i_idx
+----
+INDEX tbl6@tbl6_i_idx  ALTER INDEX tbl6@tbl6_i_idx CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 10,
+                       num_voters = 3,
+                       constraints = '{+region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an index zone config on a GLOBAL table should succeed without
+# override.
+statement ok
+ALTER INDEX tbl6@tbl6_i_idx CONFIGURE ZONE DISCARD
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl6@tbl6_i_idx
+----
+TABLE tbl6  ALTER TABLE tbl6 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 90000,
+            global_reads = true,
+            num_replicas = 3,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER TABLE tbl6 CONFIGURE ZONE USING gc.ttlseconds=10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER TABLE tbl6 CONFIGURE ZONE USING num_replicas=10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl6 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl6
+----
+TABLE tbl6  ALTER TABLE tbl6 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 10,
+            global_reads = true,
+            num_replicas = 10,
+            num_voters = 3,
+            constraints = '{+region=us-east-1: 1}',
+            voter_constraints = '[+region=us-east-1]',
+            lease_preferences = '[[+region=us-east-1]]'
+
+# DISCARD of an table zone config on a GLOBAL table should fail without
+# override.
+statement error attempting to discard the zone configuration of a multi-region entity
+ALTER TABLE tbl6 CONFIGURE ZONE DISCARD
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE tbl6 CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl6
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 90000,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+DROP TABLE tbl6
+
+# Ensure that when using INHERIT FROM PARENT, blocks still apply.
+subtest inherit_from_parent
+
+statement ok
+CREATE TABLE tbl7 (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER TABLE tbl7 CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER INDEX tbl7@tbl7_i_idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER PARTITION "us-east-1" OF INDEX tbl7@tbl7_i_idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
