@@ -2986,6 +2986,10 @@ type EvalPlanner interface {
 	EvalDatabase
 	TypeReferenceResolver
 
+	// GetImmutableTableInterfaceByID returns an interface{} with
+	// catalog.TableDescriptor to avoid a circular dependency.
+	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
+
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.
 	// `INT(13)`, `mytype`, `"mytype"`, `pg_catalog.int4` or `"public".mytype`.
