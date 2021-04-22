@@ -353,6 +353,12 @@ func (b *writeBuffer) writeBinaryDatum(
 			return ndigit
 		}
 
+		// The dscale is defined as number of digits (in base 10) visible
+		// after the decimal separator, so it can't be negative.
+		if alloc.pgNum.Dscale < 0 {
+			alloc.pgNum.Dscale = 0
+		}
+
 		b.putInt32(int32(2 * (4 + alloc.pgNum.Ndigits)))
 		b.putInt16(alloc.pgNum.Ndigits)
 		b.putInt16(alloc.pgNum.Weight)

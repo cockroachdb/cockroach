@@ -156,7 +156,7 @@ func TestEncodings(t *testing.T) {
 				}
 				got := verifyLen(t)
 				if !bytes.Equal(got, tc.TextAsBinary) {
-					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.Text)
+					t.Errorf("unexpected text encoding:\n\t%q found,\n\t%q expected", got, tc.TextAsBinary)
 				}
 			}
 		})
