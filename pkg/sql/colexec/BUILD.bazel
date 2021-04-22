@@ -71,6 +71,7 @@ go_library(
         "//pkg/util/duration",  # keep
         "//pkg/util/encoding",  # keep
         "//pkg/util/humanizeutil",
+        "//pkg/util/json",  # keep
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/stringarena",
@@ -166,6 +167,7 @@ go_test(
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/humanizeutil",
+        "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",

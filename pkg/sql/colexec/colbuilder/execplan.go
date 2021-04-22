@@ -1978,7 +1978,8 @@ func planProjectionOperators(
 	case *tree.CaseExpr:
 		allocator := colmem.NewAllocator(ctx, acc, factory)
 		caseOutputType := t.ResolvedType()
-		if typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family()) == types.BytesFamily {
+		family := typeconv.TypeFamilyToCanonicalTypeFamily(caseOutputType.Family())
+		if family == types.BytesFamily || family == types.JsonFamily {
 			// Currently, there is a contradiction between the way CASE operator
 			// works (which populates its output in arbitrary order) and the
 			// flat bytes implementation of Bytes type (which prohibits sets in
@@ -2121,8 +2122,8 @@ func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) e
 	leftDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(left.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
 	rightDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(right.ResolvedType().Family()) == typeconv.DatumVecCanonicalTypeFamily
 	outputDatumBacked := typeconv.TypeFamilyToCanonicalTypeFamily(outputType.Family()) == typeconv.DatumVecCanonicalTypeFamily
-	if (leftDatumBacked || rightDatumBacked) && !outputDatumBacked {
-		return errors.New("datum-backed arguments and not datum-backed " +
+	if (leftDatumBacked && rightDatumBacked) && !outputDatumBacked {
+		return errors.New("datum-backed arguments on both sides and not datum-backed " +
 			"output of a binary expression is currently not supported")
 	}
 	return nil
