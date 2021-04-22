@@ -404,6 +404,7 @@ go_test(
         "admin_audit_log_test.go",
         "alter_column_type_test.go",
         "ambiguous_commit_test.go",
+        "apply_join_test.go",
         "as_of_test.go",
         "builtin_mem_usage_test.go",
         "builtin_test.go",
