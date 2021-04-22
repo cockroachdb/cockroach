@@ -468,6 +468,12 @@ message SchemaChangeDetails {
   // (controlled and updated by a SchemaChanger) and jobs as they exist in 20.1
   // (scheduled and run by the job registry).
   uint32 format_version = 7 [(gogoproto.casttype) = "SchemaChangeDetailsFormatVersion"];
+
+  // WriteTimestamp is the timestamp at which a backfill may want to write, e.g.
+  // a time that has been identified via a scan as safe for writing.
+  util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 11.
 }
 
 message SchemaChangeProgress {
