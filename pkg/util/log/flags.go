@@ -43,31 +43,18 @@ func init() {
 		&logging.showLogs,
 		&logging.vmoduleConfig.mu.vmodule,
 	)
-	// package is imported but not further initialized.
-	defaultConfig := logconfig.DefaultConfig()
 
-	if err := defaultConfig.Validate(nil /* no default directory */); err != nil {
+	// By default, we use and apply the test configuration.
+	// This can be overridden to use output to file in tests
+	// using TestLogScope.
+	cfg, err := getTestConfig(nil /* output to files disabled */)
+	if err != nil {
+		panic(err)
+	}
+	if _, err := ApplyConfig(cfg); err != nil {
 		panic(err)
 	}
 
-	// Default stderrThreshold to log everything to the process'
-	// external stderr (OrigStderr).
-	defaultConfig.Sinks.Stderr.Filter = severity.INFO
-	// Ensure all channels go to stderr.
-	defaultConfig.Sinks.Stderr.Channels.Channels = logconfig.SelectAllChannels()
-	// We also don't capture internal writes to fd2 by default:
-	// let the writes go to the external stderr.
-	defaultConfig.CaptureFd2.Enable = false
-	// Since we are letting writes go to the external stderr,
-	// we cannot keep redaction markers there.
-	*defaultConfig.Sinks.Stderr.Redactable = false
-	// Remove all sinks other than stderr.
-	defaultConfig.Sinks.FluentServers = nil
-	defaultConfig.Sinks.FileGroups = nil
-
-	if _, err := ApplyConfig(defaultConfig); err != nil {
-		panic(err)
-	}
 	// Reset the "active' flag so that the main commands can reset the
 	// configuration.
 	logging.mu.active = false
