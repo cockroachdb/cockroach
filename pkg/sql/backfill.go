@@ -945,18 +945,26 @@ func (sc *SchemaChanger) distBackfill(
 	origNRanges := -1
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
-	readAsOf := sc.clock.Now()
-	// Index backfilling ingests SSTs that don't play nicely with running txns
-	// since they just add their keys blindly. Running a Scan of the target
-	// spans at the time the SSTs' keys will be written will calcify history up
-	// to then since the scan will resolve intents and populate tscache to keep
-	// anything else from sneaking under us. Since these are new indexes, these
-	// spans should be essentially empty, so this should be a pretty quick and
-	// cheap scan.
-	if backfillType == indexBackfill {
+
+	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
+	if writeAsOf.IsEmpty() {
+		if err := sc.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus("scanning target index for in-progress transactions"), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
+		}
+		writeAsOf = sc.clock.Now()
+		log.Infof(ctx, "starting scan of target index as of %v...", writeAsOf)
+		// Index backfilling ingests SSTs that don't play nicely with running txns
+		// since they just add their keys blindly. Running a Scan of the target
+		// spans at the time the SSTs' keys will be written will calcify history up
+		// to then since the scan will resolve intents and populate tscache to keep
+		// anything else from sneaking under us. Since these are new indexes, these
+		// spans should be essentially empty, so this should be a pretty quick and
+		// cheap scan.
 		const pageSize = 10000
 		noop := func(_ []kv.KeyValue) error { return nil }
-		if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+		if err := sc.fixedTimestampTxn(ctx, writeAsOf, func(ctx context.Context, txn *kv.Txn) error {
 			for _, span := range targetSpans {
 				// TODO(dt): a Count() request would be nice here if the target isn't
 				// empty, since we don't need to drag all the results back just to
@@ -969,7 +977,23 @@ func (sc *SchemaChanger) distBackfill(
 		}); err != nil {
 			return err
 		}
+		log.Infof(ctx, "persisting target safe write time %v...", writeAsOf)
+
+		details := sc.job.Details().(jobspb.SchemaChangeDetails)
+		details.WriteTimestamp = writeAsOf
+		if err := sc.job.SetDetails(ctx, details); err != nil {
+			return err
+		}
+		if err := sc.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return RunningStatusBackfill, nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
+		}
+	} else {
+		log.Infof(ctx, "writing at persisted safe write time %v...", writeAsOf)
 	}
+
+	readAsOf := sc.clock.Now()
 
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
@@ -1045,7 +1069,7 @@ func (sc *SchemaChanger) distBackfill(
 
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn, true /* distribute */)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, readAsOf,
+				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, writeAsOf, readAsOf,
 			)
 			if err != nil {
 				return err

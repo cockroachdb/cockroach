@@ -199,7 +199,11 @@ func (b *backfiller) mainLoop(
 		for todo.Key != nil {
 			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
 			var err error
-			todo.Key, err = b.chunks.runChunk(ctx, mutations, todo, b.spec.ChunkSize, b.spec.ReadAsOf)
+			readAsOf := b.spec.ReadAsOf
+			if readAsOf.IsEmpty() {
+				readAsOf = b.spec.WriteAsOf // old gateway
+			}
+			todo.Key, err = b.chunks.runChunk(ctx, mutations, todo, b.spec.ChunkSize, readAsOf)
 			if err != nil {
 				return nil, err
 			}
