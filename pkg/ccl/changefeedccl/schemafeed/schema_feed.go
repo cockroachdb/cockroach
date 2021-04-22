@@ -83,6 +83,9 @@ type Config struct {
 	// InternalExecutor is required to properly resolve descriptors using the
 	// descs API.
 	InternalExecutor sqlutil.InternalExecutor
+
+	// Metrics tracks schemafeed related metrics
+	Metrics *Metrics
 }
 
 // SchemaFeed tracks changes to a set of tables and exports them as a queue of
@@ -103,7 +106,9 @@ type SchemaFeed struct {
 	targets  jobspb.ChangefeedTargets
 	leaseMgr *lease.Manager
 	ie       sqlutil.InternalExecutor
-	mu       struct {
+	metrics  *Metrics
+
+	mu struct {
 		syncutil.Mutex
 
 		started bool
@@ -206,6 +211,7 @@ func New(cfg Config) *SchemaFeed {
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
 		ie:       cfg.InternalExecutor,
+		metrics:  cfg.Metrics,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = cfg.InitialHighWater
@@ -401,6 +407,9 @@ func (tf *SchemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	case err := <-errCh:
 		if log.V(1) {
 			log.Infof(ctx, "waited %s for %s highwater: %v", timeutil.Since(start), ts, err)
+		}
+		if tf.metrics != nil {
+			tf.metrics.TableMetadataNanos.Inc(timeutil.Since(start).Nanoseconds())
 		}
 		return err
 	}
