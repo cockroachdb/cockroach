@@ -218,6 +218,7 @@ go_test(
         "client_replica_backpressure_test.go",
         "client_replica_gc_test.go",
         "client_replica_test.go",
+        "client_split_burst_test.go",
         "client_split_test.go",
         "client_status_test.go",
         "client_tenant_test.go",
