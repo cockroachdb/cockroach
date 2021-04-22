@@ -509,6 +509,7 @@ func rewriteBackupSpanKey(
 func restoreWithRetry(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
+	numNodes int,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -532,6 +533,7 @@ func restoreWithRetry(
 		res, err = restore(
 			restoreCtx,
 			execCtx,
+			numNodes,
 			backupManifests,
 			backupLocalityInfo,
 			endTime,
@@ -586,6 +588,7 @@ func makeBackupLocalityMap(
 func restore(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
+	numNodes int,
 	backupManifests []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
@@ -661,10 +664,17 @@ func restore(
 
 	g := ctxgroup.WithContext(restoreCtx)
 
-	// TODO(dan): This not super principled. I just wanted something that wasn't
-	// a constant and grew slower than linear with the length of importSpans. It
-	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
-	chunkSize := int(math.Sqrt(float64(len(importSpans))))
+	// TODO(pbardea): This not super principled. I just wanted something that
+	// wasn't a constant and grew slower than linear with the length of
+	// importSpans. It seems to be working well for BenchmarkRestore2TB but
+	// worth revisiting.
+	// It tries to take the cluster size into account so that larger clusters
+	// distribute more chunks amongst them so that after scattering there isn't
+	// a large varience in the distribution of entries.
+	chunkSize := int(math.Sqrt(float64(len(importSpans)))) / numNodes
+	if chunkSize == 0 {
+		chunkSize = 1
+	}
 	importSpanChunks := make([][]execinfrapb.RestoreSpanEntry, 0, len(importSpans)/chunkSize)
 	for start := 0; start < len(importSpans); {
 		importSpanChunk := importSpans[start:]
@@ -1581,11 +1591,21 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		mainData.addTenant(roachpb.MakeTenantID(tenant.ID))
 	}
 
+	numNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+	if err != nil {
+		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
+			return err
+		}
+		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
+		numNodes = 1
+	}
+
 	var resTotal RowCount
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
 			p,
+			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1620,6 +1640,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		res, err := restoreWithRetry(
 			ctx,
 			p,
+			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
@@ -1699,15 +1720,6 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	// Collect telemetry.
 	{
-		numClusterNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
-		if err != nil {
-			if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
-				return err
-			}
-			log.Warningf(ctx, "unable to determine cluster node count: %v", err)
-			numClusterNodes = 1
-		}
-
 		telemetry.Count("restore.total.succeeded")
 		const mb = 1 << 20
 		sizeMb := resTotal.DataSize / mb
@@ -1719,11 +1731,11 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		telemetry.CountBucketed("restore.duration-sec.succeeded", sec)
 		telemetry.CountBucketed("restore.size-mb.full", sizeMb)
 		telemetry.CountBucketed("restore.speed-mbps.total", mbps)
-		telemetry.CountBucketed("restore.speed-mbps.per-node", mbps/int64(numClusterNodes))
+		telemetry.CountBucketed("restore.speed-mbps.per-node", mbps/int64(numNodes))
 		// Tiny restores may skew throughput numbers due to overhead.
 		if sizeMb > 10 {
 			telemetry.CountBucketed("restore.speed-mbps.over10mb", mbps)
-			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numClusterNodes))
+			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numNodes))
 		}
 	}
 	return nil
