@@ -48,13 +48,13 @@ export const SessionsPageConnected = withRouter(
         dispatch(terminateQueryActions.terminateSession(payload)),
       cancelQuery: (payload: ICancelQueryRequest) =>
         dispatch(terminateQueryActions.terminateQuery(payload)),
-      onSortingChange: (columnName: string, tableName: string) => {
+      onSortingChange: (columnName: string) => {
         dispatch(
           analyticsActions.track({
             name: "Column Sorted",
             page: "Sessions",
             columnName,
-            tableName,
+            tableName: "Sessions",
           }),
         );
       },

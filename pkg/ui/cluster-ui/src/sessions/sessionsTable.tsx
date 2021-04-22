@@ -103,7 +103,7 @@ export function makeSessionsColumns(
 ): ColumnDescriptor<SessionInfo>[] {
   return [
     {
-      name: "1",
+      name: "sessionAge",
       title: SessionTableTitle.sessionAge,
       className: cx("cl-table__col-session-age"),
       cell: session =>
@@ -111,7 +111,7 @@ export function makeSessionsColumns(
       sort: session => TimestampToMoment(session.session.start).valueOf(),
     },
     {
-      name: "1",
+      name: "txnAge",
       title: SessionTableTitle.txnAge,
       className: cx("cl-table__col-session-start"),
       cell: function(session: SessionInfo) {
@@ -126,7 +126,7 @@ export function makeSessionsColumns(
       sort: session => session.session.active_txn?.start.seconds || 0,
     },
     {
-      name: "1",
+      name: "statementAge",
       title: SessionTableTitle.statementAge,
       className: cx("cl-table__col-session-start"),
       cell: function(session: SessionInfo) {
@@ -146,7 +146,7 @@ export function makeSessionsColumns(
       },
     },
     {
-      name: "1",
+      name: "memUsage",
       title: SessionTableTitle.memUsage,
       className: cx("cl-table__col-session-mem-usage"),
       cell: session =>
@@ -156,7 +156,7 @@ export function makeSessionsColumns(
       sort: session => session.session.alloc_bytes?.toNumber(),
     },
     {
-      name: "1",
+      name: "statement",
       title: SessionTableTitle.statement,
       className: cx("cl-table__col-query-text"),
       cell: session => {
@@ -177,7 +177,7 @@ export function makeSessionsColumns(
       },
     },
     {
-      name: "1",
+      name: "actions",
       title: SessionTableTitle.actions,
       className: cx("cl-table__col-session-actions"),
       titleAlign: "right",
