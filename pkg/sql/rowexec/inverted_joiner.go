@@ -326,7 +326,7 @@ func newInvertedJoiner(
 
 	// Initialize memory monitors and row container for index rows.
 	ctx := flowCtx.EvalCtx.Ctx()
-	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "invertedjoiner-limited")
+	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "invertedjoiner-limited")
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */

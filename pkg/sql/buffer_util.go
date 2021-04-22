@@ -37,7 +37,10 @@ func (c *rowContainerHelper) init(
 	typs []*types.T, evalContext *extendedEvalContext, opName string,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
-	c.memMonitor = execinfra.NewLimitedMonitor(evalContext.Context, evalContext.Mon, distSQLCfg, fmt.Sprintf("%s-limited", opName))
+	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
+		evalContext.Context, evalContext.Mon, distSQLCfg, evalContext.SessionData,
+		fmt.Sprintf("%s-limited", opName),
+	)
 	c.diskMonitor = execinfra.NewMonitor(evalContext.Context, distSQLCfg.ParentDiskMonitor, fmt.Sprintf("%s-disk", opName))
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
