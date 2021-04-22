@@ -1,0 +1,22 @@
+load(":defs.bzl", "protobufjs_library")
+load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
+
+package(default_visibility = ["//visibility:public"])
+
+protobufjs_library(
+    name = "db_console_oss_js_proto",
+    out_name = "protos",
+    protos = [
+        "//pkg/server/serverpb:serverpb_proto",
+        "//pkg/ts/tspb:tspb_proto",
+    ],
+)
+
+js_library(
+    name = "ui_protos_oss_package",
+    package_name = "@cockroachlabs/crdb-protobuf-client",
+    srcs = [
+        "package.json",
+    ],
+    deps = [":db_console_oss_js_proto"],
+)

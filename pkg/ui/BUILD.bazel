@@ -12,3 +12,17 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
+
+filegroup(
+    name = "node_modules",
+    srcs = glob(
+        include = [
+            "node_modules/**",
+        ],
+        exclude = [
+            "node_modules/db-console",
+            "node_modules/@cockroachlabs/cluster-ui",
+        ],
+    ),
+    visibility = ["//pkg/ui:__subpackages__"],
+)
