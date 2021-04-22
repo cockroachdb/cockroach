@@ -82,6 +82,10 @@ var debugZipTablesPerNode = []string{
 // (this is useful since these profiles contain profiler labels, which
 // can then be correlated across nodes).
 //
+// Note that the request for CPU profiles is always issued at maximum
+// concurrency, because we wish profiling to be enabled on all nodes
+// simultaneously. This ensures that profiling data flows across RPCs.
+//
 // This is called first and in isolation, before other zip operations
 // possibly influence the nodes.
 func (zc *debugZipContext) collectCPUProfiles(
@@ -97,6 +101,8 @@ func (zc *debugZipContext) collectCPUProfiles(
 		data []byte
 		err  error
 	}
+
+	zc.clusterPrinter.info("requesting CPU profiles")
 
 	// NB: this takes care not to produce non-deterministic log output.
 	resps := make([]profData, len(nodeList))
@@ -134,16 +140,17 @@ func (zc *debugZipContext) collectCPUProfiles(
 		}(ctx, i)
 	}
 
-	fmt.Print("requesting CPU profiles... ")
 	wg.Wait()
-	fmt.Println("ok")
+	zc.clusterPrinter.info("profiles generated")
 
 	for i, pd := range resps {
 		if len(pd.data) == 0 && pd.err == nil {
 			continue // skipped node
 		}
-		prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeList[i].Desc.NodeID))
-		if err := zc.z.createRawOrError(prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
+		nodeID := nodeList[i].Desc.NodeID
+		prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeID))
+		s := zc.clusterPrinter.start("profile for node %d", nodeID)
+		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
 			return err
 		}
 	}
@@ -170,18 +177,19 @@ func (zc *debugZipContext) collectPerNodeData(
 		return nil
 	}
 
+	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
 	id := fmt.Sprintf("%d", nodeID)
 	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
 
 	if !zipCtx.nodes.isIncluded(nodeID) {
-		if err := zc.z.createRaw(prefix+".skipped",
+		if err := zc.z.createRaw(nodePrinter.start("skipping node"), prefix+".skipped",
 			[]byte(fmt.Sprintf("skipping excluded node %d\n", nodeID))); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	if err := zc.z.createJSON(prefix+"/status.json", node); err != nil {
+	if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", node); err != nil {
 		return err
 	}
 
@@ -194,14 +202,14 @@ func (zc *debugZipContext) collectPerNodeData(
 	// still happen.
 	sqlAddr := node.Desc.CheckedSQLAddress()
 	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.url, sqlAddr.AddressField)
-	fmt.Printf("using SQL connection URL for node %s: %s\n", id, curSQLConn.url)
+	nodePrinter.info("using SQL connection URL: %s", curSQLConn.url)
 
 	for _, table := range debugZipTablesPerNode {
 		query := fmt.Sprintf(`SELECT * FROM %s`, table)
 		if override, ok := customQuery[table]; ok {
 			query = override
 		}
-		if err := zc.dumpTableDataForZip(curSQLConn, prefix, table, query); err != nil {
+		if err := zc.dumpTableDataForZip(nodePrinter, curSQLConn, prefix, table, query); err != nil {
 			return errors.Wrapf(err, "fetching %s", table)
 		}
 	}
@@ -209,13 +217,14 @@ func (zc *debugZipContext) collectPerNodeData(
 	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.admin, zc.status)
 
 	for _, r := range perNodeZipRequests {
-		if err := zc.runZipRequest(ctx, r); err != nil {
+		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {
 			return err
 		}
 	}
 
 	var stacksData []byte
-	requestErr := zc.runZipFn(ctx, "requesting stacks for node "+id,
+	s := nodePrinter.start("requesting stacks")
+	requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
 				NodeId: id,
@@ -226,12 +235,13 @@ func (zc *debugZipContext) collectPerNodeData(
 			}
 			return err
 		})
-	if err := zc.z.createRawOrError(prefix+"/stacks.txt", stacksData, requestErr); err != nil {
+	if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
 		return err
 	}
 
 	var threadData []byte
-	requestErr = zc.runZipFn(ctx, "requesting threads for node "+id,
+	s = nodePrinter.start("requesting threads")
+	requestErr = zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			threads, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
 				NodeId: id,
@@ -242,12 +252,13 @@ func (zc *debugZipContext) collectPerNodeData(
 			}
 			return err
 		})
-	if err := zc.z.createRawOrError(prefix+"/threads.txt", threadData, requestErr); err != nil {
+	if err := zc.z.createRawOrError(s, prefix+"/threads.txt", threadData, requestErr); err != nil {
 		return err
 	}
 
 	var heapData []byte
-	requestErr = zc.runZipFn(ctx, "requesting heap profile for node "+id,
+	s = nodePrinter.start("requesting heap profile")
+	requestErr = zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			heap, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
 				NodeId: id,
@@ -258,12 +269,13 @@ func (zc *debugZipContext) collectPerNodeData(
 			}
 			return err
 		})
-	if err := zc.z.createRawOrError(prefix+"/heap.pprof", heapData, requestErr); err != nil {
+	if err := zc.z.createRawOrError(s, prefix+"/heap.pprof", heapData, requestErr); err != nil {
 		return err
 	}
 
 	var profiles *serverpb.GetFilesResponse
-	if requestErr := zc.runZipFn(ctx, "requesting heap files for node "+id,
+	s = nodePrinter.start("requesting heap files")
+	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			profiles, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
@@ -273,22 +285,24 @@ func (zc *debugZipContext) collectPerNodeData(
 			})
 			return err
 		}); requestErr != nil {
-		if err := zc.z.createError(prefix+"/heapprof", requestErr); err != nil {
+		if err := zc.z.createError(s, prefix+"/heapprof", requestErr); err != nil {
 			return err
 		}
 	} else {
-		fmt.Printf("%d found\n", len(profiles.Files))
+		s.done()
+		nodePrinter.info("%d heap profiles found", len(profiles.Files))
 		for _, file := range profiles.Files {
 			fName := maybeAddProfileSuffix(file.Name)
 			name := prefix + "/heapprof/" + fName
-			if err := zc.z.createRaw(name, file.Contents); err != nil {
+			if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
 				return err
 			}
 		}
 	}
 
 	var goroutinesResp *serverpb.GetFilesResponse
-	if requestErr := zc.runZipFn(ctx, "requesting goroutine files for node "+id,
+	s = nodePrinter.start("requesting goroutine dumps")
+	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			goroutinesResp, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
@@ -298,37 +312,42 @@ func (zc *debugZipContext) collectPerNodeData(
 			})
 			return err
 		}); requestErr != nil {
-		if err := zc.z.createError(prefix+"/goroutines", requestErr); err != nil {
+		if err := zc.z.createError(s, prefix+"/goroutines", requestErr); err != nil {
 			return err
 		}
 	} else {
-		fmt.Printf("%d found\n", len(goroutinesResp.Files))
+		s.done()
+		nodePrinter.info("%d goroutine dumps found", len(goroutinesResp.Files))
 		for _, file := range goroutinesResp.Files {
 			// NB: the files have a .txt.gz suffix already.
 			name := prefix + "/goroutines/" + file.Name
-			if err := zc.z.createRaw(name, file.Contents); err != nil {
+			if err := zc.z.createRaw(nodePrinter.start("writing dump"), name, file.Contents); err != nil {
 				return err
 			}
 		}
 	}
 
 	var logs *serverpb.LogFilesListResponse
-	if requestErr := zc.runZipFn(ctx, "requesting log files list",
+	s = nodePrinter.start("requesting log files list")
+	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			logs, err = zc.status.LogFilesList(
 				ctx, &serverpb.LogFilesListRequest{NodeId: id})
 			return err
 		}); requestErr != nil {
-		if err := zc.z.createError(prefix+"/logs", requestErr); err != nil {
+		if err := zc.z.createError(s, prefix+"/logs", requestErr); err != nil {
 			return err
 		}
 	} else {
-		fmt.Printf("%d found\n", len(logs.Files))
+		s.done()
+		nodePrinter.info("%d log files found", len(logs.Files))
 		for _, file := range logs.Files {
+			logPrinter := nodePrinter.withPrefix("log file: %s", file.Name)
 			name := prefix + "/logs/" + file.Name
 			var entries *serverpb.LogEntriesResponse
-			if requestErr := zc.runZipFn(ctx, fmt.Sprintf("requesting log file %s", file.Name),
+			sf := logPrinter.start("requesting file")
+			if requestErr := zc.runZipFn(ctx, sf,
 				func(ctx context.Context) error {
 					var err error
 					entries, err = zc.status.LogFile(
@@ -337,11 +356,12 @@ func (zc *debugZipContext) collectPerNodeData(
 						})
 					return err
 				}); requestErr != nil {
-				if err := zc.z.createError(name, requestErr); err != nil {
+				if err := zc.z.createError(sf, name, requestErr); err != nil {
 					return err
 				}
 				continue
 			}
+			sf.progress("writing output: %s", name)
 			warnRedactLeak := false
 			if err := func() error {
 				// Use a closure so that the zipper is only locked once per
@@ -375,8 +395,9 @@ func (zc *debugZipContext) collectPerNodeData(
 				}
 				return nil
 			}(); err != nil {
-				return err
+				return sf.fail(err)
 			}
+			sf.done()
 			if warnRedactLeak {
 				// Defer the warning, so that it does not get "drowned" as
 				// part of the main zip output.
@@ -388,23 +409,26 @@ func (zc *debugZipContext) collectPerNodeData(
 	}
 
 	var ranges *serverpb.RangesResponse
-	if requestErr := zc.runZipFn(ctx, "requesting ranges", func(ctx context.Context) error {
+	s = nodePrinter.start("requesting ranges")
+	if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 		var err error
 		ranges, err = zc.status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id})
 		return err
 	}); requestErr != nil {
-		if err := zc.z.createError(prefix+"/ranges", requestErr); err != nil {
+		if err := zc.z.createError(s, prefix+"/ranges", requestErr); err != nil {
 			return err
 		}
 	} else {
-		fmt.Printf("%d found\n", len(ranges.Ranges))
+		s.done()
+		nodePrinter.info("%d ranges found", len(ranges.Ranges))
 		sort.Slice(ranges.Ranges, func(i, j int) bool {
 			return ranges.Ranges[i].State.Desc.RangeID <
 				ranges.Ranges[j].State.Desc.RangeID
 		})
 		for _, r := range ranges.Ranges {
+			s := nodePrinter.start("writing range %d", r.State.Desc.RangeID)
 			name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-			if err := zc.z.createJSON(name+".json", r); err != nil {
+			if err := zc.z.createJSON(s, name+".json", r); err != nil {
 				return err
 			}
 		}

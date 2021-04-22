@@ -1,56 +1,57 @@
 zip
 ----
-retrieving SQL data for crdb_internal.cluster_database_privileges... writing: debug/crdb_internal.cluster_database_privileges.txt
-requesting list of SQL databases... 8 found
-requesting database details for ../system... writing: debug/schema/___system@details.json
-0 tables found
-requesting database details for SYSTEM... writing: debug/schema/system@details.json
-0 tables found
-requesting database details for a-b... writing: debug/schema/a_b@details.json
-0 tables found
-requesting database details for a-b-1... writing: debug/schema/a_b_1@details.json
-0 tables found
-requesting database details for a:b... writing: debug/schema/a_b-1@details.json
-0 tables found
-requesting database details for defaultdb... writing: debug/schema/defaultdb@details.json
-5 tables found
-requesting table details for defaultdb.public."SYSTEM.JOBS"... writing: debug/schema/defaultdb/public__system_jobs_.json
-requesting table details for defaultdb.public."a:b"... writing: debug/schema/defaultdb/public__a_b_.json
-requesting table details for defaultdb.public."a-b"... writing: debug/schema/defaultdb/public__a_b_-1.json
-requesting table details for defaultdb.public."pg_catalog.pg_class"... writing: debug/schema/defaultdb/public__pg_catalog_pg_class_.json
-requesting table details for defaultdb.public."../system"... writing: debug/schema/defaultdb/public_____system_.json
-requesting database details for postgres... writing: debug/schema/postgres@details.json
-0 tables found
-requesting database details for system... writing: debug/schema/system-1@details.json
-31 tables found
-requesting table details for system.public.namespace... writing: debug/schema/system-1/public_namespace.json
-requesting table details for system.public.descriptor... writing: debug/schema/system-1/public_descriptor.json
-requesting table details for system.public.users... writing: debug/schema/system-1/public_users.json
-requesting table details for system.public.zones... writing: debug/schema/system-1/public_zones.json
-requesting table details for system.public.settings... writing: debug/schema/system-1/public_settings.json
-requesting table details for system.public.tenants... writing: debug/schema/system-1/public_tenants.json
-requesting table details for system.public.lease... writing: debug/schema/system-1/public_lease.json
-requesting table details for system.public.eventlog... writing: debug/schema/system-1/public_eventlog.json
-requesting table details for system.public.rangelog... writing: debug/schema/system-1/public_rangelog.json
-requesting table details for system.public.ui... writing: debug/schema/system-1/public_ui.json
-requesting table details for system.public.jobs... writing: debug/schema/system-1/public_jobs.json
-requesting table details for system.public.web_sessions... writing: debug/schema/system-1/public_web_sessions.json
-requesting table details for system.public.table_statistics... writing: debug/schema/system-1/public_table_statistics.json
-requesting table details for system.public.locations... writing: debug/schema/system-1/public_locations.json
-requesting table details for system.public.role_members... writing: debug/schema/system-1/public_role_members.json
-requesting table details for system.public.comments... writing: debug/schema/system-1/public_comments.json
-requesting table details for system.public.replication_constraint_stats... writing: debug/schema/system-1/public_replication_constraint_stats.json
-requesting table details for system.public.replication_critical_localities... writing: debug/schema/system-1/public_replication_critical_localities.json
-requesting table details for system.public.replication_stats... writing: debug/schema/system-1/public_replication_stats.json
-requesting table details for system.public.reports_meta... writing: debug/schema/system-1/public_reports_meta.json
-requesting table details for system.public.namespace2... writing: debug/schema/system-1/public_namespace2.json
-requesting table details for system.public.protected_ts_meta... writing: debug/schema/system-1/public_protected_ts_meta.json
-requesting table details for system.public.protected_ts_records... writing: debug/schema/system-1/public_protected_ts_records.json
-requesting table details for system.public.role_options... writing: debug/schema/system-1/public_role_options.json
-requesting table details for system.public.statement_bundle_chunks... writing: debug/schema/system-1/public_statement_bundle_chunks.json
-requesting table details for system.public.statement_diagnostics_requests... writing: debug/schema/system-1/public_statement_diagnostics_requests.json
-requesting table details for system.public.statement_diagnostics... writing: debug/schema/system-1/public_statement_diagnostics.json
-requesting table details for system.public.scheduled_jobs... writing: debug/schema/system-1/public_scheduled_jobs.json
-requesting table details for system.public.sqlliveness... writing: debug/schema/system-1/public_sqlliveness.json
-requesting table details for system.public.migrations... writing: debug/schema/system-1/public_migrations.json
-requesting table details for system.public.join_tokens... writing: debug/schema/system-1/public_join_tokens.json
+[cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
+[cluster] requesting list of SQL databases... received response... done
+[cluster] 8 databases found
+[cluster] [database: ../system] requesting database details... received response... converting to JSON... writing binary output: debug/schema/___system@details.json... done
+[cluster] [database: ../system] 0 tables found
+[cluster] [database: SYSTEM] requesting database details... received response... converting to JSON... writing binary output: debug/schema/system@details.json... done
+[cluster] [database: SYSTEM] 0 tables found
+[cluster] [database: a-b] requesting database details... received response... converting to JSON... writing binary output: debug/schema/a_b@details.json... done
+[cluster] [database: a-b] 0 tables found
+[cluster] [database: a-b-1] requesting database details... received response... converting to JSON... writing binary output: debug/schema/a_b_1@details.json... done
+[cluster] [database: a-b-1] 0 tables found
+[cluster] [database: a:b] requesting database details... received response... converting to JSON... writing binary output: debug/schema/a_b-1@details.json... done
+[cluster] [database: a:b] 0 tables found
+[cluster] [database: defaultdb] requesting database details... received response... converting to JSON... writing binary output: debug/schema/defaultdb@details.json... done
+[cluster] [database: defaultdb] 5 tables found
+[cluster] [database: defaultdb] [table: public."SYSTEM.JOBS"] requesting table details... received response... converting to JSON... writing binary output: debug/schema/defaultdb/public__system_jobs_.json... done
+[cluster] [database: defaultdb] [table: public."a:b"] requesting table details... received response... converting to JSON... writing binary output: debug/schema/defaultdb/public__a_b_.json... done
+[cluster] [database: defaultdb] [table: public."a-b"] requesting table details... received response... converting to JSON... writing binary output: debug/schema/defaultdb/public__a_b_-1.json... done
+[cluster] [database: defaultdb] [table: public."pg_catalog.pg_class"] requesting table details... received response... converting to JSON... writing binary output: debug/schema/defaultdb/public__pg_catalog_pg_class_.json... done
+[cluster] [database: defaultdb] [table: public."../system"] requesting table details... received response... converting to JSON... writing binary output: debug/schema/defaultdb/public_____system_.json... done
+[cluster] [database: postgres] requesting database details... received response... converting to JSON... writing binary output: debug/schema/postgres@details.json... done
+[cluster] [database: postgres] 0 tables found
+[cluster] [database: system] requesting database details... received response... converting to JSON... writing binary output: debug/schema/system-1@details.json... done
+[cluster] [database: system] 31 tables found
+[cluster] [database: system] [table: public.namespace] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_namespace.json... done
+[cluster] [database: system] [table: public.descriptor] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_descriptor.json... done
+[cluster] [database: system] [table: public.users] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_users.json... done
+[cluster] [database: system] [table: public.zones] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_zones.json... done
+[cluster] [database: system] [table: public.settings] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_settings.json... done
+[cluster] [database: system] [table: public.tenants] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_tenants.json... done
+[cluster] [database: system] [table: public.lease] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_lease.json... done
+[cluster] [database: system] [table: public.eventlog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_eventlog.json... done
+[cluster] [database: system] [table: public.rangelog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_rangelog.json... done
+[cluster] [database: system] [table: public.ui] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_ui.json... done
+[cluster] [database: system] [table: public.jobs] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_jobs.json... done
+[cluster] [database: system] [table: public.web_sessions] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_web_sessions.json... done
+[cluster] [database: system] [table: public.table_statistics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_table_statistics.json... done
+[cluster] [database: system] [table: public.locations] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_locations.json... done
+[cluster] [database: system] [table: public.role_members] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_role_members.json... done
+[cluster] [database: system] [table: public.comments] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_comments.json... done
+[cluster] [database: system] [table: public.replication_constraint_stats] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_replication_constraint_stats.json... done
+[cluster] [database: system] [table: public.replication_critical_localities] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_replication_critical_localities.json... done
+[cluster] [database: system] [table: public.replication_stats] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_replication_stats.json... done
+[cluster] [database: system] [table: public.reports_meta] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_reports_meta.json... done
+[cluster] [database: system] [table: public.namespace2] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_namespace2.json... done
+[cluster] [database: system] [table: public.protected_ts_meta] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_protected_ts_meta.json... done
+[cluster] [database: system] [table: public.protected_ts_records] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_protected_ts_records.json... done
+[cluster] [database: system] [table: public.role_options] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_role_options.json... done
+[cluster] [database: system] [table: public.statement_bundle_chunks] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_statement_bundle_chunks.json... done
+[cluster] [database: system] [table: public.statement_diagnostics_requests] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_statement_diagnostics_requests.json... done
+[cluster] [database: system] [table: public.statement_diagnostics] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_statement_diagnostics.json... done
+[cluster] [database: system] [table: public.scheduled_jobs] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_scheduled_jobs.json... done
+[cluster] [database: system] [table: public.sqlliveness] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_sqlliveness.json... done
+[cluster] [database: system] [table: public.migrations] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_migrations.json... done
+[cluster] [database: system] [table: public.join_tokens] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system-1/public_join_tokens.json... done
