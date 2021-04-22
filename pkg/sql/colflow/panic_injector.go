@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -51,6 +52,7 @@ func newPanicInjector(input colexecop.Operator) colexecop.Operator {
 
 func (i panicInjector) Init() {
 	if i.rng.Float64() < initPanicInjectionProbability {
+		log.Info(context.TODO(), "injecting panic in Init")
 		colexecerror.ExpectedError(errors.New("injected panic in Init"))
 	}
 	i.Input.Init()
@@ -58,6 +60,7 @@ func (i panicInjector) Init() {
 
 func (i panicInjector) Next(ctx context.Context) coldata.Batch {
 	if i.rng.Float64() < nextPanicInjectionProbability {
+		log.Info(ctx, "injecting panic in Next")
 		colexecerror.ExpectedError(errors.New("injected panic in Next"))
 	}
 	return i.Input.Next(ctx)

@@ -155,6 +155,14 @@ type Closers []Closer
 // Note: this method should *only* be used when returning an error doesn't make
 // sense.
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
+	if ctx == nil {
+		// In some edge cases (like when Init encounters a panic), an Operator
+		// might not be properly initialized, yet it still might attempt to
+		// close its Closers. This context is only used for logging purposes, so
+		// it is ok to grab the background context in order to prevent a NPE if
+		// ctx ends being needed below.
+		ctx = context.Background()
+	}
 	prefix += ":"
 	for _, closer := range c {
 		if err := closer.Close(ctx); err != nil && log.V(1) {
