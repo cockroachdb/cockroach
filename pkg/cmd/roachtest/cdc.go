@@ -151,17 +151,6 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	defer verifier.maybeLogLatencyHist()
 
 	m.Go(func(ctx context.Context) error {
-		// Some of the tests have a tight enough bound on targetSteadyLatency
-		// that the default for kv.closed_timestamp.target_duration means the
-		// changefeed is never considered sufficiently caught up. We could
-		// instead make targetSteadyLatency less aggressive, but it'd be nice to
-		// keep it where it is.
-		if _, err := db.Exec(
-			`SET CLUSTER SETTING kv.closed_timestamp.target_duration='10s'`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		var targets string
 		if args.workloadType == tpccWorkloadType {
 			targets = `tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
