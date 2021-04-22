@@ -18,5 +18,5 @@ tc_end_block "Compile C dependencies"
 maybe_stress stress
 
 tc_start_block "Run Go tests"
-run_json_test build/builder.sh stdbuf -oL -eL make test GOTESTFLAGS=-json TESTFLAGS='-v'
+run_json_test build/builder.sh stdbuf -oL -eL make test PKG=./pkg/cli/... GOTESTFLAGS=-json TESTFLAGS='-v'
 tc_end_block "Run Go tests"
