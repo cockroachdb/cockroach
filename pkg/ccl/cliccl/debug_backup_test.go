@@ -231,7 +231,7 @@ func TestListIncremental(t *testing.T) {
 	checkExpectedOutput(t, buf.String(), out)
 }
 
-func TestShowData(t *testing.T) {
+func TestExportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -340,7 +340,71 @@ func TestShowData(t *testing.T) {
 	}
 }
 
-func TestShowDataAOST(t *testing.T) {
+func TestExportDataWithMultipleRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	sqlDB.Exec(t, `CREATE TABLE fooTable(id int PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO fooTable select * from generate_series(1,10)`)
+	sqlDB.Exec(t, `ALTER TABLE fooTable SPLIT AT VALUES (2), (5), (7)`)
+
+	const backupPath = "nodelocal://0/fooFolder"
+	sqlDB.Exec(t, `BACKUP TABLE fooTable TO $1 `, backupPath)
+
+	var rangeNum int
+	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW RANGES from TABLE fooTable]`).Scan(&rangeNum)
+	require.Equal(t, 4, rangeNum)
+	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW BACKUP FILES $1]`, backupPath).Scan(&rangeNum)
+	require.Equal(t, 4, rangeNum)
+
+	sqlDB.Exec(t, `ALTER TABLE fooTable ADD COLUMN active BOOL DEFAULT false`)
+	sqlDB.Exec(t, `INSERT INTO fooTable select * from generate_series(11,15)`)
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime()), backupPath)
+
+	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW RANGES from TABLE fooTable]`).Scan(&rangeNum)
+	require.Equal(t, 4, rangeNum)
+	sqlDB.QueryRow(t, `SELECT count(*) from [SHOW BACKUP FILES $1]`, backupPath).Scan(&rangeNum)
+	require.Equal(t, 8, rangeNum)
+
+	t.Run("export-data-with-multiple-ranges", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=testDB.public.fooTable  --external-io-dir=%s",
+			backupPath,
+			dir))
+		require.NoError(t, err)
+		var expectedOut string
+		for i := 1; i <= 10; i++ {
+			expectedOut = fmt.Sprintf("%s%d\n", expectedOut, i)
+		}
+		checkExpectedOutput(t, expectedOut, out)
+	})
+
+	t.Run("export-data-with-multiple-ranges-in-incremental-backups", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s %s --table=testDB.public.fooTable  --external-io-dir=%s",
+			backupPath, backupPath+ts.GoTime().Format(backupccl.DateBasedIncFolderName),
+			dir))
+		require.NoError(t, err)
+		var expectedOut string
+		for i := 1; i <= 15; i++ {
+			expectedOut = fmt.Sprintf("%s%d,false\n", expectedOut, i)
+		}
+		checkExpectedOutput(t, expectedOut, out)
+	})
+}
+
+func TestExportDataAOST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

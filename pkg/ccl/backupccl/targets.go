@@ -444,13 +444,16 @@ func selectTargets(
 	return matched.Descs, matched.RequestedDBs, nil, nil
 }
 
+// EntryFiles is a group of sst files of a backup table range
+type EntryFiles []roachpb.ImportRequest_File
+
 // BackupTableEntry wraps information of a table retrieved
 // from backup manifests.
 // exported to cliccl for exporting data directly from backup sst.
 type BackupTableEntry struct {
 	Desc  catalog.TableDescriptor
 	Span  roachpb.Span
-	Files []roachpb.ImportRequest_File
+	Files []EntryFiles
 }
 
 // MakeBackupTableEntry looks up the descriptor of fullyQualifiedTableName
@@ -525,11 +528,15 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
 
-	res := BackupTableEntry{
+	backupTableEntry := BackupTableEntry{
 		tbDesc,
 		tablePrimaryIndexSpan,
-		entry[0].Files,
+		make([]EntryFiles, 0),
 	}
 
-	return res, nil
+	for _, e := range entry {
+		backupTableEntry.Files = append(backupTableEntry.Files, e.Files)
+	}
+
+	return backupTableEntry, nil
 }

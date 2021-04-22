@@ -52,12 +52,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var externalIODir string
-var exportTableName string
-var readTime string
-var destination string
-var format string
-var nullas string
+// debugBackupArgs captures the parameters of the `debug backup` command.
+var debugBackupArgs struct {
+	externalIODir string
+
+	exportTableName string
+	readTime        string
+	destination     string
+	format          string
+	nullas          string
+}
 
 func init() {
 
@@ -105,42 +109,42 @@ func init() {
 
 	backupFlags := backupCmds.Flags()
 	backupFlags.StringVarP(
-		&externalIODir,
+		&debugBackupArgs.externalIODir,
 		cliflags.ExternalIODir.Name,
 		cliflags.ExternalIODir.Shorthand,
 		"", /*value*/
 		cliflags.ExternalIODir.Usage())
 
 	exportDataCmd.Flags().StringVarP(
-		&exportTableName,
+		&debugBackupArgs.exportTableName,
 		cliflags.ExportTableTarget.Name,
 		cliflags.ExportTableTarget.Shorthand,
 		"", /*value*/
 		cliflags.ExportTableTarget.Usage())
 
 	exportDataCmd.Flags().StringVarP(
-		&readTime,
+		&debugBackupArgs.readTime,
 		cliflags.ReadTime.Name,
 		cliflags.ReadTime.Shorthand,
 		"", /*value*/
 		cliflags.ReadTime.Usage())
 
 	exportDataCmd.Flags().StringVarP(
-		&destination,
+		&debugBackupArgs.destination,
 		cliflags.ExportDestination.Name,
 		cliflags.ExportDestination.Shorthand,
 		"", /*value*/
 		cliflags.ExportDestination.Usage())
 
 	exportDataCmd.Flags().StringVarP(
-		&format,
+		&debugBackupArgs.format,
 		cliflags.ExportTableFormat.Name,
 		cliflags.ExportTableFormat.Shorthand,
 		"csv", /*value*/
 		cliflags.ExportTableFormat.Usage())
 
 	exportDataCmd.Flags().StringVarP(
-		&nullas,
+		&debugBackupArgs.nullas,
 		cliflags.ExportCSVNullas.Name,
 		cliflags.ExportCSVNullas.Shorthand,
 		"null", /*value*/
@@ -165,10 +169,10 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 	if dialing != 0 {
 		return nil, errors.Errorf("accessing node %d during nodelocal access is unsupported for CLI inspection; only local access is supported with nodelocal://self", dialing)
 	}
-	if externalIODir == "" {
-		externalIODir = filepath.Join(server.DefaultStorePath, "extern")
+	if debugBackupArgs.externalIODir == "" {
+		debugBackupArgs.externalIODir = filepath.Join(server.DefaultStorePath, "extern")
 	}
-	return blobs.NewLocalClient(externalIODir)
+	return blobs.NewLocalClient(debugBackupArgs.externalIODir)
 }
 
 func externalStorageFromURIFactory(
@@ -302,10 +306,10 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 
 func runExportDataCmd(cmd *cobra.Command, args []string) error {
 
-	if exportTableName == "" {
+	if debugBackupArgs.exportTableName == "" {
 		return errors.New("export data requires table name specified by --table flag")
 	}
-	fullyQualifiedTableName := strings.ToLower(exportTableName)
+	fullyQualifiedTableName := strings.ToLower(debugBackupArgs.exportTableName)
 	manifestPaths := args
 
 	ctx := context.Background()
@@ -318,9 +322,9 @@ func runExportDataCmd(cmd *cobra.Command, args []string) error {
 		manifests = append(manifests, manifest)
 	}
 
-	endTime, err := evalAsOfTimestamp(readTime)
+	endTime, err := evalAsOfTimestamp(debugBackupArgs.readTime)
 	if err != nil {
-		return errors.Wrapf(err, "eval as of timestamp %s", readTime)
+		return errors.Wrapf(err, "eval as of timestamp %s", debugBackupArgs.readTime)
 	}
 
 	codec := keys.TODOSQLCodec
@@ -364,21 +368,18 @@ func evalAsOfTimestamp(readTime string) (hlc.Timestamp, error) {
 
 func showData(
 	ctx context.Context, entry backupccl.BackupTableEntry, endTime hlc.Timestamp, codec keys.SQLCodec,
-) (err error) {
+) error {
 
-	iters, cleanup, err := makeIters(ctx, entry)
-	if err != nil {
-		return errors.Wrapf(err, "make iters")
+	buf := bytes.NewBuffer([]byte{})
+	var writer *csv.Writer
+	if debugBackupArgs.format != "csv" {
+		return errors.Newf("only exporting to csv format is supported")
 	}
-	defer func() {
-		cleanupErr := cleanup()
-		if err == nil {
-			err = cleanupErr
-		}
-	}()
-
-	iter := storage.MakeMultiIterator(iters)
-	defer iter.Close()
+	if debugBackupArgs.destination == "" {
+		writer = csv.NewWriter(os.Stdout)
+	} else {
+		writer = csv.NewWriter(buf)
+	}
 
 	rf, err := makeRowFetcher(ctx, entry, codec)
 	if err != nil {
@@ -386,52 +387,17 @@ func showData(
 	}
 	defer rf.Close(ctx)
 
-	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key}, storage.MVCCKey{Key: entry.Span.EndKey}
-	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
-
-	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
-		return errors.Wrapf(err, "row fetcher starts scan")
-	}
-
-	var writer *csv.Writer
-	if format != "csv" {
-		return errors.Newf("only exporting to csv format is supported")
-	}
-
-	buf := bytes.NewBuffer([]byte{})
-	if destination == "" {
-		writer = csv.NewWriter(os.Stdout)
-	} else {
-		writer = csv.NewWriter(buf)
-	}
-
-	for {
-		datums, _, _, err := rf.NextRowDecoded(ctx)
-		if err != nil {
-			return errors.Wrapf(err, "decode row")
-		}
-		if datums == nil {
-			break
-		}
-		row := make([]string, datums.Len())
-		for i, datum := range datums {
-			if datum == tree.DNull {
-				row[i] = nullas
-			} else {
-				row[i] = datum.String()
-			}
-		}
-		if err := writer.Write(row); err != nil {
+	for _, files := range entry.Files {
+		if err := processEntryFiles(ctx, rf, files, entry.Span, endTime, writer); err != nil {
 			return err
 		}
-		writer.Flush()
 	}
 
-	if destination != "" {
-		dir, file := filepath.Split(destination)
+	if debugBackupArgs.destination != "" {
+		dir, file := filepath.Split(debugBackupArgs.destination)
 		store, err := externalStorageFromURIFactory(ctx, dir, security.RootUserName())
 		if err != nil {
-			return errors.Wrapf(err, "unable to open store to write files: %s", destination)
+			return errors.Wrapf(err, "unable to open store to write files: %s", debugBackupArgs.destination)
 		}
 		if err = store.WriteFile(ctx, file, bytes.NewReader(buf.Bytes())); err != nil {
 			_ = store.Close()
@@ -439,15 +405,15 @@ func showData(
 		}
 		return store.Close()
 	}
-	return err
+	return nil
 }
 
 func makeIters(
-	ctx context.Context, entry backupccl.BackupTableEntry,
+	ctx context.Context, files backupccl.EntryFiles,
 ) ([]storage.SimpleMVCCIterator, func() error, error) {
-	iters := make([]storage.SimpleMVCCIterator, len(entry.Files))
-	dirStorage := make([]cloud.ExternalStorage, len(entry.Files))
-	for i, file := range entry.Files {
+	iters := make([]storage.SimpleMVCCIterator, len(files))
+	dirStorage := make([]cloud.ExternalStorage, len(files))
+	for i, file := range files {
 		var err error
 		clusterSettings := cluster.MakeClusterSettings()
 		dirStorage[i], err = cloudimpl.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
@@ -510,6 +476,59 @@ func makeRowFetcher(
 		return rf, err
 	}
 	return rf, nil
+}
+
+func processEntryFiles(
+	ctx context.Context,
+	rf row.Fetcher,
+	files backupccl.EntryFiles,
+	span roachpb.Span,
+	endTime hlc.Timestamp,
+	writer *csv.Writer,
+) (err error) {
+
+	iters, cleanup, err := makeIters(ctx, files)
+	defer func() {
+		if cleanupErr := cleanup(); err == nil {
+			err = cleanupErr
+		}
+	}()
+	if err != nil {
+		return errors.Wrapf(err, "make iters")
+	}
+
+	iter := storage.MakeMultiIterator(iters)
+	defer iter.Close()
+
+	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: span.Key}, storage.MVCCKey{Key: span.EndKey}
+	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
+
+	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
+		return errors.Wrapf(err, "row fetcher starts scan")
+	}
+
+	for {
+		datums, _, _, err := rf.NextRowDecoded(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "decode row")
+		}
+		if datums == nil {
+			break
+		}
+		rowDisplay := make([]string, datums.Len())
+		for i, datum := range datums {
+			if datum == tree.DNull {
+				rowDisplay[i] = debugBackupArgs.nullas
+			} else {
+				rowDisplay[i] = datum.String()
+			}
+		}
+		if err := writer.Write(rowDisplay); err != nil {
+			return err
+		}
+		writer.Flush()
+	}
+	return nil
 }
 
 type backupMetaDisplayMsg backupccl.BackupManifest
