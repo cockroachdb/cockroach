@@ -264,6 +264,9 @@ func main() {
 				if duration < minDuration {
 					duration = minDuration
 				}
+				// XXX: Hack
+				duration = 4 * time.Minute
+
 				// Use a timeout shorter than the duration so that hanging tests don't
 				// get a free pass.
 				timeout := (3 * duration) / 4
