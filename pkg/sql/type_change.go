@@ -794,7 +794,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}
-				unionUnnests.WriteString(fmt.Sprintf("SELECT unnest(%s) FROM [%d AS t]", col.GetName(), ID))
+				unionUnnests.WriteString(fmt.Sprintf("SELECT unnest(t.%s) FROM [%d AS t]", col.GetName(), ID))
 				firstClause = false
 			}
 		}
