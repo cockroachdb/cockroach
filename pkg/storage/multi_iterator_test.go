@@ -27,7 +27,13 @@ func TestMultiIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	pebble := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+	pebble := newPebbleInMem(
+		context.Background(),
+		roachpb.Attributes{},
+		1<<20,   /* cacheSize */
+		512<<20, /* storeSize */
+		nil,     /* settings */
+	)
 	defer pebble.Close()
 
 	// Each `input` is turned into an iterator and these are passed to a new

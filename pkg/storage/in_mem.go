@@ -25,9 +25,12 @@ import (
 //
 // FIXME(tschottdorf): make the signature similar to NewPebble (require a cfg).
 func NewInMem(
-	ctx context.Context, attrs roachpb.Attributes, cacheSize int64, settings *cluster.Settings,
+	ctx context.Context,
+	attrs roachpb.Attributes,
+	cacheSize, storeSize int64,
+	settings *cluster.Settings,
 ) Engine {
-	return newPebbleInMem(ctx, attrs, cacheSize, settings)
+	return newPebbleInMem(ctx, attrs, cacheSize, storeSize, settings)
 }
 
 // The ForTesting functions randomize the settings for separated intents. This
@@ -43,9 +46,9 @@ func NewInMem(
 
 // NewInMemForTesting allocates and returns a new, opened in-memory engine. The caller
 // must call the engine's Close method when the engine is no longer needed.
-func NewInMemForTesting(ctx context.Context, attrs roachpb.Attributes, cacheSize int64) Engine {
+func NewInMemForTesting(ctx context.Context, attrs roachpb.Attributes, storeSize int64) Engine {
 	settings := MakeRandomSettingsForSeparatedIntents()
-	return newPebbleInMem(ctx, attrs, cacheSize, settings)
+	return newPebbleInMem(ctx, attrs, 0 /* cacheSize */, storeSize, settings)
 }
 
 // NewDefaultInMemForTesting allocates and returns a new, opened in-memory engine with

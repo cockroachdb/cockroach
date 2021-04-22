@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,30 +29,35 @@ func TestStickyEngines(t *testing.T) {
 
 	ctx := context.Background()
 	attrs := roachpb.Attributes{}
-	cacheSize := int64(1 << 20)
+	cacheSize := int64(1 << 20)   /* 1 MiB */
+	storeSize := int64(512 << 20) /* 512 MiB */
 
 	registry := NewStickyInMemEnginesRegistry()
 
+	cfg1 := MakeConfig(ctx, cluster.MakeTestingClusterSettings())
+	cfg1.CacheSize = cacheSize
 	spec1 := base.StoreSpec{
 		StickyInMemoryEngineID: "engine1",
 		Attributes:             attrs,
-		Size:                   base.SizeSpec{InBytes: cacheSize},
+		Size:                   base.SizeSpec{InBytes: storeSize},
 	}
-	engine1, err := registry.GetOrCreateStickyInMemEngine(ctx, spec1)
+	engine1, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
 	require.NoError(t, err)
 	require.False(t, engine1.Closed())
 
+	cfg2 := MakeConfig(ctx, cluster.MakeTestingClusterSettings())
+	cfg2.CacheSize = cacheSize
 	spec2 := base.StoreSpec{
 		StickyInMemoryEngineID: "engine2",
 		Attributes:             attrs,
-		Size:                   base.SizeSpec{InBytes: cacheSize},
+		Size:                   base.SizeSpec{InBytes: storeSize},
 	}
-	engine2, err := registry.GetOrCreateStickyInMemEngine(ctx, spec2)
+	engine2, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg2, spec2)
 	require.NoError(t, err)
 	require.False(t, engine2.Closed())
 
 	// Regetting the engine whilst it is not closed will fail.
-	_, err = registry.GetOrCreateStickyInMemEngine(ctx, spec1)
+	_, err = registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
 	require.EqualError(t, err, "sticky engine engine1 has not been closed")
 
 	// Close the engine, which allows it to be refetched.
@@ -60,7 +66,7 @@ func TestStickyEngines(t *testing.T) {
 	require.False(t, engine1.(*stickyInMemEngine).Engine.Closed())
 
 	// Refetching the engine should give back the same engine.
-	engine1Refetched, err := registry.GetOrCreateStickyInMemEngine(ctx, spec1)
+	engine1Refetched, err := registry.GetOrCreateStickyInMemEngine(ctx, &cfg1, spec1)
 	require.NoError(t, err)
 	require.Equal(t, engine1, engine1Refetched)
 	require.False(t, engine1.Closed())
