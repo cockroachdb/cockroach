@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -76,8 +77,8 @@ type drainHelper struct {
 	// are noops.
 	ctx context.Context
 
-	getStats func() []*execinfrapb.ComponentStats
-	sources  colexecop.MetadataSources
+	statsCollectors []colexecop.VectorizedStatsCollector
+	sources         colexecop.MetadataSources
 
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
@@ -92,10 +93,10 @@ var drainHelperPool = sync.Pool{
 }
 
 func newDrainHelper(
-	getStats func() []*execinfrapb.ComponentStats, sources colexecop.MetadataSources,
+	statsCollectors []colexecop.VectorizedStatsCollector, sources colexecop.MetadataSources,
 ) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
-	d.getStats = getStats
+	d.statsCollectors = statsCollectors
 	d.sources = sources
 	return d
 }
@@ -118,6 +119,20 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		// The drainHelper wasn't Start()'ed, so this operation is a noop.
 		return nil, nil
 	}
+	if len(d.statsCollectors) > 0 {
+		// If statsCollectors is non-nil, then the drainHelper is responsible
+		// for attaching the execution statistics to the span. Note that we
+		// neither retrieve the trace from the span (via sp.GetRecording()) nor
+		// propagate the trace as a metadata here - that is left to the
+		// materializer (more precisely, to the embedded ProcessorBase) which is
+		// necessary in order to not collect same trace data twice.
+		if sp := tracing.SpanFromContext(d.ctx); sp != nil {
+			for _, s := range d.statsCollectors {
+				sp.RecordStructured(s.GetStats())
+			}
+		}
+		d.statsCollectors = nil
+	}
 	if d.bufferedMeta == nil {
 		d.bufferedMeta = d.sources.DrainMeta(d.ctx)
 		if d.bufferedMeta == nil {
@@ -134,25 +149,7 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // ConsumerDone implements the RowSource interface.
-func (d *drainHelper) ConsumerDone() {
-	if d.ctx == nil {
-		// The drainHelper wasn't Start()'ed, so this operation is a noop.
-		return
-	}
-	if d.getStats != nil {
-		// If getStats is non-nil, then the drainHelper is responsible for
-		// attaching the execution statistics to the span, yet we don't get the
-		// recording from the span - that is left to the materializer (more
-		// precisely to the embedded ProcessorBase) which is necessary in order
-		// to not collect same trace data twice.
-		if sp := tracing.SpanFromContext(d.ctx); sp != nil {
-			for _, s := range d.getStats() {
-				sp.RecordStructured(s)
-			}
-		}
-		d.getStats = nil
-	}
-}
+func (d *drainHelper) ConsumerDone() {}
 
 // ConsumerClosed implements the RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
@@ -184,8 +181,6 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 // - typs is the output types scheme.
 // - getStats (when tracing is enabled) returns all of the execution statistics
 // of operators which the materializer is responsible for.
-// - metadataSources are all of the metadata sources that are planned on the
-// same node as the Materializer and that need to be drained.
 // - cancelFlow should return the context cancellation function that cancels
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
@@ -195,23 +190,20 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input colexecop.Operator,
+	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	output execinfra.RowReceiver,
-	getStats func() []*execinfrapb.ComponentStats,
-	metadataSources []colexecop.MetadataSource,
-	toClose []colexecop.Closer,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
 	*m = Materializer{
 		ProcessorBase: m.ProcessorBase,
-		input:         input,
+		input:         input.Root,
 		typs:          typs,
-		drainHelper:   newDrainHelper(getStats, metadataSources),
+		drainHelper:   newDrainHelper(input.StatsCollectors, input.MetadataSources),
 		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
-		closers:       toClose,
+		closers:       input.ToClose,
 	}
 
 	if err := m.ProcessorBase.InitWithEvalCtx(

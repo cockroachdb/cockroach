@@ -274,7 +274,7 @@ func TestWindowFunctions(t *testing.T) {
 		} {
 			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
-			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
+			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				tc.init()
 				ct := make([]*types.T, len(tc.tuples[0]))
 				for i := range ct {
@@ -297,7 +297,7 @@ func TestWindowFunctions(t *testing.T) {
 				sem := colexecop.NewTestingSemaphore(relativeRankNumRequiredFDs)
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                spec,
-					Inputs:              inputs,
+					Inputs:              colexectestutils.MakeInputs(sources),
 					StreamingMemAccount: testMemAcc,
 					DiskQueueCfg:        queueCfg,
 					FDSemaphore:         sem,
@@ -307,7 +307,7 @@ func TestWindowFunctions(t *testing.T) {
 				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 				accounts = append(accounts, result.OpAccounts...)
 				monitors = append(monitors, result.OpMonitors...)
-				return result.Op, err
+				return result.Root, err
 			})
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)

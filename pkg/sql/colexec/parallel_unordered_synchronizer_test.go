@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -50,7 +51,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		numBatches = rng.Intn(maxBatches) + 1
 	)
 
-	inputs := make([]SynchronizerInput, numInputs)
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
 		source := colexecop.NewRepeatableBatchSource(
 			testAllocator,
@@ -58,7 +59,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 			typs,
 		)
 		source.ResetBatchesToReturn(numBatches)
-		inputs[i].Op = source
+		inputs[i].Root = source
 		inputIdx := i
 		inputs[i].MetadataSources = []colexecop.MetadataSource{
 			colexectestutils.CallbackMetadataSource{DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
@@ -153,8 +154,8 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	const expectedErr = "first input error"
 	ctx := context.Background()
 
-	inputs := make([]SynchronizerInput, 6)
-	inputs[0].Op = &colexecop.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
+	inputs := make([]colexecargs.OpWithMetaInfo, 6)
+	inputs[0].Root = &colexecop.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
 		colexecerror.InternalError(errors.New(expectedErr))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
@@ -163,7 +164,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		acc := testMemMonitor.MakeBoundAccount()
 		defer acc.Close(ctx)
 		func(allocator *colmem.Allocator) {
-			inputs[i].Op = &colexecop.CallbackOperator{
+			inputs[i].Root = &colexecop.CallbackOperator{
 				NextCb: func(ctx context.Context) coldata.Batch {
 					// All inputs that do not encounter an error will continue to return
 					// batches.
@@ -200,11 +201,11 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	const numInputs = 6
 
 	typs := []*types.T{types.Int}
-	inputs := make([]SynchronizerInput, numInputs)
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
 		batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 		batch.SetLength(coldata.BatchSize())
-		inputs[i].Op = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
+		inputs[i].Root = colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())

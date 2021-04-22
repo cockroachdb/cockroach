@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -116,9 +117,9 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	colexectestutils.RunTestsWithoutAllNullsInjection(t, testAllocator, inputTuples, [][]*types.T{inputTypes, inputTypes}, expected, colexectestutils.UnorderedVerifier,
 		func(inputs []colexecop.Operator) (colexecop.Operator, error) {
 			var input colexecop.Operator
-			parallelUnorderedSynchronizerInputs := make([]colexec.SynchronizerInput, len(inputs))
+			parallelUnorderedSynchronizerInputs := make([]colexecargs.OpWithMetaInfo, len(inputs))
 			for i := range parallelUnorderedSynchronizerInputs {
-				parallelUnorderedSynchronizerInputs[i].Op = inputs[i]
+				parallelUnorderedSynchronizerInputs[i].Root = inputs[i]
 			}
 			input = colexec.NewParallelUnorderedSynchronizer(parallelUnorderedSynchronizerInputs, &wg)
 			input = colexecbase.NewSimpleProjectOp(input, len(inputTypes), []uint32{0})

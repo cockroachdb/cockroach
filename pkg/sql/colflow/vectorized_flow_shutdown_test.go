@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -163,7 +164,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					numInboxes           = numHashRouterOutputs + 3
 					inboxes              = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh    = make([]chan error, numInboxes+1)
-					synchronizerInputs   = make([]colexec.SynchronizerInput, 0, numInboxes)
+					synchronizerInputs   = make([]colexecargs.OpWithMetaInfo, 0, numInboxes)
 					streamID             = 0
 					addAnotherRemote     = rng.Float64() < 0.5
 				)
@@ -196,16 +197,16 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
 					allocators,
-					hashRouterInput,
+					colexecargs.OpWithMetaInfo{
+						Root:            hashRouterInput,
+						MetadataSources: toDrain,
+					},
 					typs,
 					[]uint32{0}, /* hashCols */
 					64<<20,      /* memoryLimit */
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					nil, /* getStats */
-					toDrain,
-					nil, /* toClose */
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -220,8 +221,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes = append(inboxes, inbox)
 					synchronizerInputs = append(
 						synchronizerInputs,
-						colexec.SynchronizerInput{
-							Op:              colexecop.Operator(inbox),
+						colexecargs.OpWithMetaInfo{
+							Root:            colexecop.Operator(inbox),
 							MetadataSources: []colexecop.MetadataSource{inbox},
 						},
 					)
@@ -358,15 +359,16 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				materializer, err := colexec.NewMaterializer(
 					flowCtx,
 					1, /* processorID */
-					materializerInput,
+					colexecargs.OpWithMetaInfo{
+						Root:            materializerInput,
+						MetadataSources: colexecop.MetadataSources{materializerMetadataSource},
+						ToClose: colexecop.Closers{callbackCloser{closeCb: func() error {
+							materializerCalledClose = true
+							return nil
+						}}},
+					},
 					typs,
 					nil, /* output */
-					nil, /* getStats */
-					[]colexecop.MetadataSource{materializerMetadataSource},
-					[]colexecop.Closer{callbackCloser{closeCb: func() error {
-						materializerCalledClose = true
-						return nil
-					}}}, /* toClose */
 					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)

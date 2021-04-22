@@ -98,7 +98,7 @@ func CreateTestProjectingOperator(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecop.Operator{input},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: input}},
 		StreamingMemAccount: testMemAcc,
 	}
 	if canFallbackToRowexec {
@@ -108,5 +108,5 @@ func CreateTestProjectingOperator(
 	if err != nil {
 		return nil, err
 	}
-	return result.Op, nil
+	return result.Root, nil
 }

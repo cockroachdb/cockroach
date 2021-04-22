@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -72,9 +73,9 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 	for _, tc := range testCases {
 		for _, success := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, success), func(t *testing.T) {
-				inputs := []colexecop.Operator{colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */, nil /* opToInitialize */)}
+				sources := []colexecop.Operator{colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */, nil /* opToInitialize */)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */, nil /* opToInitialize */))
+					sources = append(sources, colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */, nil /* opToInitialize */))
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				if success {
@@ -87,7 +88,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 				defer acc.Close(ctx)
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                tc.spec,
-					Inputs:              inputs,
+					Inputs:              colexectestutils.MakeInputs(sources),
 					StreamingMemAccount: &acc,
 				}
 				var setupErr error
@@ -194,9 +195,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		for _, success := range []bool{true, false} {
 			expectNoMemoryError := success || tc.spillingSupported
 			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expectNoMemoryError), func(t *testing.T) {
-				inputs := []colexecop.Operator{colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)}
+				sources := []colexecop.Operator{colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)}
 				if len(tc.spec.Input) > 1 {
-					inputs = append(inputs, colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
+					sources = append(sources, colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}
 				memMon := mon.NewMonitor("MemoryMonitor", mon.MemoryResource, nil, nil, 0, math.MaxInt64, st)
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
@@ -218,7 +219,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				defer acc.Close(ctx)
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:                tc.spec,
-					Inputs:              inputs,
+					Inputs:              colexectestutils.MakeInputs(sources),
 					StreamingMemAccount: &acc,
 					FDSemaphore:         colexecop.NewTestingSemaphore(256),
 				}
@@ -239,9 +240,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					require.NoError(t, err)
 				}); err == nil {
 					err = colexecerror.CatchVectorizedRuntimeError(func() {
-						result.Op.Init()
-						result.Op.Next(ctx)
-						result.Op.Next(ctx)
+						result.Root.Init()
+						result.Root.Next(ctx)
+						result.Root.Next(ctx)
 					})
 				}
 				if result != nil {

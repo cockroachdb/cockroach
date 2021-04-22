@@ -8,15 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package colexec
+package colexectestutils
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
-// VectorizedStatsCollector is the common interface implemented by collectors.
-type VectorizedStatsCollector interface {
-	colexecop.Operator
-	GetStats() *execinfrapb.ComponentStats
+// MakeInputs is a utility function that populates a slice of
+// colexecargs.OpWithMetaInfo objects based on sources.
+func MakeInputs(sources []colexecop.Operator) []colexecargs.OpWithMetaInfo {
+	inputs := make([]colexecargs.OpWithMetaInfo, len(sources))
+	for i := range sources {
+		inputs[i].Root = sources[i]
+	}
+	return inputs
 }
