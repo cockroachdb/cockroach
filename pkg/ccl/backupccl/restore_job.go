@@ -613,10 +613,17 @@ func restore(
 
 	g := ctxgroup.WithContext(restoreCtx)
 
-	// TODO(dan): This not super principled. I just wanted something that wasn't
-	// a constant and grew slower than linear with the length of importSpans. It
-	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
-	chunkSize := int(math.Sqrt(float64(len(importSpans))))
+	// TODO(pbardea): This not super principled. I just wanted something that
+	// wasn't a constant and grew slower than linear with the length of
+	// importSpans. It seems to be working well for BenchmarkRestore2TB but
+	// worth revisiting.
+	// It tries to take the cluster size into account so that larger clusters
+	// distribute more chunks amongst them so that after scattering there isn't
+	// a large varience in the distribution of entries.
+	chunkSize := int(math.Sqrt(float64(len(importSpans)))) / numClusterNodes
+	if chunkSize == 0 {
+		chunkSize = 1
+	}
 	importSpanChunks := make([][]execinfrapb.RestoreSpanEntry, 0, len(importSpans)/chunkSize)
 	for start := 0; start < len(importSpans); {
 		importSpanChunk := importSpans[start:]
