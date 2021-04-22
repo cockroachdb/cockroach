@@ -3613,7 +3613,21 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 
 	// With the meta2CKey intent cleaned up, allow store1's merge watcher
 	// goroutine to proceed.
-	cond.Signal()
+	_ = tc.Stopper().RunAsyncTask(ctx, "signal-cond", func(ctx context.Context) {
+		for {
+			// In the common case we need to signal only once, but this test has
+			// a deadlock if we do that. The cause is unknown but it shows a merge
+			// watcher sitting on the cond waiting for a signal. This is just duct
+			// tape. See internal link:
+			// https://cockroachlabs.slack.com/archives/C0KB9Q03D/p1619085304141400
+			cond.Signal()
+			select {
+			case <-time.After(100 * time.Millisecond):
+			case <-tc.Stopper().ShouldQuiesce():
+				return
+			}
+		}
+	})
 
 	// We *must* see a RangeNotFound error from the get request we sent earlier
 	// because we sent it after the merge completed. Anything else is a
