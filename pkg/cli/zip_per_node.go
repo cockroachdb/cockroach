@@ -177,7 +177,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		return nil
 	}
 
-	nodePrinter := newZipReporter("node %d", nodeID)
+	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
 	id := fmt.Sprintf("%d", nodeID)
 	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
 
