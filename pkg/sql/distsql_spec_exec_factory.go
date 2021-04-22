@@ -592,7 +592,11 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
+	typ tree.UnionType,
+	all bool,
+	left, right exec.Node,
+	reqOrdering exec.OutputOrdering,
+	hardLimit uint64,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
 }

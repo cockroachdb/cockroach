@@ -15,6 +15,7 @@ go_library(
         "row_number.go",
         "scan.go",
         "select.go",
+        "set.go",
         "sort.go",
         "statement.go",
     ],

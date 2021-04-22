@@ -37,22 +37,25 @@ EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 distribution: full
 vectorized: true
 ·
-• sort
-│ order: +x
+• union all
 │
-└── • union all
-    │
-    ├── • scan
-    │     missing stats
-    │     table: xyz@primary
-    │     spans: FULL SCAN
+├── • sort
+│   │ order: +x
+│   │
+│   └── • scan
+│         missing stats
+│         table: xyz@primary
+│         spans: FULL SCAN
+│
+└── • sort
+    │ order: +x
     │
     └── • scan
           missing stats
           table: xyz@primary
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysVk2L2kAYvvdXDO-ppRPiTOJXTm67FgSrW7XQUnJIzbAIrpPORIgr_vdiguwq5p3JxzEZn3k-kRxB_9tCAONfT9OHyYx8fJwsV8sf009kOZ6Ov65IRr4t5t9JdnglP2eT-Yw8TKd3zuaLx_GCfPlNMqCwk7GYRS9CQ_AHGFDgQMEDCj5Q6EJIIVFyLbSW6vyTYw6YxBkEHQqbXbJPz69DCmupBARHSDfpVkAAq-jvVixEFAvldoBCLNJos81pssPrKFGbl0gdgMIyiXY6II57Zp7v04CMGIQnCnKfvl2v0-hZQMBOtJ6EbmsSeKmEN2apYqFEfM0J4emOyJl0ZOKy64jKuDtV7C-lSoVy2Y31Eftc6s2r6624tNQet7PnX9Ez-3aZRbsud1yv8sQqiOi1KIKXimgyMlZjZIYALiPr1R0Ztw-Y2wTsOa5fueUKIvotiuClIpq0zGu0bAjg0nK_bsuefcCeTcC-k_-jV2u5gohBiyJ4qYgmLXs1WjYEcGl5ULdl3z5g3ybgrlO54woShq1J4KUSmjTs12jYYP_S8LCNT4I79y-ETuROC0vlIQURP4siKC33ai2elFznNMXjPMflL2Kh0-KUFw-TXX6U9_8ezJqAOQr2rsCdW7CHgn2c2cdlM5y6i6L7OHWvCbiPgge47EGTxIYomDHDTPCRGeH4zBjHjTN8aAbnDF8a6xrg-NaMcHxsrGewjs_NZB3fGxsa4PjijHB8c7yDW-f45m6th6cP_wMAAP__BE4uGA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll-L2kAUxd_7KcJ9aumEeGcm-ydPu-1aEKxu1UJL8SE1wyK4TjqJoCt-92IUdi3mTmZiH5PxnHPPnR-YLRR_FpBA98dj_743CN4_9MaT8bf-h2Dc7Xc_T4J18GU0_BqsNy_B90FvOAju-_0zZ8PRQ3cUfPoZrIHBUmdqkD6rApJfgMCAAwMBDCQwiGHKIDd6popCm_1PtpWgl60h6TCYL_NVuX89ZTDTRkGyhXJeLhQkMEl_L9RIpZkyUQcYZKpM54sqZr15ucvN_Dk1G2AwztNlkQRhtE8ersokuEOY7hjoVflqX5Tpk4IEd6z5CGNtSmWi-DT9Dj_W2nMX-7cN8XIVhUdFdOgoa_1fbbXJlFHZOdMzQwx0qPOIn66gLr7zv-LjRvHxSTw63HCDC454GAlnii1DHK_4ypdil46XLCk8SqJDS1nr3xIk9OCYN18yb7JjEUbSGSTLEMcdX_uC5NARL1lSeJREh5ay1r8lSNwDJNF8yaLJjmVY_f-5gWQZ4rjjG1-QHDriJUsKj5Lo0FLW-rcESXiAJJsvWTbZcRw6Y2QZ4bjhW1-MHBri5SoKj4ro0FHW-reESLb8PDvjPFJFrpeFaug8ZaCyJ3XoUuiVmalHo2dVzOFxWOmqF5kqysMpHh56y8PRfsC3YiTF8kSM_4o5KRZ0smiTLElxTItjUsyv6LmvSPU1Lb6m76pDD35Dqm_p6NtW0UhTZtk40pght0BKg4a2dBo1lJZ0GjZrOo2bTU3jhhbekAaO226dJg4tyCHNnC2dt2KO08xxC3OcZo7b0mnmuIU5TjNnTXdjbrp79zcAAP__3g8zPw==
 
 query T
 EXPLAIN (DISTSQL) SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
@@ -165,22 +168,25 @@ EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz OR
 distribution: full
 vectorized: true
 ·
-• sort
-│ order: +x
+• union all
 │
-└── • union all
-    │
-    ├── • scan
-    │     missing stats
-    │     table: xyz@primary
-    │     spans: FULL SCAN
+├── • sort
+│   │ order: +x
+│   │
+│   └── • scan
+│         missing stats
+│         table: xyz@primary
+│         spans: FULL SCAN
+│
+└── • sort
+    │ order: +x
     │
     └── • scan
           missing stats
           table: xyz@primary
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysVluL2kwYvv9-xfBerXwT4kziKVduuxYEq1u10FJykZphEVwnnYngAf97MUGssnlncrgzh2eeI5IT6D8bCGD043XyPJ6Sp5fxYrn4NmmRp8VoMvq8JHvyZT77SvaHI5nNX0Zz8uknObTI9-l4NiXPkwn64rF1-70HClsZi2n0LjQEv4ABBQ4UPKDgA4UOhBQSJVdCa6kur5wywDjeQ9CmsN4mu_RyO6SwkkpAcIJ0nW4EBLCMfm_EXESxUG4bKMQijdabjGZ_OA4TtX6P1AEoLJJoqwPiuBfm2S4NyJBBeKYgd-nteJ1GbwICdqbVJHQak8ALJdyYpYqFEvE9J4TnD0ROpSMTl91HVMTdLmN_IVUqlMserA_Z_4XevKre8kML7XE7e_4dPbNvl1m063LH9UpPrISIboMieKGIOiNjFUZmCOA6sm7VkXH7gLlNwJ7j-qVbLiGi16AIXiiiTsu8QsuGAK4t96q27NkH7NkE7DvZP3q5lkuI6DcogheKqNOyV6FlQwDXlvtVW_btA_ZtAu44pTsuIWHQmAReKKFOw36Fhg32rw0Pmvgk-OD8udCJ3GphqTykIOI3kQel5U6txKuSq4wmv5xluOxGLHSaP-X5xXibPcr6_xfM6oA5CvbuwO1HsIeCfZzZx2UznLqDons4dbcOuIeC-7jsfp3EBiiYMcNM8JEZ4fjMGMeNM3xoBucMXxrrGOD41oxwfGysa7COz81kHd8bGxjg-OKMcHxzvI1b5_jmHq2H5__-BgAA__96tDSb
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll1v2jwUx--fT2Gdq1aPUTiO05dc0a1MQmLQQSdtmrjIiFUhUZw5QYJWfPeJgETZmmPH1u6al39-53_8k8orlL-WkEL_28PwbjBiF_eD6eP0y_CSXUz7w_7HR7Zhnybjz2yzfWHjyX1_wj58Z9tL9nU0GI_Y3XBIvvhyefp7AxxWOlej7FmVkP4ABA4COMTAQQKHBGYcCqPnqiy12b_yWgcG-QbSLofFqlhX-9szDnNtFKSvUC2qpYIUHrOfSzVRWa5M1AUOuaqyxbLGbLYvvcIsnjOzBQ7TIluVKetEe_J4XaWsh7wXw2zHQa-rE6GssicFKe64-xRTbSplouR8gB7-f2I1gkQb0Nu66NFXNI4Re_RFr8KykXQCaJMro_K_Pz_bvTPOSHd0EYnzfTThu_8KnzjhkzM8tjhuh9OORCeKffy2zHE876twv9sU9mrsarhbY_SqLBtJgYqhh-HCfePCZeFxJ5I-ilnmOC78OlyxFoXRq7GrYm6N0auybCQFKiY8FIvdNx67LFx26n-lrRWzzHFc-E24Yi0Ko1djV8XcGqNXZdlIClQs9lBMum9cuiw86fgIZpniuO7bcMFa1EWPvq56ufVFr8KykRSolwz8GfjOlyeqLPSqVI5fnnFQ-ZM6dCn12szVg9HzGnO4HNe5-kauyurwFA8Xg9Xh0X7At2Ekw_IsjH-GBRmOaXIcQpZkOKHDCRkWV_TcV2T6mg5f02fVpQe_IdO3NPo2CI20ZZaNI60ZCouktGhoo9OqobTQadmsdFo3W5rWDS2-IS2csJ06bRxalEPaORtdBDknaOeExTlBOydsdNo5YXFO0M5Z6e2cm-3--x0AAP__SitYcQ==
 
 query T
 EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
@@ -212,22 +218,25 @@ EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz OR
 distribution: full
 vectorized: true
 ·
-• sort
-│ order: +x
+• union all
 │
-└── • union all
-    │
-    ├── • scan
-    │     missing stats
-    │     table: xyz@primary
-    │     spans: FULL SCAN
+├── • sort
+│   │ order: +x
+│   │
+│   └── • scan
+│         missing stats
+│         table: xyz@primary
+│         spans: FULL SCAN
+│
+└── • sort
+    │ order: +x
     │
     └── • scan
           missing stats
           table: xyz@primary
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysVluL2kwYvv9-xfBerXwT4kziKVduuxYEq1u10FJykZphEVwnnYngAf97MUGssnlncricJM88R8QT6D8bCGD043XyPJ6Sp5fxYrn4NmmRp8VoMvq8JHvyZT77SvaHI5nNX0Zz8uknObTI9-l4NiXPkwn-ISXH1u24BwpbGYtp9C40BL-AAQUOFDyg4AOFDoQUEiVXQmupLp-cMsA43kPQprDeJrv08jiksJJKQHCCdJ1uBASwjH5vxFxEsVBuGyjEIo3Wm4xmfzgOE7V-j9QBKCySaKsD4rgX5tkuDciQQXimIHfp7XqdRm8CAnam1SR0GpPACyXcmKWKhRLxPSeE5w9ETqUjE5fdR1TE3S5jfyFVKpTLHqwP2f-F3ryq3vJLC-1xO3v-HT2zb5dZtOtyx_VKT6yEiG6DInihiDojYxVGZgjgOrJu1ZFx-4C5TcCe4_qlWy4hotegCF4ook7LvELLhgCuLfeqtuzZB-zZBOw72S96uZZLiOg3KIIXiqjTslehZUMA15b7VVv27QP2bQLuOKU7LiFh0JgEXiihTsN-hYYN9q8ND5r4S_DB_XOhE7nVwlJ5SEHEbyIPSsudWolXJVcZTX6cZbjsQSx0mr_l-WG8zV5l_f8LZnXAHAV7d-D2I9hDwT7O7OOyGU7dQdE9nLpbB9xDwX1cdr9OYgMUzJhhJvjIjHB8Zozjxhk-NINzhi-NdQxwfGtGOD421jVYx-dmso7vjQ0McHxxRji-Od7GrXN8c4_Ww_N_fwMAAP__3oE1YA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ll1v2jwUx--fT2Gdq1aPUTiO05dc0a1MQmLQQSdtmrjIiFUhUZw5QYJWfPeJgETZmmPH1i7z8s_v_I9_ErxC-WsJKfS_PQzvBiN2cT-YPk6_DC_ZxbQ_7H98ZBv2aTL-zDbbFzae3Pcn7MN3tr1kX0eD8YjdDYf0i5y9XJ4uN8BhpXM1yp5VCekPQOAggEMMHCRwSGDGoTB6rspSm_0rr3VgkG8g7XJYrIp1tb894zDXRkH6CtWiWipI4TH7uVQTleXKRF3gkKsqWyxrzGb70ivM4jkzW-AwLbJVmbJOtCeP11XKesh7gvdimO046HV1gpRV9qQgxR13H2SqTaVMlJzP0MP_T7hGkGgDetsYfSo3jhF79EWvwrKRdAJokyuj8r8_P9u9M85Id3QRifN9NOG7_wqfOOGTMzy2OG6H045EJ4o9FbeMcjzyq3DF23T2K-0ouVtj9KosG0mBlqGH5MJ948Jl4XEnkp6WWUY57vw63LIWndGvtKNlbo3Rq7JsJAVaJjwsi903HrssXHbqH1QfyyyjHHd-E25Zi87oV9rRMrfG6FVZNpICLYs9LJPuG5cuC086no5ZBjlu_DbcsRaN0aeyo2FufdGrsGwkBRomA_8SvvPliSoLvSqV45dnHFT-pA5dSr02c_Vg9LzGHC7Hda6-kauyOjzFw8VgdXi0H_BtGMmwPAvjn2FBhmOaHIeQJRlO6HBChsUVPfcVmb6mw9f0WXXpwW_I9C2Nvg1CI22ZZeNIa4bCIiktGtrotGooLXRaNiud1s2WpnVDi29ICydsp04bhxblkHbORhdBzgnaOWFxTtDOCRuddk5YnBO0c1Z6O-dmu_9-BwAA__9mrFxM
 
 # Only one distinct processor should be used in the single node UNION case.
 query T
