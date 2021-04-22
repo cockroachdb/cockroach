@@ -633,8 +633,9 @@ func (db *DB) AddSSTable(
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
+	batchTs hlc.Timestamp,
 ) error {
-	b := &Batch{}
+	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
 	return getOneErr(db.Run(ctx, b), b)
 }

@@ -106,6 +106,7 @@ func MakeBulkAdder(
 			skipDuplicates:    opts.SkipDuplicates,
 			disallowShadowing: opts.DisallowShadowing,
 			splitAfter:        opts.SplitAndScatterAfter,
+			batchTS:           opts.BatchTimestamp,
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,
