@@ -253,10 +253,15 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 	return nil
 }
 
+// sidetransportReceiver abstracts *sidetransport.Receiver.
+type sidetransportReceiver interface {
+	HTML() string
+}
+
 // RegisterClosedTimestampSideTransport registers web endpoints for the closed
 // timestamp side transport sender and receiver.
 func (ds *Server) RegisterClosedTimestampSideTransport(
-	sender *sidetransport.Sender, receiver *sidetransport.Receiver,
+	sender *sidetransport.Sender, receiver sidetransportReceiver,
 ) {
 	ds.mux.HandleFunc("/debug/closedts-receiver",
 		func(w http.ResponseWriter, req *http.Request) {

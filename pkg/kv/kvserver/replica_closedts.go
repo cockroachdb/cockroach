@@ -208,9 +208,10 @@ type sidetransportReceiver interface {
 	GetClosedTimestamp(
 		ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
 	) (hlc.Timestamp, ctpb.LAI)
+	HTML() string
 }
 
-func (st *sidetransportAccess) init(receiver *sidetransport.Receiver, rangeID roachpb.RangeID) {
+func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roachpb.RangeID) {
 	if receiver != nil {
 		// Avoid st.receiver becoming a typed nil.
 		st.receiver = receiver
