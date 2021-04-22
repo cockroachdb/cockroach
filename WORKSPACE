@@ -113,10 +113,18 @@ go_register_toolchains(go_version = "1.15.11")
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
 
+# install external dependencies for pkg/ui package
 yarn_install(
     name = "npm",
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
+)
+
+# install external dependencies for pkg/ui/src/js package (used to generate protobuf js client)
+yarn_install(
+    name = "npm_proto_js",
+    package_json = "//pkg/ui/src/js:package.json",
+    yarn_lock = "//pkg/ui/src/js:yarn.lock",
 )
 
 # NB: @bazel_skylib comes from go_rules_dependencies().
