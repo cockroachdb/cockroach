@@ -710,7 +710,9 @@ func NewColOperator(
 	resultPreSpecPlanningStateShallowCopy := *r
 
 	if err = supportedNatively(spec); err != nil {
-		if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
+		if wrapErr := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); wrapErr != nil {
+			// Return the original error for why we don't support this spec
+			// natively since it is more interesting.
 			return r, err
 		}
 		if log.V(1) {
