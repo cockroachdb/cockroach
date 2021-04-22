@@ -1100,7 +1100,7 @@ func TestDecodeKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+	e := newPebbleInMem(context.Background(), roachpb.Attributes{}, 0, 1<<20, nil /* settings */)
 	defer e.Close()
 
 	tests := []MVCCKey{

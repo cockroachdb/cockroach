@@ -43,8 +43,8 @@ func TestCachedSettingsStoreAndLoad(t *testing.T) {
 
 	ctx := context.Background()
 	attrs := roachpb.Attributes{}
-	cacheSize := int64(1 << 20)
-	engine := storage.NewInMemForTesting(ctx, attrs, cacheSize)
+	storeSize := int64(512 << 20)
+	engine := storage.NewInMemForTesting(ctx, attrs, storeSize)
 	defer engine.Close()
 
 	require.NoError(t, storeCachedSettingsKVs(ctx, engine, testSettings))

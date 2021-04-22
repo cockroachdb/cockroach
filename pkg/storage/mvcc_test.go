@@ -85,7 +85,7 @@ func createTestPebbleEngine() Engine {
 }
 
 func createTestPebbleEngineWithSettings(settings *cluster.Settings) Engine {
-	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, settings)
+	return newPebbleInMem(context.Background(), roachpb.Attributes{}, 0, 1<<20, settings)
 }
 
 // TODO(sumeer): the following is legacy from when we had multiple engine

@@ -161,10 +161,13 @@ type TestClusterArgs struct {
 }
 
 var (
-	// DefaultTestStoreSpec is just a single in memory store of 100 MiB
+	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
 	// with no special attributes.
 	DefaultTestStoreSpec = StoreSpec{
 		InMemory: true,
+		Size: SizeSpec{
+			InBytes: 512 << 20,
+		},
 	}
 )
 

@@ -423,7 +423,7 @@ func TestPebbleDiskSlowEmit(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	MaxSyncDurationFatalOnExceeded.Override(&settings.SV, false)
-	p := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, settings)
+	p := newPebbleInMem(context.Background(), roachpb.Attributes{}, 0, 1<<20, settings)
 	defer p.Close()
 
 	require.Equal(t, uint64(0), p.diskSlowCount)
