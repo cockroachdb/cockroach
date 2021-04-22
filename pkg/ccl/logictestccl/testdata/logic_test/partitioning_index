@@ -161,3 +161,58 @@ statement error interleaved indexes cannot be partitioned
 CREATE INDEX i ON t60699_b (a) INTERLEAVE IN PARENT t60699_a (a) PARTITION BY LIST (a) (
   partition part1 VALUES IN (1)
 )
+
+# Regression test for #63733. Scanning a partitioned index should produce rows
+# where the first index column is NULL.
+statement ok
+CREATE TABLE t63733 (
+  k INT PRIMARY KEY,
+  region STRING,
+  INDEX idx (region) PARTITION BY LIST (region) (
+     PARTITION us_west VALUES IN (('us-west'))
+  )
+);
+INSERT INTO t63733 VALUES (1, NULL)
+
+query IT
+SELECT * FROM t63733@idx WHERE k = 1
+----
+1  NULL
+
+statement ok
+CREATE TABLE t63733_multi (
+  a INT,
+  b INT,
+  c INT,
+  INDEX idx (a,b,c) PARTITION BY LIST (a, b) (
+    PARTITION x VALUES IN ((10, 10)),
+    PARTITION y VALUES IN ((20, 20))
+  )
+)
+
+statement ok
+INSERT INTO t63733_multi VALUES
+  (10, 10, 1),
+  (10, 10, 1),
+  (20, 20, 1),
+  (NULL, NULL, 1),
+  (NULL, 10, 1),
+  (5, NULL, 1),
+  (10, NULL, 1),
+  (15, NULL, 1),
+  (20, NULL, 1),
+  (25, NULL, 1)
+
+query III rowsort
+SELECT * FROM t63733_multi@idx WHERE c = 1
+----
+NULL  NULL  1
+NULL  10    1
+5     NULL  1
+10    NULL  1
+10    10    1
+10    10    1
+15    NULL  1
+20    NULL  1
+20    20    1
+25    NULL  1
