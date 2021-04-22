@@ -697,8 +697,8 @@
         "expectedDataType": null
       },
       "relfrozenxid": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -751,8 +751,8 @@
         "expectedDataType": null
       },
       "relminmxid": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1207,8 +1207,8 @@
         "expectedDataType": null
       },
       "datfrozenxid": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -1225,8 +1225,8 @@
         "expectedDataType": null
       },
       "datminmxid": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2101,8 +2101,8 @@
         "expectedDataType": null
       },
       "transactionid": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -2583,8 +2583,8 @@
         "expectedDataType": null
       },
       "transaction": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       }
@@ -2953,8 +2953,8 @@
         "expectedDataType": null
       },
       "catalog_xmin": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       },
@@ -3019,8 +3019,8 @@
         "expectedDataType": null
       },
       "xmin": {
-        "oid": 26,
-        "dataType": "OID",
+        "oid": 20,
+        "dataType": "INT8",
         "expectedOid": null,
         "expectedDataType": null
       }

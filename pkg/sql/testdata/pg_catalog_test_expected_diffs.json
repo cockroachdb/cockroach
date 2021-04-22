@@ -10,15 +10,6 @@
   "pg_attribute": {
     "attmissingval": null
   },
-  "pg_class": {
-    "relfrozenxid": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 26,
-      "expectedDataType": "OID"
-    },
-    "relminmxid": null
-  },
   "pg_collation": {
     "collcollate": {
       "oid": 25,
@@ -58,7 +49,6 @@
       "expectedOid": 18,
       "expectedDataType": "char"
     },
-    "conparentid": null,
     "contype": {
       "oid": 25,
       "dataType": "text",
@@ -86,18 +76,6 @@
       "dataType": "text",
       "expectedOid": 19,
       "expectedDataType": "name"
-    },
-    "datfrozenxid": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 26,
-      "expectedDataType": "OID"
-    },
-    "datminmxid": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 26,
-      "expectedDataType": "OID"
     }
   },
   "pg_enum": {
@@ -120,16 +98,6 @@
       "dataType": "text",
       "expectedOid": 1028,
       "expectedDataType": "_oid"
-    }
-  },
-  "pg_init_privs": {},
-  "pg_largeobject_metadata": {},
-  "pg_locks": {
-    "transactionid": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 26,
-      "expectedDataType": "OID"
     }
   },
   "pg_operator": {
@@ -158,16 +126,6 @@
       "expectedDataType": "regproc"
     }
   },
-  "pg_partitioned_table": {},
-  "pg_policy": {},
-  "pg_prepared_xacts": {
-    "transaction": {
-      "oid": 20,
-      "dataType": "int8",
-      "expectedOid": 26,
-      "expectedDataType": "OID"
-    }
-  },
   "pg_proc": {
     "proargmodes": {
       "oid": 1009,
@@ -190,8 +148,6 @@
       "expectedDataType": "regproc"
     }
   },
-  "pg_replication_origin_status": {},
-  "pg_replication_slots": {},
   "pg_rewrite": {
     "ev_enabled": {
       "oid": 25,
@@ -214,7 +170,6 @@
       "expectedDataType": "int4"
     }
   },
-  "pg_sequences": {},
   "pg_settings": {
     "enumvals": {
       "oid": 25,
@@ -223,7 +178,6 @@
       "expectedDataType": "_text"
     }
   },
-  "pg_subscription_rel": {},
   "pg_trigger": {
     "tgenabled": {
       "oid": 25,
