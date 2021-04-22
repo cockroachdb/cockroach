@@ -16,6 +16,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
+func TestFileSelection(t *testing.T) {
+	type s = string
+	testCases := []struct {
+		incl    []s
+		excl    []s
+		accepts []s
+		rejects []s
+	}{
+		{nil, nil, []s{"anything", "really"}, nil},
+		{nil, []s{"any*"}, []s{"really", "unrelated"}, []s{"anything"}},
+		{nil, []s{"any*", "*lly"}, []s{"unrelated"}, []s{"anything", "really"}},
+		{[]s{"any*"}, nil, []s{"anything"}, []s{"really", "unrelated"}},
+		{[]s{"any*", "*lly"}, nil, []s{"anything", "really"}, []s{"unrelated"}},
+		{[]s{"any*", "*lly"}, []s{"re*"}, []s{"anything", "oreilly"}, []s{"unrelated", "really"}},
+	}
+
+	for _, tc := range testCases {
+		sel := fileSelection{includePatterns: tc.incl, excludePatterns: tc.excl}
+		for _, f := range tc.accepts {
+			if !sel.isIncluded(f) {
+				t.Errorf("incl=%+v, excl=%+v: mistakenly does not include %q", sel.includePatterns, sel.excludePatterns, f)
+			}
+		}
+		for _, f := range tc.rejects {
+			if sel.isIncluded(f) {
+				t.Errorf("incl=%+v, excl=%+v: mistakenly includes %q", sel.includePatterns, sel.excludePatterns, f)
+			}
+		}
+	}
+}
+
 func TestNodeSelection(t *testing.T) {
 	testCases := []struct {
 		incl    string

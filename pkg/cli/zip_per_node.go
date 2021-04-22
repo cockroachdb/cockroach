@@ -274,14 +274,15 @@ func (zc *debugZipContext) collectPerNodeData(
 	}
 
 	var profiles *serverpb.GetFilesResponse
-	s = nodePrinter.start("requesting heap files")
+	s = nodePrinter.start("requesting heap file list")
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			profiles, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
 				NodeId:   id,
 				Type:     serverpb.FileType_HEAP,
-				Patterns: []string{"*"},
+				Patterns: zipCtx.files.retrievalPatterns(),
+				ListOnly: true,
 			})
 			return err
 		}); requestErr != nil {
@@ -292,23 +293,54 @@ func (zc *debugZipContext) collectPerNodeData(
 		s.done()
 		nodePrinter.info("%d heap profiles found", len(profiles.Files))
 		for _, file := range profiles.Files {
+			if !zipCtx.files.isIncluded(file.Name) {
+				nodePrinter.info("skipping excluded heap profile: %s", file.Name)
+				continue
+			}
+
 			fName := maybeAddProfileSuffix(file.Name)
 			name := prefix + "/heapprof/" + fName
-			if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
+			fs := nodePrinter.start("retrieving %s", file.Name)
+			var oneprof *serverpb.GetFilesResponse
+			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
+				var err error
+				oneprof, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
+					NodeId:   id,
+					Type:     serverpb.FileType_HEAP,
+					Patterns: []string{file.Name},
+					ListOnly: false, // Retrieve the file contents.
+				})
 				return err
+			}); fileErr != nil {
+				if err := zc.z.createError(fs, name, fileErr); err != nil {
+					return err
+				}
+			} else {
+				fs.done()
+
+				if len(oneprof.Files) < 1 {
+					// This is possible in theory, if the file was removed in-between
+					// the list request above and the content retrieval request.
+					continue
+				}
+				file := oneprof.Files[0]
+				if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
+					return err
+				}
 			}
 		}
 	}
 
 	var goroutinesResp *serverpb.GetFilesResponse
-	s = nodePrinter.start("requesting goroutine dumps")
+	s = nodePrinter.start("requesting goroutine dump list")
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			goroutinesResp, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
 				NodeId:   id,
 				Type:     serverpb.FileType_GOROUTINES,
-				Patterns: []string{"*"},
+				Patterns: zipCtx.files.retrievalPatterns(),
+				ListOnly: true,
 			})
 			return err
 		}); requestErr != nil {
@@ -319,10 +351,41 @@ func (zc *debugZipContext) collectPerNodeData(
 		s.done()
 		nodePrinter.info("%d goroutine dumps found", len(goroutinesResp.Files))
 		for _, file := range goroutinesResp.Files {
+			if !zipCtx.files.isIncluded(file.Name) {
+				nodePrinter.info("skipping excluded goroutine dump: %s", file.Name)
+				continue
+			}
+
 			// NB: the files have a .txt.gz suffix already.
 			name := prefix + "/goroutines/" + file.Name
-			if err := zc.z.createRaw(nodePrinter.start("writing dump"), name, file.Contents); err != nil {
+
+			fs := nodePrinter.start("retrieving %s", file.Name)
+			var onedump *serverpb.GetFilesResponse
+			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
+				var err error
+				onedump, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
+					NodeId:   id,
+					Type:     serverpb.FileType_GOROUTINES,
+					Patterns: []string{file.Name},
+					ListOnly: false, // Retrieve the file contents.
+				})
 				return err
+			}); fileErr != nil {
+				if err := zc.z.createError(fs, name, fileErr); err != nil {
+					return err
+				}
+			} else {
+				fs.done()
+
+				if len(onedump.Files) < 1 {
+					// This is possible in theory, if the file was removed in-between
+					// the list request above and the content retrieval request.
+					continue
+				}
+				file := onedump.Files[0]
+				if err := zc.z.createRaw(nodePrinter.start("writing dump"), name, file.Contents); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -343,6 +406,11 @@ func (zc *debugZipContext) collectPerNodeData(
 		s.done()
 		nodePrinter.info("%d log files found", len(logs.Files))
 		for _, file := range logs.Files {
+			if !zipCtx.files.isIncluded(file.Name) {
+				nodePrinter.info("skipping excluded log file: %s", file.Name)
+				continue
+			}
+
 			logPrinter := nodePrinter.withPrefix("log file: %s", file.Name)
 			name := prefix + "/logs/" + file.Name
 			var entries *serverpb.LogEntriesResponse
