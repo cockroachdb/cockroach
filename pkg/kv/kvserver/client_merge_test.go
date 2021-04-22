@@ -4073,6 +4073,7 @@ func verifyUnmerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKe
 
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 64056, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
