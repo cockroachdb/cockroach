@@ -13,6 +13,7 @@ go_library(
         "cpuprofile.go",
         "debug.go",
         "debug_check_store.go",
+        "debug_list_files.go",
         "debug_logconfig.go",
         "debug_merge_logs.go",
         "debug_reset_quorum.go",

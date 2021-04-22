@@ -555,6 +555,7 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
+		debugListFilesCmd,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,
@@ -621,11 +622,15 @@ func init() {
 	// Zip command.
 	{
 		f := debugZipCmd.Flags()
-		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
-		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
 		boolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		intFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
+	}
+	// List-nodes + Zip commands.
+	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
+		f := cmd.Flags()
+		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
+		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
 	}
 
 	// Decommission command.
