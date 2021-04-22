@@ -1866,12 +1866,12 @@ func (d *DDate) Next(_ *EvalContext) (Datum, bool) {
 
 // IsMax implements the Datum interface.
 func (d *DDate) IsMax(_ *EvalContext) bool {
-	return d.Date == pgdate.PosInfDate
+	return d.PGEpochDays() == pgdate.PosInfDate.PGEpochDays()
 }
 
 // IsMin implements the Datum interface.
 func (d *DDate) IsMin(_ *EvalContext) bool {
-	return d.Date == pgdate.NegInfDate
+	return d.PGEpochDays() == pgdate.NegInfDate.PGEpochDays()
 }
 
 // Max implements the Datum interface.
@@ -2264,7 +2264,42 @@ func timeFromDatumForComparison(ctx *EvalContext, d Datum) (time.Time, bool) {
 	}
 }
 
+type infiniteDateComparison int
+
+const (
+	// Note: the order of the constants here is important.
+	negativeInfinity infiniteDateComparison = iota
+	finite
+	positiveInfinity
+)
+
+func checkInfiniteDate(ctx *EvalContext, d Datum) infiniteDateComparison {
+	if _, isDate := d.(*DDate); isDate {
+		if d.IsMax(ctx) {
+			return positiveInfinity
+		}
+		if d.IsMin(ctx) {
+			return negativeInfinity
+		}
+	}
+	return finite
+}
+
 func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
+	leftInf := checkInfiniteDate(ctx, l)
+	rightInf := checkInfiniteDate(ctx, r)
+	if leftInf != finite || rightInf != finite {
+		// At least one of the datums is an infinite date.
+		if leftInf != finite && rightInf != finite {
+			// Both datums cannot be infinite dates at the same time because we
+			// wouldn't use this method.
+			panic(errors.AssertionFailedf("unexpectedly two infinite dates in compareTimestamps"))
+		}
+		// Exactly one of the datums is an infinite date and another is a finite
+		// datums (not necessarily a date). We can just subtract the returned
+		// values to get the desired result for comparison.
+		return int(leftInf - rightInf)
+	}
 	lTime, lOk := timeFromDatumForComparison(ctx, l)
 	rTime, rOk := timeFromDatumForComparison(ctx, r)
 	if !lOk || !rOk {
