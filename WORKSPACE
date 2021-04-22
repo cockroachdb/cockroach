@@ -2,7 +2,13 @@
 # `@cockroach//...`.
 workspace(
     name = "cockroach",
-    managed_directories = {"@npm": ["node_modules"]},
+    managed_directories = {
+       "@npm": [
+          "pkg/ui/node_modules",
+          "pkg/ui/workspaces/cluster-ui/node_modules",
+          "pkg/ui/workspaces/db-console/node_modules",
+       ],
+    },
 )
 
 # Load the things that let us load other things.
@@ -19,8 +25,8 @@ git_repository(
 # Like the above, but for nodeJS.
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "6142e9586162b179fdd570a55e50d1332e7d9c030efd853453438d607569721d",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/3.0.0/rules_nodejs-3.0.0.tar.gz"],
+    sha256 = "8f5f192ba02319254aaf2cdcca00ec12eaafeb979a80a1e946773c520ae0a2c9",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/3.7.0/rules_nodejs-3.7.0.tar.gz"],
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -54,10 +60,13 @@ go_register_toolchains(go_version = "1.16.6")
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
 
+# install external dependencies for pkg/ui package
 yarn_install(
     name = "npm",
     package_json = "//pkg/ui:package.json",
     yarn_lock = "//pkg/ui:yarn.lock",
+    frozen_lockfile = False,
+    strict_visibility = False,
 )
 
 # Load gazelle dependencies.
