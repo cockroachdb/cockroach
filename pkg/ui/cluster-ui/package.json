@@ -29,7 +29,7 @@
     "@babel/runtime": "^7.12.13",
     "@cockroachlabs/crdb-protobuf-client": "^0.0.10-beta.0",
     "@cockroachlabs/icons": "0.3.0",
-    "@cockroachlabs/ui-components": "0.2.14-alpha.0",
+    "@cockroachlabs/ui-components": "0.2.18",
     "@popperjs/core": "^2.4.0",
     "@reduxjs/toolkit": "^1.5.0",
     "babel-polyfill": "^6.26.0",

@@ -2,7 +2,7 @@ import _ from "lodash";
 import React, { Fragment } from "react";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Tooltip } from "src/tooltip";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import styles from "./planView.module.scss";
 
 type IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
@@ -331,7 +331,7 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
                 {this.props.title}
               </h2>
               <div className={cx("plan-view-table__tooltip")}>
-                <Tooltip text={lastSampledHelpText}>
+                <Tooltip content={lastSampledHelpText}>
                   <div className={cx("plan-view-table__tooltip-hover-area")}>
                     <div className={cx("plan-view-table__info-icon")}>i</div>
                   </div>
