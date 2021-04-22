@@ -202,6 +202,16 @@ export default function Debug() {
           <DebugTableLink name="Raft Messages" url="#/raft/messages/all" />
           <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
         </DebugTableRow>
+        <DebugTableRow title="Closed timestamps">
+          <DebugTableLink
+            name="Sender on this node"
+            url="/debug/closedts-sender"
+          />
+          <DebugTableLink
+            name="Receiver on this node"
+            url="/debug/closedts-receiver"
+          />
+        </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">

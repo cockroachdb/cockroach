@@ -35,6 +35,7 @@ service ClosedTimestamp {
 // properly handle incrementals, the recipient maintains a "stream's state": the
 // group of ranges that can be implicitly referenced by the next message.
 message Update {
+  option (gogoproto.goproto_stringer) = false;
   // node_id identifies the sending node.
   int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
