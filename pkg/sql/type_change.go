@@ -548,7 +548,12 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				if err != nil {
 					return err
 				}
-				query.WriteString(fmt.Sprintf(" t.%s = %s", col.GetName(), sqlPhysRep))
+				colName := col.ColName()
+				query.WriteString(fmt.Sprintf(
+					" t.%s = %s",
+					colName.String(),
+					sqlPhysRep,
+				))
 				firstClause = false
 				validationQueryConstructed = true
 			}
@@ -624,8 +629,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	descsCol *descs.Collection,
 ) error {
 	const validationErr = "could not validate removal of enum value %q"
-	for _, ID := range arrayTypeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{})
+	for _, id := range arrayTypeDesc.ReferencingDescriptorIDs {
+		desc, err := descsCol.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlags{})
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -645,7 +650,12 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}
-				unionUnnests.WriteString(fmt.Sprintf("SELECT unnest(%s) FROM [%d AS t]", col.GetName(), ID))
+				colName := col.ColName()
+				unionUnnests.WriteString(fmt.Sprintf(
+					"SELECT unnest(t.%s) FROM [%d AS t]",
+					colName.String(),
+					id,
+				))
 				firstClause = false
 			}
 		}
