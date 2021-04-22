@@ -930,7 +930,12 @@ func SendEmptySnapshot(
 ) error {
 	// Create an engine to use as a buffer for the empty snapshot.
 	eng := storage.NewInMem(
-		context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+		context.Background(),
+		roachpb.Attributes{},
+		1<<20,   /* cacheSize 1MiB */
+		512<<20, /* storeSize 512 MiB */
+		nil,     /* settings */
+	)
 	defer eng.Close()
 
 	var ms enginepb.MVCCStats

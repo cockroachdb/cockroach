@@ -1503,7 +1503,14 @@ func TestSupportsPrev(t *testing.T) {
 		})
 	}
 	t.Run("pebble", func(t *testing.T) {
-		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20, nil /* settings */)
+
+		eng := newPebbleInMem(
+			context.Background(),
+			roachpb.Attributes{},
+			1<<20,   /* cacheSize */
+			512<<20, /* storeSize */
+			nil,     /* settings */
+		)
 		defer eng.Close()
 		runTest(t, eng, engineTest{
 			engineIterSupportsPrev:   true,
@@ -1627,7 +1634,13 @@ func TestScanSeparatedIntents(t *testing.T) {
 	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
 		t.Run(name, func(t *testing.T) {
 			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
-			eng := newPebbleInMem(ctx, roachpb.Attributes{}, 1<<20, settings)
+			eng := newPebbleInMem(
+				ctx,
+				roachpb.Attributes{},
+				1<<20,   /* cacheSize */
+				512<<20, /* storeSize */
+				settings,
+			)
 			defer eng.Close()
 
 			for _, key := range keys {
