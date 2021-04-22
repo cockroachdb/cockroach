@@ -696,7 +696,12 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				if err != nil {
 					return err
 				}
-				query.WriteString(fmt.Sprintf(" t.%s = %s", col.GetName(), sqlPhysRep))
+				colName := col.ColName()
+				query.WriteString(fmt.Sprintf(
+					" t.%s = %s",
+					tree.AsStringWithFlags(&colName, tree.FmtParsable),
+					sqlPhysRep,
+				))
 				firstClause = false
 				validationQueryConstructed = true
 			}
@@ -794,7 +799,12 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}
-				unionUnnests.WriteString(fmt.Sprintf("SELECT unnest(%s) FROM [%d AS t]", col.GetName(), ID))
+				colName := col.ColName()
+				unionUnnests.WriteString(fmt.Sprintf(
+					"SELECT unnest(t.%s) FROM [%d AS t]",
+					tree.AsStringWithFlags(&colName, tree.FmtParsable),
+					ID,
+				))
 				firstClause = false
 			}
 		}
