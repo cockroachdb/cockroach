@@ -117,7 +117,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	if cl := logging.testingFd2CaptureLogger; cl != nil {
 		// Temporarily give up the previous internal fd2 capture. We'll set
 		// up a new one with the new configuration below.
-		// The original will e restored in the Close() function.
+		// The original will be restored in the Close() function.
 		if err := cl.getFileSink().relinquishInternalStderr(); err != nil {
 			// This should not fail. If it does, some caller messed up by
 			// switching over stderr redirection to a different file sink
@@ -147,28 +147,10 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	// Remember the directory name for the Close() function.
 	sc.logDir = tempDir
 
-	// Create a fresh configuration.
-	cfg := logconfig.DefaultConfig()
-
-	if skip.UnderBench() {
-		// Avoid logging anything to stderr, to avoid polluting the output
-		// of benchmarks. This is necessary because 'go test' unhelpfully
-		// merges stdout and stderr writes together.
-		cfg.Sinks.Stderr.Filter = severity.NONE
-	} else {
-		// Normal case: make all logged errors/fatal calls go to the
-		// external stderr, in addition to the log file.
-		cfg.Sinks.Stderr.Filter = severity.ERROR
-	}
-	// Disable the internal fd2 capture to file, to ensure that panic
-	// objects get reported to stderr.
-	cfg.CaptureFd2.Enable = false
-	// We cannot enable redactable markers on stderr when fd2 capture is
-	// disabled.
-	bf := false
-	cfg.Sinks.Stderr.Redactable = &bf
-
-	if err := cfg.Validate(&sc.logDir); err != nil {
+	// Obtain the standard test configuration, with the configured
+	// destination directory.
+	cfg, err := getTestConfig(&sc.logDir)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -185,6 +167,52 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 
 	t.Logf("test logs captured to: %s", tempDir)
 	return sc
+}
+
+// getTestConfig initialize the logging configuration to parameters
+// suitable for use in tests.
+func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
+	testConfig = logconfig.DefaultConfig()
+
+	if err := testConfig.Validate(fileDir); err != nil {
+		return testConfig, err
+	}
+
+	if fileDir == nil {
+		// File output is disabled; we use stderr for everything.
+
+		// All messages go to stderr.
+		testConfig.Sinks.Stderr.Filter = severity.INFO
+		// Ensure all channels go to stderr.
+		testConfig.Sinks.Stderr.Channels.Channels = logconfig.SelectAllChannels()
+		// Remove all sinks other than stderr.
+		testConfig.Sinks.FluentServers = nil
+		testConfig.Sinks.FileGroups = nil
+	} else {
+		// Output to files enabled.
+
+		// Even though we use file output, make all logged errors/fatal
+		// calls go to the external stderr, in addition to the log file.
+		testConfig.Sinks.Stderr.Filter = severity.ERROR
+	}
+
+	if skip.UnderBench() {
+		// Avoid logging anything to stderr, to avoid polluting the output
+		// of benchmarks. This is necessary because 'go test' unhelpfully
+		// merges stdout and stderr writes together.
+		//
+		// This overrides any default set above.
+		testConfig.Sinks.Stderr.Filter = severity.NONE
+	}
+
+	// Disable the internal fd2 capture to file, to ensure that panic
+	// objects get reported to stderr.
+	testConfig.CaptureFd2.Enable = false
+	// Since we are letting writes go to the external stderr,
+	// we cannot keep redaction markers there.
+	*testConfig.Sinks.Stderr.Redactable = false
+
+	return testConfig, nil
 }
 
 // GetDirectory retrieves the log directory for this scope.
