@@ -97,6 +97,10 @@ func (s *spanInner) Finish() {
 		return
 	}
 	finishTime := timeutil.Now()
+	duration := finishTime.Sub(s.crdb.startTime)
+	if duration == 0 {
+		duration = time.Nanosecond
+	}
 
 	s.crdb.mu.Lock()
 	if alreadyFinished := s.crdb.mu.duration >= 0; alreadyFinished {
@@ -106,10 +110,7 @@ func (s *spanInner) Finish() {
 		// finished twice, but it may happen so let's be resilient to it.
 		return
 	}
-	s.crdb.mu.duration = finishTime.Sub(s.crdb.startTime)
-	if s.crdb.mu.duration == 0 {
-		s.crdb.mu.duration = time.Nanosecond
-	}
+	s.crdb.mu.duration = duration
 	s.crdb.mu.Unlock()
 
 	if s.ot.shadowSpan != nil {
@@ -118,9 +119,11 @@ func (s *spanInner) Finish() {
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
-	s.tracer.activeSpans.Lock()
-	delete(s.tracer.activeSpans.m, s.crdb.spanID)
-	s.tracer.activeSpans.Unlock()
+	if s.crdb.rootSpan == s.crdb {
+		s.tracer.activeSpans.Lock()
+		delete(s.tracer.activeSpans.m, s.crdb.spanID)
+		s.tracer.activeSpans.Unlock()
+	}
 }
 
 func (s *spanInner) Meta() SpanMeta {
