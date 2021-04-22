@@ -6,7 +6,7 @@ source "$(dirname "${0}")/teamcity-support.sh"
 
 tc_start_block "Prepare environment"
 # Grab a testing license good for one hour.
-COCKROACH_DEV_LICENSE=$(curl -f "https://register.cockroachdb.com/api/prodtest")
+COCKROACH_DEV_LICENSE=$(curl --retry 3 --retry-connrefused -f "https://register.cockroachdb.com/api/prodtest")
 run mkdir -p artifacts
 maybe_ccache
 tc_end_block "Prepare environment"

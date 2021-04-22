@@ -448,9 +448,9 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			}
 			optData = append(optData, []string{n, options[n].display(), options[n].description})
 		}
-		err := printQueryOutput(os.Stdout,
+		err := PrintQueryOutput(os.Stdout,
 			[]string{"Option", "Value", "Description"},
-			newRowSliceIter(optData, "lll" /*align*/))
+			NewRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
 			panic(err)
 		}

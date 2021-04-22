@@ -74,7 +74,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows, "r"))
+	return PrintQueryOutput(os.Stdout, lsNodesColumnHeaders, NewRowSliceIter(rows, "r"))
 }
 
 var baseNodeColumnHeaders = []string{
@@ -129,8 +129,8 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	sliceIter := newRowSliceIter(rows, getStatusNodeAlignment())
-	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), sliceIter)
+	sliceIter := NewRowSliceIter(rows, getStatusNodeAlignment())
+	return PrintQueryOutput(os.Stdout, getStatusNodeHeaders(), sliceIter)
 }
 
 func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]string, error) {
@@ -528,8 +528,8 @@ signaling the affected nodes to participate in the cluster again.
 }
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
-	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
-		newRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
+	return PrintQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
+		NewRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
