@@ -1288,6 +1288,34 @@ list of node IDs or ranges of node IDs, for example: 5,10-20,23.
 The default is to not exclude any node.`,
 	}
 
+	ZipIncludedFiles = FlagInfo{
+		Name: "include-files",
+		Description: `
+List of glob patterns that determine files that can be included
+in the output. The list can be specified as a comma-delimited
+list of patterns, or by using the flag multiple times.
+The default is to include all files.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipExcludedFiles = FlagInfo{
+		Name: "exclude-files",
+		Description: `
+List of glob patterns that determine files that are to
+be excluded from the output. The list can be specified
+as a comma-delimited list of patterns, or by using the
+flag multiple times.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
