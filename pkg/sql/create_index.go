@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -557,13 +559,33 @@ func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*createIndexNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createIndexNode) Close(context.Context)        {}
 
-// configureIndexDescForNewIndexPartitioning returns a new copy of an index descriptor
-// containing modifications needed if partitioning is configured.
 func (p *planner) configureIndexDescForNewIndexPartitioning(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
 	indexDesc descpb.IndexDescriptor,
 	partitionByIndex *tree.PartitionByIndex,
+) (descpb.IndexDescriptor, error) {
+	allowImplicitPartitioning := p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
+		tableDesc.IsLocalityRegionalByRow()
+	return configureIndexDescForNewIndexPartitioning(
+		ctx,
+		p.EvalContext(),
+		tableDesc,
+		indexDesc,
+		partitionByIndex,
+		allowImplicitPartitioning,
+	)
+}
+
+// configureIndexDescForNewIndexPartitioning returns a new copy of an index descriptor
+// containing modifications needed if partitioning is configured.
+func configureIndexDescForNewIndexPartitioning(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	tableDesc *tabledesc.Mutable,
+	indexDesc descpb.IndexDescriptor,
+	partitionByIndex *tree.PartitionByIndex,
+	allowImplicitPartitioning bool,
 ) (descpb.IndexDescriptor, error) {
 	var err error
 	if partitionByIndex.ContainsPartitioningClause() || tableDesc.IsPartitionAllBy() {
@@ -578,18 +600,16 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 				"cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition",
 			)
 		} else {
-			partitionBy, err = partitionByFromTableDesc(p.ExecCfg().Codec, tableDesc)
+			partitionBy, err = partitionByFromTableDesc(evalCtx.Codec, tableDesc)
 			if err != nil {
 				return indexDesc, err
 			}
 		}
-		allowImplicitPartitioning := p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
-			tableDesc.IsLocalityRegionalByRow()
 		if partitionBy != nil {
 			if indexDesc, err = CreatePartitioning(
 				ctx,
-				p.ExecCfg().Settings,
-				p.EvalContext(),
+				evalCtx.Settings,
+				evalCtx,
 				tableDesc,
 				indexDesc,
 				partitionBy,
@@ -603,25 +623,43 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 	return indexDesc, nil
 }
 
-// configureZoneConfigForNewIndexPartitioning configures the zone config for any new index
-// in a REGIONAL BY ROW table.
-// This *must* be done after the index ID has been allocated.
 func (p *planner) configureZoneConfigForNewIndexPartitioning(
 	ctx context.Context, tableDesc *tabledesc.Mutable, indexDesc descpb.IndexDescriptor,
+) error {
+	return configureZoneConfigForNewIndexPartitioning(
+		ctx,
+		p.txn,
+		p.ExecCfg(),
+		tableDesc,
+		indexDesc,
+		p.Descriptors(),
+	)
+}
+
+// configureZoneConfigForNewIndexPartitioning configures the zone config for any new index
+// in a REGIONAL BY ROW table.
+// This *must* be done after the index ID has been allocated.	func configureZoneConfigForNewIndexPartitioning(
+func configureZoneConfigForNewIndexPartitioning(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	tableDesc *tabledesc.Mutable,
+	indexDesc descpb.IndexDescriptor,
+	descsCol *descs.Collection,
 ) error {
 	if indexDesc.ID == 0 {
 		return errors.AssertionFailedf("index %s does not have id", indexDesc.Name)
 	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
 	if tableDesc.IsLocalityRegionalByRow() {
-		regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, tableDesc.GetParentID(), p.Descriptors())
+		regionConfig, err := SynthesizeRegionConfig(ctx, txn, tableDesc.GetParentID(), descsCol)
 		if err != nil {
 			return err
 		}
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
-			p.txn,
-			p.ExecCfg(),
+			txn,
+			execCfg,
 			regionConfig,
 			tableDesc,
 			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexDesc.ID),
