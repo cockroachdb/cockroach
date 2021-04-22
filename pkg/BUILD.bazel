@@ -303,6 +303,7 @@ ALL_TESTS = [
     "//pkg/util/flagutil:flagutil_test",
     "//pkg/util/fsm:fsm_test",
     "//pkg/util/fuzzystrmatch:fuzzystrmatch_test",
+    "//pkg/util/goschedstats:goschedstats_test",
     "//pkg/util/grpcutil:grpcutil_test",
     "//pkg/util/hlc:hlc_test",
     "//pkg/util/humanizeutil:humanizeutil_test",
