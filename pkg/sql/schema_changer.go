@@ -928,12 +928,13 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				}
 				// else if DELETE_ONLY, then the state change has already moved forward.
 			}
-			// We might have to update some zone configs for indexes that are
-			// being rewritten. It is important that this is done _before_ the
+			// We might have to update some partitions and zone configs for
+			// indexes that are being rewritten.
+			// It is important that this is done _before_ the
 			// index swap occurs. The logic that generates spans for subzone
 			// configurations removes spans for indexes in the dropping state,
 			// which we don't want. So, set up the zone configs before we swap.
-			if err := sc.applyZoneConfigChangeForMutation(
+			if err := sc.applyPartitionAndZoneConfigChangeForMutation(
 				ctx,
 				txn,
 				dbDesc,
@@ -1116,7 +1117,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			// Ensure that zone configurations are finalized (or rolled back) when
 			// done is called.
 			// This will configure the table zone config for multi-region transformations.
-			if err := sc.applyZoneConfigChangeForMutation(
+			if err := sc.applyPartitionAndZoneConfigChangeForMutation(
 				ctx,
 				txn,
 				dbDesc,
@@ -2417,7 +2418,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 	return nil
 }
 
-func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
+func (sc *SchemaChanger) applyPartitionAndZoneConfigChangeForMutation(
 	ctx context.Context,
 	txn *kv.Txn,
 	dbDesc catalog.DatabaseDescriptor,
@@ -2426,7 +2427,66 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 	isDone bool,
 	descsCol *descs.Collection,
 ) error {
+	// REGIONAL BY ROW tables need to have CREATE or DROP INDEX repartition
+	// just before finalization, in case an ADD/DROP REGION races with it.
+	if tableDesc.IsLocalityRegionalByRow() {
+		if indexMut := mutation.AsIndex(); indexMut != nil {
+			// Disabled mutations should not be actioned upon.
+			if indexMut.IsDisabled() {
+				return nil
+			}
+			// If have completed the drop, we do not need to re-partition.
+			if mutation.Dropped() && !mutation.IsRollback() && isDone {
+				return nil
+			}
+			evalCtx := createSchemaChangeEvalCtx(
+				ctx,
+				sc.execCfg,
+				txn.ReadTimestamp(),
+				sc.ieFactory,
+			).EvalContext
+
+			regionConfig, err := SynthesizeRegionConfig(ctx, txn, tableDesc.GetParentID(), descsCol)
+			if err != nil {
+				return err
+			}
+
+			indexDescPtr := tableDesc.AllIndexes()[indexMut.Ordinal()].IndexDesc()
+			// Use the index descriptor on the table itself.
+			// Re-apply the partitions and zone configurations.
+			colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+			if err != nil {
+				return err
+			}
+
+			newIdx, err := CreatePartitioning(
+				ctx,
+				evalCtx.Settings,
+				&evalCtx,
+				tableDesc,
+				*indexDescPtr,
+				partitionByForRegionalByRow(regionConfig, colName),
+				nil,  /* allowedNewColumnName*/
+				true, /* allowImplicitPartitioning */
+			)
+			if err != nil {
+				return err
+			}
+			*indexDescPtr = newIdx
+
+			return ApplyZoneConfigForMultiRegionTable(
+				ctx,
+				txn,
+				sc.execCfg,
+				regionConfig,
+				tableDesc,
+				applyZoneConfigForMultiRegionTableOptionNewIndexes(indexMut.GetID()),
+			)
+		}
+	}
+
 	if pkSwap := mutation.AsPrimaryKeySwap(); pkSwap != nil {
+		// TODO(#63974): we should re-write the partitions for REGIONAL BY ROW too.
 		if pkSwap.HasLocalityConfig() {
 			// We will add up to three options - one for the table itself,
 			// one for dropping any zone configs for old indexes and one
