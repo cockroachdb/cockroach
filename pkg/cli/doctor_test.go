@@ -98,13 +98,16 @@ func TestDoctorZipDir2(t *testing.T) {
 	c := NewCLITest(TestCLIParams{T: t, NoServer: true})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip")
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t, "testdata/doctor/testzipdir", func(t *testing.T, td *datadriven.TestData) string {
-		return out
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, "testdata/doctor/test_examine_zipdir2", func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
 	})
+
 }
