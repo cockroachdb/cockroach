@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -517,69 +516,6 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 		t.Fatalf("splitting at a range boundary should not create a new range; before second split "+
 			"found %d ranges, after second split found %d ranges", replCount, newReplCount)
 	}
-}
-
-// TestSplitTriggerRaftSnapshotRace verifies that when an uninitialized Replica
-// resulting from a split hasn't been initialized via the split trigger yet, a
-// grace period prevents the replica from requesting an errant Raft snapshot.
-// This is verified by running a number of splits and asserting that no Raft
-// snapshots are observed. As a nice side effect, this also verifies that log
-// truncations don't cause any Raft snapshots in this test.
-func TestSplitTriggerRaftSnapshotRace(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	const numNodes = 3
-	var args base.TestClusterArgs
-	// NB: the merge queue is enabled for additional "chaos". Note that the test
-	// uses three nodes and so there is no replica movement, which would other-
-	// wise tickle Raft snapshots for unrelated reasons.
-	tc := testcluster.StartTestCluster(t, numNodes, args)
-	defer tc.Stopper().Stop(ctx)
-
-	numSplits := 100
-	if util.RaceEnabled {
-		// Running 100 splits is overkill in race builds.
-		numSplits = 10
-	}
-	perm := rand.Perm(numSplits)
-	idx := int32(-1) // accessed atomically
-
-	numRaftSnaps := func(when string) int {
-		var totalSnaps int
-		for i := 0; i < numNodes; i++ {
-			var n int // num rows (sanity check against test rotting)
-			var c int // num Raft snapshots
-			if err := tc.ServerConn(i).QueryRow(`
-SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
-	name = 'range.snapshots.applied-voter'
-`).Scan(&n, &c); err != nil {
-				t.Fatal(err)
-			}
-			if expRows := 1; n != expRows {
-				t.Fatalf("%s: expected %d rows, got %d", when, expRows, n)
-			}
-			totalSnaps += c
-		}
-		return totalSnaps
-	}
-
-	// There are usually no raft snaps before, but there is a race condition where
-	// they can occasionally happen during upreplication.
-	numSnapsBefore := numRaftSnaps("before")
-
-	doSplit := func(ctx context.Context, _ int) error {
-		_, _, err := tc.SplitRange([]byte(fmt.Sprintf("key-%d", perm[atomic.AddInt32(&idx, 1)])))
-		return err
-	}
-
-	if err := ctxgroup.GroupWorkers(ctx, numSplits, doSplit); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check that no snaps happened during the splits.
-	require.Equal(t, numSnapsBefore, numRaftSnaps("after"))
 }
 
 // TestStoreRangeSplitIdempotency executes a split of a range and
