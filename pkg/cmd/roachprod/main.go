@@ -42,6 +42,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -514,6 +515,11 @@ directory is removed.
 `,
 	Args: cobra.ArbitraryArgs,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		type cloudAndName struct {
+			name  string
+			cloud *cld.Cloud
+		}
+		var cns []cloudAndName
 		switch len(args) {
 		case 0:
 			if !destroyAllMine {
@@ -530,19 +536,12 @@ directory is removed.
 				return err
 			}
 
-			var names []string
 			for name := range cloud.Clusters {
 				if destroyPattern.MatchString(name) {
-					names = append(names, name)
+					cns = append(cns, cloudAndName{name: name, cloud: cloud})
 				}
 			}
-			sort.Strings(names)
 
-			for _, clusterName := range names {
-				if err := destroyCluster(cloud, clusterName); err != nil {
-					return err
-				}
-			}
 		default:
 			if destroyAllMine {
 				return errors.New("--all-mine cannot be combined with cluster names")
@@ -563,15 +562,19 @@ directory is removed.
 						}
 					}
 
-					if err := destroyCluster(cloud, clusterName); err != nil {
-						return err
-					}
+					cns = append(cns, cloudAndName{name: clusterName, cloud: cloud})
 				} else {
 					if err := destroyLocalCluster(); err != nil {
 						return err
 					}
 				}
 			}
+		}
+
+		if err := ctxgroup.GroupWorkers(cmd.Context(), len(cns), func(ctx context.Context, idx int) error {
+			return destroyCluster(cns[idx].cloud, cns[idx].name)
+		}); err != nil {
+			return err
 		}
 		fmt.Println("OK")
 		return nil
