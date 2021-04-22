@@ -73,9 +73,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := &lockTableImpl{
-		maxLocks: cfg.MaxLockTableSize,
-	}
+	lt := newLockTable(cfg.MaxLockTableSize)
 	*m = managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
