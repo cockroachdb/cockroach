@@ -58,7 +58,7 @@ interface OwnProps {
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   onPageChanged?: (newPage: number) => void;
-  onSortingChange?: (columnName: string, tableName: string) => void;
+  onSortingChange?: (columnName: string) => void;
   onSessionClick?: () => void;
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
@@ -128,7 +128,7 @@ export class SessionsPage extends React.Component<
 
   changeSortSetting = (ss: SortSetting) => {
     const { onSortingChange } = this.props;
-    onSortingChange && onSortingChange("Sessions", ss.columnTitle);
+    onSortingChange && onSortingChange(ss.columnTitle);
 
     this.setState({
       sortSetting: ss,
