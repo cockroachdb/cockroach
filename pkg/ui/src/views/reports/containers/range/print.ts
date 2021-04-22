@@ -110,10 +110,10 @@ export function PrintTimestampDeltaFromNow(
   }
   const time: moment.Moment = LongToMoment(timestamp.wall_time);
   if (now.isAfter(time)) {
-    const diff = moment.duration(moment().diff(time));
+    const diff = moment.duration(now.diff(time));
     return `${PrintDuration(diff)} ago`;
   }
-  const diff = moment.duration(time.diff(moment()));
+  const diff = moment.duration(time.diff(now));
   return `${PrintDuration(diff)} in the future`;
 }
 
