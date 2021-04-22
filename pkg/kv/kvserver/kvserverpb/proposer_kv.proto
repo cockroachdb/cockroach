@@ -125,10 +125,12 @@ message ReplicatedEvalResult {
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
-  // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
-  // to verify the validity of the command (for lease coverage and GC
-  // threshold).
-  util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
+  // The timestamp at which this command is writing. Used to verify the validity
+  // of the command against the GC threshold and to update the followers'
+  // clocks. If the request that produced this command is not an IntentWrite
+  // one, then the request's write timestamp is meaningless; for such request's,
+  // this field is simply a clock reading from the proposer.
+  util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
   storage.enginepb.MVCCStats deprecated_delta = 10; // See #18828

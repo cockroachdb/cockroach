@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -506,14 +505,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	r.tableID = details.Table.ID
 	evalCtx := p.ExtendedEvalContext()
 
-	ci := colinfo.ColTypeInfoFromColTypes([]*types.T{})
-	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci)
-	defer func() {
-		if rows != nil {
-			rows.Close(ctx)
-		}
-	}()
-
 	dsp := p.DistSQLPlanner()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Set the transaction on the EvalContext to this txn. This allows for
@@ -527,8 +518,11 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		}
 
 		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn, true /* distribute */)
+		// CREATE STATS flow doesn't produce any rows and only emits the
+		// metadata, so we can use a nil rowContainerHelper.
+		resultWriter := NewRowResultWriter(nil /* rowContainer */)
 		if err := dsp.planAndRunCreateStats(
-			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
+			ctx, evalCtx, planCtx, txn, r.job, resultWriter,
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {
