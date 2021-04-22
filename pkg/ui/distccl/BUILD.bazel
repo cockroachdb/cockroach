@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+genrule(
+    name = "assets",
+    srcs = ["//pkg/ui/workspaces/db-console:db_console_webpack"],
+    outs = ["assets"],
+    cmd = "cp -r $(locations //pkg/ui/workspaces/db-console:db_console_webpack)/* $(OUTS)",
+)
+
+go_library(
+    name = "distccl",
+    srcs = ["distccl.go"],
+    embedsrcs = ["assets"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/ui"],
+)

@@ -14,7 +14,7 @@ const WebpackBar = require("webpackbar");
 const MomentLocalesPlugin = require("moment-locales-webpack-plugin");
 
 module.exports = {
-  entry: "./src/index.ts",
+  entry: path.resolve(__dirname, "./src/index.ts"),
 
   output: {
     path: path.resolve(__dirname, "dist/js"),
@@ -107,6 +107,7 @@ module.exports = {
         enforce: "pre",
         test: /\.js$/,
         loader: "source-map-loader",
+        exclude: /node_modules/,
       },
       { test: /\.css$/, use: [ "style-loader", "css-loader" ] },
     ],
@@ -143,7 +144,9 @@ module.exports = {
       amd: "react-dom",
       root: "ReactDom",
     },
-    "react-router-dom": "react-router-dom",
+    // TODO (koorosh): commented to avoid bazel build failure.
+    // should be fixed to consume react-router-dom as peer dependency
+    // "react-router-dom": "react-router-dom",
     "react-redux": "react-redux",
     "redux-saga": "redux-saga",
     "redux": "redux",
