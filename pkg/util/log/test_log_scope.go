@@ -67,7 +67,7 @@ type tShim interface {
 // restrictions.
 func Scope(t tShim) *TestLogScope {
 	if logging.showLogs {
-		return (*TestLogScope)(nil)
+		return newLogScope(t, false /* use files */)
 	}
 
 	scope := ScopeWithoutShowLogs(t)
@@ -85,20 +85,16 @@ func Scope(t tShim) *TestLogScope {
 // directory.
 // When the scope ends, the previous configuration is restored.
 //
-// ScopeWithoutShowLogs() is only valid if logging was not yet
-// active. If it was, the test fails with an assertion error.
-// The motivation for this restriction is to simplify reasoning by
-// users of this facility: if a user has set up their code so that
-// logging goes to files already, they are signaling that they want
-// logging to go there and not elsewhere. In that case, it is
-// undesirable to come along with a new random directory and take
-// logging over there.
-//
 // ScopeWithoutShowLogs() does not enable redirection of internal
 // stderr writes to files. Tests that wish to use that facility should
 // call the other APIs in these package after setting up a
 // TestLogScope.
 func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
+	t.Helper()
+	return newLogScope(t, true /* use files */)
+}
+
+func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 	t.Helper()
 	sc = &TestLogScope{}
 
@@ -140,16 +136,20 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 		}
 	}()
 
-	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
-	if err != nil {
-		t.Fatal(err)
+	var fileDir *string
+	if useFiles {
+		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Remember the directory name for the Close() function.
+		sc.logDir = tempDir
+		fileDir = &sc.logDir
 	}
-	// Remember the directory name for the Close() function.
-	sc.logDir = tempDir
 
 	// Obtain the standard test configuration, with the configured
 	// destination directory.
-	cfg, err := getTestConfig(&sc.logDir)
+	cfg, err := getTestConfig(fileDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,9 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 		t.Fatal(err)
 	}
 
-	t.Logf("test logs captured to: %s", tempDir)
+	if useFiles {
+		t.Logf("test logs captured to: %s", *fileDir)
+	}
 	return sc
 }
 
@@ -242,7 +244,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {
 	t.Helper()
-	if l == nil || l.logDir == "" {
+	if l == nil {
 		// Never initialized.
 		return
 	}
@@ -251,29 +253,31 @@ func (l *TestLogScope) Close(t tShim) {
 	// Ensure any remaining logs are written to files.
 	Flush()
 
-	defer func() {
-		// Check whether there is something to remove.
-		emptyDir, err := isDirEmpty(l.logDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		inPanic := calledDuringPanic()
-		if (t.Failed() && !emptyDir) || inPanic {
-			// If the test failed or there was a panic, we keep the log
-			// files for further investigation.
-			if inPanic {
-				fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
-					"Details cannot be printed yet because we are still unwinding.\n"+
-					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+	if l.logDir != "" {
+		defer func() {
+			// Check whether there is something to remove.
+			emptyDir, err := isDirEmpty(l.logDir)
+			if err != nil {
+				t.Fatal(err)
 			}
-			fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
-		} else {
-			// Clean up.
-			if err := os.RemoveAll(l.logDir); err != nil {
-				t.Error(err)
+			inPanic := calledDuringPanic()
+			if (t.Failed() && !emptyDir) || inPanic {
+				// If the test failed or there was a panic, we keep the log
+				// files for further investigation.
+				if inPanic {
+					fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+						"Details cannot be printed yet because we are still unwinding.\n"+
+						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+				}
+				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
+			} else {
+				// Clean up.
+				if err := os.RemoveAll(l.logDir); err != nil {
+					t.Error(err)
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	if l.cleanupFn != nil {
 		l.cleanupFn()
