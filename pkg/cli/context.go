@@ -315,7 +315,9 @@ func setSQLContextDefaults() {
 
 // zipCtx captures the command-line parameters of the `zip` command.
 // See below for defaults.
-var zipCtx struct {
+var zipCtx zipContext
+
+type zipContext struct {
 	nodes nodeSelection
 
 	// redactLogs indicates whether log files should be redacted

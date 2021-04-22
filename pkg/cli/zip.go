@@ -140,7 +140,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	zr := newZipReporter("cluster")
+	zr := zipCtx.newZipReporter("cluster")
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)

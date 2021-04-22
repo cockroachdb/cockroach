@@ -465,7 +465,7 @@ func TestZipRetries(t *testing.T) {
 		sqlConn := makeSQLConn(sqlURL.String())
 		defer sqlConn.Close()
 
-		zr := newZipReporter("test")
+		zr := zipCtx.newZipReporter("test")
 		zc := debugZipContext{
 			z:       z,
 			timeout: 3 * time.Second,
