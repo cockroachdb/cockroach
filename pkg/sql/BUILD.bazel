@@ -23,6 +23,7 @@ go_library(
         "authorization.go",
         "backfill.go",
         "buffer.go",
+        "buffer_util.go",
         "cancel_queries.go",
         "cancel_sessions.go",
         "check.go",
