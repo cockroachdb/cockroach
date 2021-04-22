@@ -330,6 +330,9 @@ type zipContext struct {
 	// How much concurrency to use during the collection. The code
 	// attempts to access multiple nodes concurrently by default.
 	concurrency int
+
+	// The log/heap/etc files to include.
+	files fileSelection
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -337,6 +340,7 @@ type zipContext struct {
 // test that exercises command-line parsing.
 func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
+	zipCtx.files = fileSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15

@@ -57,9 +57,9 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting threads... received response... writing binary output: debug/nodes/1/threads.txt... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
-[node 1] requesting heap files... received response... done
+[node 1] requesting heap file list... received response... done
 [node 1] 0 heap profiles found
-[node 1] requesting goroutine dumps... received response... done
+[node 1] requesting goroutine dump list... received response... done
 [node 1] 0 goroutine dumps found
 [node 1] requesting log file ...
 [node 1] 0 log file ...
