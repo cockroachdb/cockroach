@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"container/list"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -111,6 +112,9 @@ type treeMu struct {
 	// For constraining memory consumption. We need better memory accounting
 	// than this.
 	numLocks int64
+
+	// For dampening the frequency with which we enforce lockTableImpl.maxLocks.
+	lockAddMaxLocksCheckInterval uint64
 }
 
 // lockTableImpl is an implementation of lockTable.
@@ -182,7 +186,13 @@ type lockTableImpl struct {
 
 	locks [spanset.NumSpanScope]treeMu
 
+	// maxLocks is a soft maximum on number of locks. When it is exceeded, and
+	// subject to the dampening in lockAddMaxLocksCheckInterval, locks will be
+	// cleared.
 	maxLocks int64
+	// When maxLocks is exceeded, will attempt to clear down to minLocks,
+	// instead of clearing everything.
+	minLocks int64
 
 	// finalizedTxnCache is a small LRU cache that tracks transactions that
 	// were pushed and found to be finalized (COMMITTED or ABORTED). It is
@@ -197,6 +207,22 @@ type lockTableImpl struct {
 }
 
 var _ lockTable = &lockTableImpl{}
+
+func newLockTable(maxLocks int64) *lockTableImpl {
+	// Check at 5% intervals of the max count.
+	lockAddMaxLocksCheckInterval := maxLocks / (int64(spanset.NumSpanScope) * 20)
+	if lockAddMaxLocksCheckInterval == 0 {
+		lockAddMaxLocksCheckInterval = 1
+	}
+	lt := &lockTableImpl{
+		maxLocks: maxLocks,
+		minLocks: maxLocks / 2,
+	}
+	for i := 0; i < int(spanset.NumSpanScope); i++ {
+		lt.locks[i].lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+	}
+	return lt
+}
 
 // lockTableGuardImpl is an implementation of lockTableGuard.
 //
@@ -290,6 +316,18 @@ type lockTableGuardImpl struct {
 	// is comparable in system throughput, one can eliminate the above anomalies.
 	//
 	tableSnapshot [spanset.NumSpanScope]btree
+
+	// notRemovableLock points to the lock for which this guard has incremented
+	// lockState.notRemovable. It will be set to nil when this guard has decremented
+	// lockState.notRemovable. Note that:
+	// - notRemovableLock may no longer be in one of the btrees in lockTableImpl
+	//   since it may have been removed due to the lock being released. This is
+	//   harmless since the change in lock state for that lock's key (even if it
+	//   has meanwhile been reacquired by a different request) means forward
+	//   progress for this request, which guarantees liveness for this request.
+	// - Multiple guards can have marked the same lock as notRemovable, which is
+	//   why lockState.notRemovable behaves like a reference count.
+	notRemovableLock *lockState
 
 	// A request whose startWait is set to true in ScanAndEnqueue is actively
 	// waiting at a particular key. This is the first key encountered when
@@ -553,7 +591,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 // - Breaking of reservations (see the comment on reservations below, in
 //   lockState) can cause a writer to be an inactive waiter.
 // - A discovered lock causes the discoverer to become an inactive waiter
-//   (until is scans again).
+//   (until it scans again).
 // - A lock held by a finalized txn causes the first waiter to be an inactive
 //   waiter.
 // The first case above (breaking reservations) only occurs for transactional
@@ -627,6 +665,14 @@ type lockState struct {
 
 	// Information about the requests waiting on the lock.
 	lockWaitQueue
+
+	// notRemovable is temporarily incremented when a lock is added using
+	// AddDiscoveredLock. This is to ensure liveness by not allowing the lock to
+	// be removed until the requester has called ScanAndEnqueue. The *lockState
+	// is also remembered in lockTableGuardImpl.notRemovableLock. notRemovable
+	// behaves like a reference count since multiple requests may want to mark
+	// the same lock as not removable.
+	notRemovable int
 }
 
 type lockWaitQueue struct {
@@ -1508,11 +1554,18 @@ func (l *lockState) acquireLock(
 // where g is trying to access this key with access sa.
 // Acquires l.mu.
 func (l *lockState) discoveredLock(
-	txn *enginepb.TxnMeta, ts hlc.Timestamp, g *lockTableGuardImpl, sa spanset.SpanAccess,
+	txn *enginepb.TxnMeta,
+	ts hlc.Timestamp,
+	g *lockTableGuardImpl,
+	sa spanset.SpanAccess,
+	notRemovable bool,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if notRemovable {
+		l.notRemovable++
+	}
 	if l.holder.locked {
 		if !l.isLockedBy(txn.ID) {
 			return errors.AssertionFailedf(
@@ -1597,15 +1650,23 @@ func (l *lockState) discoveredLock(
 	return nil
 }
 
+func (l *lockState) decrementNotRemovable() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.notRemovable--
+	if l.notRemovable < 0 {
+		panic(fmt.Sprintf("lockState.notRemovable is negative: %d", l.notRemovable))
+	}
+}
+
 // Acquires l.mu.
 func (l *lockState) tryClearLock(force bool) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
-	if replicatedHeld && l.distinguishedWaiter == nil && !force {
-		// Replicated lock is held and has no distinguished waiter.
+	if l.notRemovable > 0 && !force {
 		return false
 	}
+	replicatedHeld := l.holder.locked && l.holder.holder[lock.Replicated].txn != nil
 
 	// Remove unreplicated holder.
 	l.holder.holder[lock.Unreplicated] = lockHolderInfo{}
@@ -1622,6 +1683,8 @@ func (l *lockState) tryClearLock(force bool) bool {
 			guardAccess: spanset.SpanReadOnly,
 		}
 	} else {
+		// !replicatedHeld || force. Both are handled as doneWaiting since the
+		// system is no longer tracking the lock that was possibly held.
 		l.clearLockHolder()
 		waitState = waitingState{kind: doneWaiting}
 	}
@@ -1970,9 +2033,10 @@ func (l *lockState) lockIsFree() (gc bool) {
 	return false
 }
 
-func (t *treeMu) nextLockSeqNum() uint64 {
+func (t *treeMu) nextLockSeqNum() (seqNum uint64, checkMaxLocks bool) {
 	t.lockIDSeqNum++
-	return t.lockIDSeqNum
+	checkMaxLocks = t.lockIDSeqNum%t.lockAddMaxLocksCheckInterval == 0
+	return t.lockIDSeqNum, checkMaxLocks
 }
 
 // ScanAndEnqueue implements the lockTable interface.
@@ -2021,6 +2085,12 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		}
 	}
 	g.findNextLockAfter(true /* notify */)
+	if g.notRemovableLock != nil {
+		// Either waiting at the notRemovableLock, or elsewhere. Either way we are
+		// making forward progress, which ensures liveness.
+		g.notRemovableLock.decrementNotRemovable()
+		g.notRemovableLock = nil
+	}
 	return g
 }
 
@@ -2032,7 +2102,10 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 
 	g := guard.(*lockTableGuardImpl)
 	defer releaseLockTableGuardImpl(g)
-
+	if g.notRemovableLock != nil {
+		g.notRemovableLock.decrementNotRemovable()
+		g.notRemovableLock = nil
+	}
 	var candidateLocks []*lockState
 	g.mu.Lock()
 	for l := range g.mu.locks {
@@ -2054,8 +2127,33 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 }
 
 // AddDiscoveredLock implements the lockTable interface.
+//
+// We discussed in
+// https://github.com/cockroachdb/cockroach/issues/62470#issuecomment-818374388
+// the possibility of consulting the finalizedTxnCache in AddDiscoveredLock,
+// and not adding the lock if the txn is already finalized, and instead
+// telling the caller to do batched intent resolution before calling
+// ScanAndEnqueue.
+// This reduces memory pressure on the lockTableImpl in the extreme case of
+// huge numbers of discovered locks. Note that when there isn't memory
+// pressure, the consultation of the finalizedTxnCache in the ScanAndEnqueue
+// achieves the same batched intent resolution. Additionally, adding the lock
+// to the lock table allows it to coordinate the population of
+// lockTableGuardImpl.toResolve for different requests that encounter the same
+// lock, to reduce the likelihood of duplicated intent resolution. This
+// coordination could be improved further, as outlined in the comment in
+// tryActiveWait, but it hinges on the lock table having the state of the
+// discovered lock.
+//
+// For now we adopt the following heuristic: the caller calls DiscoveredLocks
+// with the count of locks discovered, prior to calling AddDiscoveredLock for
+// each of the locks. At that point a decision is made whether to consult the
+// finalizedTxnCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
-	intent *roachpb.Intent, seq roachpb.LeaseSequence, guard lockTableGuard,
+	intent *roachpb.Intent,
+	seq roachpb.LeaseSequence,
+	consultFinalizedTxnCache bool,
+	guard lockTableGuard,
 ) (added bool, _ error) {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
@@ -2080,16 +2178,24 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	if err != nil {
 		return false, err
 	}
+	if consultFinalizedTxnCache {
+		finalizedTxn, ok := t.finalizedTxnCache.get(intent.Txn.ID)
+		if ok {
+			g.toResolve = append(
+				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
+			return true, nil
+		}
+	}
 	var l *lockState
 	tree := &t.locks[ss]
 	tree.mu.Lock()
-	// Can't release tree.mu until call l.discoveredLock() since someone may
-	// find an empty lock and remove it from the tree.
-	defer tree.mu.Unlock()
 	iter := tree.MakeIter()
 	iter.FirstOverlap(&lockState{key: key})
+	checkMaxLocks := false
 	if !iter.Valid() {
-		l = &lockState{id: tree.nextLockSeqNum(), key: key, ss: ss}
+		var lockSeqNum uint64
+		lockSeqNum, checkMaxLocks = tree.nextLockSeqNum()
+		l = &lockState{id: lockSeqNum, key: key, ss: ss}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
 		tree.Set(l)
@@ -2097,7 +2203,23 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	} else {
 		l = iter.Cur()
 	}
-	return true, l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa)
+	notRemovableLock := false
+	if g.notRemovableLock == nil {
+		// Only one discovered lock needs to be marked notRemovable to ensure
+		// liveness, since we only need to prevent all the discovered locks from
+		// being garbage collected. We arbitrarily pick the first one that the
+		// requester adds after evaluation.
+		g.notRemovableLock = l
+		notRemovableLock = true
+	}
+	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa, notRemovableLock)
+	// Can't release tree.mu until call l.discoveredLock() since someone may
+	// find an empty lock and remove it from the tree.
+	tree.mu.Unlock()
+	if checkMaxLocks {
+		t.checkMaxLocksAndTryClear()
+	}
+	return true, err
 }
 
 // AcquireLock implements the lockTable interface.
@@ -2126,14 +2248,16 @@ func (t *lockTableImpl) AcquireLock(
 	// tree.mu.RLock().
 	iter := tree.MakeIter()
 	iter.FirstOverlap(&lockState{key: key})
+	checkMaxLocks := false
 	if !iter.Valid() {
 		if durability == lock.Replicated {
 			// Don't remember uncontended replicated locks.
 			tree.mu.Unlock()
 			return nil
 		}
-		l = &lockState{id: tree.nextLockSeqNum(), key: key, ss: ss}
-		tree.lockIDSeqNum++
+		var lockSeqNum uint64
+		lockSeqNum, checkMaxLocks = tree.nextLockSeqNum()
+		l = &lockState{id: lockSeqNum, key: key, ss: ss}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
 		tree.Set(l)
@@ -2154,29 +2278,41 @@ func (t *lockTableImpl) AcquireLock(
 	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp)
 	tree.mu.Unlock()
 
+	if checkMaxLocks {
+		t.checkMaxLocksAndTryClear()
+	}
+	return err
+}
+
+func (t *lockTableImpl) checkMaxLocksAndTryClear() {
 	var totalLocks int64
 	for i := 0; i < len(t.locks); i++ {
 		totalLocks += atomic.LoadInt64(&t.locks[i].numLocks)
 	}
 	if totalLocks > t.maxLocks {
-		t.tryClearLocks(false /* force */)
+		numToClear := totalLocks - t.minLocks
+		t.tryClearLocks(false /* force */, int(numToClear))
 	}
-	return err
 }
 
-// If force is false, removes all locks, except for those that are held with
-// replicated durability and have no distinguished waiter, and tells those
-// waiters to wait elsewhere or that they are done waiting. A replicated lock
-// which has been discovered by a request but no request is actively waiting on
-// it will be preserved since we need to tell that request who it is waiting for
-// when it next calls ScanAndEnqueue(). If we aggressively removed even these
-// locks, the next ScanAndEnqueue() would not find the lock, the request would
-// evaluate again, again discover that lock and if tryClearLocks() keeps getting
-// called would be stuck in this loop without pushing.
-//
-// If force is true, removes all locks and marks all guards as doneWaiting.
-func (t *lockTableImpl) tryClearLocks(force bool) {
-	for i := 0; i < int(spanset.NumSpanScope); i++ {
+func (t *lockTableImpl) lockCountForTesting() int64 {
+	var totalLocks int64
+	for i := 0; i < len(t.locks); i++ {
+		totalLocks += atomic.LoadInt64(&t.locks[i].numLocks)
+	}
+	return totalLocks
+}
+
+// tryClearLocks attempts to clear locks.
+// - force=false: removes locks until it has removed numToClear locks. It does
+//   not remove locks marked as notRemovable.
+// - force=true: removes all locks.
+// Waiters of removed locks are told to wait elsewhere or that they are done
+// waiting.
+func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
+	done := false
+	clearCount := 0
+	for i := 0; i < int(spanset.NumSpanScope) && !done; i++ {
 		tree := &t.locks[i]
 		tree.mu.Lock()
 		var locksToClear []*lockState
@@ -2185,6 +2321,11 @@ func (t *lockTableImpl) tryClearLocks(force bool) {
 			l := iter.Cur()
 			if l.tryClearLock(force) {
 				locksToClear = append(locksToClear, l)
+				clearCount++
+				if !force && clearCount >= numToClear {
+					done = true
+					break
+				}
 			}
 		}
 		atomic.AddInt64(&tree.numLocks, int64(-len(locksToClear)))
@@ -2351,7 +2492,8 @@ func (t *lockTableImpl) Clear(disable bool) {
 		defer t.enabledMu.Unlock()
 		t.enabled = false
 	}
-	t.tryClearLocks(true /* force */)
+	// The numToClear=0 is arbitrary since it is unused when force=true.
+	t.tryClearLocks(true /* force */, 0)
 	// Also clear the finalized txn cache, since it won't be needed any time
 	// soon and consumes memory.
 	t.finalizedTxnCache.clear()
