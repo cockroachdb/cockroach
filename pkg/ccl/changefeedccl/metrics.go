@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -122,12 +123,6 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaChangefeedTableMetadataNanos = metric.Metadata{
-		Name:        "changefeed.table_metadata_nanos",
-		Help:        "Time blocked while verifying table metadata histories",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 	metaChangefeedEmitNanos = metric.Metadata{
 		Name:        "changefeed.emit_nanos",
 		Help:        "Total time spent emitting all feeds",
@@ -161,17 +156,18 @@ var (
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	KVFeedMetrics   kvfeed.Metrics
+	KVFeedMetrics     kvfeed.Metrics
+	SchemaFeedMetrics schemafeed.Metrics
+
 	EmittedMessages *metric.Counter
 	EmittedBytes    *metric.Counter
 	Flushes         *metric.Counter
 	ErrorRetries    *metric.Counter
 	Failures        *metric.Counter
 
-	ProcessingNanos    *metric.Counter
-	TableMetadataNanos *metric.Counter
-	EmitNanos          *metric.Counter
-	FlushNanos         *metric.Counter
+	ProcessingNanos *metric.Counter
+	EmitNanos       *metric.Counter
+	FlushNanos      *metric.Counter
 
 	Running *metric.Gauge
 
@@ -189,18 +185,18 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		KVFeedMetrics:   kvfeed.MakeMetrics(histogramWindow),
-		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
-		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
-		Flushes:         metric.NewCounter(metaChangefeedFlushes),
-		ErrorRetries:    metric.NewCounter(metaChangefeedErrorRetries),
-		Failures:        metric.NewCounter(metaChangefeedFailures),
+		KVFeedMetrics:     kvfeed.MakeMetrics(histogramWindow),
+		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
+		EmittedMessages:   metric.NewCounter(metaChangefeedEmittedMessages),
+		EmittedBytes:      metric.NewCounter(metaChangefeedEmittedBytes),
+		Flushes:           metric.NewCounter(metaChangefeedFlushes),
+		ErrorRetries:      metric.NewCounter(metaChangefeedErrorRetries),
+		Failures:          metric.NewCounter(metaChangefeedFailures),
 
-		ProcessingNanos:    metric.NewCounter(metaChangefeedProcessingNanos),
-		TableMetadataNanos: metric.NewCounter(metaChangefeedTableMetadataNanos),
-		EmitNanos:          metric.NewCounter(metaChangefeedEmitNanos),
-		FlushNanos:         metric.NewCounter(metaChangefeedFlushNanos),
-		Running:            metric.NewGauge(metaChangefeedRunning),
+		ProcessingNanos: metric.NewCounter(metaChangefeedProcessingNanos),
+		EmitNanos:       metric.NewCounter(metaChangefeedEmitNanos),
+		FlushNanos:      metric.NewCounter(metaChangefeedFlushNanos),
+		Running:         metric.NewGauge(metaChangefeedRunning),
 	}
 	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization
