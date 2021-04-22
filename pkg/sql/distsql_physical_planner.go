@@ -3330,15 +3330,8 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		return nil, err
 	}
 
-	if len(leftPlan.MergeOrdering.Columns) != 0 || len(rightPlan.MergeOrdering.Columns) != 0 {
-		return nil, errors.AssertionFailedf("set op inputs should have no orderings")
-	}
-
-	// TODO(radu): for INTERSECT and EXCEPT, the mergeOrdering should be set when
-	// we can use merge joiners below. The optimizer needs to be modified to take
-	// advantage of this optimization and pass down merge orderings. Tracked by
-	// #40797.
-	var mergeOrdering execinfrapb.Ordering
+	// Set the merge ordering.
+	mergeOrdering := dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap)
 
 	// Merge processors, streams, result routers, and stage counter.
 	leftRouters := leftPlan.ResultRouters
@@ -3473,11 +3466,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
 				leftRouters, rightRouters, resultTypes,
 			)
-		}
-
-		// An EXCEPT ALL is like a left outer join, so there is no guaranteed ordering.
-		if n.unionType == tree.ExceptOp {
-			mergeOrdering = execinfrapb.Ordering{}
 		}
 
 		p.SetMergeOrdering(mergeOrdering)
