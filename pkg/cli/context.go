@@ -315,7 +315,9 @@ func setSQLContextDefaults() {
 
 // zipCtx captures the command-line parameters of the `zip` command.
 // See below for defaults.
-var zipCtx struct {
+var zipCtx zipContext
+
+type zipContext struct {
 	nodes nodeSelection
 
 	// redactLogs indicates whether log files should be redacted
@@ -324,6 +326,10 @@ var zipCtx struct {
 
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
+
+	// How much concurrency to use during the collection. The code
+	// attempts to access multiple nodes concurrently by default.
+	concurrency int
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -333,6 +339,7 @@ func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.cpuProfDuration = 5 * time.Second
+	zipCtx.concurrency = 15
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.
