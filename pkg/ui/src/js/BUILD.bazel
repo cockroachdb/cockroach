@@ -1,0 +1,12 @@
+load(":defs.bzl", "protobufjs_library")
+
+protobufjs_library(
+    name = "db-console_oss_js_proto",
+    out_name = "protos",
+    protos = [
+      "//pkg/server/serverpb:admin_proto",
+      "//pkg/server/serverpb:authentication_proto",
+      "//pkg/server/serverpb:status_proto",
+      "//pkg/ts/tspb:tspb_proto",
+    ],
+)

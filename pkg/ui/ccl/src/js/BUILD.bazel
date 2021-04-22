@@ -1,0 +1,13 @@
+load("//pkg/ui/src/js:defs.bzl", "protobufjs_library")
+
+protobufjs_library(
+    name = "db-console_ccl_js_proto",
+    out_name = "protos",
+    protos = [
+      "//pkg/server/serverpb:admin_proto",
+      "//pkg/server/serverpb:authentication_proto",
+      "//pkg/server/serverpb:status_proto",
+      "//pkg/ts/tspb:tspb_proto",
+      "//pkg/ccl/storageccl/engineccl/enginepbccl:enginepbccl_proto",
+    ],
+)

@@ -4,40 +4,80 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
+PROTO_LIBRARY_DEPS = [
+    "//pkg/build:build_proto",
+    "//pkg/clusterversion:clusterversion_proto",
+    "//pkg/config/zonepb:zonepb_proto",
+    "//pkg/gossip:gossip_proto",
+    "//pkg/jobs/jobspb:jobspb_proto",
+    "//pkg/kv/kvserver/kvserverpb:kvserverpb_proto",
+    "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
+    "//pkg/roachpb:roachpb_proto",
+    "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
+    "//pkg/server/status/statuspb:statuspb_proto",
+    "//pkg/sql/contentionpb:contentionpb_proto",
+    "//pkg/storage/enginepb:enginepb_proto",
+    "//pkg/ts/catalog:catalog_proto",
+    "//pkg/util:util_proto",
+    "//pkg/util/hlc:hlc_proto",
+    "//pkg/util/log/logpb:logpb_proto",
+    "//pkg/util/metric:metric_proto",
+    "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    "@com_google_protobuf//:timestamp_proto",
+    "@go_googleapis//google/api:annotations_proto",
+    "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",
+]
+
+# Define proto_library per each .proto file according to recommended code organization:
+# https://docs.bazel.build/versions/master/be/protocol-buffer.html#proto_library
 proto_library(
-    name = "serverpb_proto",
+    name = "admin_proto",
     srcs = [
         "admin.proto",
-        "authentication.proto",
-        "init.proto",
-        "migration.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = PROTO_LIBRARY_DEPS + [":status_proto"],
+)
+
+proto_library(
+    name = "status_proto",
+    srcs = [
         "status.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/build:build_proto",
-        "//pkg/clusterversion:clusterversion_proto",
-        "//pkg/config/zonepb:zonepb_proto",
-        "//pkg/gossip:gossip_proto",
-        "//pkg/jobs/jobspb:jobspb_proto",
-        "//pkg/kv/kvserver/kvserverpb:kvserverpb_proto",
-        "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
-        "//pkg/roachpb:roachpb_proto",
-        "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
-        "//pkg/server/status/statuspb:statuspb_proto",
-        "//pkg/sql/contentionpb:contentionpb_proto",
-        "//pkg/storage/enginepb:enginepb_proto",
-        "//pkg/ts/catalog:catalog_proto",
-        "//pkg/util:util_proto",
-        "//pkg/util/hlc:hlc_proto",
-        "//pkg/util/log/logpb:logpb_proto",
-        "//pkg/util/metric:metric_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-        "@com_google_protobuf//:timestamp_proto",
-        "@go_googleapis//google/api:annotations_proto",
-        "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",
+    deps = PROTO_LIBRARY_DEPS,
+)
+
+proto_library(
+    name = "authentication_proto",
+    srcs = [
+        "authentication.proto",
     ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = PROTO_LIBRARY_DEPS,
+)
+
+proto_library(
+    name = "init_proto",
+    srcs = [
+        "init.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = PROTO_LIBRARY_DEPS,
+)
+
+proto_library(
+    name = "migration_proto",
+    srcs = [
+        "migration.proto",
+    ],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = PROTO_LIBRARY_DEPS,
 )
 
 go_proto_library(
@@ -47,7 +87,13 @@ go_proto_library(
         "@com_github_grpc_ecosystem_grpc_gateway//protoc-gen-grpc-gateway:go_gen_grpc_gateway",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/serverpb",
-    proto = ":serverpb_proto",
+    protos = [
+      ":admin_proto",
+      ":authentication_proto",
+      ":init_proto",
+      ":migration_proto",
+      ":status_proto",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
