@@ -1271,3 +1271,100 @@ CREATE TABLE pg_catalog.pg_amop (
 	amopsortfamily OID,
 	amopstrategy INT2
 )`
+
+//PgCatalogPartitionedTable is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogPartitionedTable = `
+CREATE TABLE pg_catalog.pg_partitioned_table (
+	partexprs STRING,
+	partnatts INT2,
+	partrelid OID,
+	partstrat "char",
+	partattrs INT2VECTOR,
+	partclass OIDVECTOR,
+	partcollation OIDVECTOR,
+	partdefid OID
+)`
+
+//PgCatalogLargeobjectMetadata is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogLargeobjectMetadata = `
+CREATE TABLE pg_catalog.pg_largeobject_metadata (
+	lomacl STRING[],
+	lomowner OID,
+	oid OID
+)`
+
+//PgCatalogInitPrivs is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogInitPrivs = `
+CREATE TABLE pg_catalog.pg_init_privs (
+	classoid OID,
+	initprivs STRING[],
+	objoid OID,
+	objsubid INT4,
+	privtype "char"
+)`
+
+//PgCatalogReplicationOriginStatus is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogReplicationOriginStatus = `
+CREATE TABLE pg_catalog.pg_replication_origin_status (
+	external_id STRING,
+	local_id OID,
+	local_lsn STRING,
+	remote_lsn STRING
+)`
+
+//PgCatalogSubscriptionRel is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogSubscriptionRel = `
+CREATE TABLE pg_catalog.pg_subscription_rel (
+	srrelid OID,
+	srsubid OID,
+	srsublsn STRING,
+	srsubstate "char"
+)`
+
+//PgCatalogPolicy is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogPolicy = `
+CREATE TABLE pg_catalog.pg_policy (
+	polcmd "char",
+	polname NAME,
+	polpermissive BOOL,
+	polqual STRING,
+	polrelid OID,
+	polroles OID[],
+	polwithcheck STRING,
+	oid OID
+)`
+
+//PgCatalogReplicationSlots is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogReplicationSlots = `
+CREATE TABLE pg_catalog.pg_replication_slots (
+	catalog_xmin OID,
+	database NAME,
+	datoid OID,
+	plugin NAME,
+	safe_wal_size INT,
+	slot_type STRING,
+	temporary BOOL,
+	active_pid INT4,
+	confirmed_flush_lsn STRING,
+	restart_lsn STRING,
+	active BOOL,
+	slot_name NAME,
+	wal_status STRING,
+	xmin OID
+)`
+
+//PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogSequences = `
+CREATE TABLE pg_catalog.pg_sequences (
+	sequenceowner NAME,
+	cache_size INT,
+	cycle BOOL,
+	data_type REGTYPE,
+	schemaname NAME,
+	sequencename NAME,
+	increment_by INT,
+	last_value INT,
+	max_value INT,
+	min_value INT,
+	start_value INT
+)`

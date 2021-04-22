@@ -145,7 +145,9 @@ const (
 	PgCatalogIndexTableID
 	PgCatalogIndexesTableID
 	PgCatalogInheritsTableID
+	PgCatalogInitPrivsTableID
 	PgCatalogLanguageTableID
+	PgCatalogLargeobjectMetadataTableID
 	PgCatalogLargeobjectTableID
 	PgCatalogLocksTableID
 	PgCatalogMatViewsTableID
@@ -153,7 +155,9 @@ const (
 	PgCatalogOpclassTableID
 	PgCatalogOperatorTableID
 	PgCatalogOpfamilyTableID
+	PgCatalogPartitionedTableTableID
 	PgCatalogPoliciesTableID
+	PgCatalogPolicyTableID
 	PgCatalogPreparedStatementsTableID
 	PgCatalogPreparedXactsTableID
 	PgCatalogProcTableID
@@ -161,7 +165,9 @@ const (
 	PgCatalogPublicationTableID
 	PgCatalogPublicationTablesTableID
 	PgCatalogRangeTableID
+	PgCatalogReplicationOriginStatusTableID
 	PgCatalogReplicationOriginTableID
+	PgCatalogReplicationSlotsTableID
 	PgCatalogRewriteTableID
 	PgCatalogRolesTableID
 	PgCatalogRulesTableID
@@ -176,6 +182,7 @@ const (
 	PgCatalogShmemAllocationsTableID
 	PgCatalogStatActivityTableID
 	PgCatalogStatisticExtTableID
+	PgCatalogSubscriptionRelTableID
 	PgCatalogSubscriptionTableID
 	PgCatalogTablesTableID
 	PgCatalogTablespaceTableID
