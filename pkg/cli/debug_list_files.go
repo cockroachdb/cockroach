@@ -110,7 +110,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 				NodeId:   nodeIDs,
 				ListOnly: true,
 				Type:     serverpb.FileType(fileType),
-				Patterns: []string{"*"},
+				Patterns: zipCtx.files.retrievalPatterns(),
 			})
 			if err != nil {
 				log.Warningf(ctx, "cannot retrieve %s file list from node %d: %v", serverpb.FileType_name[fileType], nodeID, err)
@@ -132,6 +132,9 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	for _, nodeID := range nodeList {
 		nodeIDs := fmt.Sprintf("%d", nodeID)
 		for _, logFile := range logFiles[nodeID] {
+			if !zipCtx.files.isIncluded(logFile.Name) {
+				continue
+			}
 			totalSize += logFile.SizeBytes
 			ctime := formatTimeSimple(extractTimeFromFileName(logFile.Name))
 			mtime := formatTimeSimple(timeutil.Unix(0, logFile.ModTimeNanos))
@@ -140,6 +143,9 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 		for _, ft := range fileTypes {
 			fileType := int32(ft)
 			for _, other := range otherFiles[nodeID][fileType] {
+				if !zipCtx.files.isIncluded(other.Name) {
+					continue
+				}
 				totalSize += other.FileSize
 				ctime := formatTimeSimple(extractTimeFromFileName(other.Name))
 				mtime := ctime
