@@ -1206,6 +1206,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugListFilesCmd,
 	debugResetQuorumCmd,
 )
 
