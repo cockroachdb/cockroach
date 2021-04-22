@@ -331,31 +331,37 @@ type fileInfo struct {
 func findLogFiles(
 	paths []string, filePattern, programFilter *regexp.Regexp, programGroup int, to time.Time,
 ) ([]fileInfo, error) {
+	if programGroup == 0 || programFilter == nil {
+		programGroup = 0
+	}
 	to = to.Truncate(time.Second) // log files only have second resolution
-	fileChan := make(chan fileInfo, len(paths))
-	var wg sync.WaitGroup
-	wg.Add(len(paths))
+	var files []fileInfo
 	for _, p := range paths {
-		go func(p string) {
-			defer wg.Done()
+		// NB: come go1.16, we should use WalkDir here as it is more efficient.
+		if err := filepath.Walk(p, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				// Don't act on the directory itself, Walk will visit it for us.
+				return nil
+			}
+			// We're looking at a file.
 			fi, ok := getLogFileInfo(p, filePattern)
 			if !ok {
-				return
+				return nil
 			}
 			if programGroup > 0 {
 				program := fi.path[fi.matches[2*programGroup]:fi.matches[2*programGroup+1]]
 				if !programFilter.MatchString(program) {
-					return
+					return nil
 				}
 			}
-			fileChan <- fi
-		}(p)
-	}
-	wg.Wait()
-	files := make([]fileInfo, 0, len(fileChan))
-	close(fileChan)
-	for f := range fileChan {
-		files = append(files, f)
+			files = append(files, fi)
+			return nil
+		}); err != nil {
+			return nil, err
+		}
 	}
 	return files, nil
 }
