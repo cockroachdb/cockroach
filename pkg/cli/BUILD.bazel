@@ -284,6 +284,7 @@ go_test(
         "start_test.go",
         "statement_diag_test.go",
         "userfiletable_test.go",
+        "zip_helpers_test.go",
         "zip_test.go",
     ],
     data = glob(["testdata/**"]),
