@@ -40,7 +40,7 @@ func installGolang(ctx context.Context, t *test, c *cluster, node nodeListOption
 	}
 	if err := repeatRunE(
 		ctx, c, node, "verify tarball", `sha256sum -c - <<EOF
-4aa1267517df32f2bf1cc3d55dfc27d0c6b2c2b0989449c96dd19273ccca051d /tmp/go.tgz
+8825b72d74b14e82b54ba3697813772eb94add3abf70f021b6bdebe193ed01ec /tmp/go.tgz
 EOF`,
 	); err != nil {
 		t.Fatal(err)
