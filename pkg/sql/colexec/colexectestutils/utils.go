@@ -63,6 +63,8 @@ func (t Tuple) String() string {
 			sb.WriteString(d.String())
 		} else if d, ok := t[i].([]byte); ok {
 			sb.WriteString(string(d))
+		} else if d, ok := t[i].(json.JSON); ok {
+			sb.WriteString(d.String())
 		} else {
 			sb.WriteString(fmt.Sprintf("%v", t[i]))
 		}
@@ -100,6 +102,23 @@ func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tu
 			lhsDecimal := lhsVal.Interface().(apd.Decimal)
 			rhsDecimal := rhsVal.Interface().(apd.Decimal)
 			cmp := (&lhsDecimal).CmpTotal(&rhsDecimal)
+			if cmp == 0 {
+				continue
+			} else if cmp == -1 {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		// json.JSON are not comparable.
+		if lhsVal.Type().Implements(reflect.TypeOf((*json.JSON)(nil)).Elem()) && lhsVal.CanInterface() {
+			lhsJSON := lhsVal.Interface().(json.JSON)
+			rhsJSON := rhsVal.Interface().(json.JSON)
+			cmp, err := lhsJSON.Compare(rhsJSON)
+			if err != nil {
+				colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "failed json compare"))
+			}
 			if cmp == 0 {
 				continue
 			} else if cmp == -1 {
@@ -624,8 +643,8 @@ func stringToDatum(val string, typ *types.T, evalCtx *tree.EvalContext) tree.Dat
 // setColVal is a test helper function to set the given value at the equivalent
 // col[idx]. This function is slow due to reflection.
 func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalContext) {
-	canonicalTypeFamily := vec.CanonicalTypeFamily()
-	if canonicalTypeFamily == types.BytesFamily {
+	switch vec.CanonicalTypeFamily() {
+	case types.BytesFamily:
 		var (
 			bytesVal []byte
 			ok       bool
@@ -635,7 +654,7 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			bytesVal = []byte(val.(string))
 		}
 		vec.Bytes().Set(idx, bytesVal)
-	} else if canonicalTypeFamily == types.DecimalFamily {
+	case types.DecimalFamily:
 		// setColVal is used in multiple places, therefore val can be either a float
 		// or apd.Decimal.
 		if decimalVal, ok := val.(apd.Decimal); ok {
@@ -652,7 +671,21 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			// cause the code that does not properly use execgen package to fail.
 			vec.Decimal()[idx].Set(decimalVal)
 		}
-	} else if canonicalTypeFamily == typeconv.DatumVecCanonicalTypeFamily {
+	case types.JsonFamily:
+		var j json.JSON
+		if j2, ok := val.(json.JSON); ok {
+			j = j2
+		} else {
+			s := val.(string)
+			var err error
+			j, err = json.ParseJSON(s)
+			if err != nil {
+				colexecerror.InternalError(
+					errors.AssertionFailedf("unable to set json %s: %v", s, err))
+			}
+		}
+		vec.JSON().Set(idx, j)
+	case typeconv.DatumVecCanonicalTypeFamily:
 		switch v := val.(type) {
 		case *coldataext.Datum:
 			vec.Datum().Set(idx, v)
@@ -660,12 +693,10 @@ func setColVal(vec coldata.Vec, idx int, val interface{}, evalCtx *tree.EvalCont
 			vec.Datum().Set(idx, v)
 		case string:
 			vec.Datum().Set(idx, stringToDatum(v, vec.Type(), evalCtx))
-		case json.JSON:
-			vec.Datum().Set(idx, &tree.DJSON{JSON: v})
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected type %T of datum-backed value: %v", v, v))
 		}
-	} else {
+	default:
 		reflect.ValueOf(vec.Col()).Index(idx).Set(reflect.ValueOf(val).Convert(reflect.TypeOf(vec.Col()).Elem()))
 	}
 }
@@ -875,6 +906,12 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 						setColVal(vec, outputIdx, newBytes, s.evalCtx)
 					case types.IntervalFamily:
 						setColVal(vec, outputIdx, duration.MakeDuration(rng.Int63(), rng.Int63(), rng.Int63()), s.evalCtx)
+					case types.JsonFamily:
+						j, err := json.Random(20, rng)
+						if err != nil {
+							colexecerror.InternalError(errors.AssertionFailedf("%v", err))
+						}
+						setColVal(vec, outputIdx, j, s.evalCtx)
 					case typeconv.DatumVecCanonicalTypeFamily:
 						switch vec.Type().Family() {
 						case types.CollatedStringFamily:
@@ -886,11 +923,6 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 								colexecerror.InternalError(err)
 							}
 							setColVal(vec, outputIdx, d, s.evalCtx)
-						case types.JsonFamily:
-							newBytes := make([]byte, rng.Intn(16)+1)
-							rng.Read(newBytes)
-							j := json.FromString(string(newBytes))
-							setColVal(vec, outputIdx, j, s.evalCtx)
 						case types.TimeTZFamily:
 							setColVal(vec, outputIdx, tree.NewDTimeTZFromOffset(timeofday.FromInt(rng.Int63()), rng.Int31()), s.evalCtx)
 						case types.TupleFamily:
@@ -1080,14 +1112,27 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 			ret[colIdx] = nil
 		} else {
 			var val reflect.Value
+			family := vec.CanonicalTypeFamily()
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
 				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(tupleIdx)...))
-			} else if vec.CanonicalTypeFamily() == types.DecimalFamily {
+			} else if family == types.DecimalFamily {
 				colDec := vec.Decimal()
 				var newDec apd.Decimal
 				newDec.Set(&colDec[tupleIdx])
 				val = reflect.ValueOf(newDec)
-			} else if vec.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+			} else if family == types.JsonFamily {
+				colJSON := vec.JSON()
+				newJSON := colJSON.Get(tupleIdx)
+				b, err := json.EncodeJSON(nil, newJSON)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				_, j, err := json.DecodeJSON(b)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				val = reflect.ValueOf(j)
+			} else if family == typeconv.DatumVecCanonicalTypeFamily {
 				val = reflect.ValueOf(vec.Datum().Get(tupleIdx).(*coldataext.Datum).Datum)
 			} else {
 				val = reflect.ValueOf(vec.Col()).Index(tupleIdx)
@@ -1188,6 +1233,29 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *tree.EvalContext) bool {
 					} else {
 						return false
 					}
+				}
+			}
+			// Special case for JSON.
+			if j1, ok := actual[i].(json.JSON); ok {
+				var j2 json.JSON
+				switch t := expected[i].(type) {
+				case string:
+					var err error
+					j2, err = json.ParseJSON(t)
+					if err != nil {
+						colexecerror.ExpectedError(err)
+					}
+				case json.JSON:
+					j2 = t
+				}
+				cmp, err := j1.Compare(j2)
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				if cmp == 0 {
+					continue
+				} else {
+					return false
 				}
 			}
 			// Special case for datum-backed types.

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -35,6 +36,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ coldataext.Datum
+	_ json.JSON
 )
 
 // selConstOpBase contains all of the fields for binary selections with a
@@ -9570,6 +9572,294 @@ func (p *selEQIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selEQIntervalIntervalOp) Init() {
+	p.Input.Init()
+}
+
+type selEQJSONJSONConstOp struct {
+	selConstOpBase
+	constArg json.JSON
+}
+
+func (p *selEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selEQJSONJSONConstOp) Init() {
+	p.Input.Init()
+}
+
+type selEQJSONJSONOp struct {
+	selOpBase
+}
+
+func (p *selEQJSONJSONOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.JSON()
+		col2 := vec2.JSON()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult == 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selEQJSONJSONOp) Init() {
 	p.Input.Init()
 }
 
@@ -19349,6 +19639,294 @@ func (p *selNEIntervalIntervalOp) Init() {
 	p.Input.Init()
 }
 
+type selNEJSONJSONConstOp struct {
+	selConstOpBase
+	constArg json.JSON
+}
+
+func (p *selNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selNEJSONJSONConstOp) Init() {
+	p.Input.Init()
+}
+
+type selNEJSONJSONOp struct {
+	selOpBase
+}
+
+func (p *selNEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.JSON()
+		col2 := vec2.JSON()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult != 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selNEJSONJSONOp) Init() {
+	p.Input.Init()
+}
+
 type selNEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -29122,6 +29700,294 @@ func (p *selLTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selLTIntervalIntervalOp) Init() {
+	p.Input.Init()
+}
+
+type selLTJSONJSONConstOp struct {
+	selConstOpBase
+	constArg json.JSON
+}
+
+func (p *selLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selLTJSONJSONConstOp) Init() {
+	p.Input.Init()
+}
+
+type selLTJSONJSONOp struct {
+	selOpBase
+}
+
+func (p *selLTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.JSON()
+		col2 := vec2.JSON()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult < 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selLTJSONJSONOp) Init() {
 	p.Input.Init()
 }
 
@@ -38901,6 +39767,294 @@ func (p *selLEIntervalIntervalOp) Init() {
 	p.Input.Init()
 }
 
+type selLEJSONJSONConstOp struct {
+	selConstOpBase
+	constArg json.JSON
+}
+
+func (p *selLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selLEJSONJSONConstOp) Init() {
+	p.Input.Init()
+}
+
+type selLEJSONJSONOp struct {
+	selOpBase
+}
+
+func (p *selLEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.JSON()
+		col2 := vec2.JSON()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult <= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selLEJSONJSONOp) Init() {
+	p.Input.Init()
+}
+
 type selLEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -48674,6 +49828,294 @@ func (p *selGTIntervalIntervalOp) Next(ctx context.Context) coldata.Batch {
 }
 
 func (p *selGTIntervalIntervalOp) Init() {
+	p.Input.Init()
+}
+
+type selGTJSONJSONConstOp struct {
+	selConstOpBase
+	constArg json.JSON
+}
+
+func (p *selGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selGTJSONJSONConstOp) Init() {
+	p.Input.Init()
+}
+
+type selGTJSONJSONOp struct {
+	selOpBase
+}
+
+func (p *selGTJSONJSONOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.JSON()
+		col2 := vec2.JSON()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult > 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selGTJSONJSONOp) Init() {
 	p.Input.Init()
 }
 
@@ -58453,6 +59895,294 @@ func (p *selGEIntervalIntervalOp) Init() {
 	p.Input.Init()
 }
 
+type selGEJSONJSONConstOp struct {
+	selConstOpBase
+	constArg json.JSON
+}
+
+func (p *selGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec := batch.ColVec(p.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg := col.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg.Compare(p.constArg)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selGEJSONJSONConstOp) Init() {
+	p.Input.Init()
+}
+
+type selGEJSONJSONOp struct {
+	selOpBase
+}
+
+func (p *selGEJSONJSONOp) Next(ctx context.Context) coldata.Batch {
+	// In order to inline the templated code of overloads, we need to have a
+	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
+	_overloadHelper := p.overloadHelper
+	// However, the scratch is not used in all of the selection operators, so
+	// we add this to go around "unused" error.
+	_ = _overloadHelper
+	var isNull bool
+	for {
+		batch := p.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return batch
+		}
+
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.JSON()
+		col2 := vec2.JSON()
+		n := batch.Length()
+
+		var idx int
+		if vec1.MaybeHasNulls() || vec2.MaybeHasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = nulls.NullAt(i)
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col1.Get(n - 1)
+				_ = col2.Get(n - 1)
+				for i := 0; i < n; i++ {
+					var cmp bool
+					arg1 := col1.Get(i)
+					arg2 := col2.Get(i)
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = arg1.Compare(arg2)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						cmp = cmpResult >= 0
+					}
+
+					isNull = false
+					if cmp && !isNull {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (p *selGEJSONJSONOp) Init() {
+	p.Input.Init()
+}
+
 type selGEDatumDatumConstOp struct {
 	selConstOpBase
 	constArg interface{}
@@ -58922,6 +60652,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.JsonFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selEQJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59124,6 +60867,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selNEIntervalIntervalConstOp{selConstOpBase: selConstOpBase, constArg: c.(duration.Duration)}, nil
+						}
+					}
+				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.JsonFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selNEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
 						}
 					}
 				}
@@ -59332,6 +61088,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.JsonFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selLTJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59534,6 +61303,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selLEIntervalIntervalConstOp{selConstOpBase: selConstOpBase, constArg: c.(duration.Duration)}, nil
+						}
+					}
+				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.JsonFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selLEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
 						}
 					}
 				}
@@ -59742,6 +61524,19 @@ func GetSelectionConstOperator(
 						}
 					}
 				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.JsonFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selGTJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -59944,6 +61739,19 @@ func GetSelectionConstOperator(
 						case -1:
 						default:
 							return &selGEIntervalIntervalConstOp{selConstOpBase: selConstOpBase, constArg: c.(duration.Duration)}, nil
+						}
+					}
+				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					case types.JsonFamily:
+						switch constType.Width() {
+						case -1:
+						default:
+							return &selGEJSONJSONConstOp{selConstOpBase: selConstOpBase, constArg: c.(json.JSON)}, nil
 						}
 					}
 				}
@@ -60184,6 +61992,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.JsonFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selEQJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -60386,6 +62207,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selNEIntervalIntervalOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.JsonFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selNEJSONJSONOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}
@@ -60594,6 +62428,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.JsonFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selLTJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -60796,6 +62643,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selLEIntervalIntervalOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.JsonFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selLEJSONJSONOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}
@@ -61004,6 +62864,19 @@ func GetSelectionOperator(
 						}
 					}
 				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.JsonFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selGTJSONJSONOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
 			case typeconv.DatumVecCanonicalTypeFamily:
 				switch leftType.Width() {
 				case -1:
@@ -61206,6 +63079,19 @@ func GetSelectionOperator(
 						case -1:
 						default:
 							return &selGEIntervalIntervalOp{selOpBase: selOpBase}, nil
+						}
+					}
+				}
+			case types.JsonFamily:
+				switch leftType.Width() {
+				case -1:
+				default:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					case types.JsonFamily:
+						switch rightType.Width() {
+						case -1:
+						default:
+							return &selGEJSONJSONOp{selOpBase: selOpBase}, nil
 						}
 					}
 				}

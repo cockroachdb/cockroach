@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,6 +37,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ coldataext.Datum
+	_ json.JSON
 )
 
 // Remove unused warnings.
@@ -181,6 +183,20 @@ func GetInProjectionOperator(
 			obj.filterRow, obj.hasNulls = fillDatumRowInterval(t, datumTuple)
 			return obj, nil
 		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			obj := &projectInOpJSON{
+				OneInputNode: colexecop.NewOneInputNode(input),
+				allocator:    allocator,
+				colIdx:       colIdx,
+				outputIdx:    resultIdx,
+				negate:       negate,
+			}
+			obj.filterRow, obj.hasNulls = fillDatumRowJSON(t, datumTuple)
+			return obj, nil
+		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
 		case -1:
@@ -301,6 +317,18 @@ func GetInOperator(
 				negate:       negate,
 			}
 			obj.filterRow, obj.hasNulls = fillDatumRowInterval(t, datumTuple)
+			return obj, nil
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			obj := &selectInOpJSON{
+				OneInputNode: colexecop.NewOneInputNode(input),
+				colIdx:       colIdx,
+				negate:       negate,
+			}
+			obj.filterRow, obj.hasNulls = fillDatumRowJSON(t, datumTuple)
 			return obj, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -2477,6 +2505,242 @@ func (pi *projectInOpInterval) Next(ctx context.Context) coldata.Batch {
 				//gcassert:bce
 				v := col.Get(i)
 				cmpRes := cmpInInterval(v, col, pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(i)
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		}
+	}
+	return batch
+}
+
+type selectInOpJSON struct {
+	colexecop.OneInputNode
+	colIdx    int
+	filterRow []json.JSON
+	hasNulls  bool
+	negate    bool
+}
+
+var _ colexecop.Operator = &selectInOpJSON{}
+
+type projectInOpJSON struct {
+	colexecop.OneInputNode
+	allocator *colmem.Allocator
+	colIdx    int
+	outputIdx int
+	filterRow []json.JSON
+	hasNulls  bool
+	negate    bool
+}
+
+var _ colexecop.Operator = &projectInOpJSON{}
+
+func fillDatumRowJSON(t *types.T, datumTuple *tree.DTuple) ([]json.JSON, bool) {
+	conv := colconv.GetDatumToPhysicalFn(t)
+	var result []json.JSON
+	hasNulls := false
+	for _, d := range datumTuple.D {
+		if d == tree.DNull {
+			hasNulls = true
+		} else {
+			convRaw := conv(d)
+			converted := convRaw.(json.JSON)
+			result = append(result, converted)
+		}
+	}
+	return result, hasNulls
+}
+
+func cmpInJSON(
+	targetElem json.JSON, targetCol *coldata.JSONs, filterRow []json.JSON, hasNulls bool,
+) comparisonResult {
+	// Filter row input is already sorted due to normalization, so we can use a
+	// binary search right away.
+	lo := 0
+	hi := len(filterRow)
+	for lo < hi {
+		i := (lo + hi) / 2
+		var cmpResult int
+
+		var err error
+		cmpResult, err = targetElem.Compare(filterRow[i])
+		if err != nil {
+			colexecerror.ExpectedError(err)
+		}
+
+		if cmpResult == 0 {
+			return siTrue
+		} else if cmpResult > 0 {
+			lo = i + 1
+		} else {
+			hi = i
+		}
+	}
+
+	if hasNulls {
+		return siNull
+	} else {
+		return siFalse
+	}
+}
+
+func (si *selectInOpJSON) Init() {
+	si.Input.Init()
+}
+
+func (pi *projectInOpJSON) Init() {
+	pi.Input.Init()
+}
+
+func (si *selectInOpJSON) Next(ctx context.Context) coldata.Batch {
+	for {
+		batch := si.Input.Next(ctx)
+		if batch.Length() == 0 {
+			return coldata.ZeroBatch
+		}
+
+		vec := batch.ColVec(si.colIdx)
+		col := vec.JSON()
+		var idx int
+		n := batch.Length()
+
+		compVal := siTrue
+		if si.negate {
+			compVal = siFalse
+		}
+
+		if vec.MaybeHasNulls() {
+			nulls := vec.Nulls()
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					v := col.Get(i)
+					if !nulls.NullAt(i) && cmpInJSON(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					v := col.Get(i)
+					if !nulls.NullAt(i) && cmpInJSON(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		} else {
+			if sel := batch.Selection(); sel != nil {
+				sel = sel[:n]
+				for _, i := range sel {
+					v := col.Get(i)
+					if cmpInJSON(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			} else {
+				batch.SetSelection(true)
+				sel := batch.Selection()
+				_ = col.Get(n - 1)
+				for i := 0; i < n; i++ {
+					v := col.Get(i)
+					if cmpInJSON(v, col, si.filterRow, si.hasNulls) == compVal {
+						sel[idx] = i
+						idx++
+					}
+				}
+			}
+		}
+
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+func (pi *projectInOpJSON) Next(ctx context.Context) coldata.Batch {
+	batch := pi.Input.Next(ctx)
+	if batch.Length() == 0 {
+		return coldata.ZeroBatch
+	}
+
+	vec := batch.ColVec(pi.colIdx)
+	col := vec.JSON()
+
+	projVec := batch.ColVec(pi.outputIdx)
+	projCol := projVec.Bool()
+	projNulls := projVec.Nulls()
+	if projVec.MaybeHasNulls() {
+		// We need to make sure that there are no left over null values in the
+		// output vector.
+		projNulls.UnsetNulls()
+	}
+
+	n := batch.Length()
+
+	cmpVal := siTrue
+	if pi.negate {
+		cmpVal = siFalse
+	}
+
+	if vec.MaybeHasNulls() {
+		nulls := vec.Nulls()
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				if nulls.NullAt(i) {
+					projNulls.SetNull(i)
+				} else {
+					v := col.Get(i)
+					cmpRes := cmpInJSON(v, col, pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(i)
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		} else {
+			_ = col.Get(n - 1)
+			for i := 0; i < n; i++ {
+				if nulls.NullAt(i) {
+					projNulls.SetNull(i)
+				} else {
+					v := col.Get(i)
+					cmpRes := cmpInJSON(v, col, pi.filterRow, pi.hasNulls)
+					if cmpRes == siNull {
+						projNulls.SetNull(i)
+					} else {
+						projCol[i] = cmpRes == cmpVal
+					}
+				}
+			}
+		}
+	} else {
+		if sel := batch.Selection(); sel != nil {
+			sel = sel[:n]
+			for _, i := range sel {
+				v := col.Get(i)
+				cmpRes := cmpInJSON(v, col, pi.filterRow, pi.hasNulls)
+				if cmpRes == siNull {
+					projNulls.SetNull(i)
+				} else {
+					projCol[i] = cmpRes == cmpVal
+				}
+			}
+		} else {
+			_ = col.Get(n - 1)
+			for i := 0; i < n; i++ {
+				v := col.Get(i)
+				cmpRes := cmpInJSON(v, col, pi.filterRow, pi.hasNulls)
 				if cmpRes == siNull {
 					projNulls.SetNull(i)
 				} else {

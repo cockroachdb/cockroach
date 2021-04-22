@@ -152,7 +152,7 @@ func (d *TupleHashDistributor) Distribute(
 	}
 
 	for _, i := range hashCols {
-		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.overloadHelper, &d.datumAlloc)
+		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.overloadHelper, &d.datumAlloc)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))

@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,6 +32,9 @@ var (
 	_ tree.AggType
 	_ apd.Context
 	_ duration.Duration
+	_ json.JSON
+	_ colexecerror.StorageError
+	_ coldataext.Datum
 )
 
 func newAnyNotNullHashAggAlloc(
@@ -82,6 +87,12 @@ func newAnyNotNullHashAggAlloc(
 		case -1:
 		default:
 			return &anyNotNullIntervalHashAggAlloc{aggAllocBase: allocBase}, nil
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return &anyNotNullJSONHashAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -293,7 +304,8 @@ func (a *anyNotNullBytesHashAgg) Flush(outputIdx int) {
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
+	oldCurAggSize := len(a.curAgg)
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
@@ -1113,6 +1125,154 @@ func (a *anyNotNullIntervalHashAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
+// anyNotNullJSONHashAgg implements the ANY_NOT_NULL aggregate, returning the
+// first non-null value in the input column.
+type anyNotNullJSONHashAgg struct {
+	hashAggregateFuncBase
+	col                         *coldata.JSONs
+	curAgg                      json.JSON
+	foundNonNullForCurrentGroup bool
+}
+
+var _ AggregateFunc = &anyNotNullJSONHashAgg{}
+
+func (a *anyNotNullJSONHashAgg) SetOutput(vec coldata.Vec) {
+	a.hashAggregateFuncBase.SetOutput(vec)
+	a.col = vec.JSON()
+}
+
+func (a *anyNotNullJSONHashAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	if a.foundNonNullForCurrentGroup {
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
+	}
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	vec := vecs[inputIdxs[0]]
+	col, nulls := vec.JSON(), vec.Nulls()
+	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+		{
+			sel = sel[:inputLen]
+			if nulls.MaybeHasNulls() {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = nulls.NullAt(i)
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+
+						var _err error
+						var _bytes []byte
+						_bytes, _err = json.EncodeJSON(nil, val)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						a.curAgg, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+
+						a.foundNonNullForCurrentGroup = true
+						// We have already seen non-null for the current group, and since there
+						// is at most a single group when performing hash aggregation, we can
+						// finish computing.
+						return
+					}
+				}
+			} else {
+				for _, i := range sel {
+
+					var isNull bool
+					isNull = false
+					if !a.foundNonNullForCurrentGroup && !isNull {
+						// If we haven't seen any non-nulls for the current group yet, and the
+						// current value is non-null, then we can pick the current value to be
+						// the output.
+						val := col.Get(i)
+
+						var _err error
+						var _bytes []byte
+						_bytes, _err = json.EncodeJSON(nil, val)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+						a.curAgg, _err = json.FromEncoding(_bytes)
+						if _err != nil {
+							colexecerror.ExpectedError(_err)
+						}
+
+						a.foundNonNullForCurrentGroup = true
+						// We have already seen non-null for the current group, and since there
+						// is at most a single group when performing hash aggregation, we can
+						// finish computing.
+						return
+					}
+				}
+			}
+		}
+	},
+	)
+	var newCurAggSize uintptr
+	if a.curAgg != nil {
+		newCurAggSize = a.curAgg.Size()
+	}
+	if newCurAggSize != oldCurAggSize {
+		a.allocator.AdjustMemoryUsage(int64(newCurAggSize - oldCurAggSize))
+	}
+}
+
+func (a *anyNotNullJSONHashAgg) Flush(outputIdx int) {
+	// If we haven't found any non-nulls for this group so far, the output for
+	// this group should be null.
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		a.col.Set(outputIdx, a.curAgg)
+	}
+	// Release the reference to curAgg eagerly.
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.Size()
+	}
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
+	a.curAgg = nil
+}
+
+func (a *anyNotNullJSONHashAgg) Reset() {
+	a.foundNonNullForCurrentGroup = false
+}
+
+type anyNotNullJSONHashAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNullJSONHashAgg
+}
+
+var _ aggregateFuncAlloc = &anyNotNullJSONHashAggAlloc{}
+
+const sizeOfAnyNotNullJSONHashAgg = int64(unsafe.Sizeof(anyNotNullJSONHashAgg{}))
+const anyNotNullJSONHashAggSliceOverhead = int64(unsafe.Sizeof([]anyNotNullJSONHashAgg{}))
+
+func (a *anyNotNullJSONHashAggAlloc) newAggFunc() AggregateFunc {
+	if len(a.aggFuncs) == 0 {
+		a.allocator.AdjustMemoryUsage(anyNotNullJSONHashAggSliceOverhead + sizeOfAnyNotNullJSONHashAgg*a.allocSize)
+		a.aggFuncs = make([]anyNotNullJSONHashAgg, a.allocSize)
+	}
+	f := &a.aggFuncs[0]
+	f.allocator = a.allocator
+	a.aggFuncs = a.aggFuncs[1:]
+	return f
+}
+
 // anyNotNullDatumHashAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
 type anyNotNullDatumHashAgg struct {
@@ -1207,9 +1367,12 @@ func (a *anyNotNullDatumHashAgg) Flush(outputIdx int) {
 		a.col.Set(outputIdx, a.curAgg)
 	}
 	// Release the reference to curAgg eagerly.
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
+
+	var oldCurAggSize uintptr
+	if a.curAgg != nil {
+		oldCurAggSize = a.curAgg.(*coldataext.Datum).Size()
 	}
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 }
 
