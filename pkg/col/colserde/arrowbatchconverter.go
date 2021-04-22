@@ -286,21 +286,21 @@ func (c *ArrowBatchConverter) batchToArrowSpecialType(
 }
 
 // ArrowToBatch converts []*array.Data to a coldata.Batch. There must not be
-// more than coldata.BatchSize() elements in data. It's safe to call ArrowToBatch
-// concurrently.
+// more than coldata.BatchSize() elements in data and batchLength must be
+// greater than 0. It's safe to call ArrowToBatch concurrently.
 //
 // The passed in batch is overwritten, but after this method returns it stays
 // valid as long as `data` stays valid. Callers can use this to control the
 // lifetimes of the batches, saving allocations when they can be reused (i.e.
 // reused by passing them back into this function).
-//
-// The passed in data is also mutated (we store nulls differently than arrow and
-// the adjustment is done in place).
 func (c *ArrowBatchConverter) ArrowToBatch(
 	data []*array.Data, batchLength int, b coldata.Batch,
 ) error {
 	if len(data) != len(c.typs) {
 		return errors.Errorf("mismatched data and schema length: %d != %d", len(data), len(c.typs))
+	}
+	if batchLength <= 0 {
+		return errors.AssertionFailedf("unexpectedly batch length %d is not positive", batchLength)
 	}
 
 	for i, typ := range c.typs {
@@ -312,8 +312,11 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			boolArr := array.NewBooleanData(d)
 			vec.Nulls().SetNullBitmap(boolArr.NullBitmapBytes(), batchLength)
 			vecArr := vec.Bool()
-			for i := 0; i < boolArr.Len(); i++ {
-				vecArr[i] = boolArr.Value(i)
+			_ = vecArr[batchLength-1]
+			for i := 0; i < batchLength; i++ {
+				val := boolArr.Value(i)
+				//gcassert:bce
+				vecArr[i] = val
 			}
 
 		case types.BytesFamily:
@@ -341,13 +344,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				bytes = make([]byte, 0)
 			}
 			offsets := bytesArr.ValueOffsets()
+			prevOffset := offsets[0]
+			offsets = offsets[1:]
+			_ = offsets[batchLength-1]
 			vecArr := vec.Decimal()
-			for i := 0; i < len(offsets)-1; i++ {
+			_ = vecArr[batchLength-1]
+			for i := 0; i < batchLength; i++ {
+				//gcassert:bce
+				offset := offsets[i]
 				if nulls == nil || !nulls.NullAt(i) {
-					if err := vecArr[i].UnmarshalText(bytes[offsets[i]:offsets[i+1]]); err != nil {
+					//gcassert:bce
+					v := &vecArr[i]
+					if err := v.UnmarshalText(bytes[prevOffset:offset]); err != nil {
 						return err
 					}
 				}
+				prevOffset = offset
 			}
 
 		case types.TimestampTZFamily:
@@ -369,13 +381,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				bytes = make([]byte, 0)
 			}
 			offsets := bytesArr.ValueOffsets()
+			prevOffset := offsets[0]
+			offsets = offsets[1:]
+			_ = offsets[batchLength-1]
 			vecArr := vec.Timestamp()
-			for i := 0; i < len(offsets)-1; i++ {
+			_ = vecArr[batchLength-1]
+			for i := 0; i < batchLength; i++ {
+				//gcassert:bce
+				offset := offsets[i]
 				if nulls == nil || !nulls.NullAt(i) {
-					if err := vecArr[i].UnmarshalBinary(bytes[offsets[i]:offsets[i+1]]); err != nil {
+					//gcassert:bce
+					v := &vecArr[i]
+					if err := v.UnmarshalBinary(bytes[prevOffset:offset]); err != nil {
 						return err
 					}
 				}
+				prevOffset = offset
 			}
 
 		case types.IntervalFamily:
@@ -397,11 +418,18 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				bytes = make([]byte, 0)
 			}
 			offsets := bytesArr.ValueOffsets()
+			prevOffset := offsets[0]
+			offsets = offsets[1:]
+			_ = offsets[batchLength-1]
 			vecArr := vec.Interval()
-			for i := 0; i < len(offsets)-1; i++ {
+			_ = vecArr[batchLength-1]
+			for i := 0; i < batchLength; i++ {
+				//gcassert:bce
+				offset := offsets[i]
 				if nulls == nil || !nulls.NullAt(i) {
-					intervalBytes := bytes[offsets[i]:offsets[i+1]]
+					intervalBytes := bytes[prevOffset:offset]
 					var err error
+					//gcassert:bce
 					vecArr[i], err = duration.Decode(
 						int64(binary.LittleEndian.Uint64(intervalBytes[0:sizeOfInt64])),
 						int64(binary.LittleEndian.Uint64(intervalBytes[sizeOfInt64:sizeOfInt64*2])),
@@ -411,6 +439,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 						return err
 					}
 				}
+				prevOffset = offset
 			}
 
 		case typeconv.DatumVecCanonicalTypeFamily:
@@ -430,13 +459,19 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				bytes = make([]byte, 0)
 			}
 			offsets := bytesArr.ValueOffsets()
+			prevOffset := offsets[0]
+			offsets = offsets[1:]
+			_ = offsets[batchLength-1]
 			vecArr := vec.Datum()
-			for i := 0; i < len(offsets)-1; i++ {
+			for i := 0; i < batchLength; i++ {
+				//gcassert:bce
+				offset := offsets[i]
 				if nulls == nil || !nulls.NullAt(i) {
-					if err := vecArr.UnmarshalTo(i, bytes[offsets[i]:offsets[i+1]]); err != nil {
+					if err := vecArr.UnmarshalTo(i, bytes[prevOffset:offset]); err != nil {
 						return err
 					}
 				}
+				prevOffset = offset
 			}
 
 		default:
@@ -490,5 +525,7 @@ func deserializeArrowIntoBytes(
 		// corresponds.
 		b = make([]byte, 0)
 	}
-	coldata.BytesFromArrowSerializationFormat(bytes, b, bytesArr.ValueOffsets())
+	// We have +1 in order to know the end of the last (batchLength-1)'th value.
+	offsets := bytesArr.ValueOffsets()[:batchLength+1]
+	coldata.BytesFromArrowSerializationFormat(bytes, b, offsets)
 }

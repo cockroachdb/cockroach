@@ -1912,9 +1912,16 @@ func TestLint(t *testing.T) {
 		var buf strings.Builder
 		if err := gcassert.GCAssert(&buf,
 			"../../col/coldata",
+			"../../col/colserde",
 			"../../sql/colconv",
 			"../../sql/colexec",
 			"../../sql/colexec/colexecagg",
+			"../../sql/colexec/colexecbase",
+			"../../sql/colexec/colexechash",
+			"../../sql/colexec/colexecjoin",
+			"../../sql/colexec/colexecproj",
+			"../../sql/colexec/colexecsel",
+			"../../sql/colexec/colexecwindow",
 			"../../sql/colfetcher",
 		); err != nil {
 			t.Fatal(err)
