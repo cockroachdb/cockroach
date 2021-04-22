@@ -16,5 +16,7 @@ assets.oss.installed
 dist*/**
 !dist*/index.html
 !distccl/distccl.go
+!distccl/BUILD.bazel
 !distoss/distoss.go
+!distoss/BUILD.bazel
 *manifest.json
