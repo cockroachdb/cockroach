@@ -137,6 +137,10 @@ func (zc *debugZipContext) forAllNodes(
 type nodeLivenesses = map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 
 func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
+	if err := zipCtx.files.validate(); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
