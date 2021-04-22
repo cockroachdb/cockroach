@@ -1660,11 +1660,11 @@ func TestMergeJoiner(t *testing.T) {
 				runner(t, testAllocator, []colexectestutils.Tuples{tc.leftTuples, tc.rightTuples},
 					[][]*types.T{tc.leftTypes, tc.rightTypes},
 					tc.expected, verifier,
-					func(input []colexecop.Operator) (colexecop.Operator, error) {
+					func(sources []colexecop.Operator) (colexecop.Operator, error) {
 						spec := createSpecForMergeJoiner(tc)
 						args := &colexecargs.NewColOperatorArgs{
 							Spec:                spec,
-							Inputs:              input,
+							Inputs:              colexectestutils.MakeInputs(sources),
 							StreamingMemAccount: testMemAcc,
 							DiskQueueCfg:        queueCfg,
 							FDSemaphore:         colexecop.NewTestingSemaphore(mjFDLimit),
@@ -1676,7 +1676,7 @@ func TestMergeJoiner(t *testing.T) {
 						}
 						accounts = append(accounts, result.OpAccounts...)
 						monitors = append(monitors, result.OpMonitors...)
-						return result.Op, nil
+						return result.Root, nil
 					})
 			}
 		}

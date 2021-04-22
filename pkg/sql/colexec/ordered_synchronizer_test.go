@@ -18,13 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/require"
 )
 
 // Adapted from the same-named test in the rowflow package.
@@ -147,7 +147,7 @@ func TestOrderedSync(t *testing.T) {
 			typs[i] = types.Int
 		}
 		colexectestutils.RunTests(t, testAllocator, tc.sources, tc.expected, colexectestutils.OrderedVerifier, func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-			return NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, operatorsToSynchronizerInputs(inputs), typs, tc.ordering)
+			return NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, colexectestutils.MakeInputs(inputs), typs, tc.ordering), nil
 		})
 	}
 }
@@ -183,13 +183,12 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 		}
 		sources[sourceIdx] = append(sources[sourceIdx], t)
 	}
-	inputs := make([]SynchronizerInput, numInputs)
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
-		inputs[i].Op = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
+		inputs[i].Root = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
-	require.NoError(t, err)
+	op := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
 	op.Init()
 	out := colexectestutils.NewOpTestOutput(op, expected)
 	if err := out.Verify(); err != nil {
@@ -213,14 +212,13 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 		batch.ColVec(0).Int64()[i/numInputs] = i
 	}
 
-	inputs := make([]SynchronizerInput, len(batches))
+	inputs := make([]colexecargs.OpWithMetaInfo, len(batches))
 	for i := range batches {
-		inputs[i].Op = colexecop.NewRepeatableBatchSource(testAllocator, batches[i], typs)
+		inputs[i].Root = colexecop.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
-	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
-	require.NoError(b, err)
+	op := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
 	op.Init()
 
 	b.SetBytes(8 * int64(coldata.BatchSize()) * numInputs)
