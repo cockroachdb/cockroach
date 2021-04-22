@@ -840,6 +840,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   node_id             INT NOT NULL,
   application_name    STRING NOT NULL,
   flags               STRING NOT NULL,
+  statement_id        STRING NOT NULL,
   key                 STRING NOT NULL,
   anonymized          STRING,
   count               INT NOT NULL,
@@ -941,14 +942,15 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					flags = "!" + flags
 				}
 				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)),                      // node_id
-					tree.NewDString(appName),                             // application_name
-					tree.NewDString(flags),                               // flags
-					tree.NewDString(stmtKey.anonymizedStmt),              // key
-					anonymized,                                           // anonymized
-					tree.NewDInt(tree.DInt(s.mu.data.Count)),             // count
-					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)), // first_attempt_count
-					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),        // max_retries
+					tree.NewDInt(tree.DInt(nodeID)),                         // node_id
+					tree.NewDString(appName),                                // application_name
+					tree.NewDString(flags),                                  // flags
+					tree.NewDString(strconv.FormatUint(uint64(stmtID), 10)), // statement_id
+					tree.NewDString(stmtKey.anonymizedStmt),                 // key
+					anonymized,                                              // anonymized
+					tree.NewDInt(tree.DInt(s.mu.data.Count)),                // count
+					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)),    // first_attempt_count
+					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),           // max_retries
 					errString, // last_error
 					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),                             // rows_avg
 					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),     // rows_var
