@@ -82,3 +82,38 @@
     background-color: $colors--primary-blue-3;
   }
 }
+
+.numeric-stat-legend {
+  white-space: nowrap;
+  width: 282px;
+  font-family: $font-family--semi-bold;
+  font-size: $font-size--small;
+  line-height: 1.67;
+  letter-spacing: 0.3px;
+  color: $adminui-grey-1;
+  font-weight: 600;
+
+  th {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  td {
+    text-align: right;
+  }
+  &__bar {
+    width: 41px;
+    border-radius: 10px;
+    margin-right: 14px;
+
+    &--mean {
+      height: 13px;
+      background-color: $grey-light;
+    }
+    &--dev {
+      height: 3px;
+      background-color: $colors--primary-blue-3;
+    }
+  }
+}

@@ -12,7 +12,7 @@ import { AggregateStatistics } from "src/statementsTable";
 import { Dropdown } from "src/dropdown";
 import { Button } from "src/button";
 
-import { Tooltip2 as Tooltip } from "src/tooltip2";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   statementDiagnostics,
   statementsRetries,
@@ -36,8 +36,9 @@ export const StatementTableTitle = {
   statements: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             {"SQL statement "}
             <Anchor href={statementsSql} target="_blank">
@@ -48,7 +49,7 @@ export const StatementTableTitle = {
             To view additional details of a SQL statement fingerprint, click
             this to open the Statement Details page.
           </p>
-        </div>
+        </>
       }
     >
       Statements
@@ -57,8 +58,9 @@ export const StatementTableTitle = {
   txtType: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             {
               "Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by "
@@ -78,7 +80,7 @@ export const StatementTableTitle = {
             For statements not in explicit transactions, CockroachDB wraps each
             statement in individual implicit transactions.
           </p>
-        </div>
+        </>
       }
     >
       TXN Type
@@ -87,8 +89,9 @@ export const StatementTableTitle = {
   diagnostics: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             {"Option to activate "}
             <Anchor href={statementDiagnostics} target="_blank">
@@ -99,7 +102,7 @@ export const StatementTableTitle = {
             }
             <code>WAITING</code>, <code>READY</code>, OR <code>ERROR</code>).
           </p>
-        </div>
+        </>
       }
     >
       Diagnostics
@@ -108,8 +111,9 @@ export const StatementTableTitle = {
   retries: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             {"Cumulative number of "}
             <Anchor href={statementsRetries} target="_blank">
@@ -119,7 +123,7 @@ export const StatementTableTitle = {
               " of statements with this fingerprint within the last hour or specified time interval."
             }
           </p>
-        </div>
+        </>
       }
     >
       Retries
@@ -128,8 +132,9 @@ export const StatementTableTitle = {
   executionCount: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             {
               "Cumulative number of executions of statements with this fingerprint within the last hour or specified "
@@ -146,7 +151,7 @@ export const StatementTableTitle = {
             </Anchor>
             {" (red) for the SQL statement fingerprint."}
           </p>
-        </div>
+        </>
       }
     >
       Execution Count
@@ -155,8 +160,9 @@ export const StatementTableTitle = {
   rowsAffected: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             {
               "Average number of rows returned while executing statements with this fingerprint within the last hour or specified "
@@ -170,7 +176,7 @@ export const StatementTableTitle = {
             The gray bar indicates the mean number of rows returned. The blue
             bar indicates one standard deviation from the mean.
           </p>
-        </div>
+        </>
       }
     >
       Rows Affected
@@ -179,8 +185,9 @@ export const StatementTableTitle = {
   latency: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
+      style="tableTitle"
+      content={
+        <>
           <p>
             Average service latency of statements with this fingerprint within
             the last hour or specified time interval.
@@ -189,7 +196,7 @@ export const StatementTableTitle = {
             The gray bar indicates the mean latency. The blue bar indicates one
             standard deviation from the mean.
           </p>
-        </div>
+        </>
       }
     >
       Latency
@@ -324,12 +331,11 @@ export const StatementLink = (props: StatementLinkProps) => {
       <div>
         <Tooltip
           placement="bottom"
-          title={
+          content={
             <pre className={cx("cl-table-link__description")}>
               {getHighlightedText(props.statement, props.search)}
             </pre>
           }
-          overlayClassName={cx("cl-table-link__statement-tooltip--fixed-width")}
         >
           <div className="cl-table-link__tooltip-hover-area">
             {getHighlightedText(

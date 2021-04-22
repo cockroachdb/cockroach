@@ -1,7 +1,7 @@
 import React from "react";
 import { getHighlightedText } from "src/highlightedText";
 import { Anchor } from "src/anchor";
-import { Tooltip2 as Tooltip } from "src/tooltip2";
+import { Tooltip } from "@cockroachlabs/ui-components";
 import { summarize } from "src/util/sql/summarize";
 import { shortStatement } from "src/statementsTable/statementsTable";
 import { statementsSql } from "src/util";
@@ -14,9 +14,6 @@ import Long from "long";
 const statementsCx = classNames.bind(statementsStyles);
 const ownCellStyles = classNames.bind(transactionsCellsStyles);
 const descriptionClassName = statementsCx("cl-table-link__description");
-const overlayClassName = statementsCx(
-  "cl-table-link__statement-tooltip--fixed-width",
-);
 
 const textWrapper = ownCellStyles("text-wrapper");
 const hoverAreaClassName = ownCellStyles("hover-area");
@@ -39,12 +36,11 @@ export const textCell = ({
     <div>
       <Tooltip
         placement="bottom"
-        title={
+        content={
           <pre className={descriptionClassName}>
             {getHighlightedText(transactionText, search)}
           </pre>
         }
-        overlayClassName={overlayClassName}
       >
         <div className={textWrapper}>
           <div
@@ -67,8 +63,8 @@ export const titleCells = {
   transactions: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={statementsCx("tooltip__table--title")}>
+      content={
+        <div className={statementsCx("tooltip__table--content")}>
           <p>
             {"SQL statement "}
             <Anchor href={statementsSql} target="_blank">
@@ -89,8 +85,8 @@ export const titleCells = {
   statements: (
     <Tooltip
       placement="bottom"
-      title={
-        <div className={statementsCx("tooltip__table--title")}>
+      content={
+        <div className={statementsCx("tooltip__table--content")}>
           <p>FILL THE TEXT</p>
         </div>
       }
