@@ -353,7 +353,6 @@ func (tc *Collection) getLeasedDescriptorByID(
 func (tc *Collection) getDescriptorFromStore(
 	ctx context.Context,
 	txn *kv.Txn,
-	codec keys.SQLCodec,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
@@ -365,13 +364,13 @@ func (tc *Collection) getDescriptorFromStore(
 	if !isSystemDescriptor {
 		var found bool
 		var err error
-		found, descID, err = catalogkv.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
+		found, descID, err = catalogkv.LookupObjectID(ctx, txn, tc.codec(), parentID, parentSchemaID, name)
 		if err != nil || !found {
 			return found, nil, err
 		}
 	}
 	// Always pick up a mutable copy so it can be cached.
-	desc, err = catalogkv.GetMutableDescriptorByID(ctx, txn, codec, descID)
+	desc, err = catalogkv.GetMutableDescriptorByID(ctx, txn, tc.codec(), descID)
 	if err != nil {
 		return false, nil, err
 	} else if desc == nil && isSystemDescriptor {
@@ -462,7 +461,8 @@ func (tc *Collection) getDatabaseByName(
 
 		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
 			return tc.getDescriptorFromStore(
-				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable)
+				ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable,
+			)
 		}
 
 		desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
@@ -472,7 +472,8 @@ func (tc *Collection) getDatabaseByName(
 		}
 		if shouldReadFromStore {
 			return tc.getDescriptorFromStore(
-				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable)
+				ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name, flags.RequireMutable,
+			)
 		}
 		return true, desc, nil
 	}
@@ -637,7 +638,8 @@ func (tc *Collection) getObjectByName(
 		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {
 		return tc.getDescriptorFromStore(
-			ctx, txn, tc.codec(), dbID, schemaID, objectName, flags.RequireMutable)
+			ctx, txn, dbID, schemaID, objectName, flags.RequireMutable,
+		)
 	}
 
 	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
@@ -647,7 +649,8 @@ func (tc *Collection) getObjectByName(
 	}
 	if shouldReadFromStore {
 		return tc.getDescriptorFromStore(
-			ctx, txn, tc.codec(), dbID, schemaID, objectName, flags.RequireMutable)
+			ctx, txn, dbID, schemaID, objectName, flags.RequireMutable,
+		)
 	}
 	return true, desc, nil
 }
@@ -792,7 +795,8 @@ func (tc *Collection) getUserDefinedSchemaByName(
 
 		if flags.AvoidCached || flags.RequireMutable || lease.TestingTableLeasesAreDisabled() {
 			return tc.getDescriptorFromStore(
-				ctx, txn, tc.codec(), dbID, keys.RootNamespaceID, schemaName, flags.RequireMutable)
+				ctx, txn, dbID, keys.RootNamespaceID, schemaName, flags.RequireMutable,
+			)
 		}
 
 		// Look up whether the schema is on the database descriptor and return early
