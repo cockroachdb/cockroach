@@ -91,11 +91,12 @@ func createTestPebbleEngine() Engine {
 }
 
 var mvccEngineImpls = []struct {
-	name   string
-	create func() Engine
+	name                     string
+	supportsMultiIntentError bool
+	create                   func() Engine
 }{
-	{"rocksdb", createTestRocksDBEngine},
-	{"pebble", createTestPebbleEngine},
+	{"rocksdb", false, createTestRocksDBEngine},
+	{"pebble", true, createTestPebbleEngine},
 }
 
 // makeTxn creates a new transaction using the specified base

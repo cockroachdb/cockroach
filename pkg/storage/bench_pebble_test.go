@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,7 +38,8 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 		context.Background(),
 		PebbleConfig{
 			StorageConfig: base.StorageConfig{
-				Dir: dir,
+				Dir:      dir,
+				Settings: cluster.MakeTestingClusterSettings(),
 			},
 			Opts: opts,
 		})
