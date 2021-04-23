@@ -23,6 +23,8 @@ type TestingKnobs struct {
 	AfterSinkFlush func() error
 	// MemMonitor, if non-nil, overrides memory monitor to use for changefeed..
 	MemMonitor *mon.BytesMonitor
+	// Dial, if set, is a function that overrides normal sink "dial" functionality.
+	Dial func(s Sink)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
