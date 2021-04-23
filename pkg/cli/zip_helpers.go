@@ -266,6 +266,8 @@ func (r *rangeSelection) items() map[int]struct{} {
 type fileSelection struct {
 	includePatterns []string
 	excludePatterns []string
+	startTimestamp  timestampValue
+	endTimestamp    timestampValue
 }
 
 // validate checks that all specified patterns are valid.
@@ -292,7 +294,7 @@ func (fs *fileSelection) retrievalPatterns() []string {
 }
 
 // isIncluded determine whether the given file name is included in the selection.
-func (fs *fileSelection) isIncluded(filename string) bool {
+func (fs *fileSelection) isIncluded(filename string, ctime, mtime time.Time) bool {
 	// To be included, a file must be included in at least one of the retrieval patterns.
 	included := false
 	for _, p := range fs.retrievalPatterns() {
@@ -311,8 +313,18 @@ func (fs *fileSelection) isIncluded(filename string) bool {
 			break
 		}
 	}
-
-	return included
+	if !included {
+		return false
+	}
+	// Then its mtime must not be before the selected "from" time.
+	if mtime.Before(time.Time(fs.startTimestamp)) {
+		return false
+	}
+	// And the selected "until" time must not be before the ctime.
+	if (*time.Time)(&fs.endTimestamp).Before(ctime) {
+		return false
+	}
+	return true
 }
 
 // to prevent interleaved output.
@@ -519,4 +531,40 @@ func (z *zipReporter) result(err error) error {
 		return nil
 	}
 	return z.fail(err)
+}
+
+// timestampValue is a wrapper around time.Time which supports the
+// pflag.Value interface and can be initialized from a command line flag.
+// It recognizes the following input formats:
+//    YYYY-MM-DD
+//    YYYY-MM-DD HH:MM
+//    YYYY-MM-DD HH:MM:SS
+type timestampValue time.Time
+
+// Type implements the pflag.Value interface.
+func (t *timestampValue) Type() string {
+	return "YYYY-MM-DD [HH:MM[:SS]]"
+}
+
+func (t *timestampValue) String() string {
+	return (*time.Time)(t).Format("2006-01-02 15:04:05")
+}
+
+// Set implements the pflag.Value interface.
+func (t *timestampValue) Set(v string) error {
+	v = strings.TrimSpace(v)
+	var tm time.Time
+	var err error
+	if len(v) <= len("YYYY-MM-DD") {
+		tm, err = time.ParseInLocation("2006-01-02", v, time.UTC)
+	} else if len(v) <= len("YYYY-MM-DD HH:MM") {
+		tm, err = time.ParseInLocation("2006-01-02 15:04", v, time.UTC)
+	} else {
+		tm, err = time.ParseInLocation("2006-01-02 15:04:05", v, time.UTC)
+	}
+	if err != nil {
+		return err
+	}
+	*t = timestampValue(tm)
+	return nil
 }
