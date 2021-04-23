@@ -695,6 +695,9 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
+	if txn.status().IsFinalized() {
+		panic(errors.WithContextTags(errors.AssertionFailedf("UpdateDeadlineMaybe() called on finalized txn"), ctx))
+	}
 	if txn.mu.deadline == nil || deadline.Less(*txn.mu.deadline) {
 		readTimestamp := txn.readTimestampLocked()
 		if deadline.Less(txn.readTimestampLocked()) {
