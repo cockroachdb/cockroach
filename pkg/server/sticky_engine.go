@@ -46,9 +46,7 @@ type StickyInMemEnginesRegistry interface {
 	// Note that if you re-create an existing sticky engine the new attributes
 	// and cache size will be ignored.
 	// One must Close() on the sticky engine before another can be fetched.
-	GetOrCreateStickyInMemEngine(
-		ctx context.Context, spec base.StoreSpec,
-	) (storage.Engine, error)
+	GetOrCreateStickyInMemEngine(ctx context.Context, cfg *Config, spec base.StoreSpec) (storage.Engine, error)
 	// CloseAllStickyInMemEngines closes all sticky in memory engines that were
 	// created by this registry.
 	CloseAllStickyInMemEngines()
@@ -86,7 +84,7 @@ func NewStickyInMemEnginesRegistry() StickyInMemEnginesRegistry {
 
 // GetOrCreateStickyInMemEngine implements the StickyInMemEnginesRegistry interface.
 func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
-	ctx context.Context, spec base.StoreSpec,
+	ctx context.Context, cfg *Config, spec base.StoreSpec,
 ) (storage.Engine, error) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -110,7 +108,7 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 		// create a random one since that is what we like to do in tests (for
 		// better test coverage).
 		Engine: storage.NewInMem(
-			ctx, spec.Attributes, spec.Size.InBytes, storage.MakeRandomSettingsForSeparatedIntents()),
+			ctx, spec.Attributes, cfg.CacheSize, spec.Size.InBytes, storage.MakeRandomSettingsForSeparatedIntents()),
 	}
 	registry.entries[spec.StickyInMemoryEngineID] = engine
 	return engine, nil

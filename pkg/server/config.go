@@ -509,13 +509,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 						"engine no registry available. Please use " +
 						"Knobs.Server.StickyEngineRegistry to provide one.")
 				}
-				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, spec)
+				e, err := knobs.StickyEngineRegistry.GetOrCreateStickyInMemEngine(ctx, cfg, spec)
 				if err != nil {
 					return Engines{}, err
 				}
 				engines = append(engines, e)
 			} else {
-				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, sizeInBytes, cfg.Settings))
+				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, cfg.CacheSize, sizeInBytes, cfg.Settings))
 			}
 		} else {
 			if spec.Size.Percent > 0 {
