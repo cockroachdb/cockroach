@@ -3,11 +3,8 @@
 
 package roachpb
 
-import (
-	"fmt"
-	"strconv"
-	"strings"
-)
+import "github.com/cockroachdb/errors"
+
 
 // GetInner returns the error contained in the union.
 func (ru ErrorDetail) GetInner() error {
@@ -333,7 +330,7 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 	case *InvalidLeaseError:
 		union = &ErrorDetail_InvalidLeaseError{t}
 	default:
-		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
+		panic(errors.AssertionFailedf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
@@ -434,7 +431,7 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 	case *MigrateRequest:
 		union = &RequestUnion_Migrate{t}
 	default:
-		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
+		panic(errors.AssertionFailedf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
@@ -533,7 +530,7 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 	case *MigrateResponse:
 		union = &ResponseUnion_Migrate{t}
 	default:
-		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
+		panic(errors.AssertionFailedf("unsupported type %T for %T", r, ru))
 	}
 	ru.Value = union
 }
@@ -637,7 +634,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 		case *RequestUnion_Migrate:
 			counts[44]++
 		default:
-			panic(fmt.Sprintf("unsupported request: %+v", ru))
+			panic(errors.AssertionFailedf("unsupported request: %+v", ru))
 		}
 	}
 	return counts
@@ -689,37 +686,6 @@ var requestNames = []string{
 	"RngStats",
 	"AdmVerifyProtectedTimestamp",
 	"Migrate",
-}
-
-// Summary prints a short summary of the requests in a batch.
-func (ba *BatchRequest) Summary() string {
-	var b strings.Builder
-	ba.WriteSummary(&b)
-	return b.String()
-}
-
-// WriteSummary writes a short summary of the requests in a batch
-// to the provided builder.
-func (ba *BatchRequest) WriteSummary(b *strings.Builder) {
-	if len(ba.Requests) == 0 {
-		b.WriteString("empty batch")
-		return
-	}
-	counts := ba.getReqCounts()
-	var tmp [10]byte
-	var comma bool
-	for i, v := range counts {
-		if v != 0 {
-			if comma {
-				b.WriteString(", ")
-			}
-			comma = true
-
-			b.Write(strconv.AppendInt(tmp[:0], int64(v), 10))
-			b.WriteString(" ")
-			b.WriteString(requestNames[i])
-		}
-	}
 }
 
 // The following types are used to group the allocations of Responses
@@ -1274,7 +1240,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			br.Responses[i].Value = &buf44[0].union
 			buf44 = buf44[1:]
 		default:
-			panic(fmt.Sprintf("unsupported request: %+v", r))
+			panic(errors.AssertionFailedf("unsupported request: %+v", r))
 		}
 	}
 	return br
@@ -1374,6 +1340,6 @@ func CreateRequest(method Method) Request {
 	case Migrate:
 		return &MigrateRequest{}
 	default:
-		panic(fmt.Sprintf("unsupported method: %+v", method))
+		panic(errors.AssertionFailedf("unsupported method: %+v", method))
 	}
 }
