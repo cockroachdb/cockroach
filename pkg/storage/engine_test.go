@@ -790,11 +790,8 @@ func TestFlushNumSSTables(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m, err := engine.GetMetrics()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m.NumSSTables == 0 {
+			m := engine.GetMetrics()
+			if m.NumSSTables() == 0 {
 				t.Fatal("expected non-zero sstables, got 0")
 			}
 		})
@@ -1272,19 +1269,23 @@ func TestIngestDelayLimit(t *testing.T) {
 	max, ramp := time.Second*5, time.Second*5/10
 
 	for _, tc := range []struct {
-		exp     time.Duration
-		metrics Metrics
+		exp           time.Duration
+		fileCount     int64
+		sublevelCount int32
 	}{
-		{0, Metrics{}},
-		{0, Metrics{L0FileCount: 19, L0SublevelCount: -1}},
-		{0, Metrics{L0FileCount: 20, L0SublevelCount: -1}},
-		{ramp, Metrics{L0FileCount: 21, L0SublevelCount: -1}},
-		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: -1}},
-		{ramp * 2, Metrics{L0FileCount: 22, L0SublevelCount: 22}},
-		{ramp * 2, Metrics{L0FileCount: 55, L0SublevelCount: 22}},
-		{max, Metrics{L0FileCount: 55, L0SublevelCount: -1}},
+		{0, 0, 0},
+		{0, 19, -1},
+		{0, 20, -1},
+		{ramp, 21, -1},
+		{ramp * 2, 22, -1},
+		{ramp * 2, 22, 22},
+		{ramp * 2, 55, 22},
+		{max, 55, -1},
 	} {
-		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.metrics))
+		var m pebble.Metrics
+		m.Levels[0].NumFiles = tc.fileCount
+		m.Levels[0].Sublevels = tc.sublevelCount
+		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &m))
 	}
 }
 

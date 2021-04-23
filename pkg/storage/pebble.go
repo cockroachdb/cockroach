@@ -717,14 +717,6 @@ func (p *Pebble) rawGet(key []byte) ([]byte, error) {
 	return ret, err
 }
 
-// GetCompactionStats implements the Engine interface.
-func (p *Pebble) GetCompactionStats() string {
-	// NB: The initial blank line matches the formatting used by RocksDB and
-	// ensures that compaction stats display will not contain the log prefix
-	// (this method is only used for logging purposes).
-	return "\n" + p.db.Metrics().String()
-}
-
 // MVCCGetProto implements the Engine interface.
 func (p *Pebble) MVCCGetProto(
 	key MVCCKey, msg protoutil.Message,
@@ -970,41 +962,13 @@ func (p *Pebble) Flush() error {
 }
 
 // GetMetrics implements the Engine interface.
-func (p *Pebble) GetMetrics() (*Metrics, error) {
+func (p *Pebble) GetMetrics() Metrics {
 	m := p.db.Metrics()
-
-	// Aggregate compaction stats across levels.
-	var ingestedBytes, compactedBytesRead, compactedBytesWritten, numSSTables int64
-	for _, lm := range m.Levels {
-		ingestedBytes += int64(lm.BytesIngested)
-		compactedBytesRead += int64(lm.BytesRead)
-		compactedBytesWritten += int64(lm.BytesCompacted)
-		numSSTables += lm.NumFiles
+	return Metrics{
+		Metrics:        m,
+		DiskSlowCount:  int64(atomic.LoadUint64(&p.diskSlowCount)),
+		DiskStallCount: int64(atomic.LoadUint64(&p.diskStallCount)),
 	}
-
-	return &Metrics{
-		BlockCacheHits:                 m.BlockCache.Hits,
-		BlockCacheMisses:               m.BlockCache.Misses,
-		BlockCacheUsage:                m.BlockCache.Size,
-		BlockCachePinnedUsage:          0,
-		BloomFilterPrefixChecked:       m.Filter.Hits + m.Filter.Misses,
-		BloomFilterPrefixUseful:        m.Filter.Hits,
-		DiskSlowCount:                  int64(atomic.LoadUint64(&p.diskSlowCount)),
-		DiskStallCount:                 int64(atomic.LoadUint64(&p.diskStallCount)),
-		MemtableTotalSize:              int64(m.MemTable.Size),
-		Flushes:                        m.Flush.Count,
-		FlushedBytes:                   int64(m.Levels[0].BytesFlushed),
-		Compactions:                    m.Compact.Count,
-		IngestedBytes:                  ingestedBytes,
-		CompactedBytesRead:             compactedBytesRead,
-		CompactedBytesWritten:          compactedBytesWritten,
-		TableReadersMemEstimate:        m.TableCache.Size,
-		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
-		L0FileCount:                    m.Levels[0].NumFiles,
-		L0SublevelCount:                int64(m.Levels[0].Sublevels),
-		ReadAmplification:              int64(m.ReadAmp()),
-		NumSSTables:                    numSSTables,
-	}, nil
 }
 
 // GetEncryptionRegistries implements the Engine interface.

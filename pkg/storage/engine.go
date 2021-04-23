@@ -630,11 +630,8 @@ type Engine interface {
 	// Flush causes the engine to write all in-memory data to disk
 	// immediately.
 	Flush() error
-	// GetCompactionStats returns the internal RocksDB compaction stats. See
-	// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
-	GetCompactionStats() string
 	// GetMetrics retrieves metrics from the engine.
-	GetMetrics() (*Metrics, error)
+	GetMetrics() Metrics
 	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
 	// on the store.
 	GetEncryptionRegistries() (*EncryptionRegistries, error)
@@ -747,42 +744,45 @@ type Batch interface {
 	Repr() []byte
 }
 
-// Metrics is a set of Engine metrics. Most are described in RocksDB.
-// Some metrics (eg, `IngestedBytes`) are only exposed by Pebble.
-//
-// Currently, we collect stats from the following sources:
-// 1. RocksDB's internal "tickers" (i.e. counters). They're defined in
-//    rocksdb/statistics.h
-// 2. DBEventListener, which implements RocksDB's EventListener interface.
-// 3. rocksdb::DB::GetProperty().
-//
-// This is a good resource describing RocksDB's memory-related stats:
-// https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-//
-// TODO(jackson): Refactor to mirror or even expose pebble.Metrics when
-// RocksDB is removed.
+// Metrics is a set of Engine metrics. Most are contained in the embedded
+// *pebble.Metrics struct, which has its own documentation.
 type Metrics struct {
-	BlockCacheHits                 int64
-	BlockCacheMisses               int64
-	BlockCacheUsage                int64
-	BlockCachePinnedUsage          int64
-	BloomFilterPrefixChecked       int64
-	BloomFilterPrefixUseful        int64
-	DiskSlowCount                  int64
-	DiskStallCount                 int64
-	MemtableTotalSize              int64
-	Flushes                        int64
-	FlushedBytes                   int64
-	Compactions                    int64
-	IngestedBytes                  int64 // Pebble only
-	CompactedBytesRead             int64
-	CompactedBytesWritten          int64
-	TableReadersMemEstimate        int64
-	PendingCompactionBytesEstimate int64
-	L0FileCount                    int64
-	L0SublevelCount                int64
-	ReadAmplification              int64
-	NumSSTables                    int64
+	*pebble.Metrics
+	// DiskSlowCount counts the number of times Pebble records disk slowness.
+	DiskSlowCount int64
+	// DiskStallCount counts the number of times Pebble observes slow writes
+	// lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
+	DiskStallCount int64
+}
+
+// NumSSTables returns the total number of SSTables in the LSM, aggregated
+// across levels.
+func (m *Metrics) NumSSTables() int64 {
+	var num int64
+	for _, lm := range m.Metrics.Levels {
+		num += lm.NumFiles
+	}
+	return num
+}
+
+// IngestedBytes returns the sum of all ingested tables, aggregated across all
+// levels of the LSM.
+func (m *Metrics) IngestedBytes() uint64 {
+	var ingestedBytes uint64
+	for _, lm := range m.Metrics.Levels {
+		ingestedBytes += lm.BytesIngested
+	}
+	return ingestedBytes
+}
+
+// CompactedBytes returns the sum of bytes read and written during
+// compactions across all levels of the LSM.
+func (m *Metrics) CompactedBytes() (read, written uint64) {
+	for _, lm := range m.Metrics.Levels {
+		read += lm.BytesRead
+		written += lm.BytesCompacted
+	}
+	return read, written
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
@@ -1008,17 +1008,14 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if settings == nil {
 		return
 	}
-	metrics, err := eng.GetMetrics()
-	if err != nil {
-		log.Warningf(ctx, "failed to read metrics: %+v", err)
-		return
-	}
-	targetDelay := calculatePreIngestDelay(settings, metrics)
+	metrics := eng.GetMetrics()
+	targetDelay := calculatePreIngestDelay(settings, metrics.Metrics)
 
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, metrics.L0FileCount, metrics.L0SublevelCount)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
+		targetDelay, metrics.Levels[0].NumFiles, metrics.Levels[0].Sublevels)
 
 	select {
 	case <-time.After(targetDelay):
@@ -1026,15 +1023,16 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	}
 }
 
-func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.Duration {
+func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics) time.Duration {
 	maxDelay := ingestDelayTime.Get(&settings.SV)
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := metrics.L0FileCount
-	if metrics.L0SublevelCount >= 0 {
-		l0ReadAmp = metrics.L0SublevelCount
+	l0ReadAmp := metrics.Levels[0].NumFiles
+	if metrics.Levels[0].Sublevels >= 0 {
+		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
 	}
+
 	if l0ReadAmp > l0ReadAmpLimit {
 		delayPerFile := maxDelay / time.Duration(ramp)
 		targetDelay := time.Duration(l0ReadAmp-l0ReadAmpLimit) * delayPerFile

@@ -58,15 +58,14 @@ func (n *Node) assertEngineHealth(
 		func() {
 			t := time.AfterFunc(maxDuration, func() {
 				n.metrics.DiskStalls.Inc(1)
-				stats := "\n" + eng.GetCompactionStats()
+				m := eng.GetMetrics()
 				logger := log.Warningf
 				if fatalOnExceeded {
 					logger = guaranteedExitFatal
 				}
 				// NB: the disk-stall-detected roachtest matches on this message.
-				logger(ctx, "disk stall detected: unable to write to %s within %s %s",
-					eng, storage.MaxSyncDuration, stats,
-				)
+				logger(ctx, "disk stall detected: unable to write to %s within %s\n%s",
+					eng, storage.MaxSyncDuration, m)
 			})
 			defer t.Stop()
 			if err := storage.WriteSyncNoop(ctx, eng); err != nil {
