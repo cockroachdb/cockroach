@@ -20,10 +20,10 @@ statement error type LineString does not match column type Point
 INSERT INTO geo_table (id, geom) VALUES
   (3, 'SRID=4004;LINESTRING(0.0 0.0, 1.0 2.0)')
 
-statement error unknown SRID for Geometry: 404
+statement error projection for SRID 404 does not exist
 SELECT 'SRID=404;POINT(1.0 2.0)'::geometry
 
-statement error unknown SRID for Geography: 404
+statement error projection for SRID 404 does not exist
 SELECT 'SRID=404;POINT(1.0 2.0)'::geography
 
 statement error pq: object type PointZ does not match column type Point
