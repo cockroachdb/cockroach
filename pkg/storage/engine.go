@@ -195,18 +195,24 @@ type EngineIterator interface {
 	// SeekEngineKeyLT advances the iterator to the first key in the engine
 	// which is < the provided key.
 	SeekEngineKeyLT(key EngineKey) (valid bool, err error)
-	// NextEngineKey advances the iterator to the next key/value in the
-	// iteration. After this call, valid will be true if the iterator was not
-	// originally positioned at the last key. Note that unlike
-	// MVCCIterator.NextKey, this method does not skip other versions with the
-	// same EngineKey.Key.
+	// NextEngineKey advances the iterator to the next key/value in the iteration.
+	// Note that unlike MVCCIterator.NextKey, this method does not skip other
+	// versions with the same EngineKey.Key.
+	//
+	// If an error is returned, valid will be false. If an error is not returned,
+	// valid=false means that the iterator hit the configured upper bound (if any)
+	// or moved past the last key in the engine.
+	//
 	// TODO(sumeer): change MVCCIterator.Next() to match the
 	// return values, change all its callers, and rename this
 	// to Next().
 	NextEngineKey() (valid bool, err error)
 	// PrevEngineKey moves the iterator backward to the previous key/value in
-	// the iteration. After this call, valid will be true if the iterator was
-	// not originally positioned at the first key.
+	// the iteration.
+	//
+	// If an error is returned, valid will be false. If an error is not returned,
+	// valid=false means that the iterator hit the configured lower bound (if any)
+	// or moved before the first key in the engine.
 	PrevEngineKey() (valid bool, err error)
 	// UnsafeEngineKey returns the same value as EngineKey, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
