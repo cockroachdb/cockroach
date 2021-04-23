@@ -64,6 +64,9 @@ func (ex *connExecutor) execPrepare(
 					)
 				}
 				if types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
+					// TODO(ajwerner): How does this work for user-defined types?
+					// The planner is looking up the types here using some transaction,
+					// but which? Is this sane?
 					var err error
 					parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
 					if err != nil {
@@ -283,11 +286,62 @@ func (ex *connExecutor) populatePrepared(
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
 ) (fsm.Event, fsm.EventPayload) {
+	switch ex.machine.CurState().(type) {
+	case stateOpen:
+		return ex.execBindInOpenState(ctx, bindCmd)
+	case stateNoTxn:
+		return ex.execBindInNoTxnState(ctx, bindCmd)
+	default:
+		// TODO(ajwerner): Is this reasonable? Bind comes from drivers and shouldn't
+		// be sent in a rollback or abort state.
+		return eventNonRetriableErr{IsCommit: fsm.False},
+			eventNonRetriableErrPayload{
+				err: pgwirebase.NewProtocolViolationErrorf(
+					"invalid Bind command in state %s", ex.machine.CurState()),
+			}
+	}
+}
 
+// execBindInNoTxnState ensures that the referenced portal exists and returns
+// an event to open an implicit transaction. A transaction is needed to bind
+// arguments as binding arguments to a portal may references types and tables.
+func (ex *connExecutor) execBindInNoTxnState(
+	ctx context.Context, bindCmd BindStmt,
+) (fsm.Event, fsm.EventPayload) {
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
+	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
+	if !ok {
+		return retErr(pgerror.Newf(
+			pgcode.InvalidSQLStatementName,
+			"unknown prepared statement %q", bindCmd.PreparedStatementName))
+	}
 
+	noBeginStmt := (*tree.BeginTransaction)(nil)
+	mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt)
+	if err != nil {
+		return ex.makeErrEvent(err, ps.AST)
+	}
+	return eventTxnStart{ImplicitTxn: fsm.True},
+		makeEventTxnStartPayload(
+			ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
+			mode,
+			sqlTs,
+			historicalTs,
+			ex.transitionCtx)
+}
+
+func (ex *connExecutor) execBindInOpenState(
+	ctx context.Context, bindCmd BindStmt,
+) (fsm.Event, fsm.EventPayload) {
+	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
+		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
+	}
+	// Reset the planner with the txn because this needs to happen any time a
+	// transaction gets used in the open state.
+	p := &ex.planner
+	ex.resetPlanner(ctx, p, ex.state.mu.txn, p.extendedEvalCtx.StmtTimestamp)
 	portalName := bindCmd.PortalName
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {

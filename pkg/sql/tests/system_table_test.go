@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,12 +29,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+// TestSystemTableRegclassBind ensures that it is safe to perform a bind
+// on regclass value to a system table which cannot be cached. Before the
+// commit which introduced this test, this would fail with an opaque error
+// indicating the transaction was already committed.
+func TestSystemTableRegclassBind(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	_, err := tc.ServerConn(0).Exec("SELECT $1::REGCLASS::INT", "system.descriptor")
+	require.NoError(t, err)
+}
 
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
