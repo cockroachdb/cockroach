@@ -431,6 +431,7 @@ func (ih *instrumentationHelper) buildExplainAnalyzePlan(
 
 	ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 	ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+	ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
 
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))
