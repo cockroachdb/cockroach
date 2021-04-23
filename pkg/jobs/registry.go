@@ -21,14 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -871,40 +868,6 @@ func (r *Registry) maybeCancelJobsDeprecated(
 	}
 }
 
-// isOrphaned tries to detect if there are no mutations left to be done for the
-// job which will make it a candidate for garbage collection. Jobs can be left
-// in such inconsistent state if they fail before being removed from the jobs table.
-func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (bool, error) {
-	if payload.Type() != jobspb.TypeSchemaChange {
-		return false, nil
-	}
-	for _, id := range payload.DescriptorIDs {
-		pendingMutations := false
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			td, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.TODOSQLCodec, id)
-			if err != nil {
-				return err
-			}
-			hasAnyMutations := len(td.AllMutations()) != 0 || len(td.GetGCMutations()) != 0
-			hasDropJob := td.TableDesc().DropJobID != 0
-			pendingMutations = hasAnyMutations || hasDropJob
-			return nil
-		}); err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				// Treat missing table descriptors as no longer relevant for the
-				// job payload. See
-				// https://github.com/cockroachdb/cockroach/45399.
-				continue
-			}
-			return false, err
-		}
-		if pendingMutations {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
 const cleanupPageSize = 100
 
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
@@ -950,12 +913,6 @@ func (r *Registry) cleanupOldJobsPage(
 		}
 		remove := false
 		switch Status(*row[2].(*tree.DString)) {
-		case StatusRunning, StatusPending:
-			done, err := r.isOrphaned(ctx, payload)
-			if err != nil {
-				return false, 0, err
-			}
-			remove = done && row[3].(*tree.DTimestamp).Time.Before(olderThan)
 		case StatusSucceeded, StatusCanceled, StatusFailed:
 			remove = payload.FinishedMicros < oldMicros
 		}

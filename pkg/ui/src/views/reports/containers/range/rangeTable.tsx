@@ -401,7 +401,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       };
     }
     const humanized = Print.Timestamp(timestamp);
-    const delta = `(${Print.TimestampDeltaFromNow(timestamp, now)})`;
+    const delta = Print.TimestampDeltaFromNow(timestamp, now);
     return {
       value: [humanized, delta],
       title: [humanized, FixLong(timestamp.wall_time).toString()],

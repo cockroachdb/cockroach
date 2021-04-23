@@ -532,8 +532,16 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descriptor, error) {
 	// Retrieve the descriptor that is being changed.
 	var desc catalog.Descriptor
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID)
+	if err := sc.txn(ctx, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) (err error) {
+		flags := tree.CommonLookupFlags{
+			AvoidCached:    true,
+			Required:       true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+		}
+		desc, err = descriptors.GetImmutableDescriptorByID(ctx, txn, sc.descID, flags)
 		return err
 	}); err != nil {
 		return nil, err
@@ -776,8 +784,10 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
+	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		flags := tree.ObjectLookupFlagsWithRequired()
+		flags.AvoidCached = true
+		desc, err := descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
 		if err != nil {
 			return err
 		}
@@ -2022,6 +2032,7 @@ func createSchemaChangeEvalCtx(
 	execCfg *ExecutorConfig,
 	ts hlc.Timestamp,
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	descriptors *descs.Collection,
 ) extendedEvalContext {
 
 	sd := NewFakeSessionData()
@@ -2032,6 +2043,7 @@ func createSchemaChangeEvalCtx(
 		// other fields are used.
 		Tracing: &SessionTracing{},
 		ExecCfg: execCfg,
+		Descs:   descriptors,
 		EvalContext: tree.EvalContext{
 			SessionData:      sd,
 			InternalExecutor: ieFactory(ctx, sd),
