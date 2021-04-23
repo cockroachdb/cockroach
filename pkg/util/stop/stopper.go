@@ -14,15 +14,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -30,10 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
-
-func init() {
-	leaktest.PrintLeakedStoppers = PrintLeakedStoppers
-}
 
 const asyncTaskNamePrefix = "[async] "
 
@@ -45,34 +38,9 @@ var ErrThrottled = errors.New("throttled on async limiting semaphore")
 // process new work.
 var ErrUnavailable = &roachpb.NodeUnavailableError{}
 
-func register(s *Stopper) {
-	trackedStoppers.Lock()
-	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
-		stopperWithStack{s: s, createdAt: string(debug.Stack())})
-	trackedStoppers.Unlock()
-}
-
-func unregister(s *Stopper) {
-	trackedStoppers.Lock()
-	defer trackedStoppers.Unlock()
-	sl := trackedStoppers.stoppers
-	for i, tracked := range sl {
-		if tracked.s == s {
-			trackedStoppers.stoppers = sl[:i+copy(sl[i:], sl[i+1:])]
-			return
-		}
-	}
-	panic("attempt to unregister untracked stopper")
-}
-
 type stopperWithStack struct {
 	s         *Stopper
 	createdAt string // stack from NewStopper()
-}
-
-var trackedStoppers struct {
-	syncutil.Mutex
-	stoppers []stopperWithStack
 }
 
 // HandleDebug responds with the list of stopper tasks actively running.
@@ -83,16 +51,6 @@ func HandleDebug(w http.ResponseWriter, r *http.Request) {
 	for _, ss := range trackedStoppers.stoppers {
 		s := ss.s
 		fmt.Fprintf(w, "%p: %d tasks", s, s.NumTasks())
-	}
-}
-
-// PrintLeakedStoppers prints (using `t`) the creation site of each Stopper
-// for which `.Stop()` has not yet been called.
-func PrintLeakedStoppers(t testing.TB) {
-	trackedStoppers.Lock()
-	defer trackedStoppers.Unlock()
-	for _, tracked := range trackedStoppers.stoppers {
-		t.Errorf("leaked stopper, created at:\n%s", tracked.createdAt)
 	}
 }
 
