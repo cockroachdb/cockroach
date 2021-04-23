@@ -1752,3 +1752,36 @@ func (p *planner) checkNoRegionalByRowChangeUnderway(
 		},
 	)
 }
+
+// checkNoRegionChangeUnderway checks whether the regions on the current
+// database are currently being modified.
+func (p *planner) checkNoRegionChangeUnderway(
+	ctx context.Context, dbID descpb.ID, op string,
+) error {
+	// SynthesizeRegionConfig touches the type descriptor row, which
+	// prevents a race with a racing conflicting schema change.
+	r, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbID,
+		p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+	if len(r.TransitioningRegions()) > 0 {
+		return errors.WithDetailf(
+			errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot %s while a region is being added or dropped on the database",
+					op,
+				),
+				"cancel the job which is adding or dropping the region or try again later",
+			),
+			"region %s is currently being added or dropped",
+			r.TransitioningRegions()[0],
+		)
+	}
+	return nil
+}
