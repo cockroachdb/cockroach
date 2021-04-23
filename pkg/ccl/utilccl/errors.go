@@ -9,27 +9,12 @@
 package utilccl
 
 import (
-	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 )
-
-const retryableJobsFlowError = "retryable jobs error"
-
-type retryableError struct {
-	wrapped error
-}
-
-// MarkRetryableError wraps the given error, marking it as retryable to
-// jobs.
-func MarkRetryableError(e error) error {
-	return &retryableError{wrapped: e}
-}
-
-// Error implements the error interface.
-func (e *retryableError) Error() string {
-	return fmt.Sprintf("%s: %s", retryableJobsFlowError, e.wrapped.Error())
-}
-
 
 // IsDistSQLRetryableError returns true if the supplied error, or any of its parent
 // causes is an rpc error.
@@ -48,4 +33,19 @@ func IsDistSQLRetryableError(err error) bool {
 	// it get an error with "rpc error" in the message from the call to
 	// `(*DistSQLPlanner).Run`.
 	return strings.Contains(errStr, `rpc error`)
+}
+
+// IsPermanentBulkJobError returns true if the error results in a permanent
+// failure of a bulk job (IMPORT, BACKUP, RESTORE). This function is a allowlist
+// instead of a blocklist: only known safe errors are confirmed to not be
+// permanent errors. Anything unknown is assumed to be permanent.
+func IsPermanentBulkJobError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return !IsDistSQLRetryableError(err) &&
+		!grpcutil.IsClosedConnection(err) &&
+		!flowinfra.IsNoInboundStreamConnectionError(err) &&
+		!kvcoord.IsSendError(err)
 }

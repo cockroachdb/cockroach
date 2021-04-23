@@ -2158,3 +2158,8 @@ func newSendError(msg string) error {
 func (s sendError) Error() string {
 	return "failed to send RPC: " + s.message
 }
+
+// IsSendError returns true if err is a sendError.
+func IsSendError(err error) bool {
+	return errors.HasType(err, sendError{})
+}
