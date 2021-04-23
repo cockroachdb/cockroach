@@ -2635,11 +2635,8 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	}
 
 	// Get the latest engine metrics.
-	m, err := s.engine.GetMetrics()
-	if err != nil {
-		return err
-	}
-	s.metrics.updateEngineMetrics(*m)
+	m := s.engine.GetMetrics()
+	s.metrics.updateEngineMetrics(m)
 
 	// Get engine Env stats.
 	envStats, err := s.engine.GetEnvStats()
@@ -2653,7 +2650,9 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	// non-periodic callers of this method don't trigger expensive
 	// stats.
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
-		log.Infof(ctx, "%s", s.engine.GetCompactionStats())
+		// NB: The initial blank line ensures that compaction stats display
+		// will not contain the log prefix.
+		log.Infof(ctx, "\n%s", m.Metrics)
 	}
 	return nil
 }
