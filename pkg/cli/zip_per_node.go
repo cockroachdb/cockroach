@@ -306,7 +306,8 @@ func (zc *debugZipContext) collectPerNodeData(
 
 		nodePrinter.info("%d heap profiles found", len(profiles.Files))
 		for _, file := range profiles.Files {
-			if !zipCtx.files.isIncluded(file.Name) {
+			ctime := extractTimeFromFileName(file.Name)
+			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
 				nodePrinter.info("skipping excluded heap profile: %s", file.Name)
 				continue
 			}
@@ -377,7 +378,8 @@ func (zc *debugZipContext) collectPerNodeData(
 
 		nodePrinter.info("%d goroutine dumps found", len(goroutinesResp.Files))
 		for _, file := range goroutinesResp.Files {
-			if !zipCtx.files.isIncluded(file.Name) {
+			ctime := extractTimeFromFileName(file.Name)
+			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
 				nodePrinter.info("skipping excluded goroutine dump: %s", file.Name)
 				continue
 			}
@@ -445,7 +447,9 @@ func (zc *debugZipContext) collectPerNodeData(
 
 		nodePrinter.info("%d log files found", len(logs.Files))
 		for _, file := range logs.Files {
-			if !zipCtx.files.isIncluded(file.Name) {
+			ctime := extractTimeFromFileName(file.Name)
+			mtime := timeutil.Unix(0, file.ModTimeNanos)
+			if !zipCtx.files.isIncluded(file.Name, ctime, mtime) {
 				nodePrinter.info("skipping excluded log file: %s", file.Name)
 				continue
 			}
