@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 )
@@ -1298,3 +1300,24 @@ func BenchmarkLockTable(b *testing.B) {
 // - Test with concurrency in lockTable calls.
 //   - test for race in gc'ing lock that has since become non-empty or new
 //     non-empty one has been inserted.
+
+func TestLockStateSafeFormat(t *testing.T) {
+	l := &lockState{
+		id:     1,
+		key:    []byte("KEY"),
+		endKey: []byte("END"),
+	}
+	require.EqualValues(t, " lock: ‹\"KEY\"›\n  empty\n", redact.Sprint(l))
+	require.EqualValues(t, " lock: ‹×›\n  empty\n", redact.Sprint(l).Redact())
+
+	l.holder.locked = true
+	l.holder.holder[lock.Replicated] = lockHolderInfo{
+		txn:  &enginepb.TxnMeta{ID: uuid.NamespaceDNS},
+		ts:   hlc.Timestamp{WallTime: 123, Logical: 7},
+		seqs: []enginepb.TxnSeq{1},
+	}
+	require.EqualValues(t,
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8, ts: 0.000000123,7, info: repl epoch: 0, seqs: [1]\n",
+		redact.Sprint(l).Redact(),
+	)
+}
