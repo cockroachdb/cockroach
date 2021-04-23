@@ -12,15 +12,13 @@ package spanset
 
 import (
 	"context"
-	"fmt"
-	"runtime/debug"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // SpanAccess records the intended mode of access in a SpanSet.
@@ -34,14 +32,17 @@ const (
 )
 
 // String returns a string representation of the SpanAccess.
-func (a SpanAccess) String() string {
+func (a SpanAccess) String() string { return redact.StringWithoutMarkers(a) }
+
+// SafeFormat implements redact.SafeFormatter.
+func (a SpanAccess) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch a {
 	case SpanReadOnly:
-		return "read"
+		p.SafeString("read")
 	case SpanReadWrite:
-		return "write"
+		p.SafeString("write")
 	default:
-		panic("unreachable")
+		panic(errors.New("unreachable"))
 	}
 }
 
@@ -56,14 +57,17 @@ const (
 )
 
 // String returns a string representation of the SpanScope.
-func (a SpanScope) String() string {
+func (a SpanScope) String() string { return redact.StringWithoutMarkers(a) }
+
+// SafeFormat implements redact.SafeFormatter.
+func (a SpanScope) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch a {
 	case SpanGlobal:
-		return "global"
+		p.SafeString("global")
 	case SpanLocal:
-		return "local"
+		p.SafeString("local")
 	default:
-		panic("unreachable")
+		panic(errors.New("unreachable"))
 	}
 }
 
@@ -86,16 +90,23 @@ type SpanSet struct {
 
 // String prints a string representation of the SpanSet.
 func (s *SpanSet) String() string {
-	var buf strings.Builder
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *SpanSet) SafeFormat(p redact.SafePrinter, _ rune) {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			for _, cur := range s.GetSpans(sa, ss) {
-				fmt.Fprintf(&buf, "%s %s: %s at %s\n",
-					sa, ss, cur.Span.String(), cur.Timestamp.String())
+			spans := s.GetSpans(sa, ss)
+			for i := range spans {
+				cur := &spans[i]
+				// TODO(knz): Use &cur.Span instead of cur.Span if/when
+				// roachpb.Span ever implements SafeFormatter.
+				p.Printf("%s %s: %s at %s\n",
+					sa, ss, cur.Span.String(), &cur.Timestamp)
 			}
 		}
 	}
-	return buf.String()
 }
 
 // Len returns the total number of spans tracked across all accesses and scopes.
@@ -251,9 +262,9 @@ func (s *SpanSet) CheckAllowedAt(
 				return mvcc && timestamp.LessEq(declTimestamp)
 			case SpanReadWrite:
 				// NB: should not get here, see checkAllowed.
-				panic("unexpected SpanReadWrite access")
+				panic(errors.AssertionFailedf("unexpected SpanReadWrite access"))
 			default:
-				panic("unexpected span access")
+				panic(errors.AssertionFailedf("unexpected span access"))
 			}
 		case SpanReadWrite:
 			switch access {
@@ -266,10 +277,10 @@ func (s *SpanSet) CheckAllowedAt(
 				// that timestamp of above. Non-MVCC access is not allowed.
 				return mvcc && declTimestamp.LessEq(timestamp)
 			default:
-				panic("unexpected span access")
+				panic(errors.AssertionFailedf("unexpected span access"))
 			}
 		default:
-			panic("unexpected span access")
+			panic(errors.AssertionFailedf("unexpected span access"))
 		}
 	})
 }
@@ -291,7 +302,7 @@ func (s *SpanSet) checkAllowed(
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debug.Stack())
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", access, span, s)
 }
 
 // contains returns whether s1 contains s2. Unlike Span.Contains, this function
