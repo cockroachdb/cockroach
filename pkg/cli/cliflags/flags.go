@@ -1332,6 +1332,52 @@ You can use the 'debug list-files' command to explore how
 this flag is applied.`,
 	}
 
+	ZipFilesFrom = FlagInfo{
+		Name: "files-from",
+		Description: `
+Limit file collection to those files modified after the
+specified timestamp, inclusive.
+The timestamp can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is 48 hours before now.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
+	ZipFilesUntil = FlagInfo{
+		Name: "files-until",
+		Description: `
+Limit file collection to those files created before the
+specified timestamp, inclusive.
+The timestamp can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is some time beyond
+the current time, to ensure files created during
+the collection are also included.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
