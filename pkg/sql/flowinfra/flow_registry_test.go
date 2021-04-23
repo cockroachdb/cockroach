@@ -592,8 +592,8 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 
 	// Ensure RegisterFlow performs a Push.
 	meta := <-pushChan
-	if !testutils.IsError(meta.Err, errNoInboundStreamConnection.Error()) {
-		t.Fatalf("unexpected err %v, expected %s", meta.Err, errNoInboundStreamConnection)
+	if !testutils.IsError(meta.Err, ErrNoInboundStreamConnection.Error()) {
+		t.Fatalf("unexpected err %v, expected %s", meta.Err, ErrNoInboundStreamConnection)
 	}
 
 	// Attempt to register a flow. Note that this flow has no inbound streams, so
