@@ -105,8 +105,12 @@ type everythingTestRow struct {
 
 var everythingTestRows = func() []everythingTestRow {
 	return []everythingTestRow{
-		{1, "Small", "c", []byte("bin"), timeutil.Unix(946684800, 0), 1, -2, -1.5, "-12.345", `{"a": "b", "c": {"d": ["e", 11, null]}}`},
-		{2, "Large", "c2", []byte("bin2"), timeutil.Unix(946684800, 0), 3525343334, 3, 1.2, "12.345", `{}`},
+		{1, "Small", string([]byte{99, 32, 32, 32, 32, 32, 32, 32, 32, 32}), []byte("bin"),
+			timeutil.Unix(946684800, 0), 1, -2, -1.5, "-12.345",
+			`{"a": "b", "c": {"d": ["e", 11, null]}}`},
+		{2, "Large", string([]byte{99, 50, 32, 32, 32, 32, 32, 32, 32, 32}), []byte("bin2"),
+			timeutil.Unix(946684800, 0), 3525343334, 3,
+			1.2, "12.345", `{}`},
 	}
 }()
 
