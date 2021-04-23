@@ -15,7 +15,6 @@ package log
 
 import (
 	"context"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // logging is the global state of the logging setup.
@@ -427,7 +427,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 func DumpStacks(ctx context.Context) {
 	allStacks := getStacks(true)
 	// TODO(knz): This should really be a "debug" level, not "info".
-	Infof(ctx, "stack traces:\n%s", allStacks)
+	Infof(ctx, "stack traces:\n%s", redact.RedactableBytes(allStacks))
 }
 
 func setActive() {
@@ -435,7 +435,7 @@ func setActive() {
 	defer logging.mu.Unlock()
 	if !logging.mu.active {
 		logging.mu.active = true
-		logging.mu.firstUseStack = string(debug.Stack())
+		logging.mu.firstUseStack = string(getStacks(false))
 	}
 }
 
