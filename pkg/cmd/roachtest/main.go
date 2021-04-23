@@ -87,6 +87,8 @@ func main() {
 	f := rootCmd.PersistentFlags().VarPF(
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
+	rootCmd.PersistentFlags().BoolVar(
+		&insecure, "insecure", false, "use an insecure cluster")
 
 	var listBench bool
 

@@ -51,7 +51,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 					return c.RunE(ctx, c.Node(i),
 						fmt.Sprintf(
 							`mkdir -p {log-dir} && `+
-								`./cockroach start --insecure --background --store={store-dir} `+
+								`./cockroach start `+c.secureFlags()+` --background --store={store-dir} `+
 								`--log-dir={log-dir} --cache=10%% --max-sql-memory=10%% `+
 								`--listen-addr=:{pgport:%[1]d} --http-port=$[{pgport:%[1]d}+1] `+
 								`--join=`+strings.Join(addrs, ",")+
@@ -61,7 +61,11 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 
 			urlMap := make(map[int]string)
 			for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
-				urlMap[i+1] = `http://` + addr
+				urlSchema := "https://"
+				if insecure {
+					urlSchema = "http://"
+				}
+				urlMap[i+1] = urlSchema + addr
 			}
 
 			// Wait for the servers to bind their ports.
@@ -128,7 +132,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 							// The actual contents of the cookie don't matter; the presence of
 							// a valid encoded cookie is enough to trigger the authentication
 							// code paths.
-						}, false /* forHTTPSOnly - cluster is insecure */)
+						}, !insecure /* forHTTPSOnly - cluster is insecure */)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -149,7 +153,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			}
 
 			c.Run(ctx, c.Node(initNode),
-				fmt.Sprintf(`./cockroach init --insecure --port={pgport:%d}`, initNode))
+				fmt.Sprintf(`./cockroach init %s --port={pgport:%d}`, c.secureFlags(), initNode))
 			if err := g.Wait(); err != nil {
 				t.Fatal(err)
 			}
@@ -158,10 +162,8 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 			waitForFullReplication(t, dbs[0])
 
 			execCLI := func(runNode int, extraArgs ...string) (string, error) {
-				args := []string{"./cockroach"}
+				args := []string{"./cockroach", c.secureFlags(), fmt.Sprintf("--port={pgport:%d}", runNode)}
 				args = append(args, extraArgs...)
-				args = append(args, "--insecure")
-				args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 				buf, err := c.RunWithBuffer(ctx, c.l, c.Node(runNode), args...)
 				t.l.Printf("%s\n", buf)
 				return string(buf), err

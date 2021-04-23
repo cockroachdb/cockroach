@@ -206,7 +206,9 @@ var measureRE = regexp.MustCompile(`real[^0-9]+([0-9.]+)`)
 // escaping. It's not useful for anything but simple sanity checks.
 func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) time.Duration {
 	_, port := addrToHostPort(tc.cluster, tc.ExternalAddr(ctx, tc.Node(fromNode))[0])
-	b, err := tc.cluster.RunWithBuffer(ctx, tc.cluster.l, tc.cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
+	b, err := tc.cluster.RunWithBuffer(ctx, tc.cluster.l, tc.cluster.Node(fromNode),
+		"time", "-p", "./cockroach", "sql", tc.cluster.secureFlags(),
+		"--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
 	tc.cluster.l.Printf("%s\n", b)
 	if err != nil {
 		tc.cluster.t.Fatal(err)

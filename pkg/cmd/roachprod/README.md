@@ -54,6 +54,9 @@ roachprod start ${CLUSTER}
 
 # Check the admin UI.
 roachprod admin --open ${CLUSTER}:1
+# For secure clusters, create a user and grant admin privileges
+roachprod sql ${CLUSTER}:1 -- -e "CREATE USER craig WITH PASSWORD 'cockroach';"
+roachprod sql ${CLUSTER}:1 -- -e "GRANT ADMIN TO craig;"
 
 # Run a workload.
 roachprod run ${CLUSTER}:4 -- ./workload init kv
