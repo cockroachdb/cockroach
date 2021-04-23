@@ -388,6 +388,20 @@ func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	)
 }
 
+// AddMaxDiskUsage adds a top-level field for the disk space used by the query.
+func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
+	// If we're redacting just leave this out to avoid keep logic test output
+	// independent of disk spilling.  Disk spilling is controlled by a metamorphic
+	// constant so it may or may not occur randomly so it makes sense to omit this
+	// information entirely if we're redacting.   RFC: do we redact in any other
+	// contexts besides logictest where this might be undesirable?
+	if !ob.flags.Redact.Has(RedactVolatile) && bytes > 0 {
+		// RFC: diagram uses "max scratch disk allocated" should I unify?
+		ob.AddTopLevelField("maximum sql temp disk usage",
+			humanizeutil.IBytes(bytes))
+	}
+}
+
 // AddNetworkStats adds a top-level field for network statistics.
 func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 	ob.AddRedactableTopLevelField(
