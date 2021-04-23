@@ -118,15 +118,15 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 
 // Next is part of the RowSource interface.
 func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	if bp.State != execinfra.StateRunning {
-		return nil, bp.DrainHelper()
-	}
-
 	for prog := range bp.progCh {
 		// Take a copy so that we can send the progress address to the output
 		// processor.
 		p := prog
 		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p}
+	}
+
+	if bp.State != execinfra.StateRunning {
+		return nil, bp.DrainHelper()
 	}
 
 	if bp.backupErr != nil {
