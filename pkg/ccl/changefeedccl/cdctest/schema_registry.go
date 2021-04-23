@@ -130,3 +130,18 @@ func (r *SchemaRegistry) EncodedAvroToNative(b []byte) (interface{}, error) {
 	native, _, err := codec.NativeFromBinary(b)
 	return native, err
 }
+
+// AvroToJSON converts avro bytes to their JSON representation.
+func (r *SchemaRegistry) AvroToJSON(avroBytes []byte) ([]byte, error) {
+	if len(avroBytes) == 0 {
+		return nil, nil
+	}
+	native, err := r.EncodedAvroToNative(avroBytes)
+	if err != nil {
+		return nil, err
+	}
+	// The avro textual format is a more natural fit, but it's non-deterministic
+	// because of go's randomized map ordering. Instead, we use json.Marshal,
+	// which sorts its object keys and so is deterministic.
+	return json.Marshal(native)
+}
