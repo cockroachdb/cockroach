@@ -166,7 +166,7 @@ type hashJoinerSourceSpec struct {
 // all build table rows that have never been matched and stitching it together
 // with NULL values on the probe side.
 type hashJoiner struct {
-	twoInputNode
+	*joinHelper
 
 	// buildSideAllocator should be used when building the hash table from the
 	// right input.
@@ -245,9 +245,10 @@ var _ colexecop.Resetter = &hashJoiner{}
 // TPCH queries using tpchvec/bench.
 const HashJoinerInitialNumBuckets = 256
 
-func (hj *hashJoiner) Init() {
-	hj.inputOne.Init()
-	hj.inputTwo.Init()
+func (hj *hashJoiner) Init(ctx context.Context) {
+	if !hj.init(ctx) {
+		return
+	}
 
 	allowNullEquality, probeMode := false, colexechash.HashTableDefaultProbeMode
 	if hj.spec.JoinType.IsSetOpJoin() {
@@ -258,6 +259,7 @@ func (hj *hashJoiner) Init() {
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 1.0
 	hj.ht = colexechash.NewHashTable(
+		ctx,
 		hj.buildSideAllocator,
 		hashTableLoadFactor,
 		hj.hashTableInitialNumBuckets,
@@ -274,11 +276,11 @@ func (hj *hashJoiner) Init() {
 	hj.state = hjBuilding
 }
 
-func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
+func (hj *hashJoiner) Next() coldata.Batch {
 	for {
 		switch hj.state {
 		case hjBuilding:
-			hj.build(ctx)
+			hj.build()
 			if hj.ht.Vals.Length() == 0 {
 				// The build side is empty, so we might be able to
 				// short-circuit probing phase altogether.
@@ -288,7 +290,7 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 			}
 			continue
 		case hjProbing:
-			output := hj.exec(ctx)
+			output := hj.exec()
 			if output.Length() == 0 {
 				if hj.spec.trackBuildMatches {
 					hj.state = hjEmittingRight
@@ -315,8 +317,8 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (hj *hashJoiner) build(ctx context.Context) {
-	hj.ht.FullBuild(ctx, hj.inputTwo)
+func (hj *hashJoiner) build() {
+	hj.ht.FullBuild(hj.inputTwo)
 
 	// We might have duplicates in the hash table, so we need to set up
 	// same and visited slices for the prober.
@@ -453,7 +455,7 @@ func (hj *hashJoiner) prepareForCollecting(batchSize int) {
 // left source columns and M is the number of right source columns. The first N
 // columns correspond to the respective left source columns, followed by the
 // right source columns as the last M elements.
-func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
+func (hj *hashJoiner) exec() coldata.Batch {
 	if batch := hj.probeState.prevBatch; batch != nil {
 		// We didn't finish probing the last read batch on the previous call to
 		// exec, so we continue where we left off.
@@ -474,7 +476,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 		// There were no matches in that batch, so we move on to the next one.
 	}
 	for {
-		batch := hj.inputOne.Next(ctx)
+		batch := hj.inputOne.Next()
 		batchSize := batch.Length()
 
 		if batchSize == 0 {
@@ -496,9 +498,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			// ComputeBuckets.
 			hj.probeState.buckets = hj.probeState.buckets[:batchSize]
 		}
-		hj.ht.ComputeBuckets(
-			ctx, hj.probeState.buckets, hj.ht.Keys, batchSize, sel,
-		)
+		hj.ht.ComputeBuckets(hj.probeState.buckets, hj.ht.Keys, batchSize, sel)
 
 		// Then, we initialize GroupID with the initial hash buckets and
 		// ToCheck with all applicable indices.
@@ -664,7 +664,7 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 	})
 }
 
-func (hj *hashJoiner) ExportBuffered(ctx context.Context, input colexecop.Operator) coldata.Batch {
+func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
 	if hj.inputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
@@ -807,7 +807,7 @@ func NewHashJoiner(
 	memoryLimit int64,
 ) colexecop.ResettableOperator {
 	return &hashJoiner{
-		twoInputNode:               newTwoInputNode(leftSource, rightSource),
+		joinHelper:                 newJoinHelper(leftSource, rightSource),
 		buildSideAllocator:         buildSideAllocator,
 		outputUnlimitedAllocator:   outputUnlimitedAllocator,
 		spec:                       spec,

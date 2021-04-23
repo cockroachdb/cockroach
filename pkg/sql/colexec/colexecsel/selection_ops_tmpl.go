@@ -20,8 +20,6 @@
 package colexecsel
 
 import (
-	"context"
-
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -175,14 +173,14 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	colIdx         int
 	overloadHelper execgen.OverloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	col1Idx        int
 	col2Idx        int
 	overloadHelper execgen.OverloadHelper
@@ -194,7 +192,7 @@ type _OP_CONST_NAME struct {
 	constArg _R_GO_TYPE
 }
 
-func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
+func (p *_OP_CONST_NAME) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -203,7 +201,7 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -225,10 +223,6 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (p *_OP_CONST_NAME) Init() {
-	p.Input.Init()
-}
-
 // {{end}}
 
 // {{define "selOp"}}
@@ -236,7 +230,7 @@ type _OP_NAME struct {
 	selOpBase
 }
 
-func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
+func (p *_OP_NAME) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -245,7 +239,7 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -268,10 +262,6 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
-}
-
-func (p *_OP_NAME) Init() {
-	p.Input.Init()
 }
 
 // {{end}}
@@ -305,8 +295,8 @@ func GetSelectionConstOperator(
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		colIdx:       colIdx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		colIdx:         colIdx,
 	}
 	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
 		// Tuple comparison has special null-handling semantics, so we will
@@ -360,9 +350,9 @@ func GetSelectionOperator(
 ) (colexecop.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		col1Idx:      col1Idx,
-		col2Idx:      col2Idx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		col1Idx:        col1Idx,
+		col2Idx:        col2Idx,
 	}
 	if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
 		// Tuple comparison has special null-handling semantics, so we will

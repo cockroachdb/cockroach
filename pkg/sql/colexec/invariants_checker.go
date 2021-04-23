@@ -25,9 +25,9 @@ import (
 // should be planned between other Operators in tests.
 type InvariantsChecker struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 	colexecop.NonExplainable
 
-	initStatus     colexecop.OperatorInitStatus
 	metadataSource colexecop.MetadataSource
 }
 
@@ -45,16 +45,18 @@ func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
 }
 
 // Init implements the colexecop.Operator interface.
-func (i *InvariantsChecker) Init() {
-	i.initStatus = colexecop.OperatorInitialized
-	i.Input.Init()
+func (i *InvariantsChecker) Init(ctx context.Context) {
+	if !i.InitHelper.Init(ctx) {
+		return
+	}
+	i.Input.Init(i.Ctx)
 }
 
 // assertInitWasCalled asserts that Init() has been called on the invariants
 // checker and returns a boolean indicating whether the execution should be
 // short-circuited (true means that the caller should just return right away).
 func (i *InvariantsChecker) assertInitWasCalled() bool {
-	if i.initStatus != colexecop.OperatorInitialized {
+	if i.Ctx == nil {
 		if c, ok := i.Input.(*Columnarizer); ok {
 			if c.removedFromFlow {
 				// This is a special case in which we allow for the operator to
@@ -69,11 +71,11 @@ func (i *InvariantsChecker) assertInitWasCalled() bool {
 }
 
 // Next implements the colexecop.Operator interface.
-func (i *InvariantsChecker) Next(ctx context.Context) coldata.Batch {
+func (i *InvariantsChecker) Next() coldata.Batch {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return coldata.ZeroBatch
 	}
-	b := i.Input.Next(ctx)
+	b := i.Input.Next()
 	n := b.Length()
 	if n == 0 {
 		return b

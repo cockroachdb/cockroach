@@ -28,7 +28,7 @@ import (
 // undesirable - for example when the whole query is planned on the gateway and
 // we want to run it in the RootTxn.
 type SerialUnorderedSynchronizer struct {
-	ctx  context.Context
+	colexecop.InitHelper
 	span *tracing.Span
 
 	inputs []colexecargs.OpWithMetaInfo
@@ -61,31 +61,24 @@ func NewSerialUnorderedSynchronizer(
 	}
 }
 
-// Init is part of the Operator interface.
-func (s *SerialUnorderedSynchronizer) Init() {
+// Init is part of the colexecop.Operator interface.
+func (s *SerialUnorderedSynchronizer) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
+	s.Ctx, s.span = execinfra.ProcessorSpan(s.Ctx, "serial unordered sync")
 	for _, input := range s.inputs {
-		input.Root.Init()
+		input.Root.Init(s.Ctx)
 	}
 }
 
-// maybeStartTracingSpan stores the context and possibly starts a tracing span
-// on its first call and is a noop on all consequent calls.
-// TODO(yuzefovich): remove this once ctx is passed in Init.
-func (s *SerialUnorderedSynchronizer) maybeStartTracingSpan(ctx context.Context) {
-	if s.ctx == nil {
-		// It is the very first call to maybeStartTracingSpan.
-		s.ctx, s.span = execinfra.ProcessorSpan(ctx, "serial unordered sync")
-	}
-}
-
-// Next is part of the Operator interface.
-func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
-	s.maybeStartTracingSpan(ctx)
+// Next is part of the colexecop.Operator interface.
+func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
 			return coldata.ZeroBatch
 		}
-		b := s.inputs[s.curSerialInputIdx].Root.Next(s.ctx)
+		b := s.inputs[s.curSerialInputIdx].Root.Next()
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 		} else {
@@ -95,12 +88,8 @@ func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (s *SerialUnorderedSynchronizer) DrainMeta(
-	ctx context.Context,
-) []execinfrapb.ProducerMetadata {
+func (s *SerialUnorderedSynchronizer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
-	// It is possible that Next was never called, yet the tracing is enabled.
-	s.maybeStartTracingSpan(ctx)
 	if s.span != nil {
 		for i := range s.inputs {
 			for _, stats := range s.inputs[i].StatsCollectors {
@@ -112,7 +101,7 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 		}
 	}
 	for _, input := range s.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(s.ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(s.Ctx)...)
 	}
 	return bufferedMeta
 }

@@ -467,8 +467,8 @@ func BenchmarkCrossJoiner(b *testing.B) {
 						monitors = append(monitors, result.OpMonitors...)
 						require.NoError(b, err)
 						cj := result.Root
-						cj.Init()
-						for b := cj.Next(ctx); b.Length() > 0; b = cj.Next(ctx) {
+						cj.Init(ctx)
+						for b := cj.Next(); b.Length() > 0; b = cj.Next() {
 						}
 					}
 				})

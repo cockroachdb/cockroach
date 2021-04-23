@@ -12,7 +12,6 @@ package colexecproj
 
 import (
 	"bytes"
-	"context"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -23,14 +22,14 @@ type projPrefixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -108,10 +107,6 @@ func (p projPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPrefixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projSuffixBytesBytesConstOp struct {
@@ -119,14 +114,14 @@ type projSuffixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -204,10 +199,6 @@ func (p projSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projSuffixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projContainsBytesBytesConstOp struct {
@@ -215,14 +206,14 @@ type projContainsBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -300,10 +291,6 @@ func (p projContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projContainsBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRegexpBytesBytesConstOp struct {
@@ -311,14 +298,14 @@ type projRegexpBytesBytesConstOp struct {
 	constArg *regexp.Regexp
 }
 
-func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -396,10 +383,6 @@ func (p projRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRegexpBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNotPrefixBytesBytesConstOp struct {
@@ -407,14 +390,14 @@ type projNotPrefixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -492,10 +475,6 @@ func (p projNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNotPrefixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNotSuffixBytesBytesConstOp struct {
@@ -503,14 +482,14 @@ type projNotSuffixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -588,10 +567,6 @@ func (p projNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNotSuffixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNotContainsBytesBytesConstOp struct {
@@ -599,14 +574,14 @@ type projNotContainsBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -684,10 +659,6 @@ func (p projNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNotContainsBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNotRegexpBytesBytesConstOp struct {
@@ -695,14 +666,14 @@ type projNotRegexpBytesBytesConstOp struct {
 	constArg *regexp.Regexp
 }
 
-func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -780,8 +751,4 @@ func (p projNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNotRegexpBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
