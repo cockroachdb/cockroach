@@ -1672,6 +1672,28 @@ func pebbleExportToSst(
 	targetSize, maxSize uint64,
 	useTBI bool,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	data, sum, key, err := pebbleExportToFirstFailure(reader, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+	if err != nil {
+		// If we have WriteIntentError here, we need to collect all matching intents
+		// within the range before returning error so that we could resolve them in one go.
+		intentError, ok := err.(*roachpb.WriteIntentError)
+		if !ok {
+			return nil, roachpb.BulkOpSummary{}, nil, err
+		}
+		collectRemainingIntents(intentError, reader, endKey, startTS, endTS)
+		return nil, roachpb.BulkOpSummary{}, nil, intentError
+	}
+	return data, sum, key, err
+}
+
+func pebbleExportToFirstFailure(
+	reader Reader,
+	startKey, endKey roachpb.Key,
+	startTS, endTS hlc.Timestamp,
+	exportAllRevisions bool,
+	targetSize, maxSize uint64,
+	useTBI bool,
+) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	sstFile := &MemFile{}
 	sstWriter := MakeBackupSSTWriter(sstFile)
 	defer sstWriter.Close()
@@ -1760,4 +1782,54 @@ func pebbleExportToSst(
 	}
 
 	return sstFile.Data(), rows.BulkOpSummary, resumeKey, nil
+}
+
+func collectRemainingIntents(
+	error *roachpb.WriteIntentError,
+	reader Reader,
+	endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+) {
+	if len(error.Intents) == 0 {
+		// This is not a valid error to restart collection, bail out to avoid panic.
+		return
+	}
+	iter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
+		IterOptions{
+			LowerBound: error.Intents[0].Key,
+			UpperBound: endKey,
+		})
+	defer iter.Close()
+
+	// We continue iterating starting from the intent at key where we left off in data iterator.
+	// During iteration, we skip all data values and keep iterating until we reach the end of range.
+	for iter.SeekIntentGE(error.Intents[0].Key, error.Intents[0].Txn.ID); ; {
+		// Start looping with next since we should be positioned at intent that caused error in first place.
+		iter.Next()
+		ok, err := iter.Valid()
+		if err != nil {
+			// Something went wrong we could bail with original error at this point.
+			break
+		}
+		if !ok {
+			// We reached the end of iterator data and can wrap up.
+			break
+		}
+		unsafeKey := iter.UnsafeKey()
+		if unsafeKey.Key.Compare(endKey) >= 0 {
+			break
+		}
+		if unsafeKey.IsValue() {
+			continue
+		}
+		var meta enginepb.MVCCMetadata
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			// Something went wrong we could ignore that since intents should have valid meta.
+			continue
+		}
+		metaTimestamp := meta.Timestamp.ToTimestamp()
+		if startTime.Less(metaTimestamp) && metaTimestamp.LessEq(endTime) {
+			error.Intents = append(error.Intents, roachpb.MakeIntent(meta.Txn, iter.Key().Key))
+		}
+	}
 }
