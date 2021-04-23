@@ -11,6 +11,7 @@ package utilccl
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 )
@@ -45,5 +46,6 @@ func IsPermanentBulkJobError(err error) bool {
 
 	return !IsDistSQLRetryableError(err) &&
 		!grpcutil.IsClosedConnection(err) &&
-		!flowinfra.IsNoInboundStreamConnectionError(err)
+		!flowinfra.IsNoInboundStreamConnectionError(err) &&
+		!kvcoord.IsSendError(err)
 }
