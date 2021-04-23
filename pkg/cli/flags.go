@@ -633,6 +633,8 @@ func init() {
 		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
 		stringSliceFlag(f, &zipCtx.files.includePatterns, cliflags.ZipIncludedFiles)
 		stringSliceFlag(f, &zipCtx.files.excludePatterns, cliflags.ZipExcludedFiles)
+		varFlag(f, &zipCtx.files.startTimestamp, cliflags.ZipFilesFrom)
+		varFlag(f, &zipCtx.files.endTimestamp, cliflags.ZipFilesUntil)
 	}
 
 	// Decommission command.
