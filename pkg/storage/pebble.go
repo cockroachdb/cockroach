@@ -1684,6 +1684,7 @@ func pebbleExportToSst(
 			EnableTimeBoundIteratorOptimization: useTBI,
 			StartTime:                           startTS,
 			EndTime:                             endTS,
+			EnableWriteIntentAggregation:        true,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
@@ -1692,8 +1693,8 @@ func pebbleExportToSst(
 	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
+			// This is an underlying iterator error, return it to the caller to deal
+			// with.
 			return nil, roachpb.BulkOpSummary{}, nil, err
 		}
 		if !ok {
@@ -1703,6 +1704,9 @@ func pebbleExportToSst(
 		if unsafeKey.Key.Compare(endKey) >= 0 {
 			break
 		}
+
+		skipData := iter.NumIntentErrors() > 0
+
 		unsafeValue := iter.UnsafeValue()
 		isNewKey := !exportAllRevisions || !unsafeKey.Key.Equal(curKey)
 		if paginated && exportAllRevisions && isNewKey {
@@ -1723,19 +1727,26 @@ func pebbleExportToSst(
 				resumeKey = append(make(roachpb.Key, 0, len(unsafeKey.Key)), unsafeKey.Key...)
 				break
 			}
-			if unsafeKey.Timestamp.IsEmpty() {
-				// This should never be an intent since the incremental iterator returns
-				// an error when encountering intents.
-				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
-					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
-				}
-			} else {
-				if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
-					return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+			if !skipData {
+				if unsafeKey.Timestamp.IsEmpty() {
+					// This should never be an intent since the incremental iterator returns
+					// an error when encountering intents.
+					if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+						return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+					}
+				} else {
+					if err := sstWriter.PutMVCC(unsafeKey, unsafeValue); err != nil {
+						return nil, roachpb.BulkOpSummary{}, nil, errors.Wrapf(err, "adding key %s", unsafeKey)
+					}
 				}
 			}
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			if maxSize > 0 && newSize > int64(maxSize) {
+				if skipData {
+					// Maximum data size limit is reached, but we had intents so break and report
+					// them instead of failing.
+					break
+				}
 				return nil, roachpb.BulkOpSummary{}, nil,
 					errors.Errorf("export size (%d bytes) exceeds max size (%d bytes)", newSize, maxSize)
 			}
@@ -1747,6 +1758,10 @@ func pebbleExportToSst(
 		} else {
 			iter.NextKey()
 		}
+	}
+
+	if iter.NumIntentErrors() > 0 {
+		return nil, roachpb.BulkOpSummary{}, nil, iter.GetIntentError()
 	}
 
 	if rows.BulkOpSummary.DataSize == 0 {

@@ -86,6 +86,14 @@ type MVCCIncrementalIterator struct {
 	// For allocation avoidance, meta is used to store the timestamp of keys
 	// regardless if they are metakeys.
 	meta enginepb.MVCCMetadata
+
+	// Intent aggregation options.
+	// Configuration passed in MVCCIncrementalIterOptions.
+	collectIntents bool
+	// Optional collection of intents created on demand when first intent encountered.
+	intents []roachpb.Intent
+	// Flag indicating that we are positioned at intent in scope of iterator.
+	atIntent bool
 }
 
 var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
@@ -100,6 +108,12 @@ type MVCCIncrementalIterOptions struct {
 	// time.
 	StartTime hlc.Timestamp
 	EndTime   hlc.Timestamp
+	// If intent aggregation is enabled, iterator will not fail on first encountered
+	// intent, but could proceed further. All found intents would be aggregated into
+	// a single WriteIntentError which would be updated during iteration. Consumer
+	// would be free to decide if it wants to keep collecting entries and intents or
+	// skip entries.
+	EnableWriteIntentAggregation bool
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -135,10 +149,11 @@ func NewMVCCIncrementalIterator(
 	}
 
 	return &MVCCIncrementalIterator{
-		iter:          iter,
-		startTime:     opts.StartTime,
-		endTime:       opts.EndTime,
-		timeBoundIter: timeBoundIter,
+		iter:           iter,
+		startTime:      opts.StartTime,
+		endTime:        opts.EndTime,
+		timeBoundIter:  timeBoundIter,
+		collectIntents: opts.EnableWriteIntentAggregation,
 	}
 }
 
@@ -185,12 +200,22 @@ func (i *MVCCIncrementalIterator) Close() {
 // key.
 func (i *MVCCIncrementalIterator) Next() {
 	i.iter.Next()
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	i.atIntent = false
+	if !i.checkNextAndSaveErr() {
 		return
 	}
 	i.advance()
+}
+
+// checkNextAndSaveErr checks if underlying iter is valid after operation and
+// saves error and validity state. Returns true if underlying iterator is valid.
+func (i *MVCCIncrementalIterator) checkNextAndSaveErr() bool {
+	if ok, err := i.iter.Valid(); !ok {
+		i.err = err
+		i.valid = false
+		return false
+	}
+	return true
 }
 
 // NextKey advances the iterator to the next key. This operation is distinct
@@ -198,9 +223,8 @@ func (i *MVCCIncrementalIterator) Next() {
 // key if the iterator is currently located at the last version for a key.
 func (i *MVCCIncrementalIterator) NextKey() {
 	i.iter.NextKey()
-	if ok, err := i.iter.Valid(); !ok {
-		i.err = err
-		i.valid = false
+	i.atIntent = false
+	if !i.checkNextAndSaveErr() {
 		return
 	}
 	i.advance()
@@ -313,13 +337,34 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 	}
 
 	if i.startTime.Less(metaTimestamp) && metaTimestamp.LessEq(i.endTime) {
-		i.err = &roachpb.WriteIntentError{
-			Intents: []roachpb.Intent{
-				roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
-			},
+		if !i.collectIntents {
+			// If we don't plan to collect intents for resolving, we bail out here with a single intent.
+			i.err = &roachpb.WriteIntentError{
+				Intents: []roachpb.Intent{
+					roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
+				},
+			}
+			i.valid = false
+			return i.err
 		}
-		i.valid = false
-		return i.err
+		// We are collecting intents, so we need to save it and advance to its proposed value.
+		// Caller could then use a value key to update proposed row counters for the sake of bookkeeping
+		// and advance more.
+		i.atIntent = true
+		if i.intents == nil {
+			i.intents = []roachpb.Intent{
+				roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key),
+			}
+		} else {
+			i.intents = append(i.intents, roachpb.MakeIntent(i.meta.Txn, i.iter.Key().Key))
+		}
+		// We expect underlying iterator to contain proposed value after the intent, so we
+		// need to move to that before proceeding to the next key. Proposed KV could be checked
+		// by caller if needed.
+		i.iter.Next()
+		if !i.checkNextAndSaveErr() {
+			return i.err
+		}
 	}
 	return nil
 }
@@ -343,7 +388,7 @@ func (i *MVCCIncrementalIterator) advance() {
 		// We have encountered an intent but it does not lie in the timestamp span
 		// (startTime, endTime] so we do not throw an error, and attempt to move to
 		// the next valid KV.
-		if i.meta.Txn != nil {
+		if i.meta.Txn != nil && !i.atIntent {
 			i.iter.Next()
 			if ok, err := i.iter.Valid(); !ok {
 				i.err = err
@@ -433,5 +478,28 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 
 		// We have a valid KV.
 		return
+	}
+}
+
+// AtIntent returns true if iterator is positioned at intent which is within the
+// iteration range.
+func (i *MVCCIncrementalIterator) AtIntent() bool {
+	return i.atIntent
+}
+
+// NumIntentErrors returns number of intents encountered intents during iteration.
+// This is only the case when intent aggregation is enabled, otherwise it is always 0.
+func (i *MVCCIncrementalIterator) NumIntentErrors() int {
+	return len(i.intents)
+}
+
+// GetIntentError create write intent error with all collected intents that could be
+// used to retry operations.
+func (i *MVCCIncrementalIterator) GetIntentError() error {
+	if i.intents == nil {
+		return nil
+	}
+	return &roachpb.WriteIntentError{
+		Intents: i.intents,
 	}
 }

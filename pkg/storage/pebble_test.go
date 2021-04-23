@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
@@ -541,4 +543,121 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	if testing.Verbose() {
 		fmt.Fprint(ioutil.Discard, c)
 	}
+}
+
+type TestValue struct {
+	key       roachpb.Key
+	value     roachpb.Value
+	timestamp hlc.Timestamp
+	txn       *roachpb.Transaction
+}
+
+func intent(key roachpb.Key, val string, ts hlc.Timestamp) TestValue {
+	var value = roachpb.MakeValueFromString(val)
+	value.InitChecksum(key)
+	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, roachpb.NormalUserPriority, ts, 1000)
+	var txn = &tx
+	return TestValue{key, value, ts, txn}
+}
+
+func value(key roachpb.Key, val string, ts hlc.Timestamp) TestValue {
+	var value = roachpb.MakeValueFromString(val)
+	value.InitChecksum(key)
+	return TestValue{key, value, ts, nil}
+}
+
+func fillInData(ctx context.Context, engine Engine, data []TestValue) error {
+	batch := engine.NewBatch()
+	for _, val := range data {
+		if err := MVCCPut(ctx, batch, nil, val.key, val.timestamp, val.value, val.txn); err != nil {
+			return err
+		}
+	}
+	return batch.Commit(true)
+}
+
+func ts(ts int64) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: ts}
+}
+
+func key(k uint32) roachpb.Key {
+	var key roachpb.Key = make([]byte, 4)
+	binary.LittleEndian.PutUint32(key, k)
+	return key
+}
+
+func requireTxnForValue(t *testing.T, val TestValue, intent roachpb.Intent) {
+	require.Equal(t, val.txn.Key, intent.Txn.Key)
+}
+
+func TestIntentFailureHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test function uses a fixed time and key range to produce SST.
+	// Use varying inserted keys for values and intents to putting them in and out of ranges.
+	checkReportedErrors := func(data []TestValue, failures []int) func(*testing.T) {
+		return func(t *testing.T) {
+			ctx := context.Background()
+
+			engine := createTestPebbleEngine()
+			defer engine.Close()
+
+			require.NoError(t, fillInData(ctx, engine, data))
+
+			_, _, _, err := engine.ExportMVCCToSst(key(10), key(20), ts(999), ts(2000),
+				true, 0, 0, true)
+			if len(failures) == 0 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				e := (*roachpb.WriteIntentError)(nil)
+				if !errors.As(err, &e) {
+					require.Fail(t, "Expected WriteIntentFailure, got %T", err)
+				}
+				require.Equal(t, len(failures), len(e.Intents))
+				for i, dataIdx := range failures {
+					requireTxnForValue(t, data[dataIdx], e.Intents[i])
+				}
+			}
+		}
+	}
+
+	// Export range is fixed to k:[10, 20), ts:(999, 2000] for all tests.
+
+	t.Run("Report multiple intents", checkReportedErrors([]TestValue{
+		value(key(10), "hi", ts(1000)),
+		intent(key(11), "err", ts(1001)),
+		intent(key(12), "err2", ts(1002)),
+	}, []int{1, 2}))
+
+	t.Run("Ensure values are correctly skipped after first intent", checkReportedErrors([]TestValue{
+		value(key(10), "hi", ts(1000)),
+		intent(key(11), "err", ts(1001)),
+		value(key(12), "surprise", ts(1005)),
+		intent(key(13), "err2", ts(1002)),
+	}, []int{1, 3}))
+
+	t.Run("Filter some failing intents by time", checkReportedErrors([]TestValue{
+		value(key(10), "hi", ts(1000)),
+		intent(key(11), "err", ts(1001)),
+		intent(key(12), "err2", ts(2002)),
+	}, []int{1}))
+
+	t.Run("Filter all failing intents by time", checkReportedErrors([]TestValue{
+		value(key(10), "hi", ts(1000)),
+		intent(key(11), "not in scope", ts(2001)),
+		intent(key(12), "not in scope too", ts(2002)),
+	}, []int{}))
+
+	t.Run("Filter some failing intents by key range", checkReportedErrors([]TestValue{
+		value(key(10), "hi", ts(1000)),
+		intent(key(7), "outside of key range", ts(1001)),
+		intent(key(12), "err", ts(1002)),
+	}, []int{2}))
+
+	t.Run("Filter all failing intents by key range", checkReportedErrors([]TestValue{
+		value(key(10), "hi", ts(1000)),
+		intent(key(7), "before start", ts(1001)),
+		intent(key(22), "after end", ts(1002)),
+	}, []int{}))
 }

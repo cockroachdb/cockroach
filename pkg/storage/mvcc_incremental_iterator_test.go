@@ -188,6 +188,7 @@ func assertIteratedKVs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expected []MVCCKeyValue,
+	expectedIntents []roachpb.Intent,
 	useTBI bool,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
@@ -195,6 +196,7 @@ func assertIteratedKVs(
 		EnableTimeBoundIteratorOptimization: useTBI,
 		StartTime:                           startTime,
 		EndTime:                             endTime,
+		EnableWriteIntentAggregation:        true,
 	})
 	defer iter.Close()
 	var iterFn func()
@@ -210,7 +212,10 @@ func assertIteratedKVs(
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
-		kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		fmt.Printf("Found %v : %v (Intent: %v)\n", iter.Key(), string(iter.Value()), iter.AtIntent())
+		if !iter.AtIntent() {
+			kvs = append(kvs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		}
 	}
 
 	if len(kvs) != len(expected) {
@@ -224,6 +229,25 @@ func assertIteratedKVs(
 			t.Fatalf("%d value: got %x but expected %x", i, kvs[i].Value, expected[i].Value)
 		}
 	}
+
+	if iter.NumIntentErrors() != len(expectedIntents) {
+		t.Fatalf("Expected %d intents but found %d", len(expectedIntents), iter.NumIntentErrors())
+	}
+	if iter.NumIntentErrors() > 0 {
+		err := iter.GetIntentError()
+		if intentErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &intentErr) {
+			for i := range expectedIntents {
+				if !expectedIntents[i].Key.Equal(intentErr.Intents[i].Key) {
+					t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Key, expectedIntents[i].Key)
+				}
+				if !expectedIntents[i].Txn.ID.Equal(intentErr.Intents[i].Txn.ID) {
+					t.Fatalf("%d intent key: got %v, expected %v", i, intentErr.Intents[i].Txn.ID, expectedIntents[i].Txn.ID)
+				}
+			}
+		} else {
+			t.Fatalf("Expected roachpb.WriteIntentError, found %T", err)
+		}
+	}
 }
 
 func assertEqualKVs(
@@ -232,26 +256,30 @@ func assertEqualKVs(
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
 	expected []MVCCKeyValue,
+	expectedIntents []roachpb.Intent,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
 		t.Run("iterate", func(t *testing.T) {
-			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected, expectedIntents,
 				false /* useTBI */)
 		})
 		t.Run("iterate-tbi", func(t *testing.T) {
-			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+			assertIteratedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected, expectedIntents,
 				true /* useTBI */)
 		})
 
-		t.Run("export", func(t *testing.T) {
-			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
-				false /* useTBI */)
-		})
-		t.Run("export-tbi", func(t *testing.T) {
-			assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
-				true /* useTBI */)
-		})
+		// Export will abort when intent is encountered, so we don't test export in those cases.
+		if expectedIntents == nil {
+			t.Run("export", func(t *testing.T) {
+				assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+					false /* useTBI */)
+			})
+			t.Run("export-tbi", func(t *testing.T) {
+				assertExportedKVs(t, e, startKey, endKey, startTime, endTime, revisions, expected,
+					true /* useTBI */)
+			})
+		}
 	}
 }
 
@@ -427,20 +455,38 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) MVCCKeyValue {
 		return MVCCKeyValue{Key: MVCCKey{Key: key, Timestamp: ts}, Value: value}
 	}
+	makeTxn := func(key roachpb.Key, val []byte, ts hlc.Timestamp) (roachpb.Transaction, roachpb.Value, roachpb.Intent) {
+		txnID := uuid.MakeV4()
+		txnMeta := enginepb.TxnMeta{
+			Key:            key,
+			ID:             txnID,
+			Epoch:          1,
+			WriteTimestamp: ts,
+		}
+		return roachpb.Transaction{
+				TxnMeta:       txnMeta,
+				ReadTimestamp: ts,
+			}, roachpb.Value{
+				RawBytes: val,
+			}, roachpb.MakeIntent(&txnMeta, key)
+	}
+	intents := func(intents ...roachpb.Intent) []roachpb.Intent { return intents }
 
+	// Keys are named as kv<key>_<value>_<ts>.
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
 	kv1_4_4 := makeKVT(testKey1, testValue4, ts4)
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
-	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
+	//nolint
+	kv1_Deleted_3 := makeKVT(testKey1, nil, ts3)
 	kvs := func(kvs ...MVCCKeyValue) []MVCCKeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
+		t.Run(engineImpl.name+"-latest", func(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			t.Run("empty", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, latest, nil))
+			t.Run("empty", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, latest, nil, nil))
 
 			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 				v := roachpb.Value{RawBytes: kv.Value}
@@ -450,64 +496,46 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			}
 
 			// Exercise time ranges.
-			t.Run("ts (0-0]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMin, latest, nil))
-			t.Run("ts (0-1]", assertEqualKVs(e, localMax, keyMax, tsMin, ts1, latest, kvs(kv1_1_1)))
-			t.Run("ts (0-∞]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, latest, kvs(kv1_2_2, kv2_2_2)))
-			t.Run("ts (1-1]", assertEqualKVs(e, localMax, keyMax, ts1, ts1, latest, nil))
-			t.Run("ts (1-2]", assertEqualKVs(e, localMax, keyMax, ts1, ts2, latest, kvs(kv1_2_2, kv2_2_2)))
-			t.Run("ts (2-2]", assertEqualKVs(e, localMax, keyMax, ts2, ts2, latest, nil))
+			t.Run("ts (0-0]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMin, latest, nil, nil))
+			t.Run("ts (0-1]", assertEqualKVs(e, localMax, keyMax, tsMin, ts1, latest, kvs(kv1_1_1), nil))
+			t.Run("ts (0-∞]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, latest, kvs(kv1_2_2, kv2_2_2), nil))
+			t.Run("ts (1-1]", assertEqualKVs(e, localMax, keyMax, ts1, ts1, latest, nil, nil))
+			t.Run("ts (1-2]", assertEqualKVs(e, localMax, keyMax, ts1, ts2, latest, kvs(kv1_2_2, kv2_2_2), nil))
+			t.Run("ts (2-2]", assertEqualKVs(e, localMax, keyMax, ts2, ts2, latest, nil, nil))
 
 			// Exercise key ranges.
-			t.Run("kv [1-1)", assertEqualKVs(e, testKey1, testKey1, tsMin, tsMax, latest, nil))
-			t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, latest, kvs(kv1_2_2)))
+			t.Run("kv [1-1)", assertEqualKVs(e, testKey1, testKey1, tsMin, tsMax, latest, nil, nil))
+			t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, latest, kvs(kv1_2_2), nil))
 
 			// Exercise deletion.
 			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1_3Deleted, kv2_2_2)))
+			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, latest, kvs(kv1_Deleted_3, kv2_2_2), nil))
 
 			// Exercise intent handling.
-			txn1ID := uuid.MakeV4()
-			txn1 := roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{
-					Key:            testKey1,
-					ID:             txn1ID,
-					Epoch:          1,
-					WriteTimestamp: ts4,
-				},
-				ReadTimestamp: ts4,
-			}
-			txn1Val := roachpb.Value{RawBytes: testValue4}
+			txn1, txn1Val, intentErr1 := makeTxn(testKey1, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2ID := uuid.MakeV4()
-			txn2 := roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{
-					Key:            testKey2,
-					ID:             txn2ID,
-					Epoch:          1,
-					WriteTimestamp: ts4,
-				},
-				ReadTimestamp: ts4,
-			}
-			txn2Val := roachpb.Value{RawBytes: testValue4}
+			txn2, txn2Val, intentErr2 := makeTxn(testKey2, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("intents",
+			t.Run("intents-1",
 				iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, latest, "conflicting intents"))
-			t.Run("intents",
+			t.Run("intents-2",
 				iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, latest, "conflicting intents"))
-			t.Run("intents",
+			t.Run("intents-3",
 				iterateExpectErr(e, localMax, keyMax, tsMin, ts4, latest, "conflicting intents"))
+			t.Run("intents-multi",
+				assertEqualKVs(e, localMax, keyMax, tsMin, ts4, latest, nil, intents(intentErr1, intentErr2)))
 			// Intents above the upper time bound or beneath the lower time bound must
 			// be ignored (#28358). Note that the lower time bound is exclusive while
 			// the upper time bound is inclusive.
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, latest, kvs(kv1_3Deleted, kv2_2_2)))
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, ts4, tsMax, latest, kvs()))
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, ts4.Next(), tsMax, latest, kvs()))
+			t.Run("intents-filtered-1", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, latest, kvs(kv1_Deleted_3, kv2_2_2), nil))
+			t.Run("intents-filtered-2", assertEqualKVs(e, localMax, keyMax, ts4, tsMax, latest, kvs(), nil))
+			t.Run("intents-filtered-3", assertEqualKVs(e, localMax, keyMax, ts4.Next(), tsMax, latest, kvs(), nil))
 
 			intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 			intent1.Status = roachpb.COMMITTED
@@ -519,16 +547,16 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, latest, kvs(kv1_4_4, kv2_2_2)))
+			t.Run("intents-resolved", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, latest, kvs(kv1_4_4, kv2_2_2), nil))
 		})
 	}
 
 	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
+		t.Run(engineImpl.name+"-all", func(t *testing.T) {
 			e := engineImpl.create()
 			defer e.Close()
 
-			t.Run("empty", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, all, nil))
+			t.Run("empty", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, all, nil, nil))
 
 			for _, kv := range kvs(kv1_1_1, kv1_2_2, kv2_2_2) {
 				v := roachpb.Value{RawBytes: kv.Value}
@@ -538,64 +566,48 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			}
 
 			// Exercise time ranges.
-			t.Run("ts (0-0]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMin, all, nil))
-			t.Run("ts (0-1]", assertEqualKVs(e, localMax, keyMax, tsMin, ts1, all, kvs(kv1_1_1)))
-			t.Run("ts (0-∞]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1, kv2_2_2)))
-			t.Run("ts (1-1]", assertEqualKVs(e, localMax, keyMax, ts1, ts1, all, nil))
-			t.Run("ts (1-2]", assertEqualKVs(e, localMax, keyMax, ts1, ts2, all, kvs(kv1_2_2, kv2_2_2)))
-			t.Run("ts (2-2]", assertEqualKVs(e, localMax, keyMax, ts2, ts2, all, nil))
+			t.Run("ts (0-0]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMin, all, nil, nil))
+			t.Run("ts (0-1]", assertEqualKVs(e, localMax, keyMax, tsMin, ts1, all, kvs(kv1_1_1), nil))
+			t.Run("ts (0-∞]", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1, kv2_2_2), nil))
+			t.Run("ts (1-1]", assertEqualKVs(e, localMax, keyMax, ts1, ts1, all, nil, nil))
+			t.Run("ts (1-2]", assertEqualKVs(e, localMax, keyMax, ts1, ts2, all, kvs(kv1_2_2, kv2_2_2), nil))
+			t.Run("ts (2-2]", assertEqualKVs(e, localMax, keyMax, ts2, ts2, all, nil, nil))
 
 			// Exercise key ranges.
-			t.Run("kv [1-1)", assertEqualKVs(e, testKey1, testKey1, tsMin, tsMax, all, nil))
-			t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1)))
+			t.Run("kv [1-1)", assertEqualKVs(e, testKey1, testKey1, tsMin, tsMax, all, nil, nil))
+			t.Run("kv [1-2)", assertEqualKVs(e, testKey1, testKey2, tsMin, tsMax, all, kvs(kv1_2_2, kv1_1_1), nil))
 
 			// Exercise deletion.
 			if err := MVCCDelete(ctx, e, nil, testKey1, ts3, nil); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1_3Deleted, kv1_2_2, kv2_2_2)))
+			t.Run("del", assertEqualKVs(e, localMax, keyMax, ts1, tsMax, all, kvs(kv1_Deleted_3, kv1_2_2, kv2_2_2), nil))
 
 			// Exercise intent handling.
-			txn1ID := uuid.MakeV4()
-			txn1 := roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{
-					Key:            testKey1,
-					ID:             txn1ID,
-					Epoch:          1,
-					WriteTimestamp: ts4,
-				},
-				ReadTimestamp: ts4,
-			}
-			txn1Val := roachpb.Value{RawBytes: testValue4}
+			txn1, txn1Val, intentErr1 := makeTxn(testKey1, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn1.TxnMeta.Key, txn1.ReadTimestamp, txn1Val, &txn1); err != nil {
 				t.Fatal(err)
 			}
-			txn2ID := uuid.MakeV4()
-			txn2 := roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{
-					Key:            testKey2,
-					ID:             txn2ID,
-					Epoch:          1,
-					WriteTimestamp: ts4,
-				},
-				ReadTimestamp: ts4,
-			}
-			txn2Val := roachpb.Value{RawBytes: testValue4}
+			txn2, txn2Val, intentErr2 := makeTxn(testKey2, testValue4, ts4)
 			if err := MVCCPut(ctx, e, nil, txn2.TxnMeta.Key, txn2.ReadTimestamp, txn2Val, &txn2); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("intents",
+			// Single intent tests are verifying behavior when intent collection is not enabled.
+			t.Run("intents-1",
 				iterateExpectErr(e, testKey1, testKey1.PrefixEnd(), tsMin, tsMax, all, "conflicting intents"))
-			t.Run("intents",
+			t.Run("intents-2",
 				iterateExpectErr(e, testKey2, testKey2.PrefixEnd(), tsMin, tsMax, all, "conflicting intents"))
-			t.Run("intents",
+			t.Run("intents-3",
 				iterateExpectErr(e, localMax, keyMax, tsMin, ts4, all, "conflicting intents"))
+			// Multi intent test is verifying behavior when intent collection is enabled.
+			t.Run("intents-multi",
+				assertEqualKVs(e, testKey1, testKey2.PrefixEnd(), tsMin, tsMax, all, kvs(kv1_Deleted_3, kv1_2_2, kv1_1_1, kv2_2_2), intents(intentErr1, intentErr2)))
 			// Intents above the upper time bound or beneath the lower time bound must
 			// be ignored (#28358). Note that the lower time bound is exclusive while
 			// the upper time bound is inclusive.
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, all, kvs(kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, ts4, tsMax, all, kvs()))
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, ts4.Next(), tsMax, all, kvs()))
+			t.Run("intents-filtered-1", assertEqualKVs(e, localMax, keyMax, tsMin, ts3, all, kvs(kv1_Deleted_3, kv1_2_2, kv1_1_1, kv2_2_2), nil))
+			t.Run("intents-filtered-2", assertEqualKVs(e, localMax, keyMax, ts4, tsMax, all, kvs(), nil))
+			t.Run("intents-filtered-3", assertEqualKVs(e, localMax, keyMax, ts4.Next(), tsMax, all, kvs(), nil))
 
 			intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 			intent1.Status = roachpb.COMMITTED
@@ -607,7 +619,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 			if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
 				t.Fatal(err)
 			}
-			t.Run("intents", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, all, kvs(kv1_4_4, kv1_3Deleted, kv1_2_2, kv1_1_1, kv2_2_2)))
+			t.Run("intents-resolved", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, all, kvs(kv1_4_4, kv1_Deleted_3, kv1_2_2, kv1_1_1, kv2_2_2), nil))
 		})
 	}
 }
@@ -1003,7 +1015,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 				t.Fatalf("source of truth had no expected KVs; likely a bug in the test itself")
 			}
 
-			assertEqualKVs(eng, keys.LocalMax, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs)(t)
+			assertEqualKVs(eng, keys.LocalMax, keys.MaxKey, testCase.start, testCase.end, latest, expectedKVs, nil)(t)
 		})
 	}
 }
