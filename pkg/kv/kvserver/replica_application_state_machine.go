@@ -1071,7 +1071,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 	newClosed := cmd.raftCmd.ClosedTimestamp
 	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(*existingClosed) {
 		var req redact.StringBuilder
-		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
+		if cmd.IsLocal() {
 			req.Print(cmd.proposal.Request)
 		} else {
 			req.SafeString("<unknown; not leaseholder>")
@@ -1084,9 +1084,9 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 		}
 
 		return errors.AssertionFailedf(
-			"raft closed timestamp regression in cmd: %x; batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
+			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.",
-			cmd.idKey, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
+			cmd.idKey, cmd.ent.Term, cmd.ent.Index, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries)
 	}
 	return nil
