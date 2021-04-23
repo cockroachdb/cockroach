@@ -46,6 +46,7 @@ import (
 
 const (
 	maxSyncDurationFatalOnExceededDefault = true
+	maxIntentsPerWriteIntentError         = 1024
 )
 
 // Default for MaxSyncDuration below.
@@ -1684,6 +1685,7 @@ func pebbleExportToSst(
 			EnableTimeBoundIteratorOptimization: useTBI,
 			StartTime:                           startTS,
 			EndTime:                             endTS,
+			EnableWriteIntentAggregation:        true,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
@@ -1692,8 +1694,8 @@ func pebbleExportToSst(
 	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
+			// This is an underlying iterator error, return it to the caller to deal
+			// with.
 			return nil, roachpb.BulkOpSummary{}, nil, err
 		}
 		if !ok {
@@ -1703,6 +1705,11 @@ func pebbleExportToSst(
 		if unsafeKey.Key.Compare(endKey) >= 0 {
 			break
 		}
+
+		if iter.NumIntentErrors() > 0 {
+			break
+		}
+
 		unsafeValue := iter.UnsafeValue()
 		isNewKey := !exportAllRevisions || !unsafeKey.Key.Equal(curKey)
 		if paginated && exportAllRevisions && isNewKey {
@@ -1747,6 +1754,21 @@ func pebbleExportToSst(
 		} else {
 			iter.NextKey()
 		}
+	}
+
+	if iter.NumIntentErrors() > 0 {
+		// We encountered an intent error while iterating data, need to collect remainder of intents before
+		// returning all of them as an error.
+		for iter.NumIntentErrors() < maxIntentsPerWriteIntentError {
+			iter.NextKey()
+			// If we encounter other errors during intent collection, we return our original write intent failure
+			// we would find this error again upon retry.
+			ok, _ := iter.Valid()
+			if !ok {
+				break
+			}
+		}
+		return nil, roachpb.BulkOpSummary{}, nil, iter.GetIntentError()
 	}
 
 	if rows.BulkOpSummary.DataSize == 0 {
