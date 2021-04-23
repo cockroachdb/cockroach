@@ -90,11 +90,11 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 	// the 20.2 release, this test will fail because it is missing a fixture for
 	// 20.1; run the test (on 20.1) with the bool flipped to create the fixture.
 	// Check it in (instructions will be logged below) and off we go.
-	if false {
+	if true {
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
 		// empty string which uses the local cockroach binary.
-		newV := "20.2.6"
+		newV := "20.2.8"
 		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
 		if err != nil {
 			t.Fatal(err)
