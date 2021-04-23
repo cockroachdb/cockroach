@@ -47,6 +47,12 @@ import (
 
 const (
 	maxSyncDurationFatalOnExceededDefault = true
+
+	// Default value for maximum number of intents reported by ExportToSST
+	// in WriteIntentError is set to half of the maximum lock table size.
+	// This value is subject to tuning in real environment as we have more
+	// data available.
+	maxIntentsPerSstExportErrorDefault = 5000
 )
 
 // Default for MaxSyncDuration below.
@@ -68,6 +74,11 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	maxSyncDurationFatalOnExceededDefault,
 )
+
+var maxIntentsPerSstExportError = settings.RegisterIntSetting(
+	"storage.sst_export.max_intents_per_error",
+	"maximum number of intents returned in error when sst export fails",
+	maxIntentsPerSstExportErrorDefault)
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
@@ -655,8 +666,9 @@ func (p *Pebble) ExportMVCCToSst(
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
+	maxIntentCount := maxIntentsPerSstExportError.Get(&p.settings.SV)
 	b, summary, k, err := pebbleExportToSst(r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI)
+		maxSize, useTBI, maxIntentCount)
 	r.Free()
 	return b, summary, k, err
 }
@@ -1087,6 +1099,7 @@ func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
 func (p *Pebble) NewSnapshot() Reader {
 	return &pebbleSnapshot{
 		snapshot: p.db.NewSnapshot(),
+		settings: p.settings,
 	}
 }
 
@@ -1324,8 +1337,9 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
+	maxIntentCount := maxIntentsPerSstExportError.Get(&p.parent.settings.SV)
 	b, summary, k, err := pebbleExportToSst(
-		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, maxIntentCount)
 	r.Free()
 	return b, summary, k, err
 }
@@ -1560,6 +1574,7 @@ func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
 type pebbleSnapshot struct {
 	snapshot *pebble.Snapshot
+	settings *cluster.Settings
 	closed   bool
 }
 
@@ -1586,8 +1601,9 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
+	maxIntentCount := maxIntentsPerSstExportError.Get(&p.settings.SV)
 	b, summary, k, err := pebbleExportToSst(
-		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI)
+		r, startKey, endKey, startTS, endTS, exportAllRevisions, targetSize, maxSize, useTBI, maxIntentCount)
 	r.Free()
 	return b, summary, k, err
 }
@@ -1694,6 +1710,7 @@ func pebbleExportToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
+	maxIntentCount int64,
 ) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
 	sstFile := &MemFile{}
 	sstWriter := MakeBackupSSTWriter(sstFile)
@@ -1707,6 +1724,7 @@ func pebbleExportToSst(
 			EnableTimeBoundIteratorOptimization: useTBI,
 			StartTime:                           startTS,
 			EndTime:                             endTS,
+			EnableWriteIntentAggregation:        true,
 		})
 	defer iter.Close()
 	var curKey roachpb.Key // only used if exportAllRevisions
@@ -1715,8 +1733,8 @@ func pebbleExportToSst(
 	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
+			// This is an underlying iterator error, return it to the caller to deal
+			// with.
 			return nil, roachpb.BulkOpSummary{}, nil, err
 		}
 		if !ok {
@@ -1726,6 +1744,11 @@ func pebbleExportToSst(
 		if unsafeKey.Key.Compare(endKey) >= 0 {
 			break
 		}
+
+		if iter.NumCollectedIntents() > 0 {
+			break
+		}
+
 		unsafeValue := iter.UnsafeValue()
 		isNewKey := !exportAllRevisions || !unsafeKey.Key.Equal(curKey)
 		if paginated && exportAllRevisions && isNewKey {
@@ -1770,6 +1793,23 @@ func pebbleExportToSst(
 		} else {
 			iter.NextKey()
 		}
+	}
+
+	// First check if we encountered an intent while iterating the data.
+	// If we do it means this export can't complete and is aborted. We need to loop over remaining data
+	// to collect all matching intents before returning them in an error to the caller.
+	if iter.NumCollectedIntents() > 0 {
+		for int64(iter.NumCollectedIntents()) < maxIntentCount {
+			iter.NextKey()
+			// If we encounter other errors during intent collection, we return our original write intent failure.
+			// We would find this new error again upon retry.
+			ok, _ := iter.Valid()
+			if !ok {
+				break
+			}
+		}
+		err := iter.TryGetIntentError()
+		return nil, roachpb.BulkOpSummary{}, nil, err
 	}
 
 	if rows.BulkOpSummary.DataSize == 0 {
