@@ -24,11 +24,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -61,6 +65,22 @@ func (m TestFeedMessage) String() string {
 		return string(m.Resolved)
 	}
 	return fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value)
+}
+
+type seenTracker map[string]struct{}
+
+func (t seenTracker) markSeen(m *TestFeedMessage) (isNew bool) {
+	// TODO(dan): This skips duplicates, since they're allowed by the
+	// semantics of our changefeeds. Now that we're switching to RangeFeed,
+	// this can actually happen (usually because of splits) and cause flakes.
+	// However, we really should be de-duping key+ts, this is too coarse.
+	// Fixme.
+	seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
+	if _, ok := t[seenKey]; ok {
+		return false
+	}
+	t[seenKey] = struct{}{}
+	return true
 }
 
 // TestFeed abstracts over reading from the various types of changefeed sinks.
@@ -131,7 +151,7 @@ type sinklessFeed struct {
 
 	conn           *pgx.Conn
 	rows           *pgx.Rows
-	seen           map[string]struct{}
+	seen           seenTracker
 	latestResolved hlc.Timestamp
 }
 
@@ -151,16 +171,9 @@ func (c *sinklessFeed) Next() (*TestFeedMessage, error) {
 		}
 		if len(maybeTopic.String) > 0 {
 			m.Topic = maybeTopic.String
-			// TODO(dan): This skips duplicates, since they're allowed by the
-			// semantics of our changefeeds. Now that we're switching to RangeFeed,
-			// this can actually happen (usually because of splits) and cause flakes.
-			// However, we really should be de-duping key+ts, this is too coarse.
-			// Fixme.
-			seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
-			if _, ok := c.seen[seenKey]; ok {
+			if isNew := c.seen.markSeen(m); !isNew {
 				continue
 			}
-			c.seen[seenKey] = struct{}{}
 			return m, nil
 		}
 		m.Resolved = m.Value
@@ -214,12 +227,26 @@ func (c *sinklessFeed) Close() error {
 	return c.conn.Close()
 }
 
+// FeedJob is an interface describing job related information for
+// feeds that use jobs (anything but sinkless).
+type FeedJob interface {
+	// JobID returns job id for the feed.
+	JobID() jobspb.JobID
+	// Details returns changefeed details for the feed.
+	Details() (*jobspb.ChangefeedDetails, error)
+}
+
 type jobFeed struct {
 	db      *gosql.DB
 	flushCh chan struct{}
 
-	JobID  jobspb.JobID
+	jobID  jobspb.JobID
 	jobErr error
+}
+
+// JobID implements FeedJob interface.
+func (f *jobFeed) JobID() jobspb.JobID {
+	return f.jobID
 }
 
 func (f *jobFeed) fetchJobError() error {
@@ -227,6 +254,7 @@ func (f *jobFeed) fetchJobError() error {
 	// after results are flushed to a sink) in between polls. It is required
 	// that this is hooked up to `flushCh`, which is usually handled by the
 	// `enterpriseTest` helper.
+	// TODO(yevgeniy): Stop relying on flushCh to synchrnize job state.
 	//
 	// The trickiest bit is handling errors in the changefeed. The tests want to
 	// eventually notice them, but want to return all generated results before
@@ -251,7 +279,7 @@ func (f *jobFeed) fetchJobError() error {
 	// above.
 	var errorStr gosql.NullString
 	if err := f.db.QueryRow(
-		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.JobID,
+		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
 	).Scan(&errorStr); err != nil {
 		return err
 	}
@@ -261,8 +289,9 @@ func (f *jobFeed) fetchJobError() error {
 	return nil
 }
 
+// Pause implements the TestFeed interface.
 func (f *jobFeed) Pause() error {
-	_, err := f.db.Exec(`PAUSE JOB $1`, f.JobID)
+	_, err := f.db.Exec(`PAUSE JOB $1`, f.jobID)
 	if err != nil {
 		return err
 	}
@@ -276,7 +305,7 @@ func (f *jobFeed) Pause() error {
 	ctx := context.Background()
 	return retry.WithMaxAttempts(ctx, opts, 10, func() error {
 		var status string
-		if err := f.db.QueryRowContext(ctx, `SELECT status FROM system.jobs WHERE id = $1`, f.JobID).Scan(&status); err != nil {
+		if err := f.db.QueryRowContext(ctx, `SELECT status FROM system.jobs WHERE id = $1`, f.jobID).Scan(&status); err != nil {
 			return err
 		}
 		if jobs.Status(status) != jobs.StatusPaused {
@@ -286,16 +315,24 @@ func (f *jobFeed) Pause() error {
 	})
 }
 
+// Resume implements the TestFeed interface.
 func (f *jobFeed) Resume() error {
-	_, err := f.db.Exec(`RESUME JOB $1`, f.JobID)
+	_, err := f.db.Exec(`RESUME JOB $1`, f.jobID)
 	f.jobErr = nil
 	return err
 }
 
+func (f *jobFeed) cancelJob() {
+	if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {
+		log.Infof(context.Background(), `could not cancel feed %d: %v`, f.jobID, err)
+	}
+}
+
+// Details implements FeedJob interface.
 func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 	var payloadBytes []byte
 	if err := f.db.QueryRow(
-		`SELECT payload FROM system.jobs WHERE id=$1`, f.JobID,
+		`SELECT payload FROM system.jobs WHERE id=$1`, f.jobID,
 	).Scan(&payloadBytes); err != nil {
 		return nil, err
 	}
@@ -360,7 +397,7 @@ func (f *tableFeedFactory) Feed(create string, args ...interface{}) (_ TestFeed,
 	}
 	createStmt.SinkURI = tree.NewStrVal(c.sinkURI)
 
-	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.JobID); err != nil {
+	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.jobID); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -377,7 +414,7 @@ type TableFeed struct {
 	sinkURI string
 
 	toSend []*TestFeedMessage
-	seen   map[string]struct{}
+	seen   seenTracker
 }
 
 // ResetSeen is useful when manually pausing and resuming a TableFeed.
@@ -449,16 +486,9 @@ func (c *TableFeed) Next() (*TestFeedMessage, error) {
 				// array, which is pretty unexpected. Nil them out before returning.
 				// Either key+value or payload will be set, but not both.
 				if len(m.Key) > 0 || len(m.Value) > 0 {
-					// TODO(dan): This skips duplicates, since they're allowed by the
-					// semantics of our changefeeds. Now that we're switching to RangeFeed,
-					// this can actually happen (usually because of splits) and cause
-					// flakes. However, we really should be de-duping key+ts, this is too
-					// coarse. Fixme.
-					seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
-					if _, ok := c.seen[seenKey]; ok {
+					if isNew := c.seen.markSeen(m); !isNew {
 						continue
 					}
-					c.seen[seenKey] = struct{}{}
 
 					m.Resolved = nil
 				} else {
@@ -476,9 +506,7 @@ func (c *TableFeed) Next() (*TestFeedMessage, error) {
 
 // Close implements the TestFeed interface.
 func (c *TableFeed) Close() error {
-	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
-		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
-	}
+	c.cancelJob()
 	return c.db.Close()
 }
 
@@ -534,7 +562,7 @@ func (f *cloudFeedFactory) Feed(create string, args ...interface{}) (TestFeed, e
 		dir:  feedDir,
 		seen: make(map[string]struct{}),
 	}
-	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.JobID); err != nil {
+	if err := f.db.QueryRow(createStmt.String(), args...).Scan(&c.jobID); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -557,7 +585,7 @@ type cloudFeed struct {
 	resolved string
 	rows     []cloudFeedEntry
 
-	seen map[string]struct{}
+	seen seenTracker
 }
 
 const cloudFeedPartition = ``
@@ -634,12 +662,9 @@ func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 				if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
 					return nil, err
 				}
-
-				seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
-				if _, ok := c.seen[seenKey]; ok {
+				if isNew := c.seen.markSeen(m); !isNew {
 					continue
 				}
-				c.seen[seenKey] = struct{}{}
 				m.Resolved = nil
 				return m, nil
 			}
@@ -718,8 +743,177 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 
 // Close implements the TestFeed interface.
 func (c *cloudFeed) Close() error {
-	if _, err := c.db.Exec(`CANCEL JOB $1`, c.JobID); err != nil {
-		log.Infof(context.Background(), `could not cancel feed %d: %v`, c.JobID, err)
+	c.cancelJob()
+	return nil
+}
+
+type feedStarter func() (feedCh chan *sarama.ProducerMessage, stopFeed func() error)
+
+type kafkaFeedFactory struct {
+	s         serverutils.TestServerInterface
+	db        *gosql.DB
+	startFeed feedStarter
+}
+
+var _ TestFeedFactory = (*kafkaFeedFactory)(nil)
+
+// MakeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` sink.
+func MakeKafkaFeedFactory(
+	s serverutils.TestServerInterface, db *gosql.DB, startFeed feedStarter,
+) TestFeedFactory {
+	return &kafkaFeedFactory{s: s, db: db, startFeed: startFeed}
+}
+
+func exprAsString(expr tree.Expr) (string, error) {
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	semaCtx := tree.MakeSemaContext()
+	te, err := expr.TypeCheck(context.Background(), &semaCtx, types.String)
+	if err != nil {
+		return "", err
 	}
-	return c.db.Close()
+	datum, err := te.Eval(evalCtx)
+	if err != nil {
+		return "", err
+	}
+	return string(tree.MustBeDString(datum)), nil
+}
+
+// Feed implements cdctest.TestFeedFactory
+func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
+
+	// Set SinkURI if it wasn't provided.  It's okay if it is -- since we may
+	// want to set some kafka specific URI parameters.
+	if createStmt.SinkURI == nil {
+		createStmt.SinkURI = tree.NewStrVal(
+			fmt.Sprintf("%s://does.not.matter/", changefeedbase.SinkSchemeKafka))
+	}
+
+	var registry *SchemaRegistry
+	for _, opt := range createStmt.Options {
+		if opt.Key == changefeedbase.OptFormat {
+			format, err := exprAsString(opt.Value)
+			if err != nil {
+				return nil, err
+			}
+			if format == string(changefeedbase.OptFormatAvro) {
+				// Must use confluent schema registry so that we register our schema
+				// in order to be able to decode kafka messages.
+				registry = MakeTestSchemaRegistry()
+				registryOption := tree.KVOption{
+					Key:   changefeedbase.OptConfluentSchemaRegistry,
+					Value: tree.NewStrVal(registry.server.URL),
+				}
+				createStmt.Options = append(createStmt.Options, registryOption)
+				break
+			}
+		}
+	}
+
+	sourceCh, stopSource := k.startFeed()
+	c := &kafkaFeed{
+		jobFeed: jobFeed{
+			db: k.db,
+			// TODO: kill this: flushCh: flushCh,
+		},
+		seen:     make(map[string]struct{}),
+		source:   sourceCh,
+		stop:     stopSource,
+		registry: registry,
+	}
+	createChangefeed := createStmt.String()
+	if err := k.db.QueryRow(createChangefeed, args...).Scan(&c.jobID); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// Server implements TestFeedFactory
+func (k *kafkaFeedFactory) Server() serverutils.TestServerInterface {
+	return k.s
+}
+
+type kafkaFeed struct {
+	jobFeed
+	source chan *sarama.ProducerMessage
+	stop   func() error
+	seen   seenTracker
+	// Registry is set if we're emitting avro.
+	registry *SchemaRegistry
+}
+
+var _ TestFeed = (*kafkaFeed)(nil)
+
+// Partitions implements TestFeed
+func (k *kafkaFeed) Partitions() []string {
+	// TODO(yevgeniy): Support multiple partitions.
+	return []string{`kafka`}
+}
+
+// Next implements TestFeed
+func (k *kafkaFeed) Next() (*TestFeedMessage, error) {
+	for {
+		msg := <-k.source
+
+		fm := &TestFeedMessage{
+			Topic:     msg.Topic,
+			Partition: `kafka`, // TODO(yevgeniy): support multiple partitions.
+		}
+
+		decode := func(encoded sarama.Encoder, dest *[]byte) error {
+			// It's a bit weird to use encoder to get decoded bytes.
+			// But it's correct: we produce messages to sarama, and we set
+			// key/value to sarama.ByteEncoder(payload) -- and sarama ByteEncoder
+			// is just the type alias to []byte -- alas, we can't cast it, so just "encode"
+			// it to get back our original byte array.
+			decoded, err := encoded.Encode()
+			if err != nil {
+				return err
+			}
+			if k.registry == nil {
+				*dest = decoded
+			} else {
+				// Convert avro record to json.
+				jsonBytes, err := k.registry.AvroToJSON(decoded)
+				if err != nil {
+					return err
+				}
+				*dest = jsonBytes
+			}
+			return nil
+		}
+
+		if msg.Key == nil {
+			// It's a resolved timestamp
+			if err := decode(msg.Value, &fm.Resolved); err != nil {
+				return nil, err
+			}
+			return fm, nil
+		}
+		// It's a regular message
+		if err := decode(msg.Key, &fm.Key); err != nil {
+			return nil, err
+		}
+		if err := decode(msg.Value, &fm.Value); err != nil {
+			return nil, err
+		}
+
+		if isNew := k.seen.markSeen(fm); isNew {
+			return fm, nil
+		}
+
+	}
+}
+
+// Close implements TestFeed interface.
+func (k *kafkaFeed) Close() error {
+	if k.registry != nil {
+		k.registry.Close()
+	}
+	k.jobFeed.cancelJob()
+	return k.stop()
 }

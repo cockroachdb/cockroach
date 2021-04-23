@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -34,8 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var testSinkFlushFrequency = 100 * time.Millisecond
@@ -119,20 +123,8 @@ func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) 
 }
 
 func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []byte {
-	if len(avroBytes) == 0 {
-		return nil
-	}
-	native, err := reg.EncodedAvroToNative(avroBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The avro textual format is a more natural fit, but it's non-deterministic
-	// because of go's randomized map ordering. Instead, we use gojson.Marshal,
-	// which sorts its object keys and so is deterministic.
-	json, err := gojson.Marshal(native)
-	if err != nil {
-		t.Fatal(err)
-	}
+	json, err := reg.AvroToJSON(avroBytes)
+	require.NoError(t, err)
 	return json
 }
 
@@ -244,9 +236,10 @@ func expectResolvedTimestampAvro(
 	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
+type cdcTestFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)
+
 func sinklessTestWithServerArgs(
-	argsFn func(args *base.TestServerArgs),
-	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
+	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
@@ -288,17 +281,16 @@ func sinklessTestWithServerArgs(
 	}
 }
 
-func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
+func sinklessTest(testFn cdcTestFn) func(*testing.T) {
 	return sinklessTestWithServerArgs(nil, testFn)
 }
 
-func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
+func enterpriseTest(testFn cdcTestFn) func(*testing.T) {
 	return enterpriseTestWithServerArgs(nil, testFn)
 }
 
 func enterpriseTestWithServerArgs(
-	argsFn func(args *base.TestServerArgs),
-	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
+	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
@@ -351,9 +343,7 @@ func serverArgsRegion(args base.TestServerArgs) string {
 	return ""
 }
 
-func cloudStorageTest(
-	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
-) func(*testing.T) {
+func cloudStorageTest(testFn cdcTestFn) func(*testing.T) {
 	return func(t *testing.T) {
 		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
 		defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
@@ -387,6 +377,201 @@ func cloudStorageTest(
 		sqlDB.Exec(t, `CREATE DATABASE d`)
 
 		f := cdctest.MakeCloudFeedFactory(s, db, dir, flushCh)
+		testFn(t, db, f)
+	}
+}
+
+type fakeKafkaClient struct{}
+
+func (c *fakeKafkaClient) Partitions(topic string) ([]int32, error) {
+	return []int32{0}, nil
+}
+
+func (c *fakeKafkaClient) RefreshMetadata(topics ...string) error {
+	return nil
+}
+
+func (c *fakeKafkaClient) Close() error {
+	return nil
+}
+
+var _ kafkaClient = (*fakeKafkaClient)(nil)
+
+type ignoreCloseProducer struct {
+	*asyncProducerMock
+}
+
+func (p *ignoreCloseProducer) Close() error {
+	return nil
+}
+
+// teeGroup facilitates reading messages from input channel
+// and sending them to one or more output channels.
+type teeGroup struct {
+	reader      ctxgroup.Group
+	readerExit  chan struct{}
+	writers     ctxgroup.Group
+	writersExit chan struct{}
+}
+
+func newTeeGroup() *teeGroup {
+	return &teeGroup{
+		reader:      ctxgroup.WithContext(context.Background()),
+		readerExit:  make(chan struct{}),
+		writers:     ctxgroup.WithContext(context.Background()),
+		writersExit: make(chan struct{}),
+	}
+}
+
+// tee reads incoming messages from input channel and sends them out to one or more output channels.
+func (tg *teeGroup) tee(in <-chan *sarama.ProducerMessage, out ...chan<- *sarama.ProducerMessage) {
+	pipes := make([]chan *sarama.ProducerMessage, len(out))
+	for i := range out {
+		pipes[i] = make(chan *sarama.ProducerMessage)
+	}
+
+	// One reader to read messages from "in" and write them to each pipe.
+	tg.reader.Go(func() error {
+		for {
+			select {
+			case <-tg.readerExit:
+				// Signal writers to exit and return.
+				for _, pipe := range pipes {
+					close(pipe)
+				}
+				return nil
+			case m := <-in:
+				for _, pipe := range pipes {
+					pipe <- m
+				}
+			}
+		}
+	})
+
+	// Add writers for each of the outputs.
+	for i := range pipes {
+		in, out := pipes[i], out[i]
+		tg.writers.Go(func() error {
+			var m *sarama.ProducerMessage
+			for {
+				if m != nil {
+					select {
+					case <-tg.writersExit:
+						return nil
+					case out <- m:
+						m = nil
+					}
+				}
+
+				select {
+				case <-tg.writersExit:
+					return nil
+				case m = <-in:
+				}
+			}
+		})
+	}
+}
+
+// wait shuts down tee group.
+func (tg *teeGroup) wait() error {
+	// First, close the reader -- these signal writers to exit
+	// by closing tee channels.
+	close(tg.readerExit)
+	producersErr := tg.reader.Wait()
+	// Signal and wait for writers.
+	close(tg.writersExit)
+	consumersErr := tg.writers.Wait()
+	return errors.CombineErrors(producersErr, consumersErr)
+}
+
+// kafkaFeedState ties together state necessary for synchronization between
+// this helper, kafka test feed, and the kafka sink.
+// It exists in order to support creating of multiple instances of Feed()s started
+// from the same TestFeedFactory (as happens when creating subtests inside cdcTestFn).
+type kafkaFeedState struct {
+	feedCh chan *sarama.ProducerMessage
+	pg     *teeGroup
+}
+
+func (fs *kafkaFeedState) wait() error {
+	defer close(fs.feedCh)
+	return fs.pg.wait()
+}
+
+// startProduces starts kafka message production and arranges for synchronization between
+// this helper and kafka sink.
+func (fs *kafkaFeedState) startProducer() sarama.AsyncProducer {
+	// The producer we give to kafka sink ignores close call.
+	// This is because normally, kafka sinks owns the producer and so it closes it.
+	// But in this case, this test is the producer, and if we let the sink close
+	// it, the test may panic while trying to send an acknowledgement to the closed channel.
+	producer := &ignoreCloseProducer{newAsyncProducerMock(unbuffered)}
+
+	// TODO(yevgeniy): Support error injection either by acknowledging on the "errors"
+	//  channel, or by injecting error message into sarama.ProducerMessage.Metadata.
+	fs.pg.tee(producer.inputCh, fs.feedCh, producer.successesCh)
+
+	return producer
+}
+
+func kafkaTest(testFn cdcTestFn) func(t *testing.T) {
+	return kafkaTestWithServerArgs(nil, testFn)
+}
+
+func kafkaTestWithServerArgs(
+	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
+) func(*testing.T) {
+	return func(t *testing.T) {
+		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
+		defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+		ctx := context.Background()
+
+		// There can be only 1 active feed.  We don't support parallel tests.
+		var activeFeed *kafkaFeedState
+
+		createFeed := func() (feedCh chan *sarama.ProducerMessage, cleanup func() error) {
+			fs := &kafkaFeedState{
+				feedCh: make(chan *sarama.ProducerMessage),
+				pg:     newTeeGroup(),
+			}
+			activeFeed = fs
+			return fs.feedCh, fs.wait
+		}
+
+		knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{
+			Dial: func(s Sink) {
+				kafka := s.(*kafkaSink)
+				kafka.client = &fakeKafkaClient{}
+				kafka.producer = activeFeed.startProducer()
+				kafka.start()
+			},
+		}}}
+
+		args := base.TestServerArgs{
+			UseDatabase: "d",
+			Knobs:       knobs,
+		}
+		if argsFn != nil {
+			argsFn(&args)
+		}
+		s, db, _ := serverutils.StartServer(t, args)
+
+		defer func() {
+			s.Stopper().Stop(ctx)
+		}()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+
+		if region := serverArgsRegion(args); region != "" {
+			sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE d PRIMARY REGION "%s"`, region))
+		}
+
+		f := cdctest.MakeKafkaFeedFactory(s, db, createFeed)
 		testFn(t, db, f)
 	}
 }
