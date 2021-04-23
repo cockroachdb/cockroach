@@ -11,10 +11,10 @@
 package stop
 
 import (
-	"runtime/debug"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -39,9 +39,11 @@ var trackedStoppers struct {
 }
 
 func register(s *Stopper) {
+	stacks := log.GetStacks(false /* all */)
+	createdAt := string(stacks.StripMarkers())
 	trackedStoppers.Lock()
 	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
-		stopperWithStack{s: s, createdAt: string(debug.Stack())})
+		stopperWithStack{s: s, createdAt: createdAt})
 	trackedStoppers.Unlock()
 }
 

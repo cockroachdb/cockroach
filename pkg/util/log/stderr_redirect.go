@@ -87,7 +87,8 @@ func (l *fileSink) takeOverInternalStderr(logger *loggerT) error {
 
 	// Success: remember who called us, in case the next
 	// caller comes along with the wrong call sequence.
-	takeOverStderrMu.previousStderrTakeover = string(getStacks(false))
+	stacks := GetStacks(false)
+	takeOverStderrMu.previousStderrTakeover = string(stacks.StripMarkers())
 	return nil
 }
 
