@@ -8,7 +8,12 @@
 
 package utilccl
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+)
 
 // IsDistSQLRetryableError returns true if the supplied error, or any of its parent
 // causes is an rpc error.
@@ -27,4 +32,18 @@ func IsDistSQLRetryableError(err error) bool {
 	// it get an error with "rpc error" in the message from the call to
 	// `(*DistSQLPlanner).Run`.
 	return strings.Contains(errStr, `rpc error`)
+}
+
+// IsPermanentBulkJobError returns true if the error results in a permanent
+// failure of a bulk job (IMPORT, BACKUP, RESTORE). This function is a allowlist
+// instead of a blocklist: only known safe errors are confirmed to not be
+// permanent errors. Anything unknown is assumed to be permanent.
+func IsPermanentBulkJobError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return !IsDistSQLRetryableError(err) &&
+		!grpcutil.IsClosedConnection(err) &&
+		!flowinfra.IsNoInboundStreamConnectionError(err)
 }
