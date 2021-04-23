@@ -132,24 +132,26 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	for _, nodeID := range nodeList {
 		nodeIDs := fmt.Sprintf("%d", nodeID)
 		for _, logFile := range logFiles[nodeID] {
-			if !zipCtx.files.isIncluded(logFile.Name) {
+			ctime := extractTimeFromFileName(logFile.Name)
+			mtime := timeutil.Unix(0, logFile.ModTimeNanos)
+			if !zipCtx.files.isIncluded(logFile.Name, ctime, mtime) {
 				continue
 			}
 			totalSize += logFile.SizeBytes
-			ctime := formatTimeSimple(extractTimeFromFileName(logFile.Name))
-			mtime := formatTimeSimple(timeutil.Unix(0, logFile.ModTimeNanos))
-			rows = append(rows, []string{nodeIDs, "log", logFile.Name, ctime, mtime, fmt.Sprintf("%d", logFile.SizeBytes)})
+			ctimes := formatTimeSimple(ctime)
+			mtimes := formatTimeSimple(mtime)
+			rows = append(rows, []string{nodeIDs, "log", logFile.Name, ctimes, mtimes, fmt.Sprintf("%d", logFile.SizeBytes)})
 		}
 		for _, ft := range fileTypes {
 			fileType := int32(ft)
 			for _, other := range otherFiles[nodeID][fileType] {
-				if !zipCtx.files.isIncluded(other.Name) {
+				ctime := extractTimeFromFileName(other.Name)
+				if !zipCtx.files.isIncluded(other.Name, ctime, ctime) {
 					continue
 				}
 				totalSize += other.FileSize
-				ctime := formatTimeSimple(extractTimeFromFileName(other.Name))
-				mtime := ctime
-				rows = append(rows, []string{nodeIDs, fileTypeNames[fileType], other.Name, ctime, mtime, fmt.Sprintf("%d", other.FileSize)})
+				ctimes := formatTimeSimple(ctime)
+				rows = append(rows, []string{nodeIDs, fileTypeNames[fileType], other.Name, ctimes, ctimes, fmt.Sprintf("%d", other.FileSize)})
 			}
 		}
 	}
