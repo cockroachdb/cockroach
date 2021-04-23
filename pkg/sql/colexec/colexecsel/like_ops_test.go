@@ -127,11 +127,11 @@ func BenchmarkLikeOps(b *testing.B) {
 
 	batch.SetLength(coldata.BatchSize())
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
+	source.Init(ctx)
 
 	base := selConstOpBase{
-		OneInputNode: colexecop.NewOneInputNode(source),
-		colIdx:       0,
+		OneInputHelper: colexecop.MakeOneInputHelper(source),
+		colIdx:         0,
 	}
 	prefixOp := &selPrefixBytesBytesConstOp{
 		selConstOpBase: base,
@@ -162,10 +162,10 @@ func BenchmarkLikeOps(b *testing.B) {
 	}
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			tc.op.Init()
+			tc.op.Init(ctx)
 			b.SetBytes(int64(width * coldata.BatchSize()))
 			for i := 0; i < b.N; i++ {
-				tc.op.Next(ctx)
+				tc.op.Next()
 			}
 		})
 	}

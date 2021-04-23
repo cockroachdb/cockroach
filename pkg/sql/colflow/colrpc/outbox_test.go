@@ -38,12 +38,13 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		typs     = []*types.T{types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
+	input.Init(ctx)
 	outbox, err := NewOutbox(testAllocator, input, typs, nil /* getStats */, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
 	// batches to return. Verify this assumption.
-	require.Panics(t, func() { input.Next(ctx) })
+	require.Panics(t, func() { input.Next() })
 
 	// The actual test verifies that the Outbox handles input execution tree
 	// panics by not panicking and returning.
@@ -56,7 +57,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
-	inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
@@ -64,7 +65,8 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	// The outbox will be sending the panic as eagerly. This Next call will
 	// propagate the panic.
 	err = colexecerror.CatchVectorizedRuntimeError(func() {
-		inbox.Next(ctx).Length()
+		inbox.Init(ctx)
+		inbox.Next()
 	})
 	require.Error(t, err)
 
@@ -131,7 +133,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 	t.Run("AfterOutboxError", func(t *testing.T) {
 		// This test, similar to TestOutboxCatchesPanics, relies on the fact that
 		// a BatchBuffer panics when there are no batches to return.
-		require.Panics(t, func() { input.Next(ctx) })
+		require.Panics(t, func() { input.Next() })
 
 		rpcLayer := makeMockFlowStreamRPCLayer()
 		outbox, sourceDrained, err := newOutboxWithMetaSources(testAllocator)

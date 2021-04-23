@@ -67,9 +67,9 @@ func (c callbackCloser) Close(_ context.Context) error {
 // TestVectorizedFlowShutdown tests that closing the materializer correctly
 // closes all the infrastructure corresponding to the flow ending in that
 // materializer. Namely:
-// - on a remote node, it creates an exec.HashRouter with 3 outputs (with a
-// corresponding to each Outbox) as well as 3 standalone Outboxes;
-// - on a local node, it creates 6 exec.Inboxes that feed into an unordered
+// - on a remote node, it creates a colflow.HashRouter with 3 outputs (with a
+// corresponding to each colrpc.Outbox) as well as 3 standalone Outboxes;
+// - on a local node, it creates 6 colrpc.Inboxes that feed into an unordered
 // synchronizer which then outputs all the data into a materializer.
 // The resulting scheme looks as follows:
 //
@@ -211,12 +211,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxLocal)
-					inbox, err := colrpc.NewInbox(
-						ctxLocal,
-						colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory),
-						typs,
-						execinfrapb.StreamID(streamID),
-					)
+					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxLocal, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					synchronizerInputs = append(
@@ -238,7 +233,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}{}
 				idToClosed.mapping = make(map[int]bool)
 				runOutboxInbox := func(
-					ctx context.Context,
+					outboxCtx context.Context,
 					cancelFn context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
 					outboxInput colexecop.Operator,
@@ -250,7 +245,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
-						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory),
+						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
 						outboxInput,
 						typs,
 						nil, /* getStats */
@@ -267,7 +262,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					wg.Add(1)
 					go func(id int) {
 						outbox.Run(
-							ctx,
+							outboxCtx,
 							dialer,
 							execinfra.StaticNodeID,
 							flowID,
@@ -326,12 +321,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					// Add another "remote" node to the flow.
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(ctxAnotherRemote)
-					inbox, err := colrpc.NewInbox(
-						ctxAnotherRemote,
-						colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory),
-						typs,
-						execinfrapb.StreamID(streamID),
-					)
+					inbox, err := colrpc.NewInbox(colmem.NewAllocator(ctxAnotherRemote, &inboxMemAccount, testColumnFactory), typs, execinfrapb.StreamID(streamID))
 					require.NoError(t, err)
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()

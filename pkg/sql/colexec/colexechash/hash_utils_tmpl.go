@@ -20,8 +20,6 @@
 package colexechash
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -63,7 +61,6 @@ func _ASSIGN_HASH(_, _, _, _ interface{}) uint64 {
 
 // {{/*
 func _REHASH_BODY(
-	ctx context.Context,
 	buckets []uint64,
 	keys _GOTYPESLICE,
 	nulls *coldata.Nulls,
@@ -103,7 +100,7 @@ func _REHASH_BODY(
 		//gcassert:bce
 		buckets[i] = uint64(p)
 	}
-	cancelChecker.CheckEveryCall(ctx)
+	cancelChecker.CheckEveryCall()
 	// {{end}}
 
 	// {{/*
@@ -115,7 +112,6 @@ func _REHASH_BODY(
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func rehash(
-	ctx context.Context,
 	buckets []uint64,
 	col coldata.Vec,
 	nKeys int,
@@ -136,15 +132,15 @@ func rehash(
 			keys, nulls := col.TemplateType(), col.Nulls()
 			if col.MaybeHasNulls() {
 				if sel != nil {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, true)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, true)
 				} else {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, true)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, true)
 				}
 			} else {
 				if sel != nil {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, true, false)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, true, false)
 				} else {
-					_REHASH_BODY(ctx, buckets, keys, nulls, nKeys, sel, false, false)
+					_REHASH_BODY(buckets, keys, nulls, nKeys, sel, false, false)
 				}
 			}
 			// {{end}}

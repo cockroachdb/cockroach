@@ -12,7 +12,6 @@ package colexecsel
 
 import (
 	"bytes"
-	"context"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -23,7 +22,7 @@ type selPrefixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -32,7 +31,7 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -104,10 +103,6 @@ func (p *selPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
-}
-
-func (p *selPrefixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selSuffixBytesBytesConstOp struct {
@@ -115,7 +110,7 @@ type selSuffixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -124,7 +119,7 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -196,10 +191,6 @@ func (p *selSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
-}
-
-func (p *selSuffixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selContainsBytesBytesConstOp struct {
@@ -207,7 +198,7 @@ type selContainsBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -216,7 +207,7 @@ func (p *selContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -288,10 +279,6 @@ func (p *selContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
-}
-
-func (p *selContainsBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selRegexpBytesBytesConstOp struct {
@@ -299,7 +286,7 @@ type selRegexpBytesBytesConstOp struct {
 	constArg *regexp.Regexp
 }
 
-func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -308,7 +295,7 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -380,10 +367,6 @@ func (p *selRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
-}
-
-func (p *selRegexpBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selNotPrefixBytesBytesConstOp struct {
@@ -391,7 +374,7 @@ type selNotPrefixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -400,7 +383,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -472,10 +455,6 @@ func (p *selNotPrefixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			return batch
 		}
 	}
-}
-
-func (p *selNotPrefixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selNotSuffixBytesBytesConstOp struct {
@@ -483,7 +462,7 @@ type selNotSuffixBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -492,7 +471,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -564,10 +543,6 @@ func (p *selNotSuffixBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			return batch
 		}
 	}
-}
-
-func (p *selNotSuffixBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selNotContainsBytesBytesConstOp struct {
@@ -575,7 +550,7 @@ type selNotContainsBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -584,7 +559,7 @@ func (p *selNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -656,10 +631,6 @@ func (p *selNotContainsBytesBytesConstOp) Next(ctx context.Context) coldata.Batc
 			return batch
 		}
 	}
-}
-
-func (p *selNotContainsBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type selNotRegexpBytesBytesConstOp struct {
@@ -667,7 +638,7 @@ type selNotRegexpBytesBytesConstOp struct {
 	constArg *regexp.Regexp
 }
 
-func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
@@ -676,7 +647,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 	_ = _overloadHelper
 	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -748,8 +719,4 @@ func (p *selNotRegexpBytesBytesConstOp) Next(ctx context.Context) coldata.Batch 
 			return batch
 		}
 	}
-}
-
-func (p *selNotRegexpBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
