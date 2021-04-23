@@ -46,7 +46,7 @@ The addresses used are those advertised by the nodes themselves. Make sure hapro
 can resolve the hostnames in the configuration file, either by using full-qualified names, or
 running haproxy in the same network.
 
-Notes that have been decommissioned are excluded from the generated configuration.
+Nodes that have been decommissioned are excluded from the generated configuration.
 
 Nodes to include can be filtered by localities matching the '--locality' regular expression. eg:
   --locality=region=us-east                  # Nodes in region "us-east"
