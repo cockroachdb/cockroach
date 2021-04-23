@@ -564,7 +564,48 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'sqltelemetry.xxxCounter() instead", s)
+			t.Errorf("\n%s <- forbidden; use 'sqltelemetry.xxxCounter()' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestDebugStacks", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`[^[:alnum:]](runtime|debug)\.Stack`,
+			"--",
+			"*.go",
+			// The one API that turns an unsafe stack
+			// into a safe one.
+			":!util/log/get_stacks.go",
+			// Calls to debug.Stack are acceptable in test code.
+			":!*_test.go",
+			":!util/leaktest/leaktest.go",
+			":!testutils/soon.go",
+			":!sql/logictest/logic.go",
+			":!cmd/roachtest/test_runner.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use log.DumpStacks(), an error object with an embedded stack trace, or log.GetStacks()", s)
 		}); err != nil {
 			t.Error(err)
 		}
