@@ -312,7 +312,15 @@ calculated, the result is transformed back into a Geography with SRID 4326.`
 func performGeographyOperationUsingBestGeomProjection(
 	g geo.Geography, f func(geo.Geometry) (geo.Geometry, error),
 ) (geo.Geography, error) {
-	proj, err := geogfn.BestGeomProjection(g.BoundingRect())
+	bestProj, err := geogfn.BestGeomProjection(g.BoundingRect())
+	if err != nil {
+		return geo.Geography{}, err
+	}
+	geogDefaultProj, err := geoprojbase.Projection(geopb.DefaultGeographySRID)
+	if err != nil {
+		return geo.Geography{}, err
+	}
+	gProj, err := geoprojbase.Projection(g.SRID())
 	if err != nil {
 		return geo.Geography{}, err
 	}
@@ -324,8 +332,8 @@ func performGeographyOperationUsingBestGeomProjection(
 
 	inProjectedGeom, err := geotransform.Transform(
 		inLatLonGeom,
-		geoprojbase.Projections[g.SRID()].Proj4Text,
-		proj,
+		gProj.Proj4Text,
+		bestProj,
 		g.SRID(),
 	)
 	if err != nil {
@@ -339,8 +347,8 @@ func performGeographyOperationUsingBestGeomProjection(
 
 	outGeom, err := geotransform.Transform(
 		outProjectedGeom,
-		proj,
-		geoprojbase.Projections[geopb.DefaultGeographySRID].Proj4Text,
+		bestProj,
+		geogDefaultProj.Proj4Text,
 		geopb.DefaultGeographySRID,
 	)
 	if err != nil {
@@ -4063,6 +4071,18 @@ Note the geometry must be a LineString with M coordinates.`,
 				if err != nil {
 					return nil, err
 				}
+				aProj, err := geoprojbase.Projection(a.Geography.SRID())
+				if err != nil {
+					return nil, err
+				}
+				bProj, err := geoprojbase.Projection(b.Geography.SRID())
+				if err != nil {
+					return nil, err
+				}
+				geogDefaultProj, err := geoprojbase.Projection(geopb.DefaultGeographySRID)
+				if err != nil {
+					return nil, err
+				}
 
 				aInGeom, err := a.Geography.AsGeometry()
 				if err != nil {
@@ -4075,7 +4095,7 @@ Note the geometry must be a LineString with M coordinates.`,
 
 				aInProjected, err := geotransform.Transform(
 					aInGeom,
-					geoprojbase.Projections[a.Geography.SRID()].Proj4Text,
+					aProj.Proj4Text,
 					proj,
 					a.Geography.SRID(),
 				)
@@ -4084,7 +4104,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				}
 				bInProjected, err := geotransform.Transform(
 					bInGeom,
-					geoprojbase.Projections[b.Geography.SRID()].Proj4Text,
+					bProj.Proj4Text,
 					proj,
 					b.Geography.SRID(),
 				)
@@ -4100,7 +4120,7 @@ Note the geometry must be a LineString with M coordinates.`,
 				outGeom, err := geotransform.Transform(
 					projectedIntersection,
 					proj,
-					geoprojbase.Projections[geopb.DefaultGeographySRID].Proj4Text,
+					geogDefaultProj.Proj4Text,
 					geopb.DefaultGeographySRID,
 				)
 				if err != nil {
@@ -4301,13 +4321,13 @@ The paths themselves are given in the direction of the first geometry.`,
 				g := tree.MustBeDGeometry(args[0])
 				srid := geopb.SRID(tree.MustBeDInt(args[1]))
 
-				fromProj, exists := geoprojbase.Projection(g.SRID())
-				if !exists {
-					return nil, errors.Newf("projection for srid %d does not exist", g.SRID())
+				fromProj, err := geoprojbase.Projection(g.SRID())
+				if err != nil {
+					return nil, err
 				}
-				toProj, exists := geoprojbase.Projection(srid)
-				if !exists {
-					return nil, errors.Newf("projection for srid %d does not exist", srid)
+				toProj, err := geoprojbase.Projection(srid)
+				if err != nil {
+					return nil, err
 				}
 				ret, err := geotransform.Transform(g.Geometry, fromProj.Proj4Text, toProj.Proj4Text, srid)
 				if err != nil {
@@ -4331,9 +4351,9 @@ The paths themselves are given in the direction of the first geometry.`,
 				g := tree.MustBeDGeometry(args[0])
 				toProj := string(tree.MustBeDString(args[1]))
 
-				fromProj, exists := geoprojbase.Projection(g.SRID())
-				if !exists {
-					return nil, errors.Newf("projection for srid %d does not exist", g.SRID())
+				fromProj, err := geoprojbase.Projection(g.SRID())
+				if err != nil {
+					return nil, err
 				}
 				ret, err := geotransform.Transform(
 					g.Geometry,
@@ -4393,9 +4413,9 @@ The paths themselves are given in the direction of the first geometry.`,
 				fromProj := string(tree.MustBeDString(args[1]))
 				srid := geopb.SRID(tree.MustBeDInt(args[2]))
 
-				toProj, exists := geoprojbase.Projection(srid)
-				if !exists {
-					return nil, errors.Newf("projection for srid %d does not exist", srid)
+				toProj, err := geoprojbase.Projection(srid)
+				if err != nil {
+					return nil, err
 				}
 				ret, err := geotransform.Transform(
 					g.Geometry,
