@@ -28,7 +28,15 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// errNoInboundStreamConnection is the error propagated through the flow when
+// the timeout to setup the flow is exceeded.
 var errNoInboundStreamConnection = errors.New("no inbound stream connection")
+
+// IsNoInboundStreamConnectionError returns true if err's Cause is an
+// errNoInboundStreamConnection.
+func IsNoInboundStreamConnectionError(err error) bool {
+	return errors.Is(err, errNoInboundStreamConnection)
+}
 
 // SettingFlowStreamTimeout is a cluster setting that sets the default flow
 // stream timeout.
