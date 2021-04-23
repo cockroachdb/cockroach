@@ -8031,3 +8031,63 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		sqlDB.Exec(t, `DROP DATABASE restoredb CASCADE;`)
 	}
 }
+
+func TestBackupWorkerFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "under stress the test unexpectedly surfaces non-retryable errors on"+
+		" backup failure")
+
+	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
+
+	allowResponse := make(chan struct{})
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+	}
+
+	const numAccounts = 100
+
+	_, tc, _, _, cleanup := backupRestoreTestSetupWithParams(t, MultiNode, numAccounts,
+		InitManualReplication, params)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	defer cleanup()
+
+	var expectedCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&expectedCount)
+	query := `BACKUP DATABASE data TO 'userfile:///worker-failure'`
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(query)
+		errCh <- err
+	}()
+	select {
+	case allowResponse <- struct{}{}:
+	case err := <-errCh:
+		t.Fatalf("%s: query returned before expected: %s", err, query)
+	}
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+
+	// Shut down a node.
+	tc.StopServer(1)
+
+	close(allowResponse)
+	// We expect the statement to retry since it should have encountered a
+	// retryable error.
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+
+	// But the job should be restarted and succeed eventually.
+	jobutils.WaitForJob(t, sqlDB, jobID)
+
+	// Drop database and restore to ensure that the backup was successful.
+	sqlDB.Exec(t, `DROP DATABASE data`)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM 'userfile:///worker-failure'`)
+	var actualCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&actualCount)
+	require.Equal(t, expectedCount, actualCount)
+}

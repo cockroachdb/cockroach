@@ -376,7 +376,11 @@ func runBackupProcessor(
 						return err
 					}
 					prog.ProgressDetails = *details
-					progCh <- prog
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case progCh <- prog:
+					}
 				} else {
 					// Update the partial progress as we still have a resumeSpan to
 					// process.
