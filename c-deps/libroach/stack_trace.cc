@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex>
 
 namespace {
 
@@ -304,6 +305,11 @@ std::string DumpThreadStacksHelper() {
 }  // namespace
 
 std::string DumpThreadStacks() {
+  // This code is not thread-safe: ensure we have only one concurrent call to
+  // DumpThreadStacks ongoing at a time.
+  static std::mutex s_mutex;
+  std::lock_guard<std::mutex> lock(s_mutex);
+
   struct sigaction action;
   struct sigaction oldaction;
   memset(&action, 0, sizeof(action));
