@@ -12,17 +12,26 @@ package explain_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 	"text/tabwriter"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/assert"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -121,4 +130,48 @@ func TestEmptyOutputBuilder(t *testing.T) {
 	if rows := ob.BuildStringRows(); len(rows) != 0 {
 		t.Errorf("expected no rows, got %v", rows)
 	}
+}
+
+func TestMaxDiskSpillUsage(t *testing.T) {
+	testClusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationAuto,
+	}
+	distSQLKnobs := &execinfra.TestingKnobs{}
+	distSQLKnobs.ForceDiskSpill = true
+	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
+	testClusterArgs.ServerArgs.Insecure = true
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.Conns[0]
+
+	_, err := conn.ExecContext(ctx, `
+CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)
+`)
+	assert.NoError(t, err)
+	maxDiskUsageRE := regexp.MustCompile(`maximum sql temp disk usage: (\d+)`)
+
+	queryMatchRE := func(query string, re *regexp.Regexp) bool {
+		rows, err := conn.QueryContext(ctx, query)
+		assert.NoError(t, err)
+		for rows.Next() {
+			var res string
+			assert.NoError(t, rows.Scan(&res))
+			var sb strings.Builder
+			sb.WriteString(res)
+			sb.WriteByte('\n')
+			if matches := re.FindStringSubmatch(res); len(matches) > 0 {
+				return true
+			}
+		}
+		return false
+	}
+
+	// We are expecting disk spilling to show up because we enabled ForceDiskSpill
+	// knob above.
+	assert.True(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t join t AS x on t.b=x.a`, maxDiskUsageRE), "didn't find maximum sql temp disk usage in explain")
+	assert.False(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t `, maxDiskUsageRE), "found unexpected maximum sql temp disk usage in explain")
+
 }

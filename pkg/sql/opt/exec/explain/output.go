@@ -388,6 +388,19 @@ func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	)
 }
 
+// AddMaxDiskUsage adds a top-level field for the sql temporary disk space used
+// by the query. If we're redacting leave this out to keep logic test output
+// independent of disk spilling. Disk spilling is controlled by a metamorphic
+// constant so it may or may not occur randomly so it makes sense to omit this
+// information entirely if we're redacting. Since disk spilling is rare we only
+// include this field is bytes is greater than zero.
+func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
+	if !ob.flags.Redact.Has(RedactVolatile) && bytes > 0 {
+		ob.AddTopLevelField("maximum sql temp disk usage",
+			humanizeutil.IBytes(bytes))
+	}
+}
+
 // AddNetworkStats adds a top-level field for network statistics.
 func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 	ob.AddRedactableTopLevelField(
