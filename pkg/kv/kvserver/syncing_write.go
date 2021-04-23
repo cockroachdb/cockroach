@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"os"
-	"runtime/debug"
 	"strings"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
 
@@ -51,8 +51,9 @@ func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) {
 	}
 
 	if d := timeutil.Since(begin); d > bulkIOWriteLimiterLongWait {
-		log.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
-			d, bulkIOWriteLimiterLongWait, debug.Stack())
+		warning := errors.Newf("bulk io write limiter took %s (>%s)", d, bulkIOWriteLimiterLongWait)
+		// The verbose error log will also dump the stack trace embedded in the error.
+		log.Warningf(ctx, "%+v", warning)
 	}
 }
 
