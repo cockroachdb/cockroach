@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -169,7 +170,7 @@ func TestBatchRequestSummary(t *testing.T) {
 	// be exhaustive.
 	testCases := []struct {
 		reqs     []Request
-		expected string
+		expected redact.RedactableString
 	}{
 		{
 			reqs:     []Request{},

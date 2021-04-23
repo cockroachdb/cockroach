@@ -150,7 +150,10 @@ func main() {
 
 package roachpb
 
-import "github.com/cockroachdb/errors"
+import (
+  "github.com/cockroachdb/errors"
+  "github.com/cockroachdb/redact"
+)
 
 `)
 
@@ -207,7 +210,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 
 	// Generate Summary function.
 	fmt.Fprintf(f, `
-var requestNames = []string{`)
+var requestNames = []redact.SafeString{`)
 	for _, v := range reqVariants {
 		name := v.variantName
 		for str, short := range shorthands {

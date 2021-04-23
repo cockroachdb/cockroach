@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -652,11 +651,10 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
-		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
+		failure := errors.Newf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba.Summary())
-		stack := string(debug.Stack())
-		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(msg), &tc.mu.txn)
+		log.Errorf(ctx, "%+v", failure)
+		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(failure.Error()), &tc.mu.txn)
 	}
 
 	// Check the transaction proto state, along with any finalized transaction

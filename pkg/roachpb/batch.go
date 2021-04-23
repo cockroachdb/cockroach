@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -40,34 +39,25 @@ func (h Header) WriteTimestamp() hlc.Timestamp {
 }
 
 // Summary prints a short summary of the requests in a batch.
-func (ba *BatchRequest) Summary() string {
-	var b strings.Builder
-	ba.WriteSummary(&b)
-	return b.String()
-}
-
-// WriteSummary writes a short summary of the requests in a batch
-// to the provided builder.
-func (ba *BatchRequest) WriteSummary(b *strings.Builder) {
+func (ba *BatchRequest) Summary() redact.RedactableString {
 	if len(ba.Requests) == 0 {
-		b.WriteString("empty batch")
-		return
+		return "empty batch"
 	}
+
+	var p redact.StringBuilder
 	counts := ba.getReqCounts()
-	var tmp [10]byte
 	var comma bool
 	for i, v := range counts {
 		if v != 0 {
 			if comma {
-				b.WriteString(", ")
+				p.SafeString(", ")
 			}
 			comma = true
 
-			b.Write(strconv.AppendInt(tmp[:0], int64(v), 10))
-			b.WriteString(" ")
-			b.WriteString(requestNames[i])
+			p.Printf("%d %s", v, requestNames[i])
 		}
 	}
+	return p.RedactableString()
 }
 
 // SetActiveTimestamp sets the correct timestamp at which the request is to be

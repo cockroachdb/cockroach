@@ -3,7 +3,10 @@
 
 package roachpb
 
-import "github.com/cockroachdb/errors"
+import (
+  "github.com/cockroachdb/errors"
+  "github.com/cockroachdb/redact"
+)
 
 
 // GetInner returns the error contained in the union.
@@ -640,7 +643,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 	return counts
 }
 
-var requestNames = []string{
+var requestNames = []redact.SafeString{
 	"Get",
 	"Put",
 	"CPut",
