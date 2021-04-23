@@ -78,7 +78,8 @@ func (g *mockLockTableGuard) CurState() waitingState {
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
 }
-func (g *mockLockTableGuard) notify() { g.signal <- struct{}{} }
+func (g *mockLockTableGuard) DiscoveredLocks(discoveredCount int) {}
+func (g *mockLockTableGuard) notify()                             { g.signal <- struct{}{} }
 
 // mockLockTable overrides TransactionIsFinalized, which is the only LockTable
 // method that should be called in this test.

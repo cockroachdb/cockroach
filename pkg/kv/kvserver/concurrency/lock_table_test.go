@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -88,6 +89,9 @@ txn-finalized txn=<name> status=committed|aborted
 
  Informs the lock table that the named transaction is finalized.
 
+discovered-locks r=<name> count=<count>
+----
+
 add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>]
 ----
 <error string>
@@ -114,6 +118,13 @@ should-wait r=<name>
 
  Calls lockTableGuard.ShouldWait.
 
+resolve-before-scanning r=<name>
+----
+<intents to resolve>
+
+set-consult-finalized-txn-cache-for-discovered-count n=<count>
+----
+
 enable [lease-seq=<seq>]
 ----
 
@@ -138,6 +149,7 @@ func TestLockTableBasic(t *testing.T) {
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
+		var st *cluster.Settings
 		var txnsByName map[string]*enginepb.TxnMeta
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
@@ -147,7 +159,8 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				ltImpl := newLockTable(int64(maxLocks))
+				st = cluster.MakeClusterSettings()
+				ltImpl := newLockTable(int64(maxLocks), st)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
@@ -348,6 +361,18 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return lt.(*lockTableImpl).String()
 
+			case "discovered-locks":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				var count int
+				d.ScanArgs(t, "count", &count)
+				g.DiscoveredLocks(count)
+				return ""
+
 			case "add-discovered":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
@@ -425,15 +450,7 @@ func TestLockTableBasic(t *testing.T) {
 				case doneWaiting:
 					var toResolveStr string
 					if stateTransition {
-						if toResolve := g.ResolveBeforeScanning(); len(toResolve) > 0 {
-							var buf strings.Builder
-							fmt.Fprintf(&buf, "\nIntents to resolve:")
-							for i := range toResolve {
-								fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
-									toResolve[i].Txn.ID.Short(), toResolve[i].Status)
-							}
-							toResolveStr = buf.String()
-						}
+						toResolveStr = intentsToResolveToStr(g.ResolveBeforeScanning(), true)
 					}
 					return str + "state=doneWaiting" + toResolveStr
 				}
@@ -450,6 +467,20 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
 					str, typeStr, txnS, state.key, state.held, state.guardAccess)
+
+			case "resolve-before-scanning":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				return intentsToResolveToStr(g.ResolveBeforeScanning(), false)
+			case "set-consult-finalized-txn-cache-for-discovered-count":
+				var n int
+				d.ScanArgs(t, "n", &n)
+				LockTableConsultFinalizedTxnCacheForDiscoveredCount.Override(&st.SV, int64(n))
+				return ""
 
 			case "enable":
 				seq := int(1)
@@ -524,8 +555,24 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
+func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) string {
+	if len(toResolve) == 0 {
+		return ""
+	}
+	var buf strings.Builder
+	if startOnNewLine {
+		fmt.Fprintf(&buf, "\n")
+	}
+	fmt.Fprintf(&buf, "Intents to resolve:")
+	for i := range toResolve {
+		fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
+			toResolve[i].Txn.ID.Short(), toResolve[i].Status)
+	}
+	return buf.String()
+}
+
 func TestLockTableMaxLocks(t *testing.T) {
-	lt := newLockTable(5)
+	lt := newLockTable(5, cluster.MakeClusterSettings())
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -818,7 +865,7 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(maxLocks)
+	lt := newLockTable(maxLocks, cluster.MakeClusterSettings())
 	lt.enabled = true
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
@@ -1381,7 +1428,7 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(maxLocks)
+						lt := newLockTable(maxLocks, cluster.MakeClusterSettings())
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},

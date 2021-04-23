@@ -73,7 +73,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize)
+	lt := newLockTable(cfg.MaxLockTableSize, cfg.Settings)
 	*m = managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
@@ -257,6 +257,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue. If the lock-table is disabled and one or more of the intents
 	// are ignored then we immediately wait on all intents.
+	g.ltg.DiscoveredLocks(len(t.Intents))
 	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
@@ -283,6 +284,12 @@ func (m *managerImpl) HandleWriterIntentError(
 			intent := &t.Intents[i]
 			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
 				m.FinishReq(g)
+				return nil, err
+			}
+		}
+	} else {
+		if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+			if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
 				return nil, err
 			}
 		}

@@ -70,6 +70,8 @@ import (
 // on-merge
 // on-snapshot-applied
 //
+// set-consult-finalized-txn-cache-for-discovered-count n=<count>
+//
 // debug-latch-manager
 // debug-lock-table
 // debug-disable-txn-pushes
@@ -443,6 +445,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					m.OnReplicaSnapshotApplied()
 				})
 				return c.waitAndCollect(t, mon)
+
+			case "set-consult-finalized-txn-cache-for-discovered-count":
+				var n int
+				d.ScanArgs(t, "n", &n)
+				concurrency.LockTableConsultFinalizedTxnCacheForDiscoveredCount.Override(&c.st.SV, int64(n))
+				return ""
 
 			case "debug-latch-manager":
 				global, local := m.LatchMetrics()
