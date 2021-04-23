@@ -370,6 +370,9 @@ type lockTableGuardImpl struct {
 	// mu since should only be read after the caller has already synced with mu
 	// in realizing that it is doneWaiting.
 	toResolve []roachpb.LockUpdate
+	// See method comment for AddDiscoveredLock on the reason for not always
+	// consulting the finalizedTxnCache.
+	consultFinalizedTxnCacheForDiscoveredLocks bool
 }
 
 var _ lockTableGuard = &lockTableGuardImpl{}
@@ -440,6 +443,20 @@ func (g *lockTableGuardImpl) CurState() waitingState {
 	g.findNextLockAfter(false /* notify */)
 	g.mu.Lock() // Unlock deferred
 	return g.mu.state
+}
+
+func (g *lockTableGuardImpl) DiscoveredLocks(discoveredCount int) {
+	// Consult finalizedTxnCache if discovered more than 5% of capacity. This 5%
+	// number is somewhat arbitrary. The capacity is 10,000, so 5%, which is 50,
+	// should be sufficient for smallish transactions. We have seen examples
+	// with discoveredCount > 100,000, caused by stats collection, where we
+	// definitely want to avoid adding these locks to the lock table, if
+	// possible.
+	g.consultFinalizedTxnCacheForDiscoveredLocks = discoveredCount > int(g.lt.maxLocks)/20
+	// Defensive: ScanAndEnqueue already empties toResolve, and since this
+	// request proceeded to evaluation, there must have been any locks to
+	// resolve.
+	g.toResolve = g.toResolve[:0]
 }
 
 func (g *lockTableGuardImpl) notify() {
@@ -2098,6 +2115,27 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 }
 
 // AddDiscoveredLock implements the lockTable interface.
+//
+// We discussed in
+// https://github.com/cockroachdb/cockroach/issues/62470#issuecomment-818374388
+// the possibility of consulting the finalizedTxnCache in AddDiscoveredLock,
+// and not adding the lock if the txn is already finalized, and instead tell
+// the caller to do batched intent resolution before calling ScanAndEnqueue.
+// This reduces memory pressure on the lockTableImpl in the extreme case of
+// huge numbers of discovered locks. Note that when there isn't memory
+// pressure, the consultation of the finalizedTxnCache in the ScanAndEnqueue
+// achieves the same batched intent resolution. Additionally, adding the lock
+// to the lock table allows it to coordinate the population of
+// lockTableGuardImpl.toResolve for different requests that encounter the same
+// lock, to reduce the likelihood of duplicated intent resolution. This
+// coordination could be improved further, as outlined in the comment in
+// tryActiveWait, but it hinges on the lock table having the state of the
+// discovered lock.
+//
+// For now we adopt the following heuristic: the caller calls DiscoveredLocks
+// with the count of locks discovered, prior to calling AddDiscoveredLock for
+// each of the locks. At that point a decision is made whether to consult the
+// finalizedTxnCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
 	intent *roachpb.Intent, seq roachpb.LeaseSequence, guard lockTableGuard,
 ) (added bool, _ error) {
@@ -2123,6 +2161,14 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	sa, ss, err := findAccessInSpans(key, g.spans)
 	if err != nil {
 		return false, err
+	}
+	if g.consultFinalizedTxnCacheForDiscoveredLocks {
+		finalizedTxn, ok := t.finalizedTxnCache.get(intent.Txn.ID)
+		if ok {
+			g.toResolve = append(
+				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
+			return true, nil
+		}
 	}
 	var l *lockState
 	tree := &t.locks[ss]

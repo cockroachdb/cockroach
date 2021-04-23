@@ -88,6 +88,9 @@ txn-finalized txn=<name> status=committed|aborted
 
  Informs the lock table that the named transaction is finalized.
 
+discovered-locks r=<name> count=<count>
+----
+
 add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>]
 ----
 <error string>
@@ -114,6 +117,10 @@ should-wait r=<name>
 
  Calls lockTableGuard.ShouldWait.
 
+resolve-before-scanning r=<name>
+----
+<intents to resolve>
+
 enable [lease-seq=<seq>]
 ----
 
@@ -135,6 +142,22 @@ print
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	intentsToResolveToStr := func(toResolve []roachpb.LockUpdate, startOnNewLine bool) string {
+		if len(toResolve) == 0 {
+			return ""
+		}
+		var buf strings.Builder
+		if startOnNewLine {
+			fmt.Fprintf(&buf, "\n")
+		}
+		fmt.Fprintf(&buf, "Intents to resolve:")
+		for i := range toResolve {
+			fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
+				toResolve[i].Txn.ID.Short(), toResolve[i].Status)
+		}
+		return buf.String()
+	}
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
@@ -348,6 +371,18 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return lt.(*lockTableImpl).String()
 
+			case "discovered-locks":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				var count int
+				d.ScanArgs(t, "count", &count)
+				g.DiscoveredLocks(count)
+				return ""
+
 			case "add-discovered":
 				var reqName string
 				d.ScanArgs(t, "r", &reqName)
@@ -425,15 +460,7 @@ func TestLockTableBasic(t *testing.T) {
 				case doneWaiting:
 					var toResolveStr string
 					if stateTransition {
-						if toResolve := g.ResolveBeforeScanning(); len(toResolve) > 0 {
-							var buf strings.Builder
-							fmt.Fprintf(&buf, "\nIntents to resolve:")
-							for i := range toResolve {
-								fmt.Fprintf(&buf, "\n key=%s txn=%s status=%s", toResolve[i].Key,
-									toResolve[i].Txn.ID.Short(), toResolve[i].Status)
-							}
-							toResolveStr = buf.String()
-						}
+						toResolveStr = intentsToResolveToStr(g.ResolveBeforeScanning(), true)
 					}
 					return str + "state=doneWaiting" + toResolveStr
 				}
@@ -450,6 +477,15 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				return fmt.Sprintf("%sstate=%s txn=%s key=%s held=%t guard-access=%s",
 					str, typeStr, txnS, state.key, state.held, state.guardAccess)
+
+			case "resolve-before-scanning":
+				var reqName string
+				d.ScanArgs(t, "r", &reqName)
+				g := guardsByReqName[reqName]
+				if g == nil {
+					d.Fatalf(t, "unknown guard: %s", reqName)
+				}
+				return intentsToResolveToStr(g.ResolveBeforeScanning(), false)
 
 			case "enable":
 				seq := int(1)

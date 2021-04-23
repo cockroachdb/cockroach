@@ -37,7 +37,7 @@ type managerImpl struct {
 	// Synchronizes conflicting in-progress transactions.
 	lt lockTable
 	// Waits for locks that conflict with a request to be released.
-	ltw lockTableWaiter
+	ltw *lockTableWaiterImpl
 	// Waits for transaction completion and detects deadlocks.
 	twq txnWaitQueue
 }
@@ -257,6 +257,7 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue. If the lock-table is disabled and one or more of the intents
 	// are ignored then we immediately wait on all intents.
+	g.ltg.DiscoveredLocks(len(t.Intents))
 	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
@@ -283,6 +284,12 @@ func (m *managerImpl) HandleWriterIntentError(
 			intent := &t.Intents[i]
 			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
 				m.FinishReq(g)
+				return nil, err
+			}
+		}
+	} else {
+		if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+			if err := m.ltw.resolveDeferredIntents(ctx, toResolve); err != nil {
 				return nil, err
 			}
 		}

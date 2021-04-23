@@ -596,9 +596,18 @@ type lockTableGuard interface {
 	CurState() waitingState
 
 	// ResolveBeforeScanning lists the locks to resolve before scanning again.
-	// This must be called after the waiting state has transitioned to
-	// doneWaiting.
+	// This must be called after:
+	// - the waiting state has transitioned to doneWaiting.
+	// - if locks were discovered during evaluation, it must be called after all
+	//   the discovered locks have been added.
 	ResolveBeforeScanning() []roachpb.LockUpdate
+
+	// DiscoveredLocks provides guidance to the lock table, that discoveredCount
+	// locks have been discovered. This allows for an internal optimization on
+	// whether to consult the finalized txn cache. It is recommended to call
+	// before iterating over the discovered locks and calling AddDiscoveredLock,
+	// though it is not essential (and some tests don't).
+	DiscoveredLocks(discoveredCount int)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held
