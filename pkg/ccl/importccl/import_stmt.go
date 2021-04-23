@@ -2134,8 +2134,9 @@ func ingestWithRetry(
 		MaxRetries: 5,
 	}
 
-	// We want to retry a restore if there are transient failures (i.e. worker nodes
-	// dying), so if we receive a retryable error, re-plan and retry the backup.
+	// We want to retry an import if there are transient failures (i.e. worker
+	// nodes dying), so if we receive a retryable error, re-plan and retry the
+	// import.
 	var res roachpb.BulkOpSummary
 	var err error
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
@@ -2144,7 +2145,7 @@ func ingestWithRetry(
 			break
 		}
 
-		if !utilccl.IsDistSQLRetryableError(err) {
+		if utilccl.IsPermanentBulkJobError(err) {
 			return roachpb.BulkOpSummary{}, err
 		}
 
