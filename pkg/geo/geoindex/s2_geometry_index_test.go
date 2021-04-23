@@ -128,10 +128,10 @@ func TestNoClippingAtSRIDBounds(t *testing.T) {
 	// Test that indexes that use the SRID bounds don't clip shapes that touch
 	// those bounds. This test uses point shapes representing the four corners
 	// of the bounds.
-	for srid, projInfo := range geoprojbase.Projections {
-		t.Run(strconv.Itoa(int(srid)), func(t *testing.T) {
+	for _, projInfo := range geoprojbase.AllProjections() {
+		t.Run(strconv.Itoa(int(projInfo.SRID)), func(t *testing.T) {
 			b := projInfo.Bounds
-			config, err := GeometryIndexConfigForSRID(srid)
+			config, err := GeometryIndexConfigForSRID(projInfo.SRID)
 			require.NoError(t, err)
 			index := NewS2GeometryIndex(*config.S2Geometry)
 			// Four corners of the bounds, proceeding clockwise from the lower-left.
@@ -144,9 +144,8 @@ func TestNoClippingAtSRIDBounds(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, 1, len(keys))
 				require.NotEqual(t, Key(exceedsBoundsCellID), keys[0],
-					"SRID: %d, Point: %f, %f", srid, xCorners[i], yCorners[i])
+					"SRID: %d, Point: %f, %f", projInfo.SRID, xCorners[i], yCorners[i])
 			}
 		})
 	}
-
 }

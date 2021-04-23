@@ -159,9 +159,9 @@ func (i *s2GeographyIndex) DWithin(
 	distanceMeters float64,
 	useSphereOrSpheroid geogfn.UseSphereOrSpheroid,
 ) (UnionKeySpans, error) {
-	projInfo, ok := geoprojbase.Projection(g.SRID())
-	if !ok {
-		return nil, errors.Errorf("projection not found for SRID: %d", g.SRID())
+	projInfo, err := geoprojbase.Projection(g.SRID())
+	if err != nil {
+		return nil, err
 	}
 	if projInfo.Spheroid == nil {
 		return nil, errors.Errorf("projection %d does not have spheroid", g.SRID())

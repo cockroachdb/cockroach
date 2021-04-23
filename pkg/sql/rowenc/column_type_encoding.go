@@ -110,10 +110,14 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return encoding.EncodeGeoDescending(b, t.Geography.SpaceCurveIndex(), so)
 	case *tree.DGeometry:
 		so := t.Geometry.SpatialObjectRef()
-		if dir == encoding.Ascending {
-			return encoding.EncodeGeoAscending(b, t.Geometry.SpaceCurveIndex(), so)
+		spaceCurveIndex, err := t.Geometry.SpaceCurveIndex()
+		if err != nil {
+			return nil, err
 		}
-		return encoding.EncodeGeoDescending(b, t.Geometry.SpaceCurveIndex(), so)
+		if dir == encoding.Ascending {
+			return encoding.EncodeGeoAscending(b, spaceCurveIndex, so)
+		}
+		return encoding.EncodeGeoDescending(b, spaceCurveIndex, so)
 	case *tree.DDate:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, t.UnixEpochDaysWithOrig()), nil
