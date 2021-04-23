@@ -268,6 +268,52 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 }
 
+func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, args)
+	defer tc.Stopper().Stop(ctx)
+
+	k := keys.MustAddr(tc.ScratchRange(t))
+
+	tests := []struct {
+		voterTargets, nonVoterTargets []int
+		expectedErr                   string
+	}{
+		{
+			voterTargets: []int{1, 1, 2},
+			expectedErr:  "list of desired voter targets contains duplicates",
+		},
+		{
+			voterTargets:    []int{1, 2},
+			nonVoterTargets: []int{0, 1, 0},
+			expectedErr:     "list of desired non-voter targets contains duplicates",
+		},
+		{
+			voterTargets:    []int{1, 2},
+			nonVoterTargets: []int{1},
+			expectedErr:     "list of voter targets overlaps with the list of non-voter targets",
+		},
+		{
+			voterTargets:    []int{1, 2},
+			nonVoterTargets: []int{1, 2},
+			expectedErr:     "list of voter targets overlaps with the list of non-voter targets",
+		},
+	}
+	for _, subtest := range tests {
+		err := tc.Servers[0].DB().AdminRelocateRange(
+			context.Background(), k.AsRawKey(), tc.Targets(subtest.voterTargets...), tc.Targets(subtest.nonVoterTargets...),
+		)
+		require.Regexp(t, subtest.expectedErr, err)
+	}
+}
+
 // TestAdminRelocateRangeRandom runs a series of random relocations on a scratch
 // range and checks to ensure that the relocations were successfully executed.
 func TestAdminRelocateRangeRandom(t *testing.T) {
