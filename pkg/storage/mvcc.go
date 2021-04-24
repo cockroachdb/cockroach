@@ -3108,12 +3108,6 @@ func GetBufUsingIter(iter MVCCIterator) IterAndBuf {
 	}
 }
 
-// SwitchIter switches to iter, and relinquishes ownership of the existing
-// iter.
-func (b *IterAndBuf) SwitchIter(iter MVCCIterator) {
-	b.iter = iter
-}
-
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
