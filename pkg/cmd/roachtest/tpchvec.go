@@ -533,7 +533,7 @@ func baseTestRun(
 			// sql.defaults.vectorize which must have been set correctly in
 			// preTestRunHook.
 			cmd := fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
-				"--default-vectorize --max-ops=%d --queries=%d {pgurl:1}",
+				"--default-vectorize --max-ops=%d --queries=%d {pgurl:1} --enable-checks=true",
 				runConfig.numRunsPerQuery, queryNum)
 			workloadOutput, err := c.RunWithBuffer(ctx, t.l, firstNode, cmd)
 			t.l.Printf("\n" + string(workloadOutput))
