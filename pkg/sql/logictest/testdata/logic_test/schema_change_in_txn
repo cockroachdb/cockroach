@@ -1012,7 +1012,7 @@ ALTER TABLE check_table ADD CHECK (a >= 0)
 statement ok
 ALTER TABLE check_table ADD CHECK (a < 0)
 
-statement error pgcode XXA00 validation of CHECK \"a < 0:::INT8\" failed on row: k=0, a=0
+statement error pgcode XXA00 validation of CHECK \"a < 0:::INT8\" failed on row
 COMMIT
 
 query TTTTB
