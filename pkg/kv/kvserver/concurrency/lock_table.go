@@ -12,9 +12,7 @@ package concurrency
 
 import (
 	"container/list"
-	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Default upper bound on the number of locks in a lockTable.
@@ -811,25 +810,35 @@ func (l *lockState) SetEndKey(v []byte) { l.endKey = v }
 
 // REQUIRES: l.mu is locked.
 func (l *lockState) String() string {
-	var buf strings.Builder
-	l.Format(&buf, nil)
-	return buf.String()
+	var sb redact.StringBuilder
+	l.safeFormat(&sb, nil)
+	return sb.String()
 }
 
+// SafeFormat implements redact.SafeFormatter.
+// REQUIRES: l.mu is locked.
+func (l *lockState) SafeFormat(w redact.SafePrinter, _ rune) {
+	var sb redact.StringBuilder
+	l.safeFormat(&sb, nil)
+	w.Print(sb)
+}
+
+// safeFormat is a helper for SafeFormat and String methods.
 // REQUIRES: l.mu is locked. finalizedTxnCache can be nil.
-func (l *lockState) Format(buf *strings.Builder, finalizedTxnCache *txnCache) {
-	fmt.Fprintf(buf, " lock: %s\n", l.key)
+func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnCache) {
+	sb.Printf(" lock: %s\n", l.key)
 	if l.isEmptyLock() {
-		fmt.Fprintln(buf, "  empty")
+		sb.SafeString("  empty\n")
 		return
 	}
-	writeResInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
+	writeResInfo := func(sb *redact.StringBuilder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
 		// TODO(sbhola): strip the leading 0 bytes from the UUID string since tests are assigning
 		// UUIDs using a counter and makes this output more readable.
-		fmt.Fprintf(b, "txn: %v, ts: %v, seq: %v\n", txn.ID, ts, txn.Sequence)
+		sb.Printf("txn: %v, ts: %v, seq: %v\n",
+			redact.Safe(txn.ID), redact.Safe(ts), redact.Safe(txn.Sequence))
 	}
-	writeHolderInfo := func(b *strings.Builder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
-		fmt.Fprintf(b, "  holder: txn: %v, ts: %v, info: ", txn.ID, ts)
+	writeHolderInfo := func(sb *redact.StringBuilder, txn *enginepb.TxnMeta, ts hlc.Timestamp) {
+		sb.Printf("  holder: txn: %v, ts: %v, info: ", redact.Safe(txn.ID), redact.Safe(ts))
 		first := true
 		for i := range l.holder.holder {
 			h := &l.holder.holder[i]
@@ -837,13 +846,13 @@ func (l *lockState) Format(buf *strings.Builder, finalizedTxnCache *txnCache) {
 				continue
 			}
 			if !first {
-				fmt.Fprintf(b, ", ")
+				sb.SafeString(", ")
 			}
 			first = false
 			if lock.Durability(i) == lock.Replicated {
-				fmt.Fprintf(b, "repl ")
+				sb.SafeString("repl ")
 			} else {
-				fmt.Fprintf(b, "unrepl ")
+				sb.SafeString("unrepl ")
 			}
 			if finalizedTxnCache != nil {
 				finalizedTxn, ok := finalizedTxnCache.get(h.txn.ID)
@@ -855,55 +864,54 @@ func (l *lockState) Format(buf *strings.Builder, finalizedTxnCache *txnCache) {
 					case roachpb.ABORTED:
 						statusStr = "aborted"
 					}
-					fmt.Fprintf(b, "[holder finalized: %s] ", statusStr)
+					sb.Printf("[holder finalized: %s] ", redact.Safe(statusStr))
 				}
 			}
-			fmt.Fprintf(b, "epoch: %d, seqs: [%d", h.txn.Epoch, h.seqs[0])
+			sb.Printf("epoch: %d, seqs: [%d", redact.Safe(h.txn.Epoch), redact.Safe(h.seqs[0]))
 			for j := 1; j < len(h.seqs); j++ {
-				fmt.Fprintf(b, ", %d", h.seqs[j])
+				sb.Printf(", %d", redact.Safe(h.seqs[j]))
 			}
-			fmt.Fprintf(b, "]")
+			sb.SafeString("]")
 		}
-		fmt.Fprintln(b, "")
+		sb.SafeString("\n")
 	}
 	txn, ts := l.getLockHolder()
 	if txn == nil {
-		fmt.Fprintf(buf, "  res: req: %d, ", l.reservation.seqNum)
-		writeResInfo(buf, l.reservation.txn, l.reservation.ts)
+		sb.Printf("  res: req: %d, ", l.reservation.seqNum)
+		writeResInfo(sb, l.reservation.txn, l.reservation.ts)
 	} else {
-		writeHolderInfo(buf, txn, ts)
+		writeHolderInfo(sb, txn, ts)
 	}
 	// TODO(sumeer): Add an optional `description string` field to Request and
 	// lockTableGuardImpl that tests can set to avoid relying on the seqNum to
 	// identify requests.
 	if l.waitingReaders.Len() > 0 {
-		fmt.Fprintln(buf, "   waiting readers:")
+		sb.SafeString("   waiting readers:\n")
 		for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
 			g := e.Value.(*lockTableGuardImpl)
-			fmt.Fprintf(buf, "    req: %d, txn: ", g.seqNum)
+			sb.Printf("    req: %d, txn: ", redact.Safe(g.seqNum))
 			if g.txn == nil {
-				fmt.Fprintln(buf, "none")
+				sb.SafeString("none\n")
 			} else {
-				fmt.Fprintf(buf, "%v\n", g.txn.ID)
+				sb.Printf("%v\n", redact.Safe(g.txn.ID))
 			}
 		}
 	}
 	if l.queuedWriters.Len() > 0 {
-		fmt.Fprintln(buf, "   queued writers:")
+		sb.SafeString("   queued writers:\n")
 		for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
 			qg := e.Value.(*queuedGuard)
 			g := qg.guard
-			fmt.Fprintf(buf, "    active: %t req: %d, txn: ",
-				qg.active, qg.guard.seqNum)
+			sb.Printf("    active: %t req: %d, txn: ", redact.Safe(qg.active), redact.Safe(qg.guard.seqNum))
 			if g.txn == nil {
-				fmt.Fprintln(buf, "none")
+				sb.SafeString("none\n")
 			} else {
-				fmt.Fprintf(buf, "%v\n", g.txn.ID)
+				sb.Printf("%v\n", redact.Safe(g.txn.ID))
 			}
 		}
 	}
 	if l.distinguishedWaiter != nil {
-		fmt.Fprintf(buf, "   distinguished req: %d\n", l.distinguishedWaiter.seqNum)
+		sb.Printf("   distinguished req: %d\n", redact.Safe(l.distinguishedWaiter.seqNum))
 	}
 }
 
@@ -1507,7 +1515,9 @@ func (l *lockState) discoveredLock(
 
 	if l.holder.locked {
 		if !l.isLockedBy(txn.ID) {
-			return errors.AssertionFailedf("discovered lock by different transaction than existing lock")
+			return errors.AssertionFailedf(
+				"discovered lock by different transaction (%s) than existing lock (see issue #63592): %s",
+				txn, l)
 		}
 	} else {
 		l.holder.locked = true
@@ -2349,20 +2359,20 @@ func (t *lockTableImpl) Clear(disable bool) {
 
 // For tests.
 func (t *lockTableImpl) String() string {
-	var buf strings.Builder
+	var sb redact.StringBuilder
 	for i := 0; i < len(t.locks); i++ {
 		tree := &t.locks[i]
 		scope := spanset.SpanScope(i).String()
 		tree.mu.RLock()
-		fmt.Fprintf(&buf, "%s: num=%d\n", scope, atomic.LoadInt64(&tree.numLocks))
+		sb.Printf("%s: num=%d\n", scope, atomic.LoadInt64(&tree.numLocks))
 		iter := tree.MakeIter()
 		for iter.First(); iter.Valid(); iter.Next() {
 			l := iter.Cur()
 			l.mu.Lock()
-			l.Format(&buf, &t.finalizedTxnCache)
+			l.safeFormat(&sb, &t.finalizedTxnCache)
 			l.mu.Unlock()
 		}
 		tree.mu.RUnlock()
 	}
-	return buf.String()
+	return sb.String()
 }
