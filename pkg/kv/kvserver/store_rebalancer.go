@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -309,8 +310,18 @@ func (sr *StoreRebalancer) rebalanceStore(
 		}
 
 		descBeforeRebalance := replWithStats.repl.Desc()
-		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
-			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas(), voterTargets)
+		log.VEventf(
+			ctx,
+			1,
+			"rebalancing r%d (%.2f qps) to better balance load: voters from %v to %v; non-voters from %v to %v",
+			replWithStats.repl.RangeID,
+			replWithStats.qps,
+			descBeforeRebalance.Replicas().Voters(),
+			voterTargets,
+			descBeforeRebalance.Replicas().NonVoters(),
+			nonVoterTargets,
+		)
+
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
 			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, voterTargets, nonVoterTargets)
@@ -471,6 +482,17 @@ type rangeRebalanceContext struct {
 	zone                                  *zonepb.ZoneConfig
 	clusterNodes                          int
 	numDesiredVoters, numDesiredNonVoters int
+}
+
+func (rbc *rangeRebalanceContext) numDesiredReplicas(targetType targetReplicaType) int {
+	switch targetType {
+	case voterTarget:
+		return rbc.numDesiredVoters
+	case nonVoterTarget:
+		return rbc.numDesiredNonVoters
+	default:
+		panic(fmt.Sprintf("unknown targetReplicaType %s", targetType))
+	}
 }
 
 func (sr *StoreRebalancer) chooseRangeToRebalance(
@@ -730,20 +752,21 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 	options scorerOptions,
 	minQPS, maxQPS float64,
 	targetType targetReplicaType,
-) (finalTargetsForType []roachpb.ReplicaDescriptor) {
-	var numDesiredReplsForType int
+) []roachpb.ReplicaDescriptor {
+	// Alias the slice that corresponds to the set of replicas that is being
+	// appended to. This is because we want subsequent calls to
+	// `allocateTargetFromList` to observe the results of previous calls (note the
+	// append to the slice referenced by `finalTargetsForType`).
+	var finalTargetsForType *[]roachpb.ReplicaDescriptor
 	switch targetType {
 	case voterTarget:
-		finalTargetsForType = partialVoterTargets
-		numDesiredReplsForType = rebalanceCtx.numDesiredVoters
+		finalTargetsForType = &partialVoterTargets
 	case nonVoterTarget:
-		finalTargetsForType = partialNonVoterTargets
-		numDesiredReplsForType = rebalanceCtx.numDesiredNonVoters
+		finalTargetsForType = &partialNonVoterTargets
 	default:
-		log.Fatalf(ctx, "unknown targetReplicaType %s", targetType)
+		log.Fatalf(ctx, "unknown targetReplicaType: %s", targetType)
 	}
-
-	for len(finalTargetsForType) < numDesiredReplsForType {
+	for len(*finalTargetsForType) < rebalanceCtx.numDesiredReplicas(targetType) {
 		// Use the preexisting Allocate{Non}Voter logic to ensure that
 		// considerations such as zone constraints, locality diversity, and full
 		// disk come into play.
@@ -781,12 +804,12 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 			break
 		}
 
-		finalTargetsForType = append(finalTargetsForType, roachpb.ReplicaDescriptor{
+		*finalTargetsForType = append(*finalTargetsForType, roachpb.ReplicaDescriptor{
 			NodeID:  target.Node.NodeID,
 			StoreID: target.StoreID,
 		})
 	}
-	return finalTargetsForType
+	return *finalTargetsForType
 }
 
 // pickReplsToKeep determines the set of existing replicas for a range which
