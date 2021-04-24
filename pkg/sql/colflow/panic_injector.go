@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -25,6 +26,7 @@ import (
 // Init and Next methods of the wrapped operator.
 type panicInjector struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 	rng *rand.Rand
 }
 
@@ -50,14 +52,19 @@ func newPanicInjector(input colexecop.Operator) colexecop.Operator {
 }
 
 func (i *panicInjector) Init(ctx context.Context) {
+	if !i.InitHelper.Init(ctx) {
+		return
+	}
 	if i.rng.Float64() < initPanicInjectionProbability {
+		log.Info(i.Ctx, "injecting panic in Init")
 		colexecerror.ExpectedError(errors.New("injected panic in Init"))
 	}
-	i.Input.Init(ctx)
+	i.Input.Init(i.Ctx)
 }
 
 func (i *panicInjector) Next() coldata.Batch {
 	if i.rng.Float64() < nextPanicInjectionProbability {
+		log.Info(i.Ctx, "injecting panic in Next")
 		colexecerror.ExpectedError(errors.New("injected panic in Next"))
 	}
 	return i.Input.Next()
