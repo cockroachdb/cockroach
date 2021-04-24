@@ -12,15 +12,21 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func beginTransaction(
@@ -163,4 +169,36 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	if err := <-readCh2; err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/64092
+// which makes sure that synchronous ranged intent resolution during rollback
+// completes in a reasonable time.
+func TestRollbackSyncRangedIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+	skip.UnderStress(t)
+
+	ctx := context.Background()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &StoreTestingKnobs{
+				DisableLoadBasedSplitting: true,
+				IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+					ForceSyncIntentResolution: true,
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	txn := srv.DB().NewTxn(ctx, "test")
+	for i := 0; i < 100000; i++ {
+		require.NoError(t, txn.Put(ctx, []byte(fmt.Sprintf("key%v", i)), []byte("value")))
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	require.NoError(t, txn.Rollback(ctx))
+	require.NoError(t, ctx.Err())
 }
