@@ -430,7 +430,7 @@ func (p *planner) checkPrivilegesForRepartitioningRegionalByRowTables(
 	ctx context.Context, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	return p.forEachMutableTableInDatabase(ctx, dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			if tbDesc.IsLocalityRegionalByRow() {
 				err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc)
 				// Return a better error message here.
@@ -459,48 +459,52 @@ func removeLocalityConfigFromAllTablesInDB(
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := p.forEachMutableTableInDatabase(ctx, desc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
-		// The user must either be an admin or have the requisite privileges.
-		if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
-			return err
-		}
-
-		switch t := tbDesc.LocalityConfig.Locality.(type) {
-		case *descpb.TableDescriptor_LocalityConfig_Global_:
-			if err := ApplyZoneConfigForMultiRegionTable(
-				ctx,
-				p.txn,
-				p.ExecCfg(),
-				multiregion.RegionConfig{}, // pass dummy config as it is not used.
-				tbDesc,
-				applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
-			); err != nil {
+	if err := p.forEachMutableTableInDatabase(
+		ctx,
+		desc,
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			// The user must either be an admin or have the requisite privileges.
+			if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
 				return err
 			}
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-			if t.RegionalByTable.Region != nil {
+
+			switch t := tbDesc.LocalityConfig.Locality.(type) {
+			case *descpb.TableDescriptor_LocalityConfig_Global_:
+				if err := ApplyZoneConfigForMultiRegionTable(
+					ctx,
+					p.txn,
+					p.ExecCfg(),
+					multiregion.RegionConfig{}, // pass dummy config as it is not used.
+					tbDesc,
+					applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
+				); err != nil {
+					return err
+				}
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+				if t.RegionalByTable.Region != nil {
+					// This should error during the type descriptor changes.
+					return errors.AssertionFailedf(
+						"unexpected REGIONAL BY TABLE IN <region> on table %s during DROP REGION",
+						tbDesc.Name,
+					)
+				}
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 				// This should error during the type descriptor changes.
 				return errors.AssertionFailedf(
-					"unexpected REGIONAL BY TABLE IN <region> on table %s during DROP REGION",
+					"unexpected REGIONAL BY ROW on table %s during DROP REGION",
+					tbDesc.Name,
+				)
+			default:
+				return errors.AssertionFailedf(
+					"unexpected locality %T on table %s during DROP REGION",
+					t,
 					tbDesc.Name,
 				)
 			}
-		case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-			// This should error during the type descriptor changes.
-			return errors.AssertionFailedf(
-				"unexpected REGIONAL BY ROW on table %s during DROP REGION",
-				tbDesc.Name,
-			)
-		default:
-			return errors.AssertionFailedf(
-				"unexpected locality %T on table %s during DROP REGION",
-				t,
-				tbDesc.Name,
-			)
-		}
-		tbDesc.LocalityConfig = nil
-		return p.writeSchemaChangeToBatch(ctx, tbDesc, b)
-	}); err != nil {
+			tbDesc.LocalityConfig = nil
+			return p.writeSchemaChangeToBatch(ctx, tbDesc, b)
+		},
+	); err != nil {
 		return err
 	}
 	return p.Txn().Run(ctx, b)
@@ -698,33 +702,37 @@ func addDefaultLocalityConfigToAllTables(
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := p.forEachMutableTableInDatabase(ctx, dbDesc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
-		if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
-			return err
-		}
-
-		if err := checkCanConvertTableToMultiRegion(dbDesc, tbDesc); err != nil {
-			return err
-		}
-
-		if tbDesc.MaterializedView() {
-			if err := p.alterTableDescLocalityToGlobal(
-				ctx, tbDesc, regionEnumID,
-			); err != nil {
+	if err := p.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
+			if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
 				return err
 			}
-		} else {
-			if err := p.alterTableDescLocalityToRegionalByTable(
-				ctx, tree.PrimaryRegionNotSpecifiedName, tbDesc, regionEnumID,
-			); err != nil {
+
+			if err := checkCanConvertTableToMultiRegion(dbDesc, tbDesc); err != nil {
 				return err
 			}
-		}
-		if err := p.writeSchemaChangeToBatch(ctx, tbDesc, b); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+
+			if tbDesc.MaterializedView() {
+				if err := p.alterTableDescLocalityToGlobal(
+					ctx, tbDesc, regionEnumID,
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := p.alterTableDescLocalityToRegionalByTable(
+					ctx, tree.PrimaryRegionNotSpecifiedName, tbDesc, regionEnumID,
+				); err != nil {
+					return err
+				}
+			}
+			if err := p.writeSchemaChangeToBatch(ctx, tbDesc, b); err != nil {
+				return err
+			}
+			return nil
+		},
+	); err != nil {
 		return err
 	}
 	return p.Txn().Run(ctx, b)
