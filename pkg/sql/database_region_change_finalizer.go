@@ -79,7 +79,7 @@ func newDatabaseRegionChangeFinalizer(
 		return localPlanner.forEachMutableTableInDatabase(
 			ctx,
 			dbDesc,
-			func(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+			func(ctx context.Context, scName string, tableDesc *tabledesc.Mutable) error {
 				if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
 					// We only need to re-partition REGIONAL BY ROW tables. Even then, we
 					// don't need to (can't) repartition a REGIONAL BY ROW table if it has
