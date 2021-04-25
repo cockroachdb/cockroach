@@ -739,7 +739,7 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		&desc.Immutable,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
 			if err != nil {
 				return err
@@ -865,7 +865,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	if err := p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			ids = append(ids, tbDesc.GetID())
 			return nil
 		},
@@ -895,7 +895,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			return p.validateZoneConfigForMultiRegionTable(
 				tbDesc,
 				zoneConfigs[tbDesc.GetID()],
