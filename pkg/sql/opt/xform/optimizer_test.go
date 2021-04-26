@@ -224,7 +224,7 @@ func TestPlaceholderFastPath(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/placeholder-fast-path",
-		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
+		memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
 			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes,
 	)
 }
