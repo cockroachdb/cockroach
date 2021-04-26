@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
-	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 )
@@ -131,9 +130,9 @@ func BestGeomProjection(boundingRect s2.Rect) (geoprojbase.Proj4Text, error) {
 
 // getGeomProjection returns the Proj4Text associated with an SRID.
 func getGeomProjection(srid geopb.SRID) (geoprojbase.Proj4Text, error) {
-	proj, ok := geoprojbase.Projection(srid)
-	if !ok {
-		return geoprojbase.Proj4Text{}, errors.Newf("unexpected SRID %d", srid)
+	proj, err := geoprojbase.Projection(srid)
+	if err != nil {
+		return geoprojbase.Proj4Text{}, err
 	}
 	return proj.Proj4Text, nil
 }
