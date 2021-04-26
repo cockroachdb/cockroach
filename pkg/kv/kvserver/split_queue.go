@@ -231,11 +231,11 @@ func (sq *splitQueue) processAttempt(
 		// Add a small delay (default of 5m) to any subsequent attempt to merge
 		// this range split away. While the merge queue does takes into account
 		// load to avoids merging ranges that would be immediately re-split due
-		// to load-based splitting, it doesn't take into account historical
-		// load. So this small delay is the only thing that prevents split
-		// points created due to load from being immediately merged away after
-		// load is stopped, which can be a problem for benchmarks where data is
-		// first imported and then the workload begins after a small delay.
+		// to load-based splitting, it did not used to take into account historical
+		// load. This has since been fixed by #64201, but we keep this small manual
+		// delay for compatibility reasons.
+		// TODO(nvanbenschoten): remove this entirely in v22.1 when it is no longer
+		// needed.
 		var expTime hlc.Timestamp
 		if expDelay := SplitByLoadMergeDelay.Get(&sq.store.cfg.Settings.SV); expDelay > 0 {
 			expTime = sq.store.Clock().Now().Add(expDelay.Nanoseconds(), 0)
@@ -259,7 +259,7 @@ func (sq *splitQueue) processAttempt(
 		telemetry.Inc(sq.loadBasedCount)
 
 		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset()
+		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 	return false, nil

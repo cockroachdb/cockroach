@@ -73,7 +73,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 
 	if t.buildVersion.AtLeast(version.MustParse("v19.2.0")) {
 		conn := c.Conn(ctx, 1)
-		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1`, c.spec.NodeCount); err != nil {
+		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
 			t.Fatal(err)
 		}
 		conn.Close()
@@ -115,6 +115,11 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 
 	m := newMonitor(ctx, c)
 	m.Go(func(ctx context.Context) error {
+		c.Run(ctx, c.Node(1), `./cockroach workload init kv`)
+		c.Run(ctx, c.All(), `./cockroach workload run kv --concurrency=32 --duration=1h`)
+		return nil
+	})
+	m.Go(func(ctx context.Context) error {
 		conn := c.Conn(ctx, 1)
 		defer conn.Close()
 
@@ -132,7 +137,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 
 		// Set a low TTL so that the ClearRange-based cleanup mechanism can kick in earlier.
 		// This could also be done after dropping the table.
-		if _, err := conn.ExecContext(ctx, `ALTER TABLE bigbank.bank CONFIGURE ZONE USING gc.ttlseconds = 30`); err != nil {
+		if _, err := conn.ExecContext(ctx, `ALTER TABLE bigbank.bank CONFIGURE ZONE USING gc.ttlseconds = 1200`); err != nil {
 			return err
 		}
 

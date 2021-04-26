@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1035,14 +1034,26 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	return *r.mu.state.Stats
 }
 
-// GetSplitQPS returns the Replica's queries/s request rate.
+// GetMaxSplitQPS returns the Replica's maximum queries/s request rate over a
+// configured measurement period. If the Replica has not been recording QPS for
+// at least an entire measurement period, the method will return false.
 //
 // NOTE: This should only be used for load based splitting, only
 // works when the load based splitting cluster setting is enabled.
 //
 // Use QueriesPerSecond() for current QPS stats for all other purposes.
-func (r *Replica) GetSplitQPS() float64 {
-	return r.loadBasedSplitter.LastQPS(timeutil.Now())
+func (r *Replica) GetMaxSplitQPS() (float64, bool) {
+	return r.loadBasedSplitter.MaxQPS(r.Clock().PhysicalTime())
+}
+
+// GetLastSplitQPS returns the Replica's most recent queries/s request rate.
+//
+// NOTE: This should only be used for load based splitting, only
+// works when the load based splitting cluster setting is enabled.
+//
+// Use QueriesPerSecond() for current QPS stats for all other purposes.
+func (r *Replica) GetLastSplitQPS() float64 {
+	return r.loadBasedSplitter.LastQPS(r.Clock().PhysicalTime())
 }
 
 // ContainsKey returns whether this range contains the specified key.
