@@ -570,3 +570,52 @@ func (t *timestampValue) Set(v string) error {
 	*t = timestampValue(tm)
 	return nil
 }
+
+// newSizeWarner creates an io.WriteCloser which calls the provided closure
+// any time the size of the data written passes a multiple of the
+// given threshold, plus one time at close time if the total size
+// written is larger than the threshold and some bytes were
+// written since the last call.
+//
+// It also takes responsibility of calling Close() on the provided
+// WriteCloser.
+func newSizeWarner(f io.WriteCloser, threshold int, cb func(int)) io.WriteCloser {
+	return &sizeWarner{
+		f:         f,
+		sz:        0,
+		threshold: threshold,
+		cb:        cb,
+	}
+}
+
+type sizeWarner struct {
+	f io.WriteCloser
+
+	sz        int
+	threshold int
+	cb        func(sz int)
+}
+
+// Write implements the io.Writer interface.
+func (s *sizeWarner) Write(b []byte) (int, error) {
+	n, err := s.f.Write(b)
+
+	// If we're passing beyond the threshold, call the function.
+	if (s.sz+n)/s.threshold > s.sz/s.threshold {
+		s.cb(s.sz + n)
+	}
+	s.sz += n
+
+	return n, err
+}
+
+// Close implements the io.Closer interface.
+func (s *sizeWarner) Close() error {
+	if s.sz > s.threshold {
+		// NB: we are not using s.sz >= s.threshold because the case s.sz
+		// == s.threshold would have been handled in the last call to
+		// Write() already.
+		s.cb(s.sz)
+	}
+	return s.f.Close()
+}
