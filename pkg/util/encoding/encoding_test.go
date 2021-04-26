@@ -1231,13 +1231,15 @@ func TestEncodeDecodeGeometry(t *testing.T) {
 
 						var b []byte
 						var decoded geopb.SpatialObject
+						spaceCurveIndex, err := parsed.SpaceCurveIndex()
+						require.NoError(t, err)
 						if dir == Ascending {
-							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							b, err = EncodeGeoAscending(b, spaceCurveIndex, &spatialObject)
 							require.NoError(t, err)
 							_, err = DecodeGeoAscending(b, &decoded)
 							require.NoError(t, err)
 						} else {
-							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							b, err = EncodeGeoDescending(b, spaceCurveIndex, &spatialObject)
 							require.NoError(t, err)
 							_, err = DecodeGeoDescending(b, &decoded)
 							require.NoError(t, err)

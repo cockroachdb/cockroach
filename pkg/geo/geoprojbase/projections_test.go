@@ -18,7 +18,7 @@ import (
 )
 
 func TestProjections(t *testing.T) {
-	for srid, proj := range Projections {
+	for srid, proj := range projections {
 		t.Run(strconv.Itoa(int(srid)), func(t *testing.T) {
 			require.NotEqual(t, Bounds{}, proj.Bounds)
 			require.GreaterOrEqual(t, proj.Bounds.MaxX, proj.Bounds.MinX)
