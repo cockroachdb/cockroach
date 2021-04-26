@@ -1892,6 +1892,31 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+## Telemetry events
+
+
+
+Events in this category are logged to channel TELEMETRY.
+
+
+### `diagnostic_report`
+
+An event of type `diagnostic_report` is recorded periodically, at the interval
+configurable via the cluster setting `diagnostics.reporting.interval`.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Report` | the telemetry payload, encoded as JSON. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Zone config events
 
 Events in this category pertain to zone config changes on

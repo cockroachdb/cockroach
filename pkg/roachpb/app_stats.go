@@ -11,6 +11,8 @@
 package roachpb
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -69,6 +71,19 @@ func (l *NumericStat) Add(b NumericStat, countA, countB int64) {
 func (l *NumericStat) AlmostEqual(b NumericStat, eps float64) bool {
 	return math.Abs(l.Mean-b.Mean) <= eps &&
 		math.Abs(l.SquaredDiffs-b.SquaredDiffs) <= eps
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (l *NumericStat) MarshalJSON() ([]byte, error) {
+	// We need this code because of https://github.com/golang/go/issues/3480.
+	v := struct {
+		Mean         string
+		SquaredDiffs string
+	}{
+		Mean:         fmt.Sprintf("%f", l.Mean),
+		SquaredDiffs: fmt.Sprintf("%f", l.SquaredDiffs),
+	}
+	return json.Marshal(v)
 }
 
 // AddNumericStats combines derived statistics.

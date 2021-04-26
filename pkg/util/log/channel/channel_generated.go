@@ -124,3 +124,8 @@ const SQL_PERF = logpb.Channel_SQL_PERF
 // channel so as to not pollute the SQL perf logging output with
 // internal troubleshooting details.
 const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF
+
+// TELEMETRY reports telemetry events. Telemetry events describe
+// feature usage within CockroachDB and anonymizes any application-
+// specific data.
+const TELEMETRY = logpb.Channel_TELEMETRY

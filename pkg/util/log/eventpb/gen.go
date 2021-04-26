@@ -67,12 +67,13 @@ type eventInfo struct {
 }
 
 type fieldInfo struct {
-	Comment       string
-	FieldType     string
-	FieldName     string
-	ReportingSafe bool
-	Inherited     bool
-	IsEnum        bool
+	Comment            string
+	FieldType          string
+	FieldName          string
+	ReportingSafe      bool
+	Inherited          bool
+	IsEnum             bool
+	IsDiagnosticReport bool
 }
 
 func run() error {
@@ -362,11 +363,12 @@ func readInput(
 					safe = true
 				}
 				fi := fieldInfo{
-					Comment:       comment,
-					FieldType:     typ,
-					FieldName:     name,
-					ReportingSafe: safe,
-					IsEnum:        isEnum,
+					Comment:            comment,
+					FieldType:          typ,
+					FieldName:          name,
+					ReportingSafe:      safe,
+					IsEnum:             isEnum,
+					IsDiagnosticReport: name == "Report" && curMsg.GoType == "DiagnosticReport",
 				}
 				curMsg.Fields = append(curMsg.Fields, fi)
 				curMsg.AllFields = append(curMsg.AllFields, fi)
@@ -441,6 +443,16 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
 {{range .AllFields }}
    {{if .Inherited -}}
    printComma, b = m.{{.FieldName}}.AppendJSONFields(printComma, b)
+   {{- else if .IsDiagnosticReport -}}
+   if m.{{.FieldName}} != nil {
+      if printComma { b = append(b, ',')}; printComma = true
+      b = append(b, "\"{{.FieldName}}\":"...)
+      // The DiagnosticReport is already pre-encoded as JSON, devoid
+      // of sensitive information.
+      // We can simply strip any markers contained and embed the result as-is.
+      payload := redact.RedactableBytes(redact.EscapeMarkers(m.{{.FieldName}}))
+      b = append(b, payload...)
+   }
    {{- else if eq .FieldType "string" -}}
    if m.{{.FieldName}} != "" {
      if printComma { b = append(b, ',')}; printComma = true

@@ -1775,6 +1775,27 @@ func (m *CreateView) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *DiagnosticReport) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.Report != nil {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Report\":"...)
+		// The DiagnosticReport is already pre-encoded as JSON, devoid
+		// of sensitive information.
+		// We can simply strip any markers contained and embed the result as-is.
+		payload := redact.RedactableBytes(redact.EscapeMarkers(m.Report))
+		b = append(b, payload...)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *DropDatabase) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

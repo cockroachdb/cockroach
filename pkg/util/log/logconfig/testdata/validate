@@ -22,7 +22,8 @@ fluent-defaults:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -72,7 +73,8 @@ fluent-defaults:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -124,7 +126,8 @@ fluent-defaults:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /custom
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -177,7 +180,8 @@ fluent-defaults:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -228,7 +232,8 @@ fluent-defaults:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -339,7 +344,8 @@ fluent-defaults:
 sinks:
   file-groups:
     custom:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -391,7 +397,8 @@ fluent-defaults:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB
@@ -452,7 +459,8 @@ fluent-defaults:
 sinks:
   file-groups:
     default:
-      channels: all
+      channels: [DEV, OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES,
+        SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF]
       dir: /default-dir
       max-file-size: 10MiB
       max-group-size: 100MiB

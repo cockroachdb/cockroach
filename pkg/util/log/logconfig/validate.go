@@ -223,8 +223,14 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	}
 
 	// For every remaining channel without a sink, add it to the DEV sink.
+	// The exception to this is TELEMETRY, which is very verbose
+	// and should not go to files unless opted in explicitly
+	// by the user.
 	devFile := fileSinks[devch]
 	for _, ch := range channelValues {
+		if ch == logpb.Channel_TELEMETRY {
+			continue
+		}
 		if fileSinks[ch] == nil {
 			devFile.Channels.Channels = append(devFile.Channels.Channels, ch)
 		}

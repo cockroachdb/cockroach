@@ -1,0 +1,45 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: Telemetry events
+// Channel: TELEMETRY
+//
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// The comment at the top has a specific format for the doc generator.
+// *Really look at doc.go before modifying this file.*
+//
+// Additionally, the DiagnosticReport field is handled very specially:
+// even though the data type is listed as "bytes" here,
+// we are embedding a full message of type
+// cockroach.server.diagnostics.diagnosticspb.DiagnosticReport
+// in there.
+// The code that instantiates DiagnosticReport is responsible
+// for marshaling the report as a JSON blob.
+//
+// The reason why we use "bytes" and not the actual type is
+// to avoid a cyclical go package import.
+
+// DiagnosticReport is recorded periodically, at the interval
+// configurable via the cluster setting `diagnostics.reporting.interval`.
+message DiagnosticReport {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // the telemetry payload, encoded as JSON.
+  bytes report = 2 [(gogoproto.jsontag) = ",omitempty"];
+}

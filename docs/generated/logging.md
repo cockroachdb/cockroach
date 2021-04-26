@@ -158,3 +158,9 @@ helping developers of CockroachDB itself. It exists as a separate
 channel so as to not pollute the SQL perf logging output with
 internal troubleshooting details.
 
+## TELEMETRY
+
+The TELEMETRY channel reports telemetry events. Telemetry events describe
+feature usage within CockroachDB and anonymizes any application-
+specific data.
+

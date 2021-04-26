@@ -13,6 +13,8 @@ package diagnostics
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -37,12 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/kr/pretty"
 	"github.com/mitchellh/reflectwalk"
 	"google.golang.org/protobuf/proto"
 )
@@ -120,6 +124,18 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	defer span.Finish()
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)
+
+	// The eventpb.DiagnosticReport type is handled specially by
+	// logging: it presupposes that the report has been JSON-encoded
+	// already. Do it here.
+	log.Infof(ctx, "report: %s", fmt.Sprintf("%# v", pretty.Formatter(report)))
+	j, err := json.Marshal(report)
+	if err != nil {
+		logcrash.ReportOrPanic(ctx, &r.Settings.SV, "error encoding report as JSON: %v", err)
+	} else {
+		ev := eventpb.DiagnosticReport{Report: j}
+		log.StructuredEvent(ctx, &ev)
+	}
 
 	url := r.buildReportingURL(report)
 	if url == nil {
