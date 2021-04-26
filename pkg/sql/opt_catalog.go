@@ -1228,7 +1228,8 @@ func (oi *optIndex) init(
 				valueEncBuf, nil, /* prefixDatums */
 			)
 			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "while decoding partition tuple"))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err,
+					"while decoding partition tuple: %+v %+v", oi.tab.desc, oi.tab.desc.GetDependsOnTypes()))
 			}
 			oi.partitions[i].datums = append(oi.partitions[i].datums, t.Datums)
 			// TODO(radu): split into multiple prefixes if Subpartition is also by list.
