@@ -426,11 +426,12 @@ func (r *Replica) leasePostApplyLocked(
 		}
 		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), sum)
 
-		// Reset the request counts used to make lease placement decisions whenever
-		// starting a new lease.
+		// Reset the request counts used to make lease placement decisions and
+		// load-based splitting/merging decisions whenever starting a new lease.
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
 		}
+		r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 	}
 
 	// Inform the concurrency manager that the lease holder has been updated.
