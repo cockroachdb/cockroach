@@ -1071,7 +1071,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 	newClosed := cmd.raftCmd.ClosedTimestamp
 	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(*existingClosed) {
 		var req redact.StringBuilder
-		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
+		if cmd.IsLocal() {
 			req.Print(cmd.proposal.Request)
 		} else {
 			req.SafeString("<unknown; not leaseholder>")
@@ -1083,11 +1083,23 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 			prevReq.SafeString("<unknown; not leaseholder or not lease request>")
 		}
 
+		logTail, err := b.r.printRaftTail(cmd.ctx, 100 /* maxEntries */, 2000 /* maxCharsPerEntry */)
+		if err != nil {
+			if logTail != "" {
+				logTail = logTail + "\n; error printing log: " + err.Error()
+			} else {
+				logTail = "error printing log: " + err.Error()
+			}
+		}
+
 		return errors.AssertionFailedf(
-			"raft closed timestamp regression in cmd: %x; batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
-				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.",
-			cmd.idKey, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
-			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries)
+			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
+				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
+				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=true"+
+				"Raft log tail:\n%s",
+			cmd.idKey, cmd.ent.Term, cmd.ent.Index, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
+			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
+			logTail)
 	}
 	return nil
 }

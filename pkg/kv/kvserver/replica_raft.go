@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1866,4 +1867,67 @@ func getNonDeterministicFailureExplanation(err error) string {
 		return nd.safeExpl
 	}
 	return "???"
+}
+
+// printRaftTail pretty-prints the tail of the log and returns it as a string,
+// with the same format as `cockroach debug raft-log`. The entries are printed
+// from newest to oldest. maxEntries and maxCharsPerEntry control the size of
+// the output.
+//
+// If an error is returned, it's possible that a string with some entries is
+// still returned.
+func (r *Replica) printRaftTail(
+	ctx context.Context, maxEntries, maxCharsPerEntry int,
+) (string, error) {
+	start := keys.RaftLogPrefix(r.RangeID)
+	end := keys.RaftLogPrefix(r.RangeID).PrefixEnd()
+
+	// NB: raft log does not have intents.
+	it := r.Engine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	valid, err := it.SeekEngineKeyLT(storage.EngineKey{Key: end})
+	if err != nil {
+		return "", err
+	}
+	if !valid {
+		return "", errors.AssertionFailedf("iterator invalid but no error")
+	}
+
+	var sb strings.Builder
+	for i := 0; i < maxEntries; i++ {
+		key, err := it.EngineKey()
+		if err != nil {
+			return sb.String(), err
+		}
+		mvccKey, err := key.ToMVCCKey()
+		if err != nil {
+			return sb.String(), err
+		}
+		kv := storage.MVCCKeyValue{
+			Key:   mvccKey,
+			Value: it.Value(),
+		}
+		sb.WriteString(truncateEntryString(SprintKeyValue(kv, true /* printKey */), 2000))
+		sb.WriteRune('\n')
+
+		valid, err := it.PrevEngineKey()
+		if err != nil {
+			return sb.String(), err
+		}
+		if !valid {
+			// We've finished the log.
+			break
+		}
+	}
+	return sb.String(), nil
+}
+
+func truncateEntryString(s string, maxChars int) string {
+	res := s
+	if len(s) > maxChars {
+		if maxChars > 3 {
+			maxChars -= 3
+		}
+		res = s[0:maxChars] + "..."
+	}
+	return res
 }
