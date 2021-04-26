@@ -1,0 +1,6 @@
+show_regions_stmt ::=
+	'SHOW' 'REGIONS' 'FROM' 'CLUSTER'
+	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE'
+	| 'SHOW' 'REGIONS' 'FROM' 'ALL' 'DATABASES'
+	| 'SHOW' 'REGIONS' 'FROM' 'DATABASE' database_name
+	| 'SHOW' 'REGIONS'
