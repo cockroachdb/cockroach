@@ -286,6 +286,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 		}
 
+		multiRegionPreDropIsNecessary := false
+
 		// First, we check if any of the enum values that are being removed are in
 		// use and fail. This is done in a separate txn to the one that mutates the
 		// descriptor, as this validation can take arbitrarily long.
@@ -298,6 +300,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				if t.isTransitioningInCurrentJob(&member) && enumMemberIsRemoving(&member) {
 					if err := t.canRemoveEnumValue(ctx, typeDesc, txn, &member, descsCol); err != nil {
 						return err
+					}
+					if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+						multiRegionPreDropIsNecessary = true
 					}
 				}
 			}
@@ -312,9 +317,73 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 		var regionChangeFinalizer *databaseRegionChangeFinalizer
 
-		// Now that we've ascertained that the enum values can be removed, we can
-		// actually go about modifying the type descriptor.
+		// In the case where we're dropping elements from a multi-region enum,
+		// we first re-partition all REGIONAL BY ROW tables. This is to handle
+		// the dependency which exist between the partitioning and the enum.
+		//
+		// There are places in the query path (specifically, when we decode
+		// the partitioning tuple) where we validate that for a given partition,
+		// that it's respective value exists in the multi-region enum. In cases
+		// where we're in the process of a DROP REGION however, if we don't
+		// repartition the table first, we can get into a situation where the
+		// query holds the new version of the enum type descriptor (in which
+		// the partition has already been dropped) and the old version of the
+		// table descriptor (in which the partition still exists). This
+		// situation causes a panic, and the query fails.
+		//
+		// To address this issue, and only in the DROP REGION case, we
+		// repartition the tables first, and drop the value from the enum in a
+		// separate transaction. Note that we must refresh the table descriptors
+		// before we proceed to the drop enum portion, so that we ensure that
+		// any concurrent queries see the descriptor updates in the correct
+		// order.
+		//
+		// It's also worth noting that we don't need to be concerned about
+		// exposing things in the right order in OnFailOrCancel. This is because
+		// OnFailOrCancel doesn't expose any new state in the type descriptor
+		// (it just cleans up non-public states).
+		if multiRegionPreDropIsNecessary {
+			preDrop := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+				typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+				if err != nil {
+					return err
+				}
 
+				regionChangeFinalizer, err = newDatabaseRegionChangeFinalizer(
+					ctx,
+					txn,
+					t.execCfg,
+					descsCol,
+					typeDesc.GetParentID(),
+					typeDesc.GetID(),
+				)
+				if err != nil {
+					return err
+				}
+				defer regionChangeFinalizer.cleanup()
+
+				if err := regionChangeFinalizer.preDrop(ctx, txn); err != nil {
+					return err
+				}
+				return nil
+			}
+			if err := descs.Txn(
+				ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
+				t.execCfg.InternalExecutor, t.execCfg.DB, preDrop,
+			); err != nil {
+				return err
+			}
+
+			// Now update the leases to ensure the that new table descriptor is
+			// visible to all nodes.
+			if err := regionChangeFinalizer.waitToUpdateLeases(ctx, leaseMgr); err != nil {
+				return err
+			}
+		}
+
+		// Now that we've ascertained that the enum values can be removed, and
+		// have performed any necessary pre-drop work, we can actually go about
+		// modifying the type descriptor.
 		run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
 			if err != nil {
