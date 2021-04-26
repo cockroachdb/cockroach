@@ -73,6 +73,8 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
 # gazelle:exclude **/*.pb.gw.go
+# gazelle:exclude **/*_interval_btree.go
+# gazelle:exclude **/*_interval_btree_test.go
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go
