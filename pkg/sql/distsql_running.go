@@ -200,7 +200,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 							}
 						}
 					}
-					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+					log.VEventf(ctx, 2, "failed to vectorize: %s", err)
 					if returnVectorizationSetupError {
 						return nil, nil, err
 					}
@@ -345,7 +345,7 @@ func (dsp *DistSQLPlanner) Run(
 				}
 			}
 		}
-		log.VEvent(ctx, 1, "creating plan diagram")
+		log.VEvent(ctx, 3, "creating plan diagram")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -361,7 +361,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if logPlanDiagram {
-		log.VEvent(ctx, 1, "creating plan diagram for logging")
+		log.VEvent(ctx, 3, "creating plan diagram for logging")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -374,7 +374,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	log.VEvent(ctx, 1, "running DistSQL plan")
+	log.VEvent(ctx, 2, "running DistSQL plan")
 
 	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
@@ -459,9 +459,9 @@ type DistSQLReceiver struct {
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []*types.T
 
-	// noColsRequired indicates that the caller is only interested in the
-	// existence of a single row. Used by subqueries in EXISTS mode.
-	noColsRequired bool
+	// existsMode indicates that the caller is only interested in the existence
+	// of a single row. Used by subqueries in EXISTS mode.
+	existsMode bool
 
 	// discardRows is set when we want to discard rows (for testing/benchmarks).
 	// See EXECUTE .. DISCARD ROWS.
@@ -531,6 +531,7 @@ type MetadataCallbackWriter struct {
 // AddMeta implements the MetadataResultWriter interface.
 func (w *MetadataCallbackWriter) AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) {
 	if err := w.fn(ctx, meta); err != nil {
+		log.VEventf(ctx, 1, "encountered error (will transition to shutting down): %+v", err)
 		w.SetError(err)
 	}
 }
@@ -631,6 +632,7 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 // pretending that a query execution error happened. The error is passed along
 // to the resultWriter.
 func (r *DistSQLReceiver) SetError(err error) {
+	log.VEventf(r.ctx, 1, "encountered error (will transition to shutting down): %+v", err)
 	r.resultWriter.SetError(err)
 }
 
@@ -643,11 +645,11 @@ func (r *DistSQLReceiver) Push(
 			if r.txn != nil {
 				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
 					if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
-						r.resultWriter.SetError(err)
+						r.SetError(err)
 					}
 				}
 			} else {
-				r.resultWriter.SetError(
+				r.SetError(
 					errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
 			}
 		}
@@ -670,7 +672,7 @@ func (r *DistSQLReceiver) Push(
 						r.updateClock(retryErr.PErr.Now)
 					}
 				}
-				r.resultWriter.SetError(meta.Err)
+				r.SetError(meta.Err)
 			}
 		}
 		if len(meta.Ranges) > 0 {
@@ -679,10 +681,10 @@ func (r *DistSQLReceiver) Push(
 		if len(meta.TraceData) > 0 {
 			span := opentracing.SpanFromContext(r.ctx)
 			if span == nil {
-				r.resultWriter.SetError(
+				r.SetError(
 					errors.New("trying to ingest remote spans but there is no recording span set up"))
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
-				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
+				r.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
 		}
 		if meta.Metrics != nil {
@@ -701,7 +703,7 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
-		r.resultWriter.SetError(r.ctx.Err())
+		r.SetError(r.ctx.Err())
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here if we weren't canceled.
@@ -727,8 +729,9 @@ func (r *DistSQLReceiver) Push(
 	// If no columns are needed by the output, the consumer is only looking for
 	// whether a single row is pushed or not, so the contents do not matter, and
 	// planNodeToRowSource is not set up to handle decoding the row.
-	if r.noColsRequired {
+	if r.existsMode {
 		r.row = []tree.Datum{}
+		log.VEvent(r.ctx, 2, `a row is pushed in "exists" mode, so transition to shutting down`)
 		r.status = execinfra.ConsumerClosed
 	} else {
 		if r.row == nil {
@@ -737,7 +740,7 @@ func (r *DistSQLReceiver) Push(
 		for i, encDatum := range row {
 			err := encDatum.EnsureDecoded(r.outputTypes[i], &r.alloc)
 			if err != nil {
-				r.resultWriter.SetError(err)
+				r.SetError(err)
 				r.status = execinfra.ConsumerClosed
 				return r.status
 			}
@@ -756,7 +759,7 @@ func (r *DistSQLReceiver) Push(
 			// resultWriter.Err(). Also, this function itself doesn't care about the
 			// distinction and just uses resultWriter.Err() to see if we're still
 			// accepting results.
-			r.resultWriter.SetError(commErr)
+			r.SetError(commErr)
 
 			// We don't need to shut down the connection
 			// if there's a portal-related error. This is
@@ -768,6 +771,8 @@ func (r *DistSQLReceiver) Push(
 			if !errors.Is(commErr, ErrLimitedResultNotSupported) {
 				r.commErr = commErr
 			}
+		} else {
+			log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed, so transition to shutting down")
 		}
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
@@ -894,7 +899,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	var typ colinfo.ColTypeInfo
 	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
-		subqueryRecv.noColsRequired = true
+		subqueryRecv.existsMode = true
 		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
 		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
@@ -985,7 +990,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	plan planMaybePhysical,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
-	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
+	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	physPlan, err := dsp.createPhysPlan(planCtx, plan)
 	if err != nil {
@@ -1033,7 +1038,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			continue
 		}
 
-		log.VEventf(ctx, 1, "executing cascade for constraint %s", plan.cascades[i].FKName)
+		log.VEventf(ctx, 2, "executing cascade for constraint %s", plan.cascades[i].FKName)
 
 		// We place a sequence point before every cascade, so
 		// that each subsequent cascade can observe the writes
@@ -1119,7 +1124,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	}
 
 	for i := range plan.checkPlans {
-		log.VEventf(ctx, 1, "executing check query %d out of %d", i+1, len(plan.checkPlans))
+		log.VEventf(ctx, 2, "executing check query %d out of %d", i+1, len(plan.checkPlans))
 		if err := dsp.planAndRunPostquery(
 			ctx,
 			plan.checkPlans[i].plan,
