@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -198,6 +199,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				}
 				row, err := input.NextRow()
 				if err != nil {
+					log.Warningf(ctx, "csvWriter received an error from its input: %+v", err)
 					return err
 				}
 				if row == nil {
@@ -212,6 +214,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 						continue
 					}
 					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
+						log.Warningf(ctx, "csvWriter encountered an error when decoding a row: %+v", err)
 						return err
 					}
 					ed.Datum.Format(f)
@@ -219,6 +222,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 					f.Reset()
 				}
 				if err := writer.Write(csvRow); err != nil {
+					log.Warningf(ctx, "csvWriter encountered an error when creating CSV file: %+v", err)
 					return err
 				}
 			}
@@ -226,15 +230,18 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				break
 			}
 			if err := writer.Flush(); err != nil {
+				log.Warningf(ctx, "csvWriter failed to flush: %+v", err)
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
 			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
 			if err != nil {
+				log.Warningf(ctx, "csvWriter failed to get conf from URI: %+v", err)
 				return err
 			}
 			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
 			if err != nil {
+				log.Warningf(ctx, "csvWriter failed to create the external storage: %+v", err)
 				return err
 			}
 			defer es.Close()
@@ -250,12 +257,14 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			// Close writer to ensure buffer and any compression footer is flushed.
 			err = writer.Close()
 			if err != nil {
+				log.Warningf(ctx, "csvWriter failed to close exporting writer: %+v", err)
 				return errors.Wrapf(err, "failed to close exporting writer")
 			}
 
 			size := writer.Len()
 
 			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
+				log.Warningf(ctx, "csvWriter failed to write the file to the external storage: %+v", err)
 				return err
 			}
 			res := rowenc.EncDatumRow{
@@ -275,11 +284,14 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 			cs, err := sp.out.EmitRow(ctx, res)
 			if err != nil {
+				log.Warningf(ctx, "csvWriter encountered an error when emitting output row (the file name, etc): %+v", err)
 				return err
 			}
 			if cs != execinfra.NeedMoreRows {
 				// TODO(dt): presumably this is because our recv already closed due to
 				// another error... so do we really need another one?
+				log.Warningf(ctx, "csvWriter's consumer changed its status to %d "+
+					"(%d is DrainRequested, %d is ConsumerClosed)", cs, execinfra.DrainRequested, execinfra.ConsumerClosed)
 				return errors.New("unexpected closure of consumer")
 			}
 			if done {
@@ -290,6 +302,9 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		return nil
 	}()
 
+	if err != nil {
+		log.Warningf(ctx, "csvWriter's main loop returned an error: %v", err)
+	}
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
