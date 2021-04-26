@@ -47,7 +47,7 @@ const (
 var MergeQueueInterval = settings.RegisterDurationSetting(
 	"kv.range_merge.queue_interval",
 	"how long the merge queue waits between processing replicas",
-	time.Second,
+	5*time.Second,
 	settings.NonNegativeDuration,
 )
 
