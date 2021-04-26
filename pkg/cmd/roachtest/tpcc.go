@@ -793,18 +793,8 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
 	}
 	defer func() { _ = os.RemoveAll(resultsDir) }()
-	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
-	iteration := 0
-	if res, err := s.Search(func(warehouses int) (bool, error) {
-		iteration++
-		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
 
-		// NB: for goroutines in this monitor, handle errors via `t.Fatal` to
-		// *abort* the line search and whole tpccbench run. Return the errors
-		// to indicate that the specific warehouse count failed, but that the
-		// line search ought to continue.
-		m := newMonitor(ctx, c, roachNodes)
-
+	restart := func() {
 		// We overload the clusters in tpccbench, which can lead to transient infra
 		// failures. These are a) really annoying to debug and b) hide the actual
 		// passing warehouse count, making the line search sensitive to the choice
@@ -841,12 +831,28 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		}
 
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+	}
+
+	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
+	iteration := 0
+	if res, err := s.Search(func(warehouses int) (bool, error) {
+		iteration++
+		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
+
+		restart()
+
 		time.Sleep(restartWait)
 
 		// Set up the load generation configuration.
 		rampDur := 5 * time.Minute
 		loadDur := 10 * time.Minute
 		loadDone := make(chan time.Time, numLoadGroups)
+
+		// NB: for goroutines in this monitor, handle errors via `t.Fatal` to
+		// *abort* the line search and whole tpccbench run. Return the errors
+		// to indicate that the specific warehouse count failed, but that the
+		// line search ought to continue.
+		m := newMonitor(ctx, c, roachNodes)
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -981,6 +987,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	}); err != nil {
 		t.Fatal(err)
 	} else {
+		// The last iteration may have been a failing run that overloaded
+		// nodes to the point of them crashing. Make roachtest happy by
+		// restarting the cluster so that it can run consistency checks.
+		restart()
 		ttycolor.Stdout(ttycolor.Green)
 		t.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
