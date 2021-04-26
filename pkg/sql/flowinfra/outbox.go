@@ -129,6 +129,9 @@ func (m *Outbox) addRow(
 	} else {
 		encodingErr = m.encoder.AddRow(row)
 		if encodingErr != nil {
+			if log.V(1) {
+				log.Errorf(ctx, "outbox encoding error: %s", encodingErr)
+			}
 			m.encoder.AddMetadata(ctx, execinfrapb.ProducerMetadata{Err: encodingErr})
 			mustFlush = true
 		}
@@ -323,6 +326,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			}
 		case drainSignal := <-drainCh:
 			if drainSignal.err != nil {
+				log.Warningf(ctx, "outbox received a drain signal with error set, will cancel the flow: %+v", drainSignal.err)
 				// Stop work from proceeding in this flow. This also causes FlowStream
 				// RPCs that have this node as consumer to return errors.
 				m.flowCtxCancel()
@@ -338,6 +342,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			}
 			drainCh = nil
 			if drainSignal.drainRequested {
+				log.VEvent(ctx, 1, "outbox received a signal to drain")
 				// Enter draining mode.
 				draining = true
 				m.RowChannel.ConsumerDone()
