@@ -308,19 +308,19 @@ inner-join (cross)
  ├── columns: id1_4_0_:1!null id1_2_1_:8!null address2_4_0_:2!null createdo3_4_0_:3 name4_4_0_:4 nickname5_4_0_:5 version6_4_0_:6!null name2_2_1_:9!null version3_2_1_:10!null
  ├── has-placeholder
  ├── key: (1,8)
- ├── fd: ()-->(10), (1)-->(2-6), (8)-->(9)
+ ├── fd: ()-->(2,10), (1)-->(3-6), (8)-->(9)
  ├── project
  │    ├── columns: person0_.id:1!null address:2!null createdon:3 person0_.name:4 nickname:5 person0_.version:6!null
  │    ├── has-placeholder
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-6)
+ │    ├── fd: ()-->(2), (1)-->(3-6)
  │    └── inner-join (lookup person [as=person0_])
  │         ├── columns: person0_.id:1!null address:2!null createdon:3 person0_.name:4 nickname:5 person0_.version:6!null person_id:15!null
  │         ├── key columns: [15] = [1]
  │         ├── lookup columns are key
  │         ├── has-placeholder
  │         ├── key: (15)
- │         ├── fd: (1)-->(2-6), (1)==(15), (15)==(1)
+ │         ├── fd: ()-->(2), (1)-->(3-6), (1)==(15), (15)==(1)
  │         ├── distinct-on
  │         │    ├── columns: person_id:15
  │         │    ├── grouping columns: person_id:15
@@ -328,7 +328,7 @@ inner-join (cross)
  │         │    └── scan phone [as=phones2_]
  │         │         └── columns: person_id:15
  │         └── filters
- │              └── address:2 = $1 [outer=(2), constraints=(/2: (/NULL - ])]
+ │              └── address:2 = $1 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
  ├── select
  │    ├── columns: partner1_.id:8!null partner1_.name:9!null partner1_.version:10!null
  │    ├── has-placeholder
@@ -739,7 +739,7 @@ project
       ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 person_id:4 max:12!null
       ├── has-placeholder
       ├── key: (1)
-      ├── fd: (1)-->(2-4,12)
+      ├── fd: ()-->(12), (1)-->(2-4)
       ├── group-by
       │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 person_id:4 max:12!null
       │    ├── grouping columns: phone0_.id:1!null
@@ -770,7 +770,7 @@ project
       │         └── const-agg [as=person_id:4, outer=(4)]
       │              └── person_id:4
       └── filters
-           └── max:12 = $1 [outer=(12), constraints=(/12: (/NULL - ])]
+           └── max:12 = $1 [outer=(12), constraints=(/12: (/NULL - ]), fd=()-->(12)]
 
 opt
 select
@@ -860,7 +860,7 @@ project
       ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 person_id:4 min:12!null
       ├── has-placeholder
       ├── key: (1)
-      ├── fd: (1)-->(2-4,12)
+      ├── fd: ()-->(12), (1)-->(2-4)
       ├── group-by
       │    ├── columns: phone0_.id:1!null phone_number:2 phone_type:3 person_id:4 min:12!null
       │    ├── grouping columns: phone0_.id:1!null
@@ -891,7 +891,7 @@ project
       │         └── const-agg [as=person_id:4, outer=(4)]
       │              └── person_id:4
       └── filters
-           └── min:12 = $1 [outer=(12), constraints=(/12: (/NULL - ])]
+           └── min:12 = $1 [outer=(12), constraints=(/12: (/NULL - ]), fd=()-->(12)]
 
 opt
 select
@@ -983,30 +983,33 @@ project
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person [as=person0_])
+ └── project
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
-      ├── key columns: [11] = [1]
-      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
       ├── has-placeholder
-      ├── key: (11)
-      ├── fd: (1)-->(2-6), (1)==(11), (11)==(1)
-      ├── distinct-on
-      │    ├── columns: person_id:11
-      │    ├── grouping columns: person_id:11
-      │    ├── has-placeholder
-      │    ├── key: (11)
-      │    └── select
-      │         ├── columns: phones1_.id:8!null person_id:11
-      │         ├── has-placeholder
-      │         ├── key: (8)
-      │         ├── fd: (8)-->(11)
-      │         ├── scan phone [as=phones1_]
-      │         │    ├── columns: phones1_.id:8!null person_id:11
-      │         │    ├── key: (8)
-      │         │    └── fd: (8)-->(11)
-      │         └── filters
-      │              └── phones1_.id:8 = $1 [outer=(8), constraints=(/8: (/NULL - ])]
-      └── filters (true)
+      ├── key: ()
+      ├── fd: ()-->(1-6,11), (1)==(11), (11)==(1)
+      └── inner-join (lookup person [as=person0_])
+           ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones1_.id:8!null person_id:11!null
+           ├── key columns: [11] = [1]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 1]
+           ├── has-placeholder
+           ├── key: ()
+           ├── fd: ()-->(1-6,8,11), (11)==(1), (1)==(11)
+           ├── select
+           │    ├── columns: phones1_.id:8!null person_id:11
+           │    ├── cardinality: [0 - 1]
+           │    ├── has-placeholder
+           │    ├── key: ()
+           │    ├── fd: ()-->(8,11)
+           │    ├── scan phone [as=phones1_]
+           │    │    ├── columns: phones1_.id:8!null person_id:11
+           │    │    ├── key: (8)
+           │    │    └── fd: (8)-->(11)
+           │    └── filters
+           │         └── phones1_.id:8 = $1 [outer=(8), constraints=(/8: (/NULL - ]), fd=()-->(8)]
+           └── filters (true)
 
 opt
 select
@@ -1033,30 +1036,33 @@ project
  ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
- └── inner-join (lookup person [as=person0_])
+ └── project
       ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null person_id:11!null
-      ├── key columns: [11] = [1]
-      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
       ├── has-placeholder
-      ├── key: (11)
-      ├── fd: (1)-->(2-6), (1)==(11), (11)==(1)
-      ├── distinct-on
-      │    ├── columns: person_id:11
-      │    ├── grouping columns: person_id:11
-      │    ├── has-placeholder
-      │    ├── key: (11)
-      │    └── select
-      │         ├── columns: phones1_.id:8!null person_id:11
-      │         ├── has-placeholder
-      │         ├── key: (8)
-      │         ├── fd: (8)-->(11)
-      │         ├── scan phone [as=phones1_]
-      │         │    ├── columns: phones1_.id:8!null person_id:11
-      │         │    ├── key: (8)
-      │         │    └── fd: (8)-->(11)
-      │         └── filters
-      │              └── phones1_.id:8 = $1 [outer=(8), constraints=(/8: (/NULL - ])]
-      └── filters (true)
+      ├── key: ()
+      ├── fd: ()-->(1-6,11), (1)==(11), (11)==(1)
+      └── inner-join (lookup person [as=person0_])
+           ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones1_.id:8!null person_id:11!null
+           ├── key columns: [11] = [1]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 1]
+           ├── has-placeholder
+           ├── key: ()
+           ├── fd: ()-->(1-6,8,11), (11)==(1), (1)==(11)
+           ├── select
+           │    ├── columns: phones1_.id:8!null person_id:11
+           │    ├── cardinality: [0 - 1]
+           │    ├── has-placeholder
+           │    ├── key: ()
+           │    ├── fd: ()-->(8,11)
+           │    ├── scan phone [as=phones1_]
+           │    │    ├── columns: phones1_.id:8!null person_id:11
+           │    │    ├── key: (8)
+           │    │    └── fd: (8)-->(11)
+           │    └── filters
+           │         └── phones1_.id:8 = $1 [outer=(8), constraints=(/8: (/NULL - ]), fd=()-->(8)]
+           └── filters (true)
 
 opt
 select
@@ -1865,17 +1871,17 @@ project
  ├── columns: auctioni4_1_0_:4!null id1_1_0_:1!null id1_1_1_:1!null amount2_1_1_:2 createdd3_1_1_:3 auctioni4_1_1_:4!null formula41_1_:11!null
  ├── has-placeholder
  ├── key: (1)
- ├── fd: (1)-->(2-4,11)
+ ├── fd: ()-->(4), (1)-->(2,3,11)
  ├── group-by
  │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null true_agg:13
  │    ├── grouping columns: bids0_.id:1!null
  │    ├── has-placeholder
  │    ├── key: (1)
- │    ├── fd: (1)-->(2-4,13)
+ │    ├── fd: ()-->(4), (1)-->(2-4,13)
  │    ├── right-join (hash)
  │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:9 true:12
  │    │    ├── has-placeholder
- │    │    ├── fd: (1)-->(2-4)
+ │    │    ├── fd: ()-->(4), (1)-->(2,3)
  │    │    ├── project
  │    │    │    ├── columns: true:12!null successfulbid:9
  │    │    │    ├── fd: ()-->(12)
@@ -1887,13 +1893,13 @@ project
  │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
  │    │    │    ├── has-placeholder
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(2-4)
+ │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
  │    │    │    ├── scan tbid2 [as=bids0_]
  │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
  │    │    │    │    ├── key: (1)
  │    │    │    │    └── fd: (1)-->(2-4)
  │    │    │    └── filters
- │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ])]
+ │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
  │    │    └── filters
  │    │         └── successfulbid:9 = bids0_.id:1 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
  │    └── aggregations
