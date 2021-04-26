@@ -4140,9 +4140,18 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setZones := func(zone zonepb.ZoneConfig) {
-		lhs().SetZoneConfig(&zone)
-		rhs().SetZoneConfig(&zone)
+	setZones := func(t *testing.T, zone zonepb.ZoneConfig) {
+		t.Helper()
+		if l := lhs(); l == nil {
+			t.Fatal("left-hand side range not found")
+		} else {
+			l.SetZoneConfig(&zone)
+		}
+		if r := rhs(); r == nil {
+			t.Fatal("right-hand side range not found")
+		} else {
+			r.SetZoneConfig(&zone)
+		}
 	}
 
 	reset := func(t *testing.T) {
@@ -4153,7 +4162,7 @@ func TestMergeQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		setZones(zoneConfig)
+		setZones(t, zoneConfig)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, rhsStartKey.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
@@ -4192,13 +4201,13 @@ func TestMergeQueue(t *testing.T) {
 		zone := protoutil.Clone(&zoneConfig).(*zonepb.ZoneConfig)
 		zone.RangeMinBytes = proto.Int64(rhs().GetMVCCStats().Total() + 1)
 		zone.RangeMaxBytes = proto.Int64(lhs().GetMVCCStats().Total() + rhs().GetMVCCStats().Total() - 1)
-		setZones(*zone)
+		setZones(t, *zone)
 		store.MustForceMergeScanAndProcess()
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		zone.RangeMaxBytes = proto.Int64(*zone.RangeMaxBytes + 1)
-		setZones(*zone)
+		setZones(t, *zone)
 		l := lhs().RangeID
 		r := rhs().RangeID
 		log.Infof(ctx, "Left=%s, Right=%s", l, r)
