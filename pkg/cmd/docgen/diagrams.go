@@ -1303,6 +1303,10 @@ var specs = []stmtSpec{
 		name: "show_partitions_stmt",
 	},
 	{
+		name: "show_regions",
+		stmt: "show_regions_stmt",
+	},
+	{
 		name:   "show_statements",
 		stmt:   "show_statements_stmt",
 		inline: []string{"opt_cluster", "statements_or_queries"},
