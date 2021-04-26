@@ -249,7 +249,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	buf := kvfeed.MakeChanBuffer()
-	schemaFeed := newSchemaFeed(ctx, ca.flowCtx.Cfg, ca.spec)
+	schemaFeed := newSchemaFeed(ctx, ca.flowCtx.Cfg, ca.spec, ca.metrics)
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, ca.kvFeedMemMon, ca.spec,
 		spans, buf, ca.metrics, schemaFeed)
 	cfg := ca.flowCtx.Cfg
@@ -288,7 +288,10 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 }
 
 func newSchemaFeed(
-	ctx context.Context, cfg *execinfra.ServerConfig, spec execinfrapb.ChangeAggregatorSpec,
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeAggregatorSpec,
+	metrics *Metrics,
 ) kvfeed.SchemaFeed {
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
@@ -307,6 +310,7 @@ func newSchemaFeed(
 		InternalExecutor:   cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
 		SchemaChangeEvents: schemaChangeEvents,
 		InitialHighWater:   initialHighWater,
+		Metrics:            &metrics.SchemaFeedMetrics,
 	})
 }
 

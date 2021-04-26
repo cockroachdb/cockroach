@@ -1658,6 +1658,9 @@ func TestChangefeedMonitoring(t *testing.T) {
 		if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
 		}
+		if c := s.MustGetSQLCounter(`changefeed.table_metadata_nanos`); c != 0 {
+			t.Errorf(`expected 0 got %d`, c)
+		}
 
 		beforeEmitRowCh <- struct{}{}
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -1690,6 +1693,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.buffer_entries.out`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
+			if c := s.MustGetSQLCounter(`changefeed.table_metadata_nanos`); c <= 0 {
+				t.Errorf(`expected > 0 got %d`, c)
+			}
+
 			return nil
 		})
 
