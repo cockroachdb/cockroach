@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const maxRowCountForPlaceholderFastPath = 10
+
 // TryPlaceholderFastPath attempts to produce a fully optimized memo with
 // placeholders. This is only possible in very simple cases and involves special
 // operators (PlaceholderScan) which use placeholders and resolve them at
@@ -47,13 +49,24 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	}()
 
 	root := o.mem.RootExpr().(memo.RelExpr)
-	rootProps := o.mem.RootProps()
 
-	if !rootProps.Ordering.Any() {
+	rootRelProps := root.Relational()
+	// We are dealing with a memo that still contains placeholders. The statistics
+	// for such a memo can be wildly overestimated. Even if our plan is correct,
+	// the estimated row count for a scan is passed to the execution engine which
+	// uses it to make sizing decisions. Passing a very high count can affect
+	// performance significantly (see #64214). So we only use the fast path if the
+	// estimated row count is small; typically this will happen when we constrain
+	// columns that form a key and we know there will be at most one row.
+	if rootRelProps.Stats.RowCount > maxRowCountForPlaceholderFastPath {
 		return nil, false, nil
 	}
 
-	rootColumns := root.Relational().OutputCols
+	rootPhysicalProps := o.mem.RootProps()
+
+	if !rootPhysicalProps.Ordering.Any() {
+		return nil, false, nil
+	}
 
 	// TODO(radu): if we want to support more cases, we should use optgen to write
 	// the rules.
@@ -175,7 +188,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 
 	// Success!
 	newPrivate := scan.ScanPrivate
-	newPrivate.Cols = rootColumns
+	newPrivate.Cols = rootRelProps.OutputCols
 	newPrivate.Index = foundIndex.Ordinal()
 
 	span := make(memo.ScalarListExpr, numConstrained)
@@ -198,8 +211,8 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		ScanPrivate: newPrivate,
 	}
 	placeholderScan = o.mem.AddPlaceholderScanToGroup(placeholderScan, root)
-	o.mem.SetBestProps(placeholderScan, rootProps, &physical.Provided{}, 1.0 /* cost */)
-	o.mem.SetRoot(placeholderScan, rootProps)
+	o.mem.SetBestProps(placeholderScan, rootPhysicalProps, &physical.Provided{}, 1.0 /* cost */)
+	o.mem.SetRoot(placeholderScan, rootPhysicalProps)
 
 	if util.CrdbTestBuild && !o.mem.IsOptimized() {
 		return nil, false, errors.AssertionFailedf("IsOptimized() should be true")
