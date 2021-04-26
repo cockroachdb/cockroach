@@ -274,14 +274,15 @@ func (zc *debugZipContext) collectPerNodeData(
 	}
 
 	var profiles *serverpb.GetFilesResponse
-	s = nodePrinter.start("requesting heap files")
+	s = nodePrinter.start("requesting heap file list")
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			profiles, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
 				NodeId:   id,
 				Type:     serverpb.FileType_HEAP,
-				Patterns: []string{"*"},
+				Patterns: zipCtx.files.retrievalPatterns(),
+				ListOnly: true,
 			})
 			return err
 		}); requestErr != nil {
@@ -290,25 +291,70 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	} else {
 		s.done()
+
+		// Now filter the list of files and for each file selected,
+		// retrieve it.
+		//
+		// We retrieve the files one by one to avoid loading up multiple
+		// files' worth of data server-side in one response in RAM. This
+		// sequential processing is not significantly slower than
+		// requesting multiple files at once, because these files are
+		// large and the transfer time is mostly incurred in the data
+		// transmission, not the request-response roundtrip latency.
+		// Additionally, cross-node concurrency is parallelizing these
+		// transfers somehow.
+
 		nodePrinter.info("%d heap profiles found", len(profiles.Files))
 		for _, file := range profiles.Files {
+			ctime := extractTimeFromFileName(file.Name)
+			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
+				nodePrinter.info("skipping excluded heap profile: %s", file.Name)
+				continue
+			}
+
 			fName := maybeAddProfileSuffix(file.Name)
 			name := prefix + "/heapprof/" + fName
-			if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
+			fs := nodePrinter.start("retrieving %s", file.Name)
+			var oneprof *serverpb.GetFilesResponse
+			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
+				var err error
+				oneprof, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
+					NodeId:   id,
+					Type:     serverpb.FileType_HEAP,
+					Patterns: []string{file.Name},
+					ListOnly: false, // Retrieve the file contents.
+				})
 				return err
+			}); fileErr != nil {
+				if err := zc.z.createError(fs, name, fileErr); err != nil {
+					return err
+				}
+			} else {
+				fs.done()
+
+				if len(oneprof.Files) < 1 {
+					// This is possible if the file was removed in-between
+					// the list request above and the content retrieval request.
+					continue
+				}
+				file := oneprof.Files[0]
+				if err := zc.z.createRaw(nodePrinter.start("writing profile"), name, file.Contents); err != nil {
+					return err
+				}
 			}
 		}
 	}
 
 	var goroutinesResp *serverpb.GetFilesResponse
-	s = nodePrinter.start("requesting goroutine dumps")
+	s = nodePrinter.start("requesting goroutine dump list")
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
 			goroutinesResp, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
 				NodeId:   id,
 				Type:     serverpb.FileType_GOROUTINES,
-				Patterns: []string{"*"},
+				Patterns: zipCtx.files.retrievalPatterns(),
+				ListOnly: true,
 			})
 			return err
 		}); requestErr != nil {
@@ -317,12 +363,57 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	} else {
 		s.done()
+
+		// Now filter the list of files and for each file selected,
+		// retrieve it.
+		//
+		// We retrieve the files one by one to avoid loading up multiple
+		// files' worth of data server-side in one response in RAM. This
+		// sequential processing is not significantly slower than
+		// requesting multiple files at once, because these files are
+		// large and the transfer time is mostly incurred in the data
+		// transmission, not the request-response roundtrip latency.
+		// Additionally, cross-node concurrency is parallelizing these
+		// transfers somehow.
+
 		nodePrinter.info("%d goroutine dumps found", len(goroutinesResp.Files))
 		for _, file := range goroutinesResp.Files {
+			ctime := extractTimeFromFileName(file.Name)
+			if !zipCtx.files.isIncluded(file.Name, ctime, ctime) {
+				nodePrinter.info("skipping excluded goroutine dump: %s", file.Name)
+				continue
+			}
+
 			// NB: the files have a .txt.gz suffix already.
 			name := prefix + "/goroutines/" + file.Name
-			if err := zc.z.createRaw(nodePrinter.start("writing dump"), name, file.Contents); err != nil {
+
+			fs := nodePrinter.start("retrieving %s", file.Name)
+			var onedump *serverpb.GetFilesResponse
+			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
+				var err error
+				onedump, err = zc.status.GetFiles(ctx, &serverpb.GetFilesRequest{
+					NodeId:   id,
+					Type:     serverpb.FileType_GOROUTINES,
+					Patterns: []string{file.Name},
+					ListOnly: false, // Retrieve the file contents.
+				})
 				return err
+			}); fileErr != nil {
+				if err := zc.z.createError(fs, name, fileErr); err != nil {
+					return err
+				}
+			} else {
+				fs.done()
+
+				if len(onedump.Files) < 1 {
+					// This is possible if the file was removed in-between
+					// the list request above and the content retrieval request.
+					continue
+				}
+				file := onedump.Files[0]
+				if err := zc.z.createRaw(nodePrinter.start("writing dump"), name, file.Contents); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -341,8 +432,28 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	} else {
 		s.done()
+
+		// Now filter the list of files and for each file selected,
+		// retrieve it.
+		//
+		// We retrieve the files one by one to avoid loading up multiple
+		// files' worth of data server-side in one response in RAM. This
+		// sequential processing is not significantly slower than
+		// requesting multiple files at once, because these files are
+		// large and the transfer time is mostly incurred in the data
+		// transmission, not the request-response roundtrip latency.
+		// Additionally, cross-node concurrency is parallelizing these
+		// transfers somehow.
+
 		nodePrinter.info("%d log files found", len(logs.Files))
 		for _, file := range logs.Files {
+			ctime := extractTimeFromFileName(file.Name)
+			mtime := timeutil.Unix(0, file.ModTimeNanos)
+			if !zipCtx.files.isIncluded(file.Name, ctime, mtime) {
+				nodePrinter.info("skipping excluded log file: %s", file.Name)
+				continue
+			}
+
 			logPrinter := nodePrinter.withPrefix("log file: %s", file.Name)
 			name := prefix + "/logs/" + file.Name
 			var entries *serverpb.LogEntriesResponse

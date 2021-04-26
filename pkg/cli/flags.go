@@ -626,11 +626,15 @@ func init() {
 		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		intFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 	}
-	// List-nodes + Zip commands.
+	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
 		f := cmd.Flags()
 		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
 		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
+		stringSliceFlag(f, &zipCtx.files.includePatterns, cliflags.ZipIncludedFiles)
+		stringSliceFlag(f, &zipCtx.files.excludePatterns, cliflags.ZipExcludedFiles)
+		varFlag(f, &zipCtx.files.startTimestamp, cliflags.ZipFilesFrom)
+		varFlag(f, &zipCtx.files.endTimestamp, cliflags.ZipFilesUntil)
 	}
 
 	// Decommission command.
