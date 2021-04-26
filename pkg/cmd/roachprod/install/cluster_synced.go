@@ -171,6 +171,11 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
 
 		var waitCmd string
 		if wait {
+			var resetServiceCmd string
+			if !c.IsLocal() {
+				// Since we're waiting (the default), clean up the service.
+				resetServiceCmd = "sudo systemctl reset-failed cockroach"
+			}
 			waitCmd = fmt.Sprintf(`
   for pid in ${pids}; do
     echo "${pid}: checking" >> %[1]s/roachprod.log
@@ -181,14 +186,17 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
       sleep 1
     done
     echo "${pid}: dead" >> %[1]s/roachprod.log
-  done
-`, c.Impl.LogDir(c, c.Nodes[i]))
+		%[2]s
+  done`,
+				c.Impl.LogDir(c, c.Nodes[i]), // [1]
+				resetServiceCmd,
+			)
 		}
 
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
-mkdir -p logs
+mkdir -p %[1]s
 echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
 ps axeww -o pid -o command >> %[1]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
@@ -197,8 +205,13 @@ pids=$(ps axeww -o pid -o command | \
 if [ -n "${pids}" ]; then
   kill -%[4]d ${pids}
 %[5]s
-fi
-`, c.Impl.LogDir(c, c.Nodes[i]), c.Nodes[i], c.escapedTag(), sig, waitCmd)
+fi`,
+			c.Impl.LogDir(c, c.Nodes[i]), // [1]
+			c.Nodes[i],                   // [2]
+			c.escapedTag(),               // [3]
+			sig,                          // [4]
+			waitCmd,                      // [5]
+		)
 		return sess.CombinedOutput(cmd)
 	})
 }
