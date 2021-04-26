@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,6 +48,7 @@ func CreateUserDefinedSchemaDescriptor(
 	user security.SQLUsername,
 	n *tree.CreateSchema,
 	txn *kv.Txn,
+	descriptors *descs.Collection,
 	execCfg *ExecutorConfig,
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
@@ -70,11 +72,16 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				desc, err := catalogkv.MustGetSchemaDescByID(ctx, txn, execCfg.Codec, schemaID)
-				if err != nil {
+				sc, err := descriptors.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
+					Required:       true,
+					AvoidCached:    true,
+					IncludeOffline: true,
+					IncludeDropped: true,
+				})
+				if err != nil || sc.Kind != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}
-				if desc.Dropped() {
+				if sc.Desc.Dropped() {
 					return nil, nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"schema %q is being dropped, try again later",
 						schemaName)
@@ -176,7 +183,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData().User(), n,
-		p.Txn(), p.ExecCfg(), db, true /* allocateID */)
+		p.Txn(), p.Descriptors(), p.ExecCfg(), db, true /* allocateID */)
 	if err != nil {
 		return err
 	}
