@@ -626,7 +626,7 @@ func init() {
 		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		intFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 	}
-	// List-nodes + Zip commands.
+	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
 		f := cmd.Flags()
 		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
