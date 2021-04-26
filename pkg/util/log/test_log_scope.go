@@ -67,7 +67,7 @@ type tShim interface {
 // restrictions.
 func Scope(t tShim) *TestLogScope {
 	if logging.showLogs {
-		return (*TestLogScope)(nil)
+		return newLogScope(t, false /* use files */)
 	}
 
 	scope := ScopeWithoutShowLogs(t)
@@ -85,20 +85,16 @@ func Scope(t tShim) *TestLogScope {
 // directory.
 // When the scope ends, the previous configuration is restored.
 //
-// ScopeWithoutShowLogs() is only valid if logging was not yet
-// active. If it was, the test fails with an assertion error.
-// The motivation for this restriction is to simplify reasoning by
-// users of this facility: if a user has set up their code so that
-// logging goes to files already, they are signaling that they want
-// logging to go there and not elsewhere. In that case, it is
-// undesirable to come along with a new random directory and take
-// logging over there.
-//
 // ScopeWithoutShowLogs() does not enable redirection of internal
 // stderr writes to files. Tests that wish to use that facility should
 // call the other APIs in these package after setting up a
 // TestLogScope.
 func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
+	t.Helper()
+	return newLogScope(t, true /* use files */)
+}
+
+func newLogScope(t tShim, useFiles bool) (sc *TestLogScope) {
 	t.Helper()
 	sc = &TestLogScope{}
 
@@ -117,7 +113,7 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 	if cl := logging.testingFd2CaptureLogger; cl != nil {
 		// Temporarily give up the previous internal fd2 capture. We'll set
 		// up a new one with the new configuration below.
-		// The original will e restored in the Close() function.
+		// The original will be restored in the Close() function.
 		if err := cl.getFileSink().relinquishInternalStderr(); err != nil {
 			// This should not fail. If it does, some caller messed up by
 			// switching over stderr redirection to a different file sink
@@ -140,35 +136,21 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 		}
 	}()
 
-	tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+	var fileDir *string
+	if useFiles {
+		tempDir, err := ioutil.TempDir("", "log"+fileutil.EscapeFilename(t.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Remember the directory name for the Close() function.
+		sc.logDir = tempDir
+		fileDir = &sc.logDir
+	}
+
+	// Obtain the standard test configuration, with the configured
+	// destination directory.
+	cfg, err := getTestConfig(fileDir)
 	if err != nil {
-		t.Fatal(err)
-	}
-	// Remember the directory name for the Close() function.
-	sc.logDir = tempDir
-
-	// Create a fresh configuration.
-	cfg := logconfig.DefaultConfig()
-
-	if skip.UnderBench() {
-		// Avoid logging anything to stderr, to avoid polluting the output
-		// of benchmarks. This is necessary because 'go test' unhelpfully
-		// merges stdout and stderr writes together.
-		cfg.Sinks.Stderr.Filter = severity.NONE
-	} else {
-		// Normal case: make all logged errors/fatal calls go to the
-		// external stderr, in addition to the log file.
-		cfg.Sinks.Stderr.Filter = severity.ERROR
-	}
-	// Disable the internal fd2 capture to file, to ensure that panic
-	// objects get reported to stderr.
-	cfg.CaptureFd2.Enable = false
-	// We cannot enable redactable markers on stderr when fd2 capture is
-	// disabled.
-	bf := false
-	cfg.Sinks.Stderr.Redactable = &bf
-
-	if err := cfg.Validate(&sc.logDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -183,8 +165,56 @@ func ScopeWithoutShowLogs(t tShim) (sc *TestLogScope) {
 		t.Fatal(err)
 	}
 
-	t.Logf("test logs captured to: %s", tempDir)
+	if useFiles {
+		t.Logf("test logs captured to: %s", *fileDir)
+	}
 	return sc
+}
+
+// getTestConfig initialize the logging configuration to parameters
+// suitable for use in tests.
+func getTestConfig(fileDir *string) (testConfig logconfig.Config, err error) {
+	testConfig = logconfig.DefaultConfig()
+
+	if err := testConfig.Validate(fileDir); err != nil {
+		return testConfig, err
+	}
+
+	if fileDir == nil {
+		// File output is disabled; we use stderr for everything.
+
+		// All messages go to stderr.
+		testConfig.Sinks.Stderr.Filter = severity.INFO
+		// Ensure all channels go to stderr.
+		testConfig.Sinks.Stderr.Channels.Channels = logconfig.SelectAllChannels()
+		// Remove all sinks other than stderr.
+		testConfig.Sinks.FluentServers = nil
+		testConfig.Sinks.FileGroups = nil
+	} else {
+		// Output to files enabled.
+
+		// Even though we use file output, make all logged errors/fatal
+		// calls go to the external stderr, in addition to the log file.
+		testConfig.Sinks.Stderr.Filter = severity.ERROR
+	}
+
+	if skip.UnderBench() {
+		// Avoid logging anything to stderr, to avoid polluting the output
+		// of benchmarks. This is necessary because 'go test' unhelpfully
+		// merges stdout and stderr writes together.
+		//
+		// This overrides any default set above.
+		testConfig.Sinks.Stderr.Filter = severity.NONE
+	}
+
+	// Disable the internal fd2 capture to file, to ensure that panic
+	// objects get reported to stderr.
+	testConfig.CaptureFd2.Enable = false
+	// Since we are letting writes go to the external stderr,
+	// we cannot keep redaction markers there.
+	*testConfig.Sinks.Stderr.Redactable = false
+
+	return testConfig, nil
 }
 
 // GetDirectory retrieves the log directory for this scope.
@@ -214,7 +244,7 @@ func (l *TestLogScope) Rotate(t tShim) {
 // deleted, unless the test has failed and the directory is non-empty.
 func (l *TestLogScope) Close(t tShim) {
 	t.Helper()
-	if l == nil || l.logDir == "" {
+	if l == nil {
 		// Never initialized.
 		return
 	}
@@ -223,29 +253,31 @@ func (l *TestLogScope) Close(t tShim) {
 	// Ensure any remaining logs are written to files.
 	Flush()
 
-	defer func() {
-		// Check whether there is something to remove.
-		emptyDir, err := isDirEmpty(l.logDir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		inPanic := calledDuringPanic()
-		if (t.Failed() && !emptyDir) || inPanic {
-			// If the test failed or there was a panic, we keep the log
-			// files for further investigation.
-			if inPanic {
-				fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
-					"Details cannot be printed yet because we are still unwinding.\n"+
-					"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+	if l.logDir != "" {
+		defer func() {
+			// Check whether there is something to remove.
+			emptyDir, err := isDirEmpty(l.logDir)
+			if err != nil {
+				t.Fatal(err)
 			}
-			fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
-		} else {
-			// Clean up.
-			if err := os.RemoveAll(l.logDir); err != nil {
-				t.Error(err)
+			inPanic := calledDuringPanic()
+			if (t.Failed() && !emptyDir) || inPanic {
+				// If the test failed or there was a panic, we keep the log
+				// files for further investigation.
+				if inPanic {
+					fmt.Fprintln(OrigStderr, "\nERROR: a panic has occurred!\n"+
+						"Details cannot be printed yet because we are still unwinding.\n"+
+						"Hopefully the test harness prints the panic below, otherwise check the test logs.\n")
+				}
+				fmt.Fprintln(OrigStderr, "test logs left over in:", l.logDir)
+			} else {
+				// Clean up.
+				if err := os.RemoveAll(l.logDir); err != nil {
+					t.Error(err)
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	if l.cleanupFn != nil {
 		l.cleanupFn()
