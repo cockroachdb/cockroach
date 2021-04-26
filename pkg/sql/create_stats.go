@@ -410,7 +410,12 @@ func createStatsDefaultColumns(
 
 			// Generate stats for each column individually.
 			for _, colID := range colIDs.Ordered() {
-				addIndexColumnStatsIfNotExists(colID, isInverted)
+				col, err := desc.FindColumnByID(colID)
+				if err != nil {
+					return nil, err
+				}
+				isInvertedCol := colinfo.ColumnTypeIsInvertedIndexable(col.Type)
+				addIndexColumnStatsIfNotExists(colID, isInvertedCol)
 			}
 		}
 	}
