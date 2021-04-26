@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -34,13 +33,11 @@ type zipper struct {
 	// goroutines to write concurrently to a zip.Writer.
 	syncutil.Mutex
 
-	f *os.File
 	z *zip.Writer
 }
 
-func newZipper(f *os.File) *zipper {
+func newZipper(f io.Writer) *zipper {
 	return &zipper{
-		f: f,
 		z: zip.NewWriter(f),
 	}
 }
@@ -49,9 +46,7 @@ func (z *zipper) close() error {
 	z.Lock()
 	defer z.Unlock()
 
-	err1 := z.z.Close()
-	err2 := z.f.Close()
-	return errors.CombineErrors(err1, err2)
+	return z.z.Close()
 }
 
 // createLocked opens a new entry in the zip file. The caller is
