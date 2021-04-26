@@ -200,7 +200,7 @@ func checkDemoConfiguration(
 	}
 
 	// If artificial latencies were requested, then the user cannot supply their own localities.
-	if demoCtx.simulateLatency && demoCtx.localities != nil {
+	if demoCtx.global && demoCtx.localities != nil {
 		return nil, errors.Newf("--%s cannot be used with --%s", cliflags.Global.Name, cliflags.DemoNodeLocality.Name)
 	}
 
@@ -299,7 +299,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
 `, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
 
-		if demoCtx.simulateLatency {
+		if demoCtx.global {
 			printfUnlessEmbedded(
 				"#\n# WARNING: the use of --%s is experimental. Some features may not work as expected.\n",
 				cliflags.Global.Name,

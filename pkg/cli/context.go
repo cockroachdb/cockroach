@@ -559,7 +559,7 @@ var demoCtx struct {
 	runWorkload               bool
 	localities                demoLocalityList
 	geoPartitionedReplicas    bool
-	simulateLatency           bool
+	global                    bool
 	transientCluster          *transientCluster
 	insecure                  bool
 	sqlPort                   int
@@ -574,7 +574,7 @@ func setDemoContextDefaults() {
 	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.noExampleDatabase = false
-	demoCtx.simulateLatency = false
+	demoCtx.global = false
 	demoCtx.runWorkload = false
 	demoCtx.localities = nil
 	demoCtx.geoPartitionedReplicas = false

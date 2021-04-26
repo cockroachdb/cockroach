@@ -766,7 +766,7 @@ func init() {
 				"For details, see: "+build.MakeIssueURL(53404))
 
 		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
-		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
+		boolFlag(f, &demoCtx.global, cliflags.Global)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
 		boolFlag(demoCmd.Flags(), &demoCtx.noExampleDatabase, cliflags.UseEmptyDatabase)

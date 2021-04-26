@@ -240,7 +240,7 @@ func (c *transientCluster) start(
 		phaseCtx := logtags.AddTag(ctx, "phase", 5)
 
 		// If latency simulation is requested, initialize the latency map.
-		if demoCtx.simulateLatency {
+		if demoCtx.global {
 			// Now, all servers have been started enough to know their own RPC serving
 			// addresses, but nothing else. Assemble the artificial latency map.
 			log.Infof(phaseCtx, "initializing latency map")
@@ -374,7 +374,7 @@ func (c *transientCluster) createAndAddNode(
 	// it continues the startup routine.
 	serverKnobs.PauseAfterGettingRPCAddress = latencyMapWaitCh
 
-	if demoCtx.simulateLatency {
+	if demoCtx.global {
 		// The latency map will be populated after all servers have
 		// started listening on RPC, and before they proceed with their
 		// startup routine.
@@ -627,7 +627,7 @@ func (c *transientCluster) cleanup(ctx context.Context) {
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
 // then shut it down.
 func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
-	if demoCtx.simulateLatency {
+	if demoCtx.global {
 		return errors.Errorf("shutting down nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
 	nodeIndex := int(nodeID - 1)
@@ -751,7 +751,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	// TODO(#42243): re-compute the latency mapping.
 	// TODO(...): the RPC address of the first server may not be available
 	// if the first server was shut down.
-	if demoCtx.simulateLatency {
+	if demoCtx.global {
 		return errors.Errorf("restarting nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
 	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID,
@@ -790,7 +790,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 // starting.
 func (c *transientCluster) AddNode(ctx context.Context, localityString string) error {
 	// TODO(#42243): re-compute the latency mapping for this to work.
-	if demoCtx.simulateLatency {
+	if demoCtx.global {
 		return errors.Errorf("adding nodes is not supported in --%s configurations", cliflags.Global.Name)
 	}
 
