@@ -29,7 +29,6 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45,11 +44,13 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -59,11 +60,13 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -76,8 +79,7 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -90,8 +92,7 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasPrefix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -117,7 +118,6 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -133,11 +133,13 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -147,11 +149,13 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -164,8 +168,7 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -178,8 +181,7 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.HasSuffix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -205,7 +207,6 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -221,11 +222,13 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.Contains(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -235,11 +238,13 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.Contains(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -252,8 +257,7 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.Contains(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -266,8 +270,7 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = bytes.Contains(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -293,7 +296,6 @@ func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -309,11 +311,13 @@ func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -323,11 +327,13 @@ func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -340,8 +346,7 @@ func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -354,8 +359,7 @@ func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = p.constArg.Match(arg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -381,7 +385,6 @@ func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -397,11 +400,13 @@ func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -411,11 +416,13 @@ func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -428,8 +435,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -442,8 +448,7 @@ func (p *selNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasPrefix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -469,7 +474,6 @@ func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -485,11 +489,13 @@ func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -499,11 +505,13 @@ func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -516,8 +524,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -530,8 +537,7 @@ func (p *selNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.HasSuffix(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -557,7 +563,6 @@ func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -573,11 +578,13 @@ func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.Contains(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -587,11 +594,13 @@ func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.Contains(arg, p.constArg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -604,8 +613,7 @@ func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.Contains(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -618,8 +626,7 @@ func (p *selNotContainsBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !bytes.Contains(arg, p.constArg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -645,7 +652,6 @@ func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -661,11 +667,13 @@ func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -675,11 +683,13 @@ func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -692,8 +702,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -706,8 +715,7 @@ func (p *selNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 					var cmp bool
 					arg := col.Get(i)
 					cmp = !p.constArg.Match(arg)
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}

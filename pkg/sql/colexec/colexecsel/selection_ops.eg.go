@@ -66,7 +66,6 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -82,6 +81,9 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -99,8 +101,7 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -110,6 +111,9 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -128,8 +132,7 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -156,8 +159,7 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -185,8 +187,7 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -211,7 +212,6 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -230,6 +230,9 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -248,8 +251,7 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -260,6 +262,9 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -280,8 +285,7 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -309,8 +313,7 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -341,8 +344,7 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -368,7 +370,6 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -384,6 +385,9 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -393,8 +397,7 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -404,6 +407,9 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -413,8 +419,7 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -433,8 +438,7 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -453,8 +457,7 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -479,7 +482,6 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -498,6 +500,9 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -508,8 +513,7 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -520,6 +524,9 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -530,8 +537,7 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -551,8 +557,7 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -573,8 +578,7 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -600,7 +604,6 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -616,6 +619,9 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -631,8 +637,7 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -642,6 +647,9 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -658,8 +666,7 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -684,8 +691,7 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -711,8 +717,7 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -737,7 +742,6 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -756,6 +760,9 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -772,8 +779,7 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -784,6 +790,9 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -802,8 +811,7 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -829,8 +837,7 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -859,8 +866,7 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -886,7 +892,6 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -902,6 +907,9 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -917,8 +925,7 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -928,6 +935,9 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -944,8 +954,7 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -970,8 +979,7 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -997,8 +1005,7 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1023,7 +1030,6 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1042,6 +1048,9 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -1058,8 +1067,7 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1070,6 +1078,9 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -1088,8 +1099,7 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1115,8 +1125,7 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1145,8 +1154,7 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1172,7 +1180,6 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1188,6 +1195,9 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -1203,8 +1213,7 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1214,6 +1223,9 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -1230,8 +1242,7 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1256,8 +1267,7 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1283,8 +1293,7 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1309,7 +1318,6 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1328,6 +1336,9 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -1344,8 +1355,7 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1356,6 +1366,9 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -1374,8 +1387,7 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1401,8 +1413,7 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1431,8 +1442,7 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1458,7 +1468,6 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1474,6 +1483,9 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -1491,8 +1503,7 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1502,6 +1513,9 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -1520,8 +1534,7 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1548,8 +1561,7 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1577,8 +1589,7 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1603,7 +1614,6 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1622,6 +1632,9 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -1640,8 +1653,7 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1652,6 +1664,9 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -1672,8 +1687,7 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1701,8 +1715,7 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1733,8 +1746,7 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1760,7 +1772,6 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1776,6 +1787,9 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -1785,8 +1799,7 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1796,6 +1809,9 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -1806,8 +1822,7 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1826,8 +1841,7 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1847,8 +1861,7 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1873,7 +1886,6 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -1892,6 +1904,9 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -1902,8 +1917,7 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1914,6 +1928,9 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -1926,8 +1943,7 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1947,8 +1963,7 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1971,8 +1986,7 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -1998,7 +2012,6 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2014,6 +2027,9 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -2034,8 +2050,7 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2045,6 +2060,9 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -2066,8 +2084,7 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2097,8 +2114,7 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2129,8 +2145,7 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2155,7 +2170,6 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2174,6 +2188,9 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -2195,8 +2212,7 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2207,6 +2223,9 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -2230,8 +2249,7 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2262,8 +2280,7 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2297,8 +2314,7 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2324,7 +2340,6 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2340,6 +2355,9 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -2360,8 +2378,7 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2371,6 +2388,9 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -2392,8 +2412,7 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2423,8 +2442,7 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2455,8 +2473,7 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2481,7 +2498,6 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2500,6 +2516,9 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -2521,8 +2540,7 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2533,6 +2551,9 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -2556,8 +2577,7 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2588,8 +2608,7 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2623,8 +2642,7 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2650,7 +2668,6 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2666,6 +2683,9 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -2686,8 +2706,7 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2697,6 +2716,9 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -2718,8 +2740,7 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2749,8 +2770,7 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2781,8 +2801,7 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2807,7 +2826,6 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2826,6 +2844,9 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -2847,8 +2868,7 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2859,6 +2879,9 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -2882,8 +2905,7 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2914,8 +2936,7 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2949,8 +2970,7 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -2976,7 +2996,6 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -2992,6 +3011,9 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -3020,8 +3042,7 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3031,6 +3052,9 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -3060,8 +3084,7 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3099,8 +3122,7 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3139,8 +3161,7 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3165,7 +3186,6 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -3184,6 +3204,9 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -3213,8 +3236,7 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3225,6 +3247,9 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -3256,8 +3281,7 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3296,8 +3320,7 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3339,8 +3362,7 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3366,7 +3388,6 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -3382,6 +3403,9 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -3397,8 +3421,7 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3408,6 +3431,9 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -3424,8 +3450,7 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3450,8 +3475,7 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3477,8 +3501,7 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3503,7 +3526,6 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -3522,6 +3544,9 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -3538,8 +3563,7 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3550,6 +3574,9 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -3568,8 +3595,7 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3595,8 +3621,7 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3625,8 +3650,7 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3652,7 +3676,6 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -3668,6 +3691,9 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -3688,8 +3714,7 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3699,6 +3724,9 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -3720,8 +3748,7 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3751,8 +3778,7 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3783,8 +3809,7 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3809,7 +3834,6 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -3828,6 +3852,9 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -3849,8 +3876,7 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3861,6 +3887,9 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -3884,8 +3913,7 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3916,8 +3944,7 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3951,8 +3978,7 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -3978,7 +4004,6 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -3994,6 +4019,9 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -4014,8 +4042,7 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4025,6 +4052,9 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -4046,8 +4076,7 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4077,8 +4106,7 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4109,8 +4137,7 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4135,7 +4162,6 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -4154,6 +4180,9 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -4175,8 +4204,7 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4187,6 +4215,9 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -4210,8 +4241,7 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4242,8 +4272,7 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4277,8 +4306,7 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4304,7 +4332,6 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -4320,6 +4347,9 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -4340,8 +4370,7 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4351,6 +4380,9 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -4372,8 +4404,7 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4403,8 +4434,7 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4435,8 +4465,7 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4461,7 +4490,6 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -4480,6 +4508,9 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -4501,8 +4532,7 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4513,6 +4543,9 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -4536,8 +4569,7 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4568,8 +4600,7 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4603,8 +4634,7 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4630,7 +4660,6 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -4646,6 +4675,9 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -4674,8 +4706,7 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4685,6 +4716,9 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -4714,8 +4748,7 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4753,8 +4786,7 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4793,8 +4825,7 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4819,7 +4850,6 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -4838,6 +4868,9 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -4867,8 +4900,7 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4879,6 +4911,9 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -4910,8 +4945,7 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4950,8 +4984,7 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -4993,8 +5026,7 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5020,7 +5052,6 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5036,6 +5067,9 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -5051,8 +5085,7 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5062,6 +5095,9 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -5078,8 +5114,7 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5104,8 +5139,7 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5131,8 +5165,7 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5157,7 +5190,6 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5176,6 +5208,9 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -5192,8 +5227,7 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5204,6 +5238,9 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -5222,8 +5259,7 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5249,8 +5285,7 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5279,8 +5314,7 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5306,7 +5340,6 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5322,6 +5355,9 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -5342,8 +5378,7 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5353,6 +5388,9 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -5374,8 +5412,7 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5405,8 +5442,7 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5437,8 +5473,7 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5463,7 +5498,6 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5482,6 +5516,9 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -5503,8 +5540,7 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5515,6 +5551,9 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -5538,8 +5577,7 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5570,8 +5608,7 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5605,8 +5642,7 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5632,7 +5668,6 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5648,6 +5683,9 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -5668,8 +5706,7 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5679,6 +5716,9 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -5700,8 +5740,7 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5731,8 +5770,7 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5763,8 +5801,7 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5789,7 +5826,6 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5808,6 +5844,9 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -5829,8 +5868,7 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5841,6 +5879,9 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -5864,8 +5905,7 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5896,8 +5936,7 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5931,8 +5970,7 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -5958,7 +5996,6 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -5974,6 +6011,9 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -5994,8 +6034,7 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6005,6 +6044,9 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -6026,8 +6068,7 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6057,8 +6098,7 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6089,8 +6129,7 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6115,7 +6154,6 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -6134,6 +6172,9 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -6155,8 +6196,7 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6167,6 +6207,9 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -6190,8 +6233,7 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6222,8 +6264,7 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6257,8 +6298,7 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6284,7 +6324,6 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -6300,6 +6339,9 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -6328,8 +6370,7 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6339,6 +6380,9 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -6368,8 +6412,7 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6407,8 +6450,7 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6447,8 +6489,7 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6473,7 +6514,6 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -6492,6 +6532,9 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -6521,8 +6564,7 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6533,6 +6575,9 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -6564,8 +6609,7 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6604,8 +6648,7 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6647,8 +6690,7 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6674,7 +6716,6 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -6690,6 +6731,9 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -6705,8 +6749,7 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6716,6 +6759,9 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -6732,8 +6778,7 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6758,8 +6803,7 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6785,8 +6829,7 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6811,7 +6854,6 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -6830,6 +6872,9 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -6846,8 +6891,7 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6858,6 +6902,9 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -6876,8 +6923,7 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6903,8 +6949,7 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6933,8 +6978,7 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -6960,7 +7004,6 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -6976,6 +7019,9 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -7004,8 +7050,7 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7015,6 +7060,9 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -7044,8 +7092,7 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7083,8 +7130,7 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7123,8 +7169,7 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7149,7 +7194,6 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -7168,6 +7212,9 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -7197,8 +7244,7 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7209,6 +7255,9 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -7240,8 +7289,7 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7280,8 +7328,7 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7323,8 +7370,7 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7350,7 +7396,6 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -7366,6 +7411,9 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -7394,8 +7442,7 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7405,6 +7452,9 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -7434,8 +7484,7 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7473,8 +7522,7 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7513,8 +7561,7 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7539,7 +7586,6 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -7558,6 +7604,9 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -7587,8 +7636,7 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7599,6 +7647,9 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -7630,8 +7681,7 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7670,8 +7720,7 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7713,8 +7762,7 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7740,7 +7788,6 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -7756,6 +7803,9 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -7784,8 +7834,7 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7795,6 +7844,9 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -7824,8 +7876,7 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7863,8 +7914,7 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7903,8 +7953,7 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7929,7 +7978,6 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -7948,6 +7996,9 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -7977,8 +8028,7 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -7989,6 +8039,9 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -8020,8 +8073,7 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8060,8 +8112,7 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8103,8 +8154,7 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8130,7 +8180,6 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -8146,6 +8195,9 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -8174,8 +8226,7 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8185,6 +8236,9 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -8214,8 +8268,7 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8253,8 +8306,7 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8293,8 +8345,7 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8319,7 +8370,6 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -8338,6 +8388,9 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -8367,8 +8420,7 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8379,6 +8431,9 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -8410,8 +8465,7 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8450,8 +8504,7 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8493,8 +8546,7 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8520,7 +8572,6 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -8536,6 +8587,9 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -8553,8 +8607,7 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8564,6 +8617,9 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -8582,8 +8638,7 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8610,8 +8665,7 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8639,8 +8693,7 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8665,7 +8718,6 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -8684,6 +8736,9 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -8702,8 +8757,7 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8714,6 +8768,9 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -8734,8 +8791,7 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8763,8 +8819,7 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8795,8 +8850,7 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8822,7 +8876,6 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -8838,6 +8891,9 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -8854,8 +8910,7 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8865,6 +8920,9 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -8882,8 +8940,7 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8909,8 +8966,7 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8937,8 +8993,7 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -8963,7 +9018,6 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -8982,6 +9036,9 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -8999,8 +9056,7 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9011,6 +9067,9 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -9030,8 +9089,7 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9058,8 +9116,7 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9089,8 +9146,7 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9116,7 +9172,6 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9132,6 +9187,9 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -9141,8 +9199,7 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9152,6 +9209,9 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -9162,8 +9222,7 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9182,8 +9241,7 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9203,8 +9261,7 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9229,7 +9286,6 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9248,6 +9304,9 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -9258,8 +9317,7 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9270,6 +9328,9 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -9282,8 +9343,7 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9303,8 +9363,7 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9327,8 +9386,7 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9354,7 +9412,6 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9370,6 +9427,9 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -9385,8 +9445,7 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9396,6 +9455,9 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -9411,8 +9473,7 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9437,8 +9498,7 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9463,8 +9523,7 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9489,7 +9548,6 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9508,6 +9566,9 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -9524,8 +9585,7 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9536,6 +9596,9 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -9552,8 +9615,7 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9579,8 +9641,7 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9607,8 +9668,7 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9634,7 +9694,6 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9650,6 +9709,9 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -9661,8 +9723,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9672,6 +9733,9 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -9683,8 +9747,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9705,8 +9768,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9727,8 +9789,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9753,7 +9814,6 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9772,6 +9832,9 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -9784,8 +9847,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9796,6 +9858,9 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -9808,8 +9873,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9831,8 +9895,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9855,8 +9918,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult == 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9882,7 +9944,6 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -9898,6 +9959,9 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -9915,8 +9979,7 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9926,6 +9989,9 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -9944,8 +10010,7 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -9972,8 +10037,7 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10001,8 +10065,7 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10027,7 +10090,6 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10046,6 +10108,9 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -10064,8 +10129,7 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10076,6 +10140,9 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -10096,8 +10163,7 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10125,8 +10191,7 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10157,8 +10222,7 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10184,7 +10248,6 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10200,6 +10263,9 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -10209,8 +10275,7 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10220,6 +10285,9 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -10229,8 +10297,7 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10249,8 +10316,7 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10269,8 +10335,7 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10295,7 +10360,6 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10314,6 +10378,9 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -10324,8 +10391,7 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10336,6 +10402,9 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -10346,8 +10415,7 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10367,8 +10435,7 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10389,8 +10456,7 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10416,7 +10482,6 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10432,6 +10497,9 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -10447,8 +10515,7 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10458,6 +10525,9 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -10474,8 +10544,7 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10500,8 +10569,7 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10527,8 +10595,7 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10553,7 +10620,6 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10572,6 +10638,9 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -10588,8 +10657,7 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10600,6 +10668,9 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -10618,8 +10689,7 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10645,8 +10715,7 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10675,8 +10744,7 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10702,7 +10770,6 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10718,6 +10785,9 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -10733,8 +10803,7 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10744,6 +10813,9 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -10760,8 +10832,7 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10786,8 +10857,7 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10813,8 +10883,7 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10839,7 +10908,6 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -10858,6 +10926,9 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -10874,8 +10945,7 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10886,6 +10956,9 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -10904,8 +10977,7 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10931,8 +11003,7 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10961,8 +11032,7 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -10988,7 +11058,6 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11004,6 +11073,9 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -11019,8 +11091,7 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11030,6 +11101,9 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -11046,8 +11120,7 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11072,8 +11145,7 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11099,8 +11171,7 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11125,7 +11196,6 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11144,6 +11214,9 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -11160,8 +11233,7 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11172,6 +11244,9 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -11190,8 +11265,7 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11217,8 +11291,7 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11247,8 +11320,7 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11274,7 +11346,6 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11290,6 +11361,9 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -11307,8 +11381,7 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11318,6 +11391,9 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -11336,8 +11412,7 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11364,8 +11439,7 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11393,8 +11467,7 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11419,7 +11492,6 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11438,6 +11510,9 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -11456,8 +11531,7 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11468,6 +11542,9 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -11488,8 +11565,7 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11517,8 +11593,7 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11549,8 +11624,7 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11576,7 +11650,6 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11592,6 +11665,9 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -11601,8 +11677,7 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11612,6 +11687,9 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -11622,8 +11700,7 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11642,8 +11719,7 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11663,8 +11739,7 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11689,7 +11764,6 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11708,6 +11782,9 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -11718,8 +11795,7 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11730,6 +11806,9 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -11742,8 +11821,7 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11763,8 +11841,7 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11787,8 +11864,7 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11814,7 +11890,6 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11830,6 +11905,9 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -11850,8 +11928,7 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11861,6 +11938,9 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -11882,8 +11962,7 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11913,8 +11992,7 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11945,8 +12023,7 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -11971,7 +12048,6 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -11990,6 +12066,9 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12011,8 +12090,7 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12023,6 +12101,9 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -12046,8 +12127,7 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12078,8 +12158,7 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12113,8 +12192,7 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12140,7 +12218,6 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -12156,6 +12233,9 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -12176,8 +12256,7 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12187,6 +12266,9 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -12208,8 +12290,7 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12239,8 +12320,7 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12271,8 +12351,7 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12297,7 +12376,6 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -12316,6 +12394,9 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12337,8 +12418,7 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12349,6 +12429,9 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -12372,8 +12455,7 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12404,8 +12486,7 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12439,8 +12520,7 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12466,7 +12546,6 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -12482,6 +12561,9 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -12502,8 +12584,7 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12513,6 +12594,9 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -12534,8 +12618,7 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12565,8 +12648,7 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12597,8 +12679,7 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12623,7 +12704,6 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -12642,6 +12722,9 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -12663,8 +12746,7 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12675,6 +12757,9 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -12698,8 +12783,7 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12730,8 +12814,7 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12765,8 +12848,7 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12792,7 +12874,6 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -12808,6 +12889,9 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -12836,8 +12920,7 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12847,6 +12930,9 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -12876,8 +12962,7 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12915,8 +13000,7 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12955,8 +13039,7 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -12981,7 +13064,6 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13000,6 +13082,9 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -13029,8 +13114,7 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13041,6 +13125,9 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -13072,8 +13159,7 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13112,8 +13198,7 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13155,8 +13240,7 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13182,7 +13266,6 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13198,6 +13281,9 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -13213,8 +13299,7 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13224,6 +13309,9 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -13240,8 +13328,7 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13266,8 +13353,7 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13293,8 +13379,7 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13319,7 +13404,6 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13338,6 +13422,9 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -13354,8 +13441,7 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13366,6 +13452,9 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -13384,8 +13473,7 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13411,8 +13499,7 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13441,8 +13528,7 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13468,7 +13554,6 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13484,6 +13569,9 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -13504,8 +13592,7 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13515,6 +13602,9 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -13536,8 +13626,7 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13567,8 +13656,7 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13599,8 +13687,7 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13625,7 +13712,6 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13644,6 +13730,9 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -13665,8 +13754,7 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13677,6 +13765,9 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -13700,8 +13791,7 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13732,8 +13822,7 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13767,8 +13856,7 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13794,7 +13882,6 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13810,6 +13897,9 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -13830,8 +13920,7 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13841,6 +13930,9 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -13862,8 +13954,7 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13893,8 +13984,7 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13925,8 +14015,7 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -13951,7 +14040,6 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -13970,6 +14058,9 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -13991,8 +14082,7 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14003,6 +14093,9 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -14026,8 +14119,7 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14058,8 +14150,7 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14093,8 +14184,7 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14120,7 +14210,6 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -14136,6 +14225,9 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -14156,8 +14248,7 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14167,6 +14258,9 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -14188,8 +14282,7 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14219,8 +14312,7 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14251,8 +14343,7 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14277,7 +14368,6 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -14296,6 +14386,9 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -14317,8 +14410,7 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14329,6 +14421,9 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -14352,8 +14447,7 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14384,8 +14478,7 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14419,8 +14512,7 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14446,7 +14538,6 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -14462,6 +14553,9 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -14490,8 +14584,7 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14501,6 +14594,9 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -14530,8 +14626,7 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14569,8 +14664,7 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14609,8 +14703,7 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14635,7 +14728,6 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -14654,6 +14746,9 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -14683,8 +14778,7 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14695,6 +14789,9 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -14726,8 +14823,7 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14766,8 +14862,7 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14809,8 +14904,7 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14836,7 +14930,6 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -14852,6 +14945,9 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -14867,8 +14963,7 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14878,6 +14973,9 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -14894,8 +14992,7 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14920,8 +15017,7 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14947,8 +15043,7 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -14973,7 +15068,6 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -14992,6 +15086,9 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15008,8 +15105,7 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15020,6 +15116,9 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -15038,8 +15137,7 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15065,8 +15163,7 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15095,8 +15192,7 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15122,7 +15218,6 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -15138,6 +15233,9 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -15158,8 +15256,7 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15169,6 +15266,9 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -15190,8 +15290,7 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15221,8 +15320,7 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15253,8 +15351,7 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15279,7 +15376,6 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -15298,6 +15394,9 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15319,8 +15418,7 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15331,6 +15429,9 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -15354,8 +15455,7 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15386,8 +15486,7 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15421,8 +15520,7 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15448,7 +15546,6 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -15464,6 +15561,9 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -15484,8 +15584,7 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15495,6 +15594,9 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -15516,8 +15618,7 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15547,8 +15648,7 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15579,8 +15679,7 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15605,7 +15704,6 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -15624,6 +15722,9 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15645,8 +15746,7 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15657,6 +15757,9 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -15680,8 +15783,7 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15712,8 +15814,7 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15747,8 +15848,7 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15774,7 +15874,6 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -15790,6 +15889,9 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -15810,8 +15912,7 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15821,6 +15922,9 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -15842,8 +15946,7 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15873,8 +15976,7 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15905,8 +16007,7 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15931,7 +16032,6 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -15950,6 +16050,9 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -15971,8 +16074,7 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -15983,6 +16085,9 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -16006,8 +16111,7 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16038,8 +16142,7 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16073,8 +16176,7 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16100,7 +16202,6 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -16116,6 +16217,9 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -16144,8 +16248,7 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16155,6 +16258,9 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -16184,8 +16290,7 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16223,8 +16328,7 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16263,8 +16367,7 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16289,7 +16392,6 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -16308,6 +16410,9 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -16337,8 +16442,7 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16349,6 +16453,9 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -16380,8 +16487,7 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16420,8 +16526,7 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16463,8 +16568,7 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16490,7 +16594,6 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -16506,6 +16609,9 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -16521,8 +16627,7 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16532,6 +16637,9 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -16548,8 +16656,7 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16574,8 +16681,7 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16601,8 +16707,7 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16627,7 +16732,6 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -16646,6 +16750,9 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -16662,8 +16769,7 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16674,6 +16780,9 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -16692,8 +16801,7 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16719,8 +16827,7 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16749,8 +16856,7 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16776,7 +16882,6 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -16792,6 +16897,9 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -16820,8 +16928,7 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16831,6 +16938,9 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -16860,8 +16970,7 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16899,8 +17008,7 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16939,8 +17047,7 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -16965,7 +17072,6 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -16984,6 +17090,9 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -17013,8 +17122,7 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17025,6 +17133,9 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -17056,8 +17167,7 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17096,8 +17206,7 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17139,8 +17248,7 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17166,7 +17274,6 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -17182,6 +17289,9 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -17210,8 +17320,7 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17221,6 +17330,9 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -17250,8 +17362,7 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17289,8 +17400,7 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17329,8 +17439,7 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17355,7 +17464,6 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -17374,6 +17482,9 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -17403,8 +17514,7 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17415,6 +17525,9 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -17446,8 +17559,7 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17486,8 +17598,7 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17529,8 +17640,7 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17556,7 +17666,6 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -17572,6 +17681,9 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -17600,8 +17712,7 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17611,6 +17722,9 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -17640,8 +17754,7 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17679,8 +17792,7 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17719,8 +17831,7 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17745,7 +17856,6 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -17764,6 +17874,9 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -17793,8 +17906,7 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17805,6 +17917,9 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -17836,8 +17951,7 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17876,8 +17990,7 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17919,8 +18032,7 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -17946,7 +18058,6 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -17962,6 +18073,9 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -17990,8 +18104,7 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18001,6 +18114,9 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -18030,8 +18146,7 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18069,8 +18184,7 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18109,8 +18223,7 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18135,7 +18248,6 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -18154,6 +18266,9 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -18183,8 +18298,7 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18195,6 +18309,9 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -18226,8 +18343,7 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18266,8 +18382,7 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18309,8 +18424,7 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18336,7 +18450,6 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -18352,6 +18465,9 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -18369,8 +18485,7 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18380,6 +18495,9 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -18398,8 +18516,7 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18426,8 +18543,7 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18455,8 +18571,7 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18481,7 +18596,6 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -18500,6 +18614,9 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -18518,8 +18635,7 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18530,6 +18646,9 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -18550,8 +18669,7 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18579,8 +18697,7 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18611,8 +18728,7 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18638,7 +18754,6 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -18654,6 +18769,9 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -18670,8 +18788,7 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18681,6 +18798,9 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -18698,8 +18818,7 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18725,8 +18844,7 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18753,8 +18871,7 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18779,7 +18896,6 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -18798,6 +18914,9 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -18815,8 +18934,7 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18827,6 +18945,9 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -18846,8 +18967,7 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18874,8 +18994,7 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18905,8 +19024,7 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18932,7 +19050,6 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -18948,6 +19065,9 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -18957,8 +19077,7 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18968,6 +19087,9 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -18978,8 +19100,7 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -18998,8 +19119,7 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19019,8 +19139,7 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19045,7 +19164,6 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19064,6 +19182,9 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19074,8 +19195,7 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19086,6 +19206,9 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -19098,8 +19221,7 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19119,8 +19241,7 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19143,8 +19264,7 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19170,7 +19290,6 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19186,6 +19305,9 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -19201,8 +19323,7 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19212,6 +19333,9 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -19227,8 +19351,7 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19253,8 +19376,7 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19279,8 +19401,7 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19305,7 +19426,6 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19324,6 +19444,9 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19340,8 +19463,7 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19352,6 +19474,9 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19368,8 +19493,7 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19395,8 +19519,7 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19423,8 +19546,7 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19450,7 +19572,6 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19466,6 +19587,9 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -19477,8 +19601,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19488,6 +19611,9 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -19499,8 +19625,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19521,8 +19646,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19543,8 +19667,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19569,7 +19692,6 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19588,6 +19710,9 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19600,8 +19725,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19612,6 +19736,9 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19624,8 +19751,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19647,8 +19773,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19671,8 +19796,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult != 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19698,7 +19822,6 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19714,6 +19837,9 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -19731,8 +19857,7 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19742,6 +19867,9 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -19760,8 +19888,7 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19788,8 +19915,7 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19817,8 +19943,7 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19843,7 +19968,6 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -19862,6 +19986,9 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -19880,8 +20007,7 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19892,6 +20018,9 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -19912,8 +20041,7 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19941,8 +20069,7 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -19973,8 +20100,7 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20000,7 +20126,6 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20016,6 +20141,9 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -20025,8 +20153,7 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20036,6 +20163,9 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -20045,8 +20175,7 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20065,8 +20194,7 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20085,8 +20213,7 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20111,7 +20238,6 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20130,6 +20256,9 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -20140,8 +20269,7 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20152,6 +20280,9 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -20162,8 +20293,7 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20183,8 +20313,7 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20205,8 +20334,7 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20232,7 +20360,6 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20248,6 +20375,9 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -20263,8 +20393,7 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20274,6 +20403,9 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -20290,8 +20422,7 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20316,8 +20447,7 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20343,8 +20473,7 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20369,7 +20498,6 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20388,6 +20516,9 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -20404,8 +20535,7 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20416,6 +20546,9 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -20434,8 +20567,7 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20461,8 +20593,7 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20491,8 +20622,7 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20518,7 +20648,6 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20534,6 +20663,9 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -20549,8 +20681,7 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20560,6 +20691,9 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -20576,8 +20710,7 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20602,8 +20735,7 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20629,8 +20761,7 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20655,7 +20786,6 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20674,6 +20804,9 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -20690,8 +20823,7 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20702,6 +20834,9 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -20720,8 +20855,7 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20747,8 +20881,7 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20777,8 +20910,7 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20804,7 +20936,6 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20820,6 +20951,9 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -20835,8 +20969,7 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20846,6 +20979,9 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -20862,8 +20998,7 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20888,8 +21023,7 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20915,8 +21049,7 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20941,7 +21074,6 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -20960,6 +21092,9 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -20976,8 +21111,7 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -20988,6 +21122,9 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -21006,8 +21143,7 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21033,8 +21169,7 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21063,8 +21198,7 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21090,7 +21224,6 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21106,6 +21239,9 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -21123,8 +21259,7 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21134,6 +21269,9 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -21152,8 +21290,7 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21180,8 +21317,7 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21209,8 +21345,7 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21235,7 +21370,6 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21254,6 +21388,9 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21272,8 +21409,7 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21284,6 +21420,9 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -21304,8 +21443,7 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21333,8 +21471,7 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21365,8 +21502,7 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21392,7 +21528,6 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21408,6 +21543,9 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -21417,8 +21555,7 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21428,6 +21565,9 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -21438,8 +21578,7 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21458,8 +21597,7 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21479,8 +21617,7 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21505,7 +21642,6 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21524,6 +21660,9 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21534,8 +21673,7 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21546,6 +21684,9 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -21558,8 +21699,7 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21579,8 +21719,7 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21603,8 +21742,7 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21630,7 +21768,6 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21646,6 +21783,9 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -21666,8 +21806,7 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21677,6 +21816,9 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -21698,8 +21840,7 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21729,8 +21870,7 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21761,8 +21901,7 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21787,7 +21926,6 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21806,6 +21944,9 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -21827,8 +21968,7 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21839,6 +21979,9 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -21862,8 +22005,7 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21894,8 +22036,7 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21929,8 +22070,7 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -21956,7 +22096,6 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -21972,6 +22111,9 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -21992,8 +22134,7 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22003,6 +22144,9 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -22024,8 +22168,7 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22055,8 +22198,7 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22087,8 +22229,7 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22113,7 +22254,6 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -22132,6 +22272,9 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -22153,8 +22296,7 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22165,6 +22307,9 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -22188,8 +22333,7 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22220,8 +22364,7 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22255,8 +22398,7 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22282,7 +22424,6 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -22298,6 +22439,9 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -22318,8 +22462,7 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22329,6 +22472,9 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -22350,8 +22496,7 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22381,8 +22526,7 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22413,8 +22557,7 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22439,7 +22582,6 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -22458,6 +22600,9 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -22479,8 +22624,7 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22491,6 +22635,9 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -22514,8 +22661,7 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22546,8 +22692,7 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22581,8 +22726,7 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22608,7 +22752,6 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -22624,6 +22767,9 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -22652,8 +22798,7 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22663,6 +22808,9 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -22692,8 +22840,7 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22731,8 +22878,7 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22771,8 +22917,7 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22797,7 +22942,6 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -22816,6 +22960,9 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -22845,8 +22992,7 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22857,6 +23003,9 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -22888,8 +23037,7 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22928,8 +23076,7 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22971,8 +23118,7 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -22998,7 +23144,6 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23014,6 +23159,9 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -23029,8 +23177,7 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23040,6 +23187,9 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -23056,8 +23206,7 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23082,8 +23231,7 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23109,8 +23257,7 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23135,7 +23282,6 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23154,6 +23300,9 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -23170,8 +23319,7 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23182,6 +23330,9 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -23200,8 +23351,7 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23227,8 +23377,7 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23257,8 +23406,7 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23284,7 +23432,6 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23300,6 +23447,9 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -23320,8 +23470,7 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23331,6 +23480,9 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -23352,8 +23504,7 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23383,8 +23534,7 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23415,8 +23565,7 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23441,7 +23590,6 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23460,6 +23608,9 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -23481,8 +23632,7 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23493,6 +23643,9 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -23516,8 +23669,7 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23548,8 +23700,7 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23583,8 +23734,7 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23610,7 +23760,6 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23626,6 +23775,9 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -23646,8 +23798,7 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23657,6 +23808,9 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -23678,8 +23832,7 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23709,8 +23862,7 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23741,8 +23893,7 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23767,7 +23918,6 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23786,6 +23936,9 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -23807,8 +23960,7 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23819,6 +23971,9 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -23842,8 +23997,7 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23874,8 +24028,7 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23909,8 +24062,7 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23936,7 +24088,6 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -23952,6 +24103,9 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -23972,8 +24126,7 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -23983,6 +24136,9 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -24004,8 +24160,7 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24035,8 +24190,7 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24067,8 +24221,7 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24093,7 +24246,6 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -24112,6 +24264,9 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -24133,8 +24288,7 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24145,6 +24299,9 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -24168,8 +24325,7 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24200,8 +24356,7 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24235,8 +24390,7 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24262,7 +24416,6 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -24278,6 +24431,9 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -24306,8 +24462,7 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24317,6 +24472,9 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -24346,8 +24504,7 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24385,8 +24542,7 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24425,8 +24581,7 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24451,7 +24606,6 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -24470,6 +24624,9 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -24499,8 +24656,7 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24511,6 +24667,9 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -24542,8 +24701,7 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24582,8 +24740,7 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24625,8 +24782,7 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24652,7 +24808,6 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -24668,6 +24823,9 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -24683,8 +24841,7 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24694,6 +24851,9 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -24710,8 +24870,7 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24736,8 +24895,7 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24763,8 +24921,7 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24789,7 +24946,6 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -24808,6 +24964,9 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -24824,8 +24983,7 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24836,6 +24994,9 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -24854,8 +25015,7 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24881,8 +25041,7 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24911,8 +25070,7 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24938,7 +25096,6 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -24954,6 +25111,9 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -24974,8 +25134,7 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -24985,6 +25144,9 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -25006,8 +25168,7 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25037,8 +25198,7 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25069,8 +25229,7 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25095,7 +25254,6 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -25114,6 +25272,9 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -25135,8 +25296,7 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25147,6 +25307,9 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -25170,8 +25333,7 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25202,8 +25364,7 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25237,8 +25398,7 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25264,7 +25424,6 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -25280,6 +25439,9 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -25300,8 +25462,7 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25311,6 +25472,9 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -25332,8 +25496,7 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25363,8 +25526,7 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25395,8 +25557,7 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25421,7 +25582,6 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -25440,6 +25600,9 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -25461,8 +25624,7 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25473,6 +25635,9 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -25496,8 +25661,7 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25528,8 +25692,7 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25563,8 +25726,7 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25590,7 +25752,6 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -25606,6 +25767,9 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -25626,8 +25790,7 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25637,6 +25800,9 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -25658,8 +25824,7 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25689,8 +25854,7 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25721,8 +25885,7 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25747,7 +25910,6 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -25766,6 +25928,9 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -25787,8 +25952,7 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25799,6 +25963,9 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -25822,8 +25989,7 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25854,8 +26020,7 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25889,8 +26054,7 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25916,7 +26080,6 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -25932,6 +26095,9 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -25960,8 +26126,7 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -25971,6 +26136,9 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -26000,8 +26168,7 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26039,8 +26206,7 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26079,8 +26245,7 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26105,7 +26270,6 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -26124,6 +26288,9 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -26153,8 +26320,7 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26165,6 +26331,9 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -26196,8 +26365,7 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26236,8 +26404,7 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26279,8 +26446,7 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26306,7 +26472,6 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -26322,6 +26487,9 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -26337,8 +26505,7 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26348,6 +26515,9 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -26364,8 +26534,7 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26390,8 +26559,7 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26417,8 +26585,7 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26443,7 +26610,6 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -26462,6 +26628,9 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -26478,8 +26647,7 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26490,6 +26658,9 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -26508,8 +26679,7 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26535,8 +26705,7 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26565,8 +26734,7 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26592,7 +26760,6 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -26608,6 +26775,9 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -26636,8 +26806,7 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26647,6 +26816,9 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -26676,8 +26848,7 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26715,8 +26886,7 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26755,8 +26925,7 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26781,7 +26950,6 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -26800,6 +26968,9 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -26829,8 +27000,7 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26841,6 +27011,9 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -26872,8 +27045,7 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26912,8 +27084,7 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26955,8 +27126,7 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -26982,7 +27152,6 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -26998,6 +27167,9 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -27026,8 +27198,7 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27037,6 +27208,9 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -27066,8 +27240,7 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27105,8 +27278,7 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27145,8 +27317,7 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27171,7 +27342,6 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -27190,6 +27360,9 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -27219,8 +27392,7 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27231,6 +27403,9 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -27262,8 +27437,7 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27302,8 +27476,7 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27345,8 +27518,7 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27372,7 +27544,6 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -27388,6 +27559,9 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -27416,8 +27590,7 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27427,6 +27600,9 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -27456,8 +27632,7 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27495,8 +27670,7 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27535,8 +27709,7 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27561,7 +27734,6 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -27580,6 +27752,9 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -27609,8 +27784,7 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27621,6 +27795,9 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -27652,8 +27829,7 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27692,8 +27868,7 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27735,8 +27910,7 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27762,7 +27936,6 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -27778,6 +27951,9 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -27806,8 +27982,7 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27817,6 +27992,9 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -27846,8 +28024,7 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27885,8 +28062,7 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27925,8 +28101,7 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -27951,7 +28126,6 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -27970,6 +28144,9 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -27999,8 +28176,7 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28011,6 +28187,9 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -28042,8 +28221,7 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28082,8 +28260,7 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28125,8 +28302,7 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28152,7 +28328,6 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -28168,6 +28343,9 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -28185,8 +28363,7 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28196,6 +28373,9 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -28214,8 +28394,7 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28242,8 +28421,7 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28271,8 +28449,7 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28297,7 +28474,6 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -28316,6 +28492,9 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -28334,8 +28513,7 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28346,6 +28524,9 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -28366,8 +28547,7 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28395,8 +28575,7 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28427,8 +28606,7 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28454,7 +28632,6 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -28470,6 +28647,9 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -28486,8 +28666,7 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28497,6 +28676,9 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -28514,8 +28696,7 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28541,8 +28722,7 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28569,8 +28749,7 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28595,7 +28774,6 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -28614,6 +28792,9 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -28631,8 +28812,7 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28643,6 +28823,9 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -28662,8 +28845,7 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28690,8 +28872,7 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28721,8 +28902,7 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28748,7 +28928,6 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -28764,6 +28943,9 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -28773,8 +28955,7 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28784,6 +28965,9 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -28794,8 +28978,7 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28814,8 +28997,7 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28835,8 +29017,7 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28861,7 +29042,6 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -28880,6 +29060,9 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -28890,8 +29073,7 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28902,6 +29084,9 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -28914,8 +29099,7 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28935,8 +29119,7 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28959,8 +29142,7 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -28986,7 +29168,6 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29002,6 +29183,9 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29017,8 +29201,7 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29028,6 +29211,9 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29043,8 +29229,7 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29069,8 +29254,7 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29095,8 +29279,7 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29121,7 +29304,6 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29140,6 +29322,9 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29156,8 +29341,7 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29168,6 +29352,9 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29184,8 +29371,7 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29211,8 +29397,7 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29239,8 +29424,7 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29266,7 +29450,6 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29282,6 +29465,9 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29293,8 +29479,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29304,6 +29489,9 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29315,8 +29503,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29337,8 +29524,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29359,8 +29545,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29385,7 +29570,6 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29404,6 +29588,9 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29416,8 +29603,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29428,6 +29614,9 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29440,8 +29629,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29463,8 +29651,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29487,8 +29674,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult < 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29514,7 +29700,6 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29530,6 +29715,9 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29547,8 +29735,7 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29558,6 +29745,9 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -29576,8 +29766,7 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29604,8 +29793,7 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29633,8 +29821,7 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29659,7 +29846,6 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29678,6 +29864,9 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29696,8 +29885,7 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29708,6 +29896,9 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -29728,8 +29919,7 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29757,8 +29947,7 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29789,8 +29978,7 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29816,7 +30004,6 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29832,6 +30019,9 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29841,8 +30031,7 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29852,6 +30041,9 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -29861,8 +30053,7 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29881,8 +30072,7 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29901,8 +30091,7 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29927,7 +30116,6 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -29946,6 +30134,9 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29956,8 +30147,7 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29968,6 +30158,9 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -29978,8 +30171,7 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -29999,8 +30191,7 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30021,8 +30212,7 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30048,7 +30238,6 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30064,6 +30253,9 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -30079,8 +30271,7 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30090,6 +30281,9 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -30106,8 +30300,7 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30132,8 +30325,7 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30159,8 +30351,7 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30185,7 +30376,6 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30204,6 +30394,9 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -30220,8 +30413,7 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30232,6 +30424,9 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -30250,8 +30445,7 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30277,8 +30471,7 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30307,8 +30500,7 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30334,7 +30526,6 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30350,6 +30541,9 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -30365,8 +30559,7 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30376,6 +30569,9 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -30392,8 +30588,7 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30418,8 +30613,7 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30445,8 +30639,7 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30471,7 +30664,6 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30490,6 +30682,9 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -30506,8 +30701,7 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30518,6 +30712,9 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -30536,8 +30733,7 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30563,8 +30759,7 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30593,8 +30788,7 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30620,7 +30814,6 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30636,6 +30829,9 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -30651,8 +30847,7 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30662,6 +30857,9 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -30678,8 +30876,7 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30704,8 +30901,7 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30731,8 +30927,7 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30757,7 +30952,6 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30776,6 +30970,9 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -30792,8 +30989,7 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30804,6 +31000,9 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -30822,8 +31021,7 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30849,8 +31047,7 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30879,8 +31076,7 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30906,7 +31102,6 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -30922,6 +31117,9 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -30939,8 +31137,7 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30950,6 +31147,9 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -30968,8 +31168,7 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -30996,8 +31195,7 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31025,8 +31223,7 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31051,7 +31248,6 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31070,6 +31266,9 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31088,8 +31287,7 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31100,6 +31298,9 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -31120,8 +31321,7 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31149,8 +31349,7 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31181,8 +31380,7 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31208,7 +31406,6 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31224,6 +31421,9 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -31233,8 +31433,7 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31244,6 +31443,9 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -31254,8 +31456,7 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31274,8 +31475,7 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31295,8 +31495,7 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31321,7 +31520,6 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31340,6 +31538,9 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31350,8 +31551,7 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31362,6 +31562,9 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -31374,8 +31577,7 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31395,8 +31597,7 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31419,8 +31620,7 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31446,7 +31646,6 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31462,6 +31661,9 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -31482,8 +31684,7 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31493,6 +31694,9 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -31514,8 +31718,7 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31545,8 +31748,7 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31577,8 +31779,7 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31603,7 +31804,6 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31622,6 +31822,9 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31643,8 +31846,7 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31655,6 +31857,9 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -31678,8 +31883,7 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31710,8 +31914,7 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31745,8 +31948,7 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31772,7 +31974,6 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31788,6 +31989,9 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -31808,8 +32012,7 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31819,6 +32022,9 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -31840,8 +32046,7 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31871,8 +32076,7 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31903,8 +32107,7 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31929,7 +32132,6 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -31948,6 +32150,9 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -31969,8 +32174,7 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -31981,6 +32185,9 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -32004,8 +32211,7 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32036,8 +32242,7 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32071,8 +32276,7 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32098,7 +32302,6 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -32114,6 +32317,9 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -32134,8 +32340,7 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32145,6 +32350,9 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -32166,8 +32374,7 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32197,8 +32404,7 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32229,8 +32435,7 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32255,7 +32460,6 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -32274,6 +32478,9 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -32295,8 +32502,7 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32307,6 +32513,9 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -32330,8 +32539,7 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32362,8 +32570,7 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32397,8 +32604,7 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32424,7 +32630,6 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -32440,6 +32645,9 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -32468,8 +32676,7 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32479,6 +32686,9 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -32508,8 +32718,7 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32547,8 +32756,7 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32587,8 +32795,7 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32613,7 +32820,6 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -32632,6 +32838,9 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -32661,8 +32870,7 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32673,6 +32881,9 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -32704,8 +32915,7 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32744,8 +32954,7 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32787,8 +32996,7 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32814,7 +33022,6 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -32830,6 +33037,9 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -32845,8 +33055,7 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32856,6 +33065,9 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -32872,8 +33084,7 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32898,8 +33109,7 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32925,8 +33135,7 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32951,7 +33160,6 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -32970,6 +33178,9 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -32986,8 +33197,7 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -32998,6 +33208,9 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -33016,8 +33229,7 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33043,8 +33255,7 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33073,8 +33284,7 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33100,7 +33310,6 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -33116,6 +33325,9 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -33136,8 +33348,7 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33147,6 +33358,9 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -33168,8 +33382,7 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33199,8 +33412,7 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33231,8 +33443,7 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33257,7 +33468,6 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -33276,6 +33486,9 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -33297,8 +33510,7 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33309,6 +33521,9 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -33332,8 +33547,7 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33364,8 +33578,7 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33399,8 +33612,7 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33426,7 +33638,6 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -33442,6 +33653,9 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -33462,8 +33676,7 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33473,6 +33686,9 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -33494,8 +33710,7 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33525,8 +33740,7 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33557,8 +33771,7 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33583,7 +33796,6 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -33602,6 +33814,9 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -33623,8 +33838,7 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33635,6 +33849,9 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -33658,8 +33875,7 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33690,8 +33906,7 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33725,8 +33940,7 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33752,7 +33966,6 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -33768,6 +33981,9 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -33788,8 +34004,7 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33799,6 +34014,9 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -33820,8 +34038,7 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33851,8 +34068,7 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33883,8 +34099,7 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33909,7 +34124,6 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -33928,6 +34142,9 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -33949,8 +34166,7 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -33961,6 +34177,9 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -33984,8 +34203,7 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34016,8 +34234,7 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34051,8 +34268,7 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34078,7 +34294,6 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -34094,6 +34309,9 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -34122,8 +34340,7 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34133,6 +34350,9 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -34162,8 +34382,7 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34201,8 +34420,7 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34241,8 +34459,7 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34267,7 +34484,6 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -34286,6 +34502,9 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -34315,8 +34534,7 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34327,6 +34545,9 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -34358,8 +34579,7 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34398,8 +34618,7 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34441,8 +34660,7 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34468,7 +34686,6 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -34484,6 +34701,9 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -34499,8 +34719,7 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34510,6 +34729,9 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -34526,8 +34748,7 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34552,8 +34773,7 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34579,8 +34799,7 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34605,7 +34824,6 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -34624,6 +34842,9 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -34640,8 +34861,7 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34652,6 +34872,9 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -34670,8 +34893,7 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34697,8 +34919,7 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34727,8 +34948,7 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34754,7 +34974,6 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -34770,6 +34989,9 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -34790,8 +35012,7 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34801,6 +35022,9 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -34822,8 +35046,7 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34853,8 +35076,7 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34885,8 +35107,7 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34911,7 +35132,6 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -34930,6 +35150,9 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -34951,8 +35174,7 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -34963,6 +35185,9 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -34986,8 +35211,7 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35018,8 +35242,7 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35053,8 +35276,7 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35080,7 +35302,6 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -35096,6 +35317,9 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -35116,8 +35340,7 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35127,6 +35350,9 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -35148,8 +35374,7 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35179,8 +35404,7 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35211,8 +35435,7 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35237,7 +35460,6 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -35256,6 +35478,9 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -35277,8 +35502,7 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35289,6 +35513,9 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -35312,8 +35539,7 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35344,8 +35570,7 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35379,8 +35604,7 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35406,7 +35630,6 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -35422,6 +35645,9 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -35442,8 +35668,7 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35453,6 +35678,9 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -35474,8 +35702,7 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35505,8 +35732,7 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35537,8 +35763,7 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35563,7 +35788,6 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -35582,6 +35806,9 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -35603,8 +35830,7 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35615,6 +35841,9 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -35638,8 +35867,7 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35670,8 +35898,7 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35705,8 +35932,7 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35732,7 +35958,6 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -35748,6 +35973,9 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -35776,8 +36004,7 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35787,6 +36014,9 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -35816,8 +36046,7 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35855,8 +36084,7 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35895,8 +36123,7 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35921,7 +36148,6 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -35940,6 +36166,9 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -35969,8 +36198,7 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -35981,6 +36209,9 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -36012,8 +36243,7 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36052,8 +36282,7 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36095,8 +36324,7 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36122,7 +36350,6 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -36138,6 +36365,9 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -36153,8 +36383,7 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36164,6 +36393,9 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -36180,8 +36412,7 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36206,8 +36437,7 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36233,8 +36463,7 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36259,7 +36488,6 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -36278,6 +36506,9 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36294,8 +36525,7 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36306,6 +36536,9 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -36324,8 +36557,7 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36351,8 +36583,7 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36381,8 +36612,7 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36408,7 +36638,6 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -36424,6 +36653,9 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -36452,8 +36684,7 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36463,6 +36694,9 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -36492,8 +36726,7 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36531,8 +36764,7 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36571,8 +36803,7 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36597,7 +36828,6 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -36616,6 +36846,9 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -36645,8 +36878,7 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36657,6 +36889,9 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -36688,8 +36923,7 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36728,8 +36962,7 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36771,8 +37004,7 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36798,7 +37030,6 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -36814,6 +37045,9 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -36842,8 +37076,7 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36853,6 +37086,9 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -36882,8 +37118,7 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36921,8 +37156,7 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36961,8 +37195,7 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -36987,7 +37220,6 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -37006,6 +37238,9 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -37035,8 +37270,7 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37047,6 +37281,9 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -37078,8 +37315,7 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37118,8 +37354,7 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37161,8 +37396,7 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37188,7 +37422,6 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -37204,6 +37437,9 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -37232,8 +37468,7 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37243,6 +37478,9 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -37272,8 +37510,7 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37311,8 +37548,7 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37351,8 +37587,7 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37377,7 +37612,6 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -37396,6 +37630,9 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -37425,8 +37662,7 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37437,6 +37673,9 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -37468,8 +37707,7 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37508,8 +37746,7 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37551,8 +37788,7 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37578,7 +37814,6 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -37594,6 +37829,9 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -37622,8 +37860,7 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37633,6 +37870,9 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -37662,8 +37902,7 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37701,8 +37940,7 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37741,8 +37979,7 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37767,7 +38004,6 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -37786,6 +38022,9 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -37815,8 +38054,7 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37827,6 +38065,9 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -37858,8 +38099,7 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37898,8 +38138,7 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37941,8 +38180,7 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -37968,7 +38206,6 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -37984,6 +38221,9 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -38001,8 +38241,7 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38012,6 +38251,9 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -38030,8 +38272,7 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38058,8 +38299,7 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38087,8 +38327,7 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38113,7 +38352,6 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38132,6 +38370,9 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -38150,8 +38391,7 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38162,6 +38402,9 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -38182,8 +38425,7 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38211,8 +38453,7 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38243,8 +38484,7 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38270,7 +38510,6 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38286,6 +38525,9 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -38302,8 +38544,7 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38313,6 +38554,9 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -38330,8 +38574,7 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38357,8 +38600,7 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38385,8 +38627,7 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38411,7 +38652,6 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38430,6 +38670,9 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -38447,8 +38690,7 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38459,6 +38701,9 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -38478,8 +38723,7 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38506,8 +38750,7 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38537,8 +38780,7 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38564,7 +38806,6 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38580,6 +38821,9 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -38589,8 +38833,7 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38600,6 +38843,9 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -38610,8 +38856,7 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38630,8 +38875,7 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38651,8 +38895,7 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38677,7 +38920,6 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38696,6 +38938,9 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -38706,8 +38951,7 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38718,6 +38962,9 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -38730,8 +38977,7 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38751,8 +38997,7 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38775,8 +39020,7 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38802,7 +39046,6 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38818,6 +39061,9 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -38833,8 +39079,7 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38844,6 +39089,9 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -38859,8 +39107,7 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38885,8 +39132,7 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38911,8 +39157,7 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38937,7 +39182,6 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -38956,6 +39200,9 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -38972,8 +39219,7 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -38984,6 +39230,9 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -39000,8 +39249,7 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39027,8 +39275,7 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39055,8 +39302,7 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39082,7 +39328,6 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39098,6 +39343,9 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -39109,8 +39357,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39120,6 +39367,9 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -39131,8 +39381,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39153,8 +39402,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39175,8 +39423,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39201,7 +39448,6 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39220,6 +39466,9 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -39232,8 +39481,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39244,6 +39492,9 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -39256,8 +39507,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39279,8 +39529,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39303,8 +39552,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult <= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39330,7 +39578,6 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39346,6 +39593,9 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -39363,8 +39613,7 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39374,6 +39623,9 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -39392,8 +39644,7 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39420,8 +39671,7 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39449,8 +39699,7 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39475,7 +39724,6 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39494,6 +39742,9 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -39512,8 +39763,7 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39524,6 +39774,9 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -39544,8 +39797,7 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39573,8 +39825,7 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39605,8 +39856,7 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39632,7 +39882,6 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39648,6 +39897,9 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -39657,8 +39909,7 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39668,6 +39919,9 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -39677,8 +39931,7 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39697,8 +39950,7 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39717,8 +39969,7 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39743,7 +39994,6 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39762,6 +40012,9 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -39772,8 +40025,7 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39784,6 +40036,9 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -39794,8 +40049,7 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39815,8 +40069,7 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39837,8 +40090,7 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39864,7 +40116,6 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -39880,6 +40131,9 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -39895,8 +40149,7 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39906,6 +40159,9 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -39922,8 +40178,7 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39948,8 +40203,7 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -39975,8 +40229,7 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40001,7 +40254,6 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40020,6 +40272,9 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -40036,8 +40291,7 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40048,6 +40302,9 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -40066,8 +40323,7 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40093,8 +40349,7 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40123,8 +40378,7 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40150,7 +40404,6 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40166,6 +40419,9 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -40181,8 +40437,7 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40192,6 +40447,9 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -40208,8 +40466,7 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40234,8 +40491,7 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40261,8 +40517,7 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40287,7 +40542,6 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40306,6 +40560,9 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -40322,8 +40579,7 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40334,6 +40590,9 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -40352,8 +40611,7 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40379,8 +40637,7 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40409,8 +40666,7 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40436,7 +40692,6 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40452,6 +40707,9 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -40467,8 +40725,7 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40478,6 +40735,9 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -40494,8 +40754,7 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40520,8 +40779,7 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40547,8 +40805,7 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40573,7 +40830,6 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40592,6 +40848,9 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -40608,8 +40867,7 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40620,6 +40878,9 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -40638,8 +40899,7 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40665,8 +40925,7 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40695,8 +40954,7 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40722,7 +40980,6 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40738,6 +40995,9 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -40755,8 +41015,7 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40766,6 +41025,9 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -40784,8 +41046,7 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40812,8 +41073,7 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40841,8 +41101,7 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40867,7 +41126,6 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -40886,6 +41144,9 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -40904,8 +41165,7 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40916,6 +41176,9 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -40936,8 +41199,7 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40965,8 +41227,7 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -40997,8 +41258,7 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41024,7 +41284,6 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41040,6 +41299,9 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -41049,8 +41311,7 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41060,6 +41321,9 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -41070,8 +41334,7 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41090,8 +41353,7 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41111,8 +41373,7 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41137,7 +41398,6 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41156,6 +41416,9 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41166,8 +41429,7 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41178,6 +41440,9 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -41190,8 +41455,7 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41211,8 +41475,7 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41235,8 +41498,7 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41262,7 +41524,6 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41278,6 +41539,9 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -41298,8 +41562,7 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41309,6 +41572,9 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -41330,8 +41596,7 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41361,8 +41626,7 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41393,8 +41657,7 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41419,7 +41682,6 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41438,6 +41700,9 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41459,8 +41724,7 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41471,6 +41735,9 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -41494,8 +41761,7 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41526,8 +41792,7 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41561,8 +41826,7 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41588,7 +41852,6 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41604,6 +41867,9 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -41624,8 +41890,7 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41635,6 +41900,9 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -41656,8 +41924,7 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41687,8 +41954,7 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41719,8 +41985,7 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41745,7 +42010,6 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41764,6 +42028,9 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -41785,8 +42052,7 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41797,6 +42063,9 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -41820,8 +42089,7 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41852,8 +42120,7 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41887,8 +42154,7 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41914,7 +42180,6 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -41930,6 +42195,9 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -41950,8 +42218,7 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -41961,6 +42228,9 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -41982,8 +42252,7 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42013,8 +42282,7 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42045,8 +42313,7 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42071,7 +42338,6 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -42090,6 +42356,9 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -42111,8 +42380,7 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42123,6 +42391,9 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -42146,8 +42417,7 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42178,8 +42448,7 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42213,8 +42482,7 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42240,7 +42508,6 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -42256,6 +42523,9 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -42284,8 +42554,7 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42295,6 +42564,9 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -42324,8 +42596,7 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42363,8 +42634,7 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42403,8 +42673,7 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42429,7 +42698,6 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -42448,6 +42716,9 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -42477,8 +42748,7 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42489,6 +42759,9 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -42520,8 +42793,7 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42560,8 +42832,7 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42603,8 +42874,7 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42630,7 +42900,6 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -42646,6 +42915,9 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -42661,8 +42933,7 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42672,6 +42943,9 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -42688,8 +42962,7 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42714,8 +42987,7 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42741,8 +43013,7 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42767,7 +43038,6 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -42786,6 +43056,9 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -42802,8 +43075,7 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42814,6 +43086,9 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -42832,8 +43107,7 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42859,8 +43133,7 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42889,8 +43162,7 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42916,7 +43188,6 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -42932,6 +43203,9 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -42952,8 +43226,7 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -42963,6 +43236,9 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -42984,8 +43260,7 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43015,8 +43290,7 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43047,8 +43321,7 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43073,7 +43346,6 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -43092,6 +43364,9 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -43113,8 +43388,7 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43125,6 +43399,9 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -43148,8 +43425,7 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43180,8 +43456,7 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43215,8 +43490,7 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43242,7 +43516,6 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -43258,6 +43531,9 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -43278,8 +43554,7 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43289,6 +43564,9 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -43310,8 +43588,7 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43341,8 +43618,7 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43373,8 +43649,7 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43399,7 +43674,6 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -43418,6 +43692,9 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -43439,8 +43716,7 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43451,6 +43727,9 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -43474,8 +43753,7 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43506,8 +43784,7 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43541,8 +43818,7 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43568,7 +43844,6 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -43584,6 +43859,9 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -43604,8 +43882,7 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43615,6 +43892,9 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -43636,8 +43916,7 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43667,8 +43946,7 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43699,8 +43977,7 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43725,7 +44002,6 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -43744,6 +44020,9 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -43765,8 +44044,7 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43777,6 +44055,9 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -43800,8 +44081,7 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43832,8 +44112,7 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43867,8 +44146,7 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43894,7 +44172,6 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -43910,6 +44187,9 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -43938,8 +44218,7 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -43949,6 +44228,9 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -43978,8 +44260,7 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44017,8 +44298,7 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44057,8 +44337,7 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44083,7 +44362,6 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -44102,6 +44380,9 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -44131,8 +44412,7 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44143,6 +44423,9 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -44174,8 +44457,7 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44214,8 +44496,7 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44257,8 +44538,7 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44284,7 +44564,6 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -44300,6 +44579,9 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -44315,8 +44597,7 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44326,6 +44607,9 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -44342,8 +44626,7 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44368,8 +44651,7 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44395,8 +44677,7 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44421,7 +44702,6 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -44440,6 +44720,9 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -44456,8 +44739,7 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44468,6 +44750,9 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -44486,8 +44771,7 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44513,8 +44797,7 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44543,8 +44826,7 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44570,7 +44852,6 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -44586,6 +44867,9 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -44606,8 +44890,7 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44617,6 +44900,9 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -44638,8 +44924,7 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44669,8 +44954,7 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44701,8 +44985,7 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44727,7 +45010,6 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -44746,6 +45028,9 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -44767,8 +45052,7 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44779,6 +45063,9 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -44802,8 +45089,7 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44834,8 +45120,7 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44869,8 +45154,7 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44896,7 +45180,6 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -44912,6 +45195,9 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -44932,8 +45218,7 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44943,6 +45228,9 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -44964,8 +45252,7 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -44995,8 +45282,7 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45027,8 +45313,7 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45053,7 +45338,6 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45072,6 +45356,9 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -45093,8 +45380,7 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45105,6 +45391,9 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -45128,8 +45417,7 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45160,8 +45448,7 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45195,8 +45482,7 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45222,7 +45508,6 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45238,6 +45523,9 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -45258,8 +45546,7 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45269,6 +45556,9 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -45290,8 +45580,7 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45321,8 +45610,7 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45353,8 +45641,7 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45379,7 +45666,6 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45398,6 +45684,9 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -45419,8 +45708,7 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45431,6 +45719,9 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -45454,8 +45745,7 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45486,8 +45776,7 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45521,8 +45810,7 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45548,7 +45836,6 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45564,6 +45851,9 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -45592,8 +45882,7 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45603,6 +45892,9 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -45632,8 +45924,7 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45671,8 +45962,7 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45711,8 +46001,7 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45737,7 +46026,6 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45756,6 +46044,9 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -45785,8 +46076,7 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45797,6 +46087,9 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -45828,8 +46121,7 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45868,8 +46160,7 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45911,8 +46202,7 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45938,7 +46228,6 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -45954,6 +46243,9 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -45969,8 +46261,7 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -45980,6 +46271,9 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -45996,8 +46290,7 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46022,8 +46315,7 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46049,8 +46341,7 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46075,7 +46366,6 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -46094,6 +46384,9 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46110,8 +46403,7 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46122,6 +46414,9 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -46140,8 +46435,7 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46167,8 +46461,7 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46197,8 +46490,7 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46224,7 +46516,6 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -46240,6 +46531,9 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -46268,8 +46562,7 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46279,6 +46572,9 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -46308,8 +46604,7 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46347,8 +46642,7 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46387,8 +46681,7 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46413,7 +46706,6 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -46432,6 +46724,9 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46461,8 +46756,7 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46473,6 +46767,9 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -46504,8 +46801,7 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46544,8 +46840,7 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46587,8 +46882,7 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46614,7 +46908,6 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -46630,6 +46923,9 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -46658,8 +46954,7 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46669,6 +46964,9 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -46698,8 +46996,7 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46737,8 +47034,7 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46777,8 +47073,7 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46803,7 +47098,6 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -46822,6 +47116,9 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -46851,8 +47148,7 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46863,6 +47159,9 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -46894,8 +47193,7 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46934,8 +47232,7 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -46977,8 +47274,7 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47004,7 +47300,6 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -47020,6 +47315,9 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -47048,8 +47346,7 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47059,6 +47356,9 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -47088,8 +47388,7 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47127,8 +47426,7 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47167,8 +47465,7 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47193,7 +47490,6 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -47212,6 +47508,9 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -47241,8 +47540,7 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47253,6 +47551,9 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -47284,8 +47585,7 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47324,8 +47624,7 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47367,8 +47666,7 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47394,7 +47692,6 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -47410,6 +47707,9 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -47438,8 +47738,7 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47449,6 +47748,9 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -47478,8 +47780,7 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47517,8 +47818,7 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47557,8 +47857,7 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47583,7 +47882,6 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -47602,6 +47900,9 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -47631,8 +47932,7 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47643,6 +47943,9 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -47674,8 +47977,7 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47714,8 +48016,7 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47757,8 +48058,7 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47784,7 +48084,6 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -47800,6 +48099,9 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -47817,8 +48119,7 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47828,6 +48129,9 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -47846,8 +48150,7 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47874,8 +48177,7 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47903,8 +48205,7 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47929,7 +48230,6 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -47948,6 +48248,9 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -47966,8 +48269,7 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -47978,6 +48280,9 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -47998,8 +48303,7 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48027,8 +48331,7 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48059,8 +48362,7 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48086,7 +48388,6 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48102,6 +48403,9 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -48118,8 +48422,7 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48129,6 +48432,9 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -48146,8 +48452,7 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48173,8 +48478,7 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48201,8 +48505,7 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48227,7 +48530,6 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48246,6 +48548,9 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -48263,8 +48568,7 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48275,6 +48579,9 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -48294,8 +48601,7 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48322,8 +48628,7 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48353,8 +48658,7 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48380,7 +48684,6 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48396,6 +48699,9 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -48405,8 +48711,7 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48416,6 +48721,9 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -48426,8 +48734,7 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48446,8 +48753,7 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48467,8 +48773,7 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48493,7 +48798,6 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48512,6 +48816,9 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -48522,8 +48829,7 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48534,6 +48840,9 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -48546,8 +48855,7 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48567,8 +48875,7 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48591,8 +48898,7 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48618,7 +48924,6 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48634,6 +48939,9 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -48649,8 +48957,7 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48660,6 +48967,9 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -48675,8 +48985,7 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48701,8 +49010,7 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48727,8 +49035,7 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48753,7 +49060,6 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48772,6 +49078,9 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -48788,8 +49097,7 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48800,6 +49108,9 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -48816,8 +49127,7 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48843,8 +49153,7 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48871,8 +49180,7 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48898,7 +49206,6 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -48914,6 +49221,9 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -48925,8 +49235,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48936,6 +49245,9 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -48947,8 +49259,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48969,8 +49280,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -48991,8 +49301,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49017,7 +49326,6 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49036,6 +49344,9 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -49048,8 +49359,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49060,6 +49370,9 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -49072,8 +49385,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49095,8 +49407,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49119,8 +49430,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult > 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49146,7 +49456,6 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49162,6 +49471,9 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -49179,8 +49491,7 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49190,6 +49501,9 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -49208,8 +49522,7 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49236,8 +49549,7 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49265,8 +49577,7 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49291,7 +49602,6 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49310,6 +49620,9 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -49328,8 +49641,7 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49340,6 +49652,9 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -49360,8 +49675,7 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49389,8 +49703,7 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49421,8 +49734,7 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49448,7 +49760,6 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49464,6 +49775,9 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -49473,8 +49787,7 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49484,6 +49797,9 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -49493,8 +49809,7 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49513,8 +49828,7 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49533,8 +49847,7 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49559,7 +49872,6 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49578,6 +49890,9 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -49588,8 +49903,7 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49600,6 +49914,9 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -49610,8 +49927,7 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49631,8 +49947,7 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49653,8 +49968,7 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49680,7 +49994,6 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49696,6 +50009,9 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -49711,8 +50027,7 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49722,6 +50037,9 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -49738,8 +50056,7 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49764,8 +50081,7 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49791,8 +50107,7 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49817,7 +50132,6 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49836,6 +50150,9 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -49852,8 +50169,7 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49864,6 +50180,9 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -49882,8 +50201,7 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49909,8 +50227,7 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49939,8 +50256,7 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -49966,7 +50282,6 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -49982,6 +50297,9 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -49997,8 +50315,7 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50008,6 +50325,9 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -50024,8 +50344,7 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50050,8 +50369,7 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50077,8 +50395,7 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50103,7 +50420,6 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50122,6 +50438,9 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -50138,8 +50457,7 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50150,6 +50468,9 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -50168,8 +50489,7 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50195,8 +50515,7 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50225,8 +50544,7 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50252,7 +50570,6 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50268,6 +50585,9 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -50283,8 +50603,7 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50294,6 +50613,9 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -50310,8 +50632,7 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50336,8 +50657,7 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50363,8 +50683,7 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50389,7 +50708,6 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50408,6 +50726,9 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -50424,8 +50745,7 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50436,6 +50756,9 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -50454,8 +50777,7 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50481,8 +50803,7 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50511,8 +50832,7 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50538,7 +50858,6 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50554,6 +50873,9 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -50571,8 +50893,7 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50582,6 +50903,9 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -50600,8 +50924,7 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50628,8 +50951,7 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50657,8 +50979,7 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50683,7 +51004,6 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50702,6 +51022,9 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -50720,8 +51043,7 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50732,6 +51054,9 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -50752,8 +51077,7 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50781,8 +51105,7 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50813,8 +51136,7 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50840,7 +51162,6 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50856,6 +51177,9 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -50865,8 +51189,7 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50876,6 +51199,9 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -50886,8 +51212,7 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50906,8 +51231,7 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50927,8 +51251,7 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50953,7 +51276,6 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -50972,6 +51294,9 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -50982,8 +51307,7 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -50994,6 +51318,9 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -51006,8 +51333,7 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51027,8 +51353,7 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51051,8 +51376,7 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51078,7 +51402,6 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -51094,6 +51417,9 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -51114,8 +51440,7 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51125,6 +51450,9 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -51146,8 +51474,7 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51177,8 +51504,7 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51209,8 +51535,7 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51235,7 +51560,6 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -51254,6 +51578,9 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51275,8 +51602,7 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51287,6 +51613,9 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -51310,8 +51639,7 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51342,8 +51670,7 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51377,8 +51704,7 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51404,7 +51730,6 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -51420,6 +51745,9 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -51440,8 +51768,7 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51451,6 +51778,9 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -51472,8 +51802,7 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51503,8 +51832,7 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51535,8 +51863,7 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51561,7 +51888,6 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -51580,6 +51906,9 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51601,8 +51930,7 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51613,6 +51941,9 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -51636,8 +51967,7 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51668,8 +51998,7 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51703,8 +52032,7 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51730,7 +52058,6 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -51746,6 +52073,9 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -51766,8 +52096,7 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51777,6 +52106,9 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -51798,8 +52130,7 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51829,8 +52160,7 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51861,8 +52191,7 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51887,7 +52216,6 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -51906,6 +52234,9 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -51927,8 +52258,7 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51939,6 +52269,9 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -51962,8 +52295,7 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -51994,8 +52326,7 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52029,8 +52360,7 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52056,7 +52386,6 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -52072,6 +52401,9 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -52100,8 +52432,7 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52111,6 +52442,9 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -52140,8 +52474,7 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52179,8 +52512,7 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52219,8 +52551,7 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52245,7 +52576,6 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -52264,6 +52594,9 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -52293,8 +52626,7 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52305,6 +52637,9 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -52336,8 +52671,7 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52376,8 +52710,7 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52419,8 +52752,7 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52446,7 +52778,6 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -52462,6 +52793,9 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -52477,8 +52811,7 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52488,6 +52821,9 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -52504,8 +52840,7 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52530,8 +52865,7 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52557,8 +52891,7 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52583,7 +52916,6 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -52602,6 +52934,9 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -52618,8 +52953,7 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52630,6 +52964,9 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -52648,8 +52985,7 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52675,8 +53011,7 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52705,8 +53040,7 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52732,7 +53066,6 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -52748,6 +53081,9 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -52768,8 +53104,7 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52779,6 +53114,9 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -52800,8 +53138,7 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52831,8 +53168,7 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52863,8 +53199,7 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52889,7 +53224,6 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -52908,6 +53242,9 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -52929,8 +53266,7 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52941,6 +53277,9 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -52964,8 +53303,7 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -52996,8 +53334,7 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53031,8 +53368,7 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53058,7 +53394,6 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -53074,6 +53409,9 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -53094,8 +53432,7 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53105,6 +53442,9 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -53126,8 +53466,7 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53157,8 +53496,7 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53189,8 +53527,7 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53215,7 +53552,6 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -53234,6 +53570,9 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -53255,8 +53594,7 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53267,6 +53605,9 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -53290,8 +53631,7 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53322,8 +53662,7 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53357,8 +53696,7 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53384,7 +53722,6 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -53400,6 +53737,9 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -53420,8 +53760,7 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53431,6 +53770,9 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -53452,8 +53794,7 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53483,8 +53824,7 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53515,8 +53855,7 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53541,7 +53880,6 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -53560,6 +53898,9 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -53581,8 +53922,7 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53593,6 +53933,9 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -53616,8 +53959,7 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53648,8 +53990,7 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53683,8 +54024,7 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53710,7 +54050,6 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -53726,6 +54065,9 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -53754,8 +54096,7 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53765,6 +54106,9 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -53794,8 +54138,7 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53833,8 +54176,7 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53873,8 +54215,7 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53899,7 +54240,6 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -53918,6 +54258,9 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -53947,8 +54290,7 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -53959,6 +54301,9 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -53990,8 +54335,7 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54030,8 +54374,7 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54073,8 +54416,7 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54100,7 +54442,6 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -54116,6 +54457,9 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -54131,8 +54475,7 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54142,6 +54485,9 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -54158,8 +54504,7 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54184,8 +54529,7 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54211,8 +54555,7 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54237,7 +54580,6 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -54256,6 +54598,9 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -54272,8 +54617,7 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54284,6 +54628,9 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -54302,8 +54649,7 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54329,8 +54675,7 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54359,8 +54704,7 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54386,7 +54730,6 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -54402,6 +54745,9 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -54422,8 +54768,7 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54433,6 +54778,9 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -54454,8 +54802,7 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54485,8 +54832,7 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54517,8 +54863,7 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54543,7 +54888,6 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -54562,6 +54906,9 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -54583,8 +54930,7 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54595,6 +54941,9 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -54618,8 +54967,7 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54650,8 +54998,7 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54685,8 +55032,7 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54712,7 +55058,6 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -54728,6 +55073,9 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -54748,8 +55096,7 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54759,6 +55106,9 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -54780,8 +55130,7 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54811,8 +55160,7 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54843,8 +55191,7 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54869,7 +55216,6 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -54888,6 +55234,9 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -54909,8 +55258,7 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54921,6 +55269,9 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -54944,8 +55295,7 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -54976,8 +55326,7 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55011,8 +55360,7 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55038,7 +55386,6 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -55054,6 +55401,9 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -55074,8 +55424,7 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55085,6 +55434,9 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -55106,8 +55458,7 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55137,8 +55488,7 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55169,8 +55519,7 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55195,7 +55544,6 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -55214,6 +55562,9 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -55235,8 +55586,7 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55247,6 +55597,9 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -55270,8 +55623,7 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55302,8 +55654,7 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55337,8 +55688,7 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55364,7 +55714,6 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -55380,6 +55729,9 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -55408,8 +55760,7 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55419,6 +55770,9 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -55448,8 +55802,7 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55487,8 +55840,7 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55527,8 +55879,7 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55553,7 +55904,6 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -55572,6 +55922,9 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -55601,8 +55954,7 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55613,6 +55965,9 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -55644,8 +55999,7 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55684,8 +56038,7 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55727,8 +56080,7 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55754,7 +56106,6 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -55770,6 +56121,9 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -55785,8 +56139,7 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55796,6 +56149,9 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -55812,8 +56168,7 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55838,8 +56193,7 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55865,8 +56219,7 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55891,7 +56244,6 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -55910,6 +56262,9 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -55926,8 +56281,7 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55938,6 +56292,9 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -55956,8 +56313,7 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -55983,8 +56339,7 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56013,8 +56368,7 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56040,7 +56394,6 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -56056,6 +56409,9 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -56084,8 +56440,7 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56095,6 +56450,9 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -56124,8 +56482,7 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56163,8 +56520,7 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56203,8 +56559,7 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56229,7 +56584,6 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -56248,6 +56602,9 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56277,8 +56634,7 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56289,6 +56645,9 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -56320,8 +56679,7 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56360,8 +56718,7 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56403,8 +56760,7 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56430,7 +56786,6 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -56446,6 +56801,9 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -56474,8 +56832,7 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56485,6 +56842,9 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -56514,8 +56874,7 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56553,8 +56912,7 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56593,8 +56951,7 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56619,7 +56976,6 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -56638,6 +56994,9 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -56667,8 +57026,7 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56679,6 +57037,9 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -56710,8 +57071,7 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56750,8 +57110,7 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56793,8 +57152,7 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56820,7 +57178,6 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -56836,6 +57193,9 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -56864,8 +57224,7 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56875,6 +57234,9 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -56904,8 +57266,7 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56943,8 +57304,7 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -56983,8 +57343,7 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57009,7 +57368,6 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -57028,6 +57386,9 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -57057,8 +57418,7 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57069,6 +57429,9 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -57100,8 +57463,7 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57140,8 +57502,7 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57183,8 +57544,7 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57210,7 +57570,6 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -57226,6 +57585,9 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -57254,8 +57616,7 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57265,6 +57626,9 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -57294,8 +57658,7 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57333,8 +57696,7 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57373,8 +57735,7 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57399,7 +57760,6 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -57418,6 +57778,9 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -57447,8 +57810,7 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57459,6 +57821,9 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -57490,8 +57855,7 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57530,8 +57894,7 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57573,8 +57936,7 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57600,7 +57962,6 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -57616,6 +57977,9 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -57633,8 +57997,7 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57644,6 +58007,9 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -57662,8 +58028,7 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57690,8 +58055,7 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57719,8 +58083,7 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57745,7 +58108,6 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -57764,6 +58126,9 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -57782,8 +58147,7 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57794,6 +58158,9 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -57814,8 +58181,7 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57843,8 +58209,7 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57875,8 +58240,7 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57902,7 +58266,6 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -57918,6 +58281,9 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -57934,8 +58300,7 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57945,6 +58310,9 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -57962,8 +58330,7 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -57989,8 +58356,7 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58017,8 +58383,7 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58043,7 +58408,6 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58062,6 +58426,9 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -58079,8 +58446,7 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58091,6 +58457,9 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -58110,8 +58479,7 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58138,8 +58506,7 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58169,8 +58536,7 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58196,7 +58562,6 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58212,6 +58577,9 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -58221,8 +58589,7 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58232,6 +58599,9 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg := col.Get(i)
@@ -58242,8 +58612,7 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58262,8 +58631,7 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58283,8 +58651,7 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58309,7 +58676,6 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58328,6 +58694,9 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -58338,8 +58707,7 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58350,6 +58718,9 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					//gcassert:bce
 					arg1 := col1.Get(i)
@@ -58362,8 +58733,7 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58383,8 +58753,7 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58407,8 +58776,7 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58434,7 +58802,6 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58450,6 +58817,9 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -58465,8 +58835,7 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58476,6 +58845,9 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -58491,8 +58863,7 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58517,8 +58888,7 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58543,8 +58913,7 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58569,7 +58938,6 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58588,6 +58956,9 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -58604,8 +58975,7 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58616,6 +58986,9 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -58632,8 +59005,7 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58659,8 +59031,7 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58687,8 +59058,7 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58714,7 +59084,6 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58730,6 +59099,9 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -58741,8 +59113,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58752,6 +59123,9 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 				sel := batch.Selection()
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg := col.Get(i)
 
@@ -58763,8 +59137,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58785,8 +59158,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58807,8 +59179,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58833,7 +59204,6 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -58852,6 +59222,9 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -58864,8 +59237,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58876,6 +59248,9 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 				_ = col1.Get(n - 1)
 				_ = col2.Get(n - 1)
 				for i := 0; i < n; i++ {
+					if nulls.NullAt(i) {
+						continue
+					}
 					var cmp bool
 					arg1 := col1.Get(i)
 					arg2 := col2.Get(i)
@@ -58888,8 +59263,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = nulls.NullAt(i)
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58911,8 +59285,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
@@ -58935,8 +59308,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 						cmp = cmpResult >= 0
 					}
 
-					isNull = false
-					if cmp && !isNull {
+					if cmp {
 						sel[idx] = i
 						idx++
 					}
