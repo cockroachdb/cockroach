@@ -52,24 +52,36 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 
 	kvAddrs := c.ExternalAddr(ctx, c.All())
 
-	errCh := startTenantServer(ctx, c, predecessorBinary, kvAddrs, preUpdateTenantID, "--log-dir=logs/mt")
-	u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
-	require.NoError(t, err)
-	u.Host = c.ExternalIP(ctx, c.Node(1))[0] + ":36257"
-	url := u.String()
-	c.l.Printf("sql server should be running at %s", url)
+	const (
+		preUpgradeHTTPPort = 8081
+		preUpgradeSQLPort  = 36357
+	)
+	var preUpgradeURL string
+	var preUpgradeErrCh chan error
+	{
+		preUpgradeErrCh = startTenantServer(
+			ctx, c, predecessorBinary, kvAddrs, preUpdateTenantID,
+			preUpgradeHTTPPort, preUpgradeSQLPort,
+			"--log-dir=logs/mt",
+		)
+		u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
+		require.NoError(t, err)
+		u.Host = c.ExternalIP(ctx, c.Node(1))[0] + ":" + strconv.Itoa(preUpgradeSQLPort)
+		preUpgradeURL = u.String()
+	}
+	c.l.Printf("sql server should be running at %s", preUpgradeURL)
 
 	time.Sleep(time.Second)
 
 	select {
-	case err := <-errCh:
+	case err := <-preUpgradeErrCh:
 		t.Fatal(err)
 	default:
 	}
 
 	t.Status("checking that a client can connect to the tenant server")
 
-	verifySQL(t, url,
+	verifySQL(t, preUpgradeURL,
 		mkStmt(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`),
 		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
@@ -87,7 +99,7 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 	time.Sleep(time.Second)
 
 	t.Status("checking the sql server still works")
-	verifySQL(t, url,
+	verifySQL(t, preUpgradeURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}))
 
@@ -96,30 +108,75 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 	// Must use pkill because the context cancellation doesn't wait for the
 	// process to exit
 	c.Run(ctx, c.All(), "pkill -o -f '^"+predecessorBinary+" mt start'")
-	t.logger().Printf("mt cluster exited: %v", <-errCh)
+	t.logger().Printf("mt cluster exited: %v", <-preUpgradeErrCh)
 
 	t.Status("starting the upgraded tenant server")
 
-	errCh = startTenantServer(
-		ctx, c, currentBinary, kvAddrs, 123,
-		"--log='file-defaults: {dir: logs/mt}'",
-	)
+	preUpgradeErrCh = startTenantServer(
+		ctx, c, currentBinary, kvAddrs, preUpdateTenantID,
+		preUpgradeHTTPPort, preUpgradeSQLPort,
+		"--log='file-defaults: {dir: logs/mt}'")
 
 	time.Sleep(time.Second)
 	select {
-	case err := <-errCh:
+	case err := <-preUpgradeErrCh:
 		t.Fatal(err)
 	default:
 	}
 
 	t.Status("migrating the tenant server")
 
-	verifySQL(t, url,
+	verifySQL(t, preUpgradeURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
 			withResults([][]string{{"20.2"}}),
 		mkStmt("SET CLUSTER SETTING version = crdb_internal.node_executable_version()"),
+		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
+			withResults([][]string{{"true"}}),
+	)
+
+	t.Status("creating a new tenant during the upgrade")
+
+	const midUpgradeTenantID = 124
+	{
+		_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant($1)`, midUpgradeTenantID)
+		require.NoError(t, err)
+	}
+
+	t.Status("starting mid-upgrade tenant server")
+
+	const (
+		midUpgradeHTTPPort = 8082
+		midUpgradeSQLPort  = 36358
+	)
+	var midUpgradeURL string
+	var midUpgradeErrCh chan error
+	{
+		midUpgradeErrCh = startTenantServer(
+			ctx, c, currentBinary, kvAddrs, midUpgradeTenantID,
+			midUpgradeHTTPPort, midUpgradeSQLPort,
+			"--log-dir=logs/mt2")
+		u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
+		require.NoError(t, err)
+		u.Host = c.ExternalIP(ctx, c.Node(1))[0] + ":" + strconv.Itoa(midUpgradeSQLPort)
+		midUpgradeURL = u.String()
+	}
+
+	c.l.Printf("sql server should be running at %s", midUpgradeURL)
+
+	time.Sleep(time.Second)
+	select {
+	case err := <-midUpgradeErrCh:
+		t.Fatal(err)
+	default:
+	}
+
+	verifySQL(t, midUpgradeURL,
+		mkStmt(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`),
+		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
+		mkStmt(`SELECT * FROM foo LIMIT 1`).
+			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
 			withResults([][]string{{"true"}}),
 	)
@@ -141,6 +198,8 @@ func startTenantServer(
 	binary string,
 	kvAddrs []string,
 	tenantID int,
+	httpPort int,
+	sqlPort int,
 	logFlags string,
 ) chan error {
 
@@ -149,10 +208,10 @@ func startTenantServer(
 		// "--certs-dir", "certs",
 		"--insecure",
 		"--tenant-id", strconv.Itoa(tenantID),
-		"--http-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":8081",
+		"--http-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(httpPort),
 		"--kv-addrs", strings.Join(kvAddrs, ","),
 		// Don't bind to external interfaces when running locally.
-		"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":36257",
+		"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0") + ":" + strconv.Itoa(sqlPort),
 	}
 	if logFlags != "" {
 		args = append(args, logFlags)

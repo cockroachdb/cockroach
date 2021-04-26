@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -34,14 +35,19 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 
 	tenantCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	const (
+		tenantHTTPPort = 8081
+		tenantSQLPort  = 26258
+	)
 	errCh := startTenantServer(
-		tenantCtx, c, "./cockroach", kvAddrs, tenantID,
+		tenantCtx, c, "./cockroach", kvAddrs,
+		tenantID, tenantHTTPPort, tenantSQLPort,
 		// Ensure that log files get created.
 		"--log='file-defaults: {dir: logs/mt}'",
 	)
 	u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
 	require.NoError(t, err)
-	u.Host = c.ExternalIP(ctx, c.Node(1))[0] + ":36257"
+	u.Host = c.ExternalIP(ctx, c.Node(1))[0] + ":" + strconv.Itoa(tenantSQLPort)
 	url := u.String()
 	c.l.Printf("sql server should be running at %s", url)
 
