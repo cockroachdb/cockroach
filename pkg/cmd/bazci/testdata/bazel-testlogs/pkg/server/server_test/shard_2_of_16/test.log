@@ -1,0 +1,214 @@
+exec ${PAGER:-/usr/bin/less} "$0" || exit 1
+Executing tests from //pkg/server:server_test
+-----------------------------------------------------------------------------
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "invered-joiner-batch-size" with value 1
+initialized metamorphic constant "coldata-batch-size" with value 3443
+initialized metamorphic constant "spilling-queue-initial-len" with value 2
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 4
+initialized metamorphic constant "max-batch-size" with value 5733
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 31
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "invered-joiner-batch-size" with value 1
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "coldata-batch-size" with value 3942
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 1
+initialized metamorphic constant "max-batch-size" with value 8307
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 24
+=== RUN   TestLivenessAPI
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestLivenessAPI864658326
+    test_log_scope.go:74: use -show-logs to present logs inline
+    admin_cluster_test.go:192: -- test log scope end --
+--- PASS: TestLivenessAPI (2.75s)
+=== RUN   TestAdminAPIUsers
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestAdminAPIUsers632146218
+    test_log_scope.go:74: use -show-logs to present logs inline
+    admin_test.go:926: -- test log scope end --
+--- PASS: TestAdminAPIUsers (0.41s)
+=== RUN   TestDecommissionSelf
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestDecommissionSelf353817580
+    test_log_scope.go:74: use -show-logs to present logs inline
+    admin_test.go:2088: -- test log scope end --
+--- PASS: TestDecommissionSelf (2.30s)
+=== RUN   TestDummyInitializeNodeFromBundle
+I210420 21:33:02.151000 12824 1@auto_tls_init.go:122  [service=cockroach-node] 1  attempting to load service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/node.crt
+I210420 21:33:02.175021 12824 1@auto_tls_init.go:145  [service=cockroach-node] 2  not found; will attempt auto-creation
+I210420 21:33:02.210122 12824 1@auto_tls_init.go:147  [service=cockroach-node] 3  attempting to load CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca.crt
+I210420 21:33:02.211074 12824 1@auto_tls_init.go:161  [service=cockroach-node] 4  not found; CA cert does not exist, auto-creating
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5  creating CA cert from template: {
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +  SN: 982370503176057427749865337022977481382,
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +  CA: true,
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +  Subject: "OU=cockroach-node,O=Cockroach Labs,C=US",
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +  NotBefore: 2021-04-20 21:32:32.211126 +0000 UTC,
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +  NotAfter: 2031-04-28 21:33:02.211126 +0000 UTC (Validity: 87839h59m59.999813s),
+I210420 21:33:02.211320 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-node,auto-create-ca] 5 +}
+I210420 21:33:02.475491 12824 1@pkg/security/auto_tls_init.go:146  [service=cockroach-node,auto-create-ca] 6  signing CA cert
+I210420 21:33:02.478480 12824 1@auto_tls_init.go:219  [service=cockroach-node,auto-create-ca] 7  writing CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca.crt
+I210420 21:33:02.582783 12824 1@auto_tls_init.go:224  [service=cockroach-node,auto-create-ca] 8  writing CA key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca.key
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9  creating service cert from template: {
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  SN: 831663539087678190672922856061499311453,
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  CA: false,
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  Subject: "CN=node,OU=cockroach-node,O=Cockroach Labs,C=US",
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  NotBefore: 2021-04-20 21:32:32.624271 +0000 UTC,
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  NotAfter: 2026-04-24 21:33:02.624271 +0000 UTC (Validity: 43919h59m59.999583s),
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  DNS: [],
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +  IP: []
+I210420 21:33:02.624701 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-node] 9 +}
+I210420 21:33:02.905050 12824 1@pkg/security/auto_tls_init.go:263  [service=cockroach-node] 10  signing service cert
+I210420 21:33:02.919916 12824 1@auto_tls_init.go:189  [service=cockroach-node] 11  writing service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/node.crt
+I210420 21:33:02.965750 12824 1@auto_tls_init.go:194  [service=cockroach-node] 12  writing service key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/node.key
+I210420 21:33:02.967145 12824 1@auto_tls_init.go:122  [service=cockroach-client] 13  attempting to load service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/client.node.crt
+I210420 21:33:02.967233 12824 1@auto_tls_init.go:145  [service=cockroach-client] 14  not found; will attempt auto-creation
+I210420 21:33:02.967259 12824 1@auto_tls_init.go:147  [service=cockroach-client] 15  attempting to load CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca-client.crt
+I210420 21:33:02.967317 12824 1@auto_tls_init.go:161  [service=cockroach-client] 16  not found; CA cert does not exist, auto-creating
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17  creating CA cert from template: {
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +  SN: 327688830903081913267243921589090075046,
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +  CA: true,
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +  Subject: "OU=cockroach-client,O=Cockroach Labs,C=US",
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +  NotBefore: 2021-04-20 21:32:32.96734 +0000 UTC,
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +  NotAfter: 2031-04-28 21:33:02.96734 +0000 UTC (Validity: 87839h59m59.999959s),
+I210420 21:33:02.967385 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-client,auto-create-ca] 17 +}
+I210420 21:33:03.341674 12824 1@pkg/security/auto_tls_init.go:146  [service=cockroach-client,auto-create-ca] 18  signing CA cert
+I210420 21:33:03.362272 12824 1@auto_tls_init.go:219  [service=cockroach-client,auto-create-ca] 19  writing CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca-client.crt
+I210420 21:33:03.408354 12824 1@auto_tls_init.go:224  [service=cockroach-client,auto-create-ca] 20  writing CA key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca-client.key
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21  creating service cert from template: {
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  SN: 1067248825721493928219629993794393899214,
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  CA: false,
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  Subject: "CN=node,OU=cockroach-client,O=Cockroach Labs,C=US",
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  NotBefore: 2021-04-20 21:32:33.409198 +0000 UTC,
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  NotAfter: 2026-04-24 21:33:03.409199 +0000 UTC (Validity: 43919h59m59.999784s),
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  DNS: [],
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +  IP: []
+I210420 21:33:03.409424 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-client] 21 +}
+I210420 21:33:03.600368 12824 1@pkg/security/auto_tls_init.go:263  [service=cockroach-client] 22  signing service cert
+I210420 21:33:03.609597 12824 1@auto_tls_init.go:189  [service=cockroach-client] 23  writing service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/client.node.crt
+I210420 21:33:03.804329 12824 1@auto_tls_init.go:194  [service=cockroach-client] 24  writing service key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/client.node.key
+I210420 21:33:03.949729 12824 1@auto_tls_init.go:122  [service=cockroach-sql] 25  attempting to load service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.sql.crt
+I210420 21:33:03.949902 12824 1@auto_tls_init.go:145  [service=cockroach-sql] 26  not found; will attempt auto-creation
+I210420 21:33:03.989741 12824 1@auto_tls_init.go:147  [service=cockroach-sql] 27  attempting to load CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.ca.sql.crt
+I210420 21:33:03.989890 12824 1@auto_tls_init.go:161  [service=cockroach-sql] 28  not found; CA cert does not exist, auto-creating
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29  creating CA cert from template: {
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +  SN: 1146829675595890902326913695032092517430,
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +  CA: true,
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +  Subject: "OU=cockroach-sql,O=Cockroach Labs,C=US",
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +  NotBefore: 2021-04-20 21:32:34.014455 +0000 UTC,
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +  NotAfter: 2031-04-28 21:33:04.014479 +0000 UTC (Validity: 87839h59m59.999876s),
+I210420 21:33:04.014620 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-sql,auto-create-ca] 29 +}
+I210420 21:33:04.143775 12824 1@pkg/security/auto_tls_init.go:146  [service=cockroach-sql,auto-create-ca] 30  signing CA cert
+I210420 21:33:04.148498 12824 1@auto_tls_init.go:219  [service=cockroach-sql,auto-create-ca] 31  writing CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.ca.sql.crt
+I210420 21:33:04.289447 12824 1@auto_tls_init.go:224  [service=cockroach-sql,auto-create-ca] 32  writing CA key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.ca.sql.key
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33  creating service cert from template: {
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  SN: 514947054909088467989367171549305299048,
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  CA: false,
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  Subject: "CN=node,OU=cockroach-sql,O=Cockroach Labs,C=US",
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  NotBefore: 2021-04-20 21:32:34.736759 +0000 UTC,
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  NotAfter: 2026-04-24 21:33:04.736759 +0000 UTC (Validity: 43919h59m59.999751s),
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  DNS: [],
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +  IP: []
+I210420 21:33:04.737051 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-sql] 33 +}
+I210420 21:33:05.119551 12824 1@pkg/security/auto_tls_init.go:263  [service=cockroach-sql] 34  signing service cert
+I210420 21:33:05.141699 12824 1@auto_tls_init.go:189  [service=cockroach-sql] 35  writing service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.sql.crt
+I210420 21:33:05.517688 12824 1@auto_tls_init.go:194  [service=cockroach-sql] 36  writing service key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.sql.key
+I210420 21:33:05.945090 12824 1@auto_tls_init.go:122  [service=cockroach-rpc] 37  attempting to load service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.rpc.crt
+I210420 21:33:05.969735 12824 1@auto_tls_init.go:145  [service=cockroach-rpc] 38  not found; will attempt auto-creation
+I210420 21:33:05.994171 12824 1@auto_tls_init.go:147  [service=cockroach-rpc] 39  attempting to load CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.ca.rpc.crt
+I210420 21:33:05.994422 12824 1@auto_tls_init.go:161  [service=cockroach-rpc] 40  not found; CA cert does not exist, auto-creating
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41  creating CA cert from template: {
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +  SN: 531122820262117325711484361323361452782,
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +  CA: true,
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +  Subject: "OU=cockroach-rpc,O=Cockroach Labs,C=US",
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +  NotBefore: 2021-04-20 21:32:35.994494 +0000 UTC,
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +  NotAfter: 2031-04-28 21:33:05.994494 +0000 UTC (Validity: 87839h59m59.999929s),
+I210420 21:33:05.994571 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-rpc,auto-create-ca] 41 +}
+I210420 21:33:06.366305 12824 1@pkg/security/auto_tls_init.go:146  [service=cockroach-rpc,auto-create-ca] 42  signing CA cert
+I210420 21:33:06.378627 12824 1@auto_tls_init.go:219  [service=cockroach-rpc,auto-create-ca] 43  writing CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.ca.rpc.crt
+I210420 21:33:06.528844 12824 1@auto_tls_init.go:224  [service=cockroach-rpc,auto-create-ca] 44  writing CA key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.ca.rpc.key
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45  creating service cert from template: {
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  SN: 577852383054913000865645743457547067104,
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  CA: false,
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  Subject: "CN=node,OU=cockroach-rpc,O=Cockroach Labs,C=US",
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  NotBefore: 2021-04-20 21:32:36.530102 +0000 UTC,
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  NotAfter: 2026-04-24 21:33:06.530102 +0000 UTC (Validity: 43919h59m59.999852s),
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  DNS: [],
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +  IP: []
+I210420 21:33:06.530258 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-rpc] 45 +}
+I210420 21:33:06.621934 12824 1@pkg/security/auto_tls_init.go:263  [service=cockroach-rpc] 46  signing service cert
+I210420 21:33:06.627576 12824 1@auto_tls_init.go:189  [service=cockroach-rpc] 47  writing service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.rpc.crt
+I210420 21:33:06.677622 12824 1@auto_tls_init.go:194  [service=cockroach-rpc] 48  writing service key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/service.rpc.key
+I210420 21:33:07.022793 12824 1@auto_tls_init.go:122  [service=cockroach-http] 49  attempting to load service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ui.crt
+I210420 21:33:07.046047 12824 1@auto_tls_init.go:145  [service=cockroach-http] 50  not found; will attempt auto-creation
+I210420 21:33:07.046701 12824 1@auto_tls_init.go:147  [service=cockroach-http] 51  attempting to load CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca-ui.crt
+I210420 21:33:07.071432 12824 1@auto_tls_init.go:161  [service=cockroach-http] 52  not found; CA cert does not exist, auto-creating
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53  creating CA cert from template: {
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +  SN: 295694925875989355250881795180441769973,
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +  CA: true,
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +  Subject: "OU=cockroach-http,O=Cockroach Labs,C=US",
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +  NotBefore: 2021-04-20 21:32:37.071497 +0000 UTC,
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +  NotAfter: 2031-04-28 21:33:07.071497 +0000 UTC (Validity: 87839h59m59.99994s),
+I210420 21:33:07.071564 12824 1@pkg/security/auto_tls_init.go:122  [service=cockroach-http,auto-create-ca] 53 +}
+I210420 21:33:07.327696 12824 1@pkg/security/auto_tls_init.go:146  [service=cockroach-http,auto-create-ca] 54  signing CA cert
+I210420 21:33:07.352263 12824 1@auto_tls_init.go:219  [service=cockroach-http,auto-create-ca] 55  writing CA cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca-ui.crt
+I210420 21:33:07.703884 12824 1@auto_tls_init.go:224  [service=cockroach-http,auto-create-ca] 56  writing CA key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ca-ui.key
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57  creating service cert from template: {
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  SN: 702681398775849909484403883763486814118,
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  CA: false,
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  Issuer: "OU=automatic cert generator,O=Cockroach Labs,C=US",
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  Subject: "OU=cockroach-http,O=Cockroach Labs,C=US",
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  NotBefore: 2021-04-20 21:32:38.189941 +0000 UTC,
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  NotAfter: 2026-04-24 21:33:08.189941 +0000 UTC (Validity: 43919h59m59.999783s),
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  DNS: [],
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +  IP: []
+I210420 21:33:08.190168 12824 1@pkg/security/auto_tls_init.go:254  [service=cockroach-http] 57 +}
+I210420 21:33:08.362715 12824 1@pkg/security/auto_tls_init.go:263  [service=cockroach-http] 58  signing service cert
+I210420 21:33:08.388292 12824 1@auto_tls_init.go:189  [service=cockroach-http] 59  writing service cert: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ui.crt
+I210420 21:33:08.909420 12824 1@auto_tls_init.go:194  [service=cockroach-http] 60  writing service key: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/auto_tls_init_test251577620/ui.key
+--- PASS: TestDummyInitializeNodeFromBundle (7.33s)
+=== RUN   TestMakeIdleMonitor
+--- PASS: TestMakeIdleMonitor (2.27s)
+=== RUN   TestCorruptedClusterID
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestCorruptedClusterID235442019
+    test_log_scope.go:74: use -show-logs to present logs inline
+    node_test.go:277: -- test log scope end --
+--- PASS: TestCorruptedClusterID (0.13s)
+=== RUN   TestSecureHTTPRedirect
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestSecureHTTPRedirect763223910
+    test_log_scope.go:74: use -show-logs to present logs inline
+    server_test.go:293: -- test log scope end --
+--- PASS: TestSecureHTTPRedirect (0.43s)
+=== RUN   TestSettingsSetAndShow
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestSettingsSetAndShow884973960
+    test_log_scope.go:74: use -show-logs to present logs inline
+    settingsworker_test.go:259: -- test log scope end --
+--- PASS: TestSettingsSetAndShow (0.36s)
+=== RUN   TestMetricsEndpoint
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestMetricsEndpoint049592826
+    test_log_scope.go:74: use -show-logs to present logs inline
+    status_test.go:856: -- test log scope end --
+--- PASS: TestMetricsEndpoint (0.61s)
+=== RUN   TestStatusAPITransactions
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestStatusAPITransactions382336316
+    test_log_scope.go:74: use -show-logs to present logs inline
+    status_test.go:1713: -- test log scope end --
+--- PASS: TestStatusAPITransactions (8.88s)
+=== RUN   TestClusterVersionMixedVersionTooOld
+    test_log_scope.go:73: test logs captured to: /var/folders/tk/7wfswg457lqbj05wtbm4ldpm0000gp/T/logTestClusterVersionMixedVersionTooOld801294287
+    test_log_scope.go:74: use -show-logs to present logs inline
+F210420 21:33:22.683988 27428 pkg/migration/helpers.go:36  [n1,client=127.0.0.1:62520,hostssl,user=root,migration-mgr] 1  only even numbered internal versions allowed, found 20.1-1
+F210420 21:33:22.683988 27428 pkg/migration/helpers.go:36  [n1,client=127.0.0.1:62520,hostssl,user=root,migration-mgr] 1 !stack trace omitted via SetExitFunc()
+F210420 21:33:22.707951 27699 pkg/migration/helpers.go:36  [n2,client=127.0.0.1:62523,hostssl,user=root,migration-mgr] 2  only even numbered internal versions allowed, found 20.1-1
+F210420 21:33:22.707951 27699 pkg/migration/helpers.go:36  [n2,client=127.0.0.1:62523,hostssl,user=root,migration-mgr] 2 !stack trace omitted via SetExitFunc()
+    version_cluster_test.go:467: -- test log scope end --
+--- PASS: TestClusterVersionMixedVersionTooOld (0.74s)
+PASS
