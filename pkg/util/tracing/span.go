@@ -228,7 +228,6 @@ func (sp *Span) TraceID() uint64 {
 // is that the recording is to be returned to the caller when the
 // child finishes, so that the caller can inductively construct the
 // entire trace.
-// XXX: This is typically allocated, can we avoid that?
 type SpanMeta struct {
 	traceID uint64
 	spanID  uint64
@@ -251,6 +250,7 @@ type SpanMeta struct {
 	Baggage map[string]string
 }
 
+// Empty returns whether or not the SpanMeta is a zero value.
 func (sm SpanMeta) Empty() bool {
 	return sm.spanID == 0 && sm.traceID == 0
 }

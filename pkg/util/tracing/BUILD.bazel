@@ -66,6 +66,7 @@ go_test(
         "//pkg/settings",
         "//pkg/testutils",
         "//pkg/testutils/grpcutils",
+        "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",

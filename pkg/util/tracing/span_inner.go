@@ -119,7 +119,7 @@ func (s *spanInner) Finish() {
 	if s.netTr != nil {
 		s.netTr.Finish()
 	}
-	if s.crdb.rootSpan == s.crdb {
+	if s.crdb.rootSpan.spanID == s.crdb.spanID {
 		s.tracer.activeSpans.Lock()
 		delete(s.tracer.activeSpans.m, s.crdb.spanID)
 		s.tracer.activeSpans.Unlock()

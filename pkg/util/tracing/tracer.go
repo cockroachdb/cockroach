@@ -396,13 +396,20 @@ func (t *Tracer) startSpanGeneric(
 		netTr:  netTr,
 	}
 
-	// XXX: Each span has a pointer to a root span, if linked. The root span is
-	// where recordings will be ultimately rendered from.
-	rootSpan := opts.deriveRootSpan()
-	if rootSpan == nil {
-		rootSpan = &helper.crdbSpan
+	// Copy over the parent span's root span reference, and if there isn't one
+	// (we're creating a new root span), set a reference to ourselves.
+	//
+	// TODO(irfansharif): Given we have a handle on the root span, we should
+	// reconsider the maxChildrenPerSpan limit, which only limits the branching
+	// factor. To bound the total memory usage for pkg/tracing, we could instead
+	// limit the number of spans per trace (no-oping all subsequent ones) and
+	// do the same for the total number of root spans.
+	if rootSpan := opts.deriveRootSpan(); rootSpan != nil {
+		helper.crdbSpan.rootSpan = rootSpan
+	} else {
+		helper.crdbSpan.traceEmpty.Store(true)
+		helper.crdbSpan.rootSpan = &helper.crdbSpan
 	}
-	helper.crdbSpan.rootSpan = rootSpan
 
 	s := &helper.span
 
@@ -434,10 +441,11 @@ func (t *Tracer) startSpanGeneric(
 		if !opts.Parent.i.isNoop() {
 			opts.Parent.i.crdb.mu.Lock()
 			m := opts.Parent.i.crdb.mu.baggage
+			opts.Parent.i.crdb.mu.Unlock()
+
 			for k, v := range m {
 				s.SetBaggageItem(k, v)
 			}
-			opts.Parent.i.crdb.mu.Unlock()
 		}
 	} else {
 		// Local root span - put it into the registry of active local root
@@ -595,17 +603,17 @@ var noopSpanMeta = SpanMeta{}
 // given Carrier. This, alongside InjectMetaFrom, can be used to carry span
 // metadata across process boundaries. See serializationFormat for more details.
 func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
-	switch carrier.(type) {
+	switch c := carrier.(type) {
 	case MapCarrier:
-		return t.extractMetaFromMapCarrier(carrier.(MapCarrier))
+		return t.extractMetaFromMapCarrier(c)
 	case metadataCarrier:
-		return t.extractMetaFromMetadataCarrier(carrier.(metadataCarrier))
+		return t.extractMetaFromMetadataCarrier(c)
 	default:
 		return noopSpanMeta, errors.New("unsupported carrier")
 	}
 }
 
-// GetActiveSpanFromID retrieves any active span given its span ID.
+// GetActiveSpanFromID retrieves any active root span given its ID.
 func (t *Tracer) GetActiveSpanFromID(spanID uint64) (*Span, bool) {
 	t.activeSpans.Lock()
 	span, found := t.activeSpans.m[spanID]

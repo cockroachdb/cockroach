@@ -163,29 +163,6 @@ func (p parentAndManualCollectionOption) apply(opts spanOptions) spanOptions {
 	return opts
 }
 
-type tagsOption []opentracing.Tag
-
-// WithTags is an option to Tracer.StartSpan which populates the
-// tags on the newly created Span.
-// XXX: This allocates, even if the span at the end is non-verbose and would
-// skip allocating. Let's not use it.
-func WithTags(tags ...opentracing.Tag) SpanOption {
-	return (tagsOption)(tags)
-}
-
-func (o tagsOption) apply(opts spanOptions) spanOptions {
-	if len(o) == 0 {
-		return opts
-	}
-	if opts.Tags == nil {
-		opts.Tags = map[string]interface{}{}
-	}
-	for _, tag := range o {
-		opts.Tags[tag.Key] = tag.Value
-	}
-	return opts
-}
-
 type followsFromOpt struct{}
 
 // WithFollowsFrom instructs StartSpan to use a FollowsFrom relationship

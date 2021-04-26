@@ -42,9 +42,10 @@ func (w metadataCarrier) Set(key, val string) {
 	// blindly lowercase the key (which is guaranteed to work in the
 	// Inject/Extract sense per the OpenTracing spec).
 	key = strings.ToLower(key)
-	if (key == fieldNameTraceID || key == fieldNameSpanID) && len(w.MD[key]) == 1 {
-		// XXX: check if the key being set is one of fieldSpanID, or fieldTracing
-		// ID, and if the len of MD fields == 1, just over-write it in-place.
+	if (key == fieldNameTraceID || key == fieldNameSpanID) && len(w.MD[key]) == 1 && w.MD[key][0] == "0" {
+		// If the keys being set are tracing internal ones, and the metadata.MD
+		// we're using is one retrieved from grpcMetadataPool, overwrite it
+		// in-place to avoid allocating.
 		w.MD[key][0] = val
 		return
 	}
@@ -221,7 +222,9 @@ func spanInclusionFuncForClient(parent *Span) bool {
 	return parent != nil && !parent.i.isNoop()
 }
 
-func injectSpanMetaInto(ctx context.Context, md metadata.MD, tracer *Tracer, clientSpan *Span) context.Context {
+func injectSpanMetaInto(
+	ctx context.Context, md metadata.MD, tracer *Tracer, clientSpan *Span,
+) context.Context {
 	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
 		// We have no better place to record an error than the Span itself.
 		clientSpan.Recordf("error: %s", err)
@@ -231,8 +234,8 @@ func injectSpanMetaInto(ctx context.Context, md metadata.MD, tracer *Tracer, cli
 
 var grpcMetadataPool = sync.Pool{
 	New: func() interface{} {
-		// XXX: How do we make sure setting the metadata would not allocate
-		// again? We want to pre-allocate the map, so set doesn't have to.
+		// We pre-allocate metadata.MD with the two fields we'll always set in
+		// our interceptors.
 		m := map[string]string{fieldNameSpanID: "0", fieldNameTraceID: "0"}
 		return metadata.New(m)
 	},
