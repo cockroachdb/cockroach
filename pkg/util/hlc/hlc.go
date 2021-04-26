@@ -124,8 +124,7 @@ func (m *ManualClock) Set(nanos int64) {
 // ticks with the wall clock, but that can be moved arbitrarily
 // into the future or paused. HybridManualClock is thread safe.
 type HybridManualClock struct {
-	physicalClock func() int64
-	mu            struct {
+	mu struct {
 		syncutil.RWMutex
 		// nanos, if not 0, is the amount of time the clock was manually incremented
 		// by; it is added to physicalClock.
@@ -139,7 +138,7 @@ type HybridManualClock struct {
 // NewHybridManualClock returns a new instance, initialized with
 // specified timestamp.
 func NewHybridManualClock() *HybridManualClock {
-	return &HybridManualClock{physicalClock: UnixNano}
+	return &HybridManualClock{}
 }
 
 // UnixNano returns the underlying hybrid manual clock's timestamp.
@@ -151,7 +150,7 @@ func (m *HybridManualClock) UnixNano() int64 {
 	if nanosAtPause > 0 {
 		return nanos + nanosAtPause
 	}
-	return nanos + m.physicalClock()
+	return nanos + UnixNano()
 }
 
 // Increment increments the hybrid manual clock's timestamp.
@@ -165,7 +164,7 @@ func (m *HybridManualClock) Increment(nanos int64) {
 // the clock to tick. Increment can still be used, though.
 func (m *HybridManualClock) Pause() {
 	m.mu.Lock()
-	m.mu.nanosAtPause = m.physicalClock()
+	m.mu.nanosAtPause = UnixNano()
 	m.mu.Unlock()
 }
 
