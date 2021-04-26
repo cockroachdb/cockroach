@@ -39,6 +39,7 @@ go_test(
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
+        "//pkg/col/coldatatestutils",
         "//pkg/settings/cluster",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexecerror",
@@ -53,6 +54,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil/pgdate",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
