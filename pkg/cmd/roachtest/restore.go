@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -360,18 +361,27 @@ func registerRestore(r *testRegistry) {
 				// 	})
 				// })
 
+				tick := initBulkJobPerfArtifacts(ctx, testName, item.timeout)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
-					// TODO(dan): It'd be nice if we could keep track over time of how
-					// long this next line took.
+					// Tick once before starting the restore, and once after to capture the
+					// total elapsed time. This is used by roachperf to compute and display
+					// the average MB/sec per node.
+					tick()
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
 				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank'
 				WITH into_db = 'restore2tb'"`)
+					tick()
 
+					// Upload the perf artifacts to any one of the nodes so that the test
+					// runner copies it into an appropriate directory path.
+					if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					}
 					return nil
 				})
 				m.Wait()
