@@ -258,7 +258,7 @@ export const StatementTableTitle = {
               data transferred over the network
             </Anchor>
             {
-              " (e.g., between regions and nodes) for statements with this fingerprint within the last hour or speicifed "
+              " (e.g., between regions and nodes) for statements with this fingerprint within the last hour or specified "
             }
             <Anchor href={statementsTimeInterval} target="_blank">
               time interval
