@@ -125,6 +125,7 @@ go_test(
         "sorttopk_test.go",
         "types_integration_test.go",
         "utils_test.go",
+        "values_test.go",
     ],
     embed = [":colexec"],
     deps = [
@@ -157,6 +158,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
