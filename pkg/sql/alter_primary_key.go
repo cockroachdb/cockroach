@@ -51,6 +51,24 @@ func (p *planner) AlterPrimaryKey(
 	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
+	if alterPrimaryKeyLocalitySwap != nil {
+		if err := p.checkNoRegionChangeUnderway(
+			ctx,
+			tableDesc.GetParentID(),
+			"perform this locality change",
+		); err != nil {
+			return err
+		}
+	} else if tableDesc.IsLocalityRegionalByRow() {
+		if err := p.checkNoRegionChangeUnderway(
+			ctx,
+			tableDesc.GetParentID(),
+			"perform a primary key change on a REGIONAL BY ROW table",
+		); err != nil {
+			return err
+		}
+	}
+
 	if alterPKNode.Interleave != nil {
 		if err := interleavedTableDeprecationAction(p.RunParams(ctx)); err != nil {
 			return err

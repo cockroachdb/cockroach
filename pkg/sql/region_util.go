@@ -1732,7 +1732,9 @@ func (p *planner) checkNoRegionalByRowChangeUnderway(
 				}
 			}
 			// Disallow index changes for REGIONAL BY ROW tables.
-			// We do this on the second loop, as index changes may be a precede to the actual PRIMARY KEY swap.
+			// We do this on the second loop, as ALTER PRIMARY KEY may push
+			// CREATE/DROP INDEX before the ALTER PRIMARY KEY mutation itself.
+			// We should catch ALTER PRIMARY KEY before this ADD/DROP INDEX.
 			for _, mut := range table.AllMutations() {
 				if table.IsLocalityRegionalByRow() {
 					if idx := mut.AsIndex(); idx != nil {
@@ -1749,4 +1751,37 @@ func (p *planner) checkNoRegionalByRowChangeUnderway(
 			return nil
 		},
 	)
+}
+
+// checkNoRegionChangeUnderway checks whether the regions on the current
+// database are currently being modified.
+func (p *planner) checkNoRegionChangeUnderway(
+	ctx context.Context, dbID descpb.ID, op string,
+) error {
+	// SynthesizeRegionConfig touches the type descriptor row, which
+	// prevents a race with a racing conflicting schema change.
+	r, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbID,
+		p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+	if len(r.TransitioningRegions()) > 0 {
+		return errors.WithDetailf(
+			errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot %s while a region is being added or dropped on the database",
+					op,
+				),
+				"cancel the job which is adding or dropping the region or try again later",
+			),
+			"region %s is currently being added or dropped",
+			r.TransitioningRegions()[0],
+		)
+	}
+	return nil
 }
