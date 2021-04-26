@@ -259,7 +259,7 @@ func (sq *splitQueue) processAttempt(
 		telemetry.Inc(sq.loadBasedCount)
 
 		// Reset the splitter now that the bounds of the range changed.
-		r.loadBasedSplitter.Reset()
+		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 	return false, nil

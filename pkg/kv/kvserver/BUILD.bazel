@@ -320,6 +320,7 @@ go_test(
         "//pkg/kv/kvserver/raftentry",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/spanset",
+        "//pkg/kv/kvserver/split",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/kv/kvserver/tenantrate",
         "//pkg/kv/kvserver/txnwait",

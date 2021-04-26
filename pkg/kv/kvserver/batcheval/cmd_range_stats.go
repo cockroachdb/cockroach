@@ -42,7 +42,14 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
-	reply.QueriesPerSecond = cArgs.EvalCtx.GetSplitQPS()
+	if qps, ok := cArgs.EvalCtx.GetMaxSplitQPS(); ok {
+		reply.QueriesPerSecond = qps
+	} else {
+		// TODO(nvanbenschten): this needs to be migrated in. As is, we will confuse
+		// old versions. We'll need to keep using GetLastSplitQPS in mixed-version
+		// clusters. Do this before merging.
+		reply.QueriesPerSecond = -1
+	}
 	reply.RangeInfo = cArgs.EvalCtx.GetRangeInfo(ctx)
 	return result.Result{}, nil
 }

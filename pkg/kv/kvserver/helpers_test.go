@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -389,6 +390,12 @@ func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.largestPreviousMaxRangeSizeBytes
+}
+
+// LoadBasedSplitter returns the replica's split.Decider, which is used to
+// assist load-based split (and merge) decisions.
+func (r *Replica) LoadBasedSplitter() *split.Decider {
+	return &r.loadBasedSplitter
 }
 
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {

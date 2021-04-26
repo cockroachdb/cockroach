@@ -1074,6 +1074,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
+	// Disable load-based splitting, so that the absence of sufficient QPS
+	// measurements do not prevent ranges from merging.
+	knobs.Store.(*kvserver.StoreTestingKnobs).DisableLoadBasedSplitting = true
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,

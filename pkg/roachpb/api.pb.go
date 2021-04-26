@@ -4918,7 +4918,10 @@ type RangeStatsResponse struct {
 	// MVCCStats are the MVCC statistics for the range that processed the
 	// request.
 	MVCCStats enginepb.MVCCStats `protobuf:"bytes,2,opt,name=mvcc_stats,json=mvccStats,proto3" json:"mvcc_stats"`
-	// QueriesPerSecond is the rate of request/s or QPS for the range.
+	// QueriesPerSecond is the maximum rate of request/s or QPS that the range has
+	// served over a configured measurement period. Set to -1 if the replica
+	// serving the request has not been the leaseholder long enough to have
+	// recorded request rates for at least a full measurement period.
 	QueriesPerSecond float64 `protobuf:"fixed64,3,opt,name=queries_per_second,json=queriesPerSecond,proto3" json:"queries_per_second,omitempty"`
 	// range_info contains descriptor and lease information.
 	RangeInfo RangeInfo `protobuf:"bytes,4,opt,name=range_info,json=rangeInfo,proto3" json:"range_info"`

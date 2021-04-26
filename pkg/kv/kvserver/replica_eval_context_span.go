@@ -149,9 +149,16 @@ func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
 	return rec.i.GetMVCCStats()
 }
 
-// GetSplitQPS returns the Replica's queries/s rate for splitting purposes.
-func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
-	return rec.i.GetSplitQPS()
+// GetMaxSplitQPS returns the Replica's maximum queries/s rate for splitting and
+// merging purposes.
+func (rec SpanSetReplicaEvalContext) GetMaxSplitQPS() (float64, bool) {
+	return rec.i.GetMaxSplitQPS()
+}
+
+// GetLastSplitQPS returns the Replica's most recent queries/s rate for
+// splitting and merging purposes.
+func (rec SpanSetReplicaEvalContext) GetLastSplitQPS() float64 {
+	return rec.i.GetLastSplitQPS()
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created

@@ -173,7 +173,7 @@ var _ purgatoryError = rangeMergePurgatoryError{}
 
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
-) (*roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
+) (*roachpb.RangeDescriptor, enginepb.MVCCStats, float64, bool, error) {
 
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.RangeStatsRequest{
@@ -182,10 +182,10 @@ func (mq *mergeQueue) requestRangeStats(
 
 	br, pErr := mq.db.NonTransactionalSender().Send(ctx, ba)
 	if pErr != nil {
-		return nil, enginepb.MVCCStats{}, 0, pErr.GoError()
+		return nil, enginepb.MVCCStats{}, 0, false, pErr.GoError()
 	}
 	res := br.Responses[0].GetInner().(*roachpb.RangeStatsResponse)
-	return &res.RangeInfo.Desc, res.MVCCStats, res.QueriesPerSecond, nil
+	return &res.RangeInfo.Desc, res.MVCCStats, res.QueriesPerSecond, res.QueriesPerSecond >= 0, nil
 }
 
 func (mq *mergeQueue) process(
@@ -196,7 +196,9 @@ func (mq *mergeQueue) process(
 		return false, nil
 	}
 
+	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
+	lhsQPS, lhsQPSOk := lhsRepl.GetMaxSplitQPS()
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
@@ -204,9 +206,7 @@ func (mq *mergeQueue) process(
 		return false, nil
 	}
 
-	lhsDesc := lhsRepl.Desc()
-	lhsQPS := lhsRepl.GetSplitQPS()
-	rhsDesc, rhsStats, rhsQPS, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
+	rhsDesc, rhsStats, rhsQPS, rhsQPSOk, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
 		return false, err
 	}
@@ -234,6 +234,14 @@ func (mq *mergeQueue) process(
 
 	var mergedQPS float64
 	if lhsRepl.SplitByLoadEnabled() {
+		if !lhsQPSOk {
+			log.VEventf(ctx, 2, "skipping merge: LHS QPS measurement not yet reliable")
+			return false, nil
+		}
+		if !rhsQPSOk {
+			log.VEventf(ctx, 2, "skipping merge: RHS QPS measurement not yet reliable")
+			return false, nil
+		}
 		mergedQPS = lhsQPS + rhsQPS
 	}
 
@@ -362,6 +370,13 @@ func (mq *mergeQueue) process(
 		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
+	}
+
+	// Adjust the splitter to account for the additional load from the RHS. We
+	// could just Reset the splitter, but then we'd need to wait out a full
+	// measurement period (default of 5m) before merging this range again.
+	if mergedQPS != 0 {
+		lhsRepl.loadBasedSplitter.RecordMax(mq.store.Clock().PhysicalTime(), mergedQPS)
 	}
 	return true, nil
 }

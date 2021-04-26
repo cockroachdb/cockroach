@@ -1747,7 +1747,10 @@ message RangeStatsResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
-  // QueriesPerSecond is the rate of request/s or QPS for the range.
+  // QueriesPerSecond is the maximum rate of request/s or QPS that the range has
+  // served over a configured measurement period. Set to -1 if the replica
+  // serving the request has not been the leaseholder long enough to have
+  // recorded request rates for at least a full measurement period.
   double queries_per_second = 3;
 
   // range_info contains descriptor and lease information.
