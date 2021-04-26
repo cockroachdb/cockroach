@@ -125,6 +125,7 @@ go_test(
         "sorttopk_test.go",
         "types_integration_test.go",
         "utils_test.go",
+        "values_test.go",
     ],
     embed = [":colexec"],
     deps = [
