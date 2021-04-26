@@ -801,7 +801,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
 		// to recover without failing the line search.
 		if err := c.Reset(ctx); err != nil {
-			t.Fatal(err)
+			// Reset() can flake sometimes, see for example:
+			// https://github.com/cockroachdb/cockroach/issues/61981#issuecomment-826838740
+			c.l.Printf("failed to reset VMs, proceeding anyway: %s", err)
+			_ = err // intentionally continuing
 		}
 		var ok bool
 		for i := 0; i < 10; i++ {
