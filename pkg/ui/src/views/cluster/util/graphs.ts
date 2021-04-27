@@ -568,6 +568,11 @@ export function configureUPlotLineChart(
           const over = self.root.querySelector(".u-over");
           const legend = self.root.querySelector(".u-legend");
 
+          // apply class to stick a legend to the bottom of a chart if it has more than 10 series
+          if (self.series.length > 10) {
+            legend.classList.add("u-legend--place-bottom");
+          }
+
           // Show/hide legend when we enter/exit the bounds of the graph
           over.onmouseenter = () => {
             legend.style.display = "block";
