@@ -48,9 +48,10 @@ import (
 )
 
 var (
-	flagRSGTime        = flag.Duration("rsg", 0, "random syntax generator test duration")
-	flagRSGGoRoutines  = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
-	flagRSGExecTimeout = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagRSGTime             = flag.Duration("rsg", 0, "random syntax generator test duration")
+	flagRSGGoRoutines       = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
+	flagRSGExecTimeout      = flag.Duration("rsg-exec-timeout", 15*time.Second, "timeout duration when executing a statement")
+	flagSchemaChangeTimeout = flag.Duration("schema-change-timeout", 500*time.Second, "timeout duration when executing schema change statements")
 )
 
 func verifyFormat(sql string) error {
@@ -121,7 +122,9 @@ func (c *nonCrasher) Error() string {
 	return c.err.Error()
 }
 
-func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) error {
+func (db *verifyFormatDB) execWithDuration(
+	t *testing.T, ctx context.Context, sql string, duration *time.Duration,
+) error {
 	if err := verifyFormat(sql); err != nil {
 		db.verifyFormatErr = err
 		return err
@@ -158,7 +161,7 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 			return &nonCrasher{sql: sql, err: err}
 		}
 		return nil
-	case <-time.After(*flagRSGExecTimeout):
+	case <-time.After(*duration):
 		db.mu.Lock()
 		defer db.mu.Unlock()
 		b := make([]byte, 1024*1024)
@@ -189,11 +192,13 @@ func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) er
 		return &crasher{
 			sql:    sql,
 			err:    errors.Newf("statement exec timeout"),
-			detail: fmt.Sprintf("timeout: %q. currently executing: %v", sql, db.mu.active),
+			detail: fmt.Sprintf("timeout: %q. %s currently executing: %v", sql, duration, db.mu.active),
 		}
 	}
 }
-
+func (db *verifyFormatDB) exec(t *testing.T, ctx context.Context, sql string) error {
+	return db.execWithDuration(t, ctx, sql, flagRSGExecTimeout)
+}
 func TestRandomSyntaxGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -396,7 +401,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
 		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
-		return db.exec(t, ctx, s)
+		return db.execWithDuration(t, ctx, s, flagSchemaChangeTimeout)
 	})
 }
 
