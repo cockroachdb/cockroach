@@ -15,6 +15,7 @@ go_library(
         "rollup.go",
         "server.go",
         "timespan.go",
+        "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ts",
     visibility = ["//visibility:public"],
