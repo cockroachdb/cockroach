@@ -222,6 +222,8 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		conf.FileTableConfig.User = user
 		conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 		conf.FileTableConfig.Path = uri.Path
+	case "null":
+		conf.Provider = roachpb.ExternalStorageProvider_NullSink
 	default:
 		// TODO(adityamaru): Link dedicated ExternalStorage scheme docs once ready.
 		return conf, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
@@ -261,7 +263,7 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" {
+	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" || uri.Scheme == "null" {
 		return path, nil
 	}
 
@@ -317,6 +319,9 @@ func MakeExternalStorage(
 	case roachpb.ExternalStorageProvider_FileTable:
 		telemetry.Count("external-io.filetable")
 		return makeFileTableStorage(ctx, dest.FileTableConfig, ie, kvDB, settings, conf)
+	case roachpb.ExternalStorageProvider_NullSink:
+		telemetry.Count("external-io.nullsink")
+		return makeNullSinkStorage()
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
@@ -376,7 +381,7 @@ func AccessIsWithExplicitAuth(path string) (bool, string, error) {
 		hasExplicitAuth = true
 	case "http", "https", "nodelocal":
 		hasExplicitAuth = false
-	case "experimental-workload", "workload", "userfile":
+	case "experimental-workload", "workload", "userfile", "null":
 		hasExplicitAuth = true
 	default:
 		return hasExplicitAuth, "", nil
