@@ -181,20 +181,19 @@ delete xyz
  └── limit
       ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8 column9:9
       ├── internal-ordering: -9
-      ├── sort
-      │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8 column9:9
+      ├── project
+      │    ├── columns: column9:9 x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
       │    ├── ordering: -9
       │    ├── limit hint: 2.00
-      │    └── project
-      │         ├── columns: column9:9 x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
-      │         ├── select
-      │         │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
-      │         │    ├── scan xyz
-      │         │    │    └── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
-      │         │    └── filters
-      │         │         └── x:5 = $1
-      │         └── projections
-      │              └── y:6 + $2 [as=column9:9]
+      │    ├── select
+      │    │    ├── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── limit hint: 2.00
+      │    │    ├── scan xyz
+      │    │    │    └── columns: x:5!null y:6 z:7 crdb_internal_mvcc_timestamp:8
+      │    │    └── filters
+      │    │         └── x:5 = $1
+      │    └── projections
+      │         └── y:6 + $2 [as=column9:9]
       └── 2
 
 
