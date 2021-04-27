@@ -60,6 +60,7 @@ import (
 type avroSchemaType interface{}
 
 const (
+	avroSchemaArray   = `array`
 	avroSchemaBoolean = `boolean`
 	avroSchemaBytes   = `bytes`
 	avroSchemaDouble  = `double`
@@ -76,12 +77,19 @@ type avroLogicalType struct {
 	Scale       int            `json:"scale,omitempty"`
 }
 
+type avroArrayType struct {
+	SchemaType avroSchemaType `json:"type"`
+	Items      avroSchemaType `json:"items"`
+}
+
 func avroUnionKey(t avroSchemaType) string {
 	switch s := t.(type) {
 	case string:
 		return s
 	case avroLogicalType:
 		return avroUnionKey(s.SchemaType) + `.` + s.LogicalType
+	case avroArrayType:
+		return avroUnionKey(s.SchemaType)
 	case *avroRecord:
 		if s.Namespace == "" {
 			return s.Name
@@ -160,14 +168,12 @@ type avroEnvelopeRecord struct {
 	before, after *avroDataRecord
 }
 
-// columnDescToAvroSchema converts a column descriptor into its corresponding
-// avro field schema.
-func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField, error) {
+// typeToAvroSchema converts a database type to an avro field
+// reuseMap is false for nested elements since the same key may occur multiple times
+// we may need a map pool or a streaming serializer if elements get too big
+func typeToAvroSchema(typ *types.T, reuseMap bool) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
-		Name:     SQLNameToAvroName(colDesc.Name),
-		Metadata: colDesc.SQLStringNotHumanReadable(),
-		Default:  nil,
-		typ:      colDesc.Type,
+		typ: typ,
 	}
 
 	// Make every field optional by unioning it with null, so that all schema
@@ -194,8 +200,11 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 			if err != nil {
 				return nil, err
 			}
-			schema.nativeEncoded[unionKey] = encoded
-			return schema.nativeEncoded, nil
+			if reuseMap {
+				schema.nativeEncoded[unionKey] = encoded
+				return schema.nativeEncoded, nil
+			}
+			return map[string]interface{}{unionKey: encoded}, nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			if x == nil {
@@ -205,7 +214,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 		}
 	}
 
-	switch colDesc.Type.Family() {
+	switch typ.Family() {
 	case types.IntFamily:
 		setNullable(
 			avroSchemaLong,
@@ -308,7 +317,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 				date := *d.(*tree.DDate)
 				if !date.IsFinite() {
 					return nil, errors.Errorf(
-						`column %s: infinite date not yet supported with avro`, colDesc.Name)
+						`infinite date not yet supported with avro`)
 				}
 				// The avro library requires us to return this as a time.Time.
 				return date.ToTime()
@@ -375,13 +384,13 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 			},
 		)
 	case types.DecimalFamily:
-		if colDesc.Type.Precision() == 0 {
+		if typ.Precision() == 0 {
 			return nil, errors.Errorf(
-				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
+				`decimal with no precision not yet supported with avro`)
 		}
 
-		width := int(colDesc.Type.Width())
-		prec := int(colDesc.Type.Precision())
+		width := int(typ.Width())
+		prec := int(typ.Precision())
 		setNullable(
 			avroLogicalType{
 				SchemaType:  avroSchemaBytes,
@@ -394,7 +403,7 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 
 				// If the decimal happens to fit a smaller width than the
 				// column allows, add trailing zeroes so the scale is constant
-				if colDesc.Type.Width() > -dec.Exponent {
+				if typ.Width() > -dec.Exponent {
 					_, err := tree.DecimalCtx.WithPrecision(uint32(prec)).Quantize(&dec, &dec, -int32(width))
 					if err != nil {
 						// This should always be possible without rounding since we're using the column def,
@@ -450,10 +459,65 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 				return tree.ParseDJSON(x.(string))
 			},
 		)
+	case types.ArrayFamily:
+		itemSchema, err := typeToAvroSchema(typ.ArrayContents(), false /*reuse map*/)
+		if err != nil {
+			return nil, errors.Wrapf(err, `could not create item schema for %s`,
+				typ)
+		}
+		setNullable(
+			avroArrayType{
+				SchemaType: avroSchemaArray,
+				Items:      itemSchema.SchemaType,
+			},
+			func(d tree.Datum) (interface{}, error) {
+				datumArr := d.(*tree.DArray)
+				avroArr := make([]interface{}, datumArr.Len())
+				for i, elt := range datumArr.Array {
+					encoded, err := itemSchema.encodeFn(elt)
+					if err != nil {
+						return nil, err
+					}
+					avroArr[i] = encoded
+				}
+				return avroArr, nil
+
+			},
+			func(x interface{}) (tree.Datum, error) {
+				datumArr := tree.NewDArray(itemSchema.typ)
+				avroArr := x.([]interface{})
+				for _, item := range avroArr {
+					itemDatum, err := itemSchema.decodeFn(item)
+					if err != nil {
+						return nil, err
+					}
+					err = datumArr.Append(itemDatum)
+					if err != nil {
+						return nil, err
+					}
+				}
+				return datumArr, nil
+			},
+		)
+
 	default:
-		return nil, errors.Errorf(`column %s: type %s not yet supported with avro`,
-			colDesc.Name, colDesc.Type.SQLString())
+		return nil, errors.Errorf(`type %s not yet supported with avro`,
+			typ.SQLString())
 	}
+
+	return schema, nil
+}
+
+// columnToAvroSchema converts a column descriptor into its corresponding
+// avro field schema.
+func columnToAvroSchema(col catalog.Column) (*avroSchemaField, error) {
+	schema, err := typeToAvroSchema(col.GetType(), true /*reuse map */)
+	if err != nil {
+		return nil, errors.Wrapf(err, "column %s", col.GetName())
+	}
+	schema.Name = SQLNameToAvroName(col.GetName())
+	schema.Metadata = col.ColumnDesc().SQLStringNotHumanReadable()
+	schema.Default = nil
 
 	return schema, nil
 }
@@ -483,7 +547,7 @@ func indexToAvroSchema(
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
 		col := tableDesc.PublicColumns()[colIdx]
-		field, err := columnDescToAvroSchema(col.ColumnDesc())
+		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
@@ -529,7 +593,7 @@ func tableToAvroSchema(
 		colIdxByFieldIdx: make(map[int]int),
 	}
 	for _, col := range tableDesc.PublicColumns() {
-		field, err := columnDescToAvroSchema(col.ColumnDesc())
+		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
