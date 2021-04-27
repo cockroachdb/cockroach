@@ -609,7 +609,16 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
-	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
+	// Try to simplify the required ordering based on the internal FDs.
+	required := scan.RequiredPhysical()
+	if fds := scan.InternalFDs(); required.Ordering.CanSimplify(fds) {
+		copy := *required
+		copy.Ordering = required.Ordering.Copy()
+		copy.Ordering.Simplify(fds)
+		required = &copy
+	}
+
+	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), required)
 	if err != nil {
 		return execPlan{}, err
 	}

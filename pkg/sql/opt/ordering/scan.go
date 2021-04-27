@@ -19,6 +19,12 @@ import (
 )
 
 func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+	// Try to simplify the required ordering based on the internal FDs.
+	if fds := expr.(*memo.ScanExpr).InternalFDs(); required.CanSimplify(fds) {
+		copy := required.Copy()
+		copy.Simplify(fds)
+		required = &copy
+	}
 	ok, _ := ScanPrivateCanProvide(
 		expr.Memo().Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
@@ -32,6 +38,12 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
 func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool {
+	// Try to simplify the required ordering based on the internal FDs.
+	if fds := scan.InternalFDs(); required.CanSimplify(fds) {
+		copy := required.Copy()
+		copy.Simplify(fds)
+		required = &copy
+	}
 	ok, reverse := ScanPrivateCanProvide(
 		scan.Memo().Metadata(),
 		&scan.ScanPrivate,
@@ -117,7 +129,6 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	scan := expr.(*memo.ScanExpr)
 	md := scan.Memo().Metadata()
 	index := md.Table(scan.Table).Index(scan.Index)
-	fds := &scan.Relational().FuncDeps
 
 	// We need to know the direction of the scan.
 	reverse := ScanIsReverse(scan, required)
@@ -125,25 +136,25 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	// We generate the longest ordering that this scan can provide, then we trim
 	// it. This is the longest prefix of index columns that are output by the scan
 	// (ignoring constant columns, in the case of constrained scans).
-	constCols := fds.ComputeClosure(opt.ColSet{})
+	constCols := scan.InternalFDs().ComputeClosure(opt.ColSet{})
 	numCols := index.KeyColumnCount()
 	provided := make(opt.Ordering, 0, numCols)
 	for i := 0; i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal())
-		if !scan.Cols.Contains(colID) {
-			// Column not in output; we are done.
-			break
-		}
 		if constCols.Contains(colID) {
 			// Column constrained to a constant, ignore.
 			continue
+		}
+		if !scan.Cols.Contains(colID) {
+			// Column not in output; we are done.
+			break
 		}
 		direction := (indexCol.Descending != reverse) // != is bool XOR
 		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
 	}
 
-	return trimProvided(provided, required, fds)
+	return trimProvided(provided, required, &scan.Relational().FuncDeps)
 }
 
 func init() {

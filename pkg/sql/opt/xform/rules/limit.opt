@@ -28,12 +28,12 @@
 # Therefore, they cannot be considered for limited scans.
 [PushLimitIntoFilteredScan, Explore]
 (Limit
-    (Scan $scanPrivate:*)
+    $scan:(Scan)
     (Const $limit:* & (IsPositiveInt $limit))
-    $ordering:* & (CanLimitFilteredScan $scanPrivate $ordering)
+    $ordering:* & (CanLimitFilteredScan $scan $ordering)
 )
 =>
-(Scan (LimitScanPrivate $scanPrivate $limit $ordering))
+(Scan (LimitScanPrivate $scan $limit $ordering))
 
 # PushLimitIntoIndexJoin pushes a limit through an index join. Since index
 # lookup can be expensive, it's always better to discard rows beforehand.

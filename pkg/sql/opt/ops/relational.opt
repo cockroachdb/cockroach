@@ -32,6 +32,14 @@
 [Relational]
 define Scan {
     _ ScanPrivate
+
+    # notNullCols is the set of columns that are known to be not-null, including
+    # columns that are not output.
+    notNullCols ColSet
+
+    # internalFuncDeps are the functional dependencies between all columns
+    # in the scan, including those that are not output.
+    internalFuncDeps FuncDepSet
 }
 
 [Private]

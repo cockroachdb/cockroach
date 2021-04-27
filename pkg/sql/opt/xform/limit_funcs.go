@@ -27,8 +27,17 @@ import (
 // which must be a constant int datum value. The other fields are inherited from
 // the existing private.
 func (c *CustomFuncs) LimitScanPrivate(
-	scanPrivate *memo.ScanPrivate, limit tree.Datum, required physical.OrderingChoice,
+	scan *memo.ScanExpr, limit tree.Datum, required physical.OrderingChoice,
 ) *memo.ScanPrivate {
+	scanPrivate := &scan.ScanPrivate
+
+	// Try to simplify the required ordering based on the internal FDs.
+	if fds := scan.InternalFDs(); required.CanSimplify(fds) {
+		copy := required.Copy()
+		copy.Simplify(fds)
+		required = copy
+	}
+
 	// Determine the scan direction necessary to provide the required ordering.
 	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
 
@@ -46,8 +55,17 @@ func (c *CustomFuncs) LimitScanPrivate(
 //       GenerateLimitedScans rule, since that can require IndexJoin operators
 //       to be generated.
 func (c *CustomFuncs) CanLimitFilteredScan(
-	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
+	scan *memo.ScanExpr, required physical.OrderingChoice,
 ) bool {
+	scanPrivate := &scan.ScanPrivate
+
+	// Try to simplify the required ordering based on the internal FDs.
+	if fds := scan.InternalFDs(); required.CanSimplify(fds) {
+		copy := required.Copy()
+		copy.Simplify(fds)
+		required = copy
+	}
+
 	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
 		// usually only happen when normalizations haven't run, as otherwise

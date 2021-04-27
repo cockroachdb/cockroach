@@ -432,82 +432,50 @@ vectorized: true
     │   │   │   │   │   ├── • union
     │   │   │   │   │   │   │ estimated row count: 10
     │   │   │   │   │   │   │
-    │   │   │   │   │   │   ├── • sort
-    │   │   │   │   │   │   │   │ estimated row count: 5
-    │   │   │   │   │   │   │   │ order: +date_should_be_completed
-    │   │   │   │   │   │   │   │
-    │   │   │   │   │   │   │   └── • scan
-    │   │   │   │   │   │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │   │   │   │   │   │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │   │   │   │   │   │   │         spans: [/0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │   │   │   │   │   │   │         limit: 5
+    │   │   │   │   │   │   ├── • scan
+    │   │   │   │   │   │   │     estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │   │   │   │   │   │     table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │   │   │   │   │   │     spans: [/0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /0/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │   │   │   │   │   │     limit: 5
     │   │   │   │   │   │   │
-    │   │   │   │   │   │   └── • sort
-    │   │   │   │   │   │       │ estimated row count: 5
-    │   │   │   │   │   │       │ order: +date_should_be_completed
-    │   │   │   │   │   │       │
-    │   │   │   │   │   │       └── • scan
-    │   │   │   │   │   │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │   │   │   │   │   │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │   │   │   │   │   │             spans: [/1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │   │   │   │   │   │             limit: 5
+    │   │   │   │   │   │   └── • scan
+    │   │   │   │   │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │   │   │   │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │   │   │   │   │         spans: [/1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /1/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │   │   │   │   │         limit: 5
     │   │   │   │   │   │
-    │   │   │   │   │   └── • sort
-    │   │   │   │   │       │ estimated row count: 5
-    │   │   │   │   │       │ order: +date_should_be_completed
-    │   │   │   │   │       │
-    │   │   │   │   │       └── • scan
-    │   │   │   │   │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │   │   │   │   │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │   │   │   │   │             spans: [/2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │   │   │   │   │             limit: 5
+    │   │   │   │   │   └── • scan
+    │   │   │   │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │   │   │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │   │   │   │         spans: [/2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /2/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │   │   │   │         limit: 5
     │   │   │   │   │
-    │   │   │   │   └── • sort
-    │   │   │   │       │ estimated row count: 5
-    │   │   │   │       │ order: +date_should_be_completed
-    │   │   │   │       │
-    │   │   │   │       └── • scan
-    │   │   │   │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │   │   │   │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │   │   │   │             spans: [/3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │   │   │   │             limit: 5
+    │   │   │   │   └── • scan
+    │   │   │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │   │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │   │   │         spans: [/3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /3/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │   │   │         limit: 5
     │   │   │   │
-    │   │   │   └── • sort
-    │   │   │       │ estimated row count: 5
-    │   │   │       │ order: +date_should_be_completed
-    │   │   │       │
-    │   │   │       └── • scan
-    │   │   │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │   │   │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │   │   │             spans: [/4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │   │   │             limit: 5
+    │   │   │   └── • scan
+    │   │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │   │         spans: [/4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /4/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │   │         limit: 5
     │   │   │
-    │   │   └── • sort
-    │   │       │ estimated row count: 5
-    │   │       │ order: +date_should_be_completed
-    │   │       │
-    │   │       └── • scan
-    │   │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │   │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │   │             spans: [/5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │   │             limit: 5
+    │   │   └── • scan
+    │   │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │   │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │   │         spans: [/5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /5/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │   │         limit: 5
     │   │
-    │   └── • sort
-    │       │ estimated row count: 5
-    │       │ order: +date_should_be_completed
-    │       │
-    │       └── • scan
-    │             estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-    │             table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-    │             spans: [/6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-    │             limit: 5
+    │   └── • scan
+    │         estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+    │         table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+    │         spans: [/6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /6/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+    │         limit: 5
     │
-    └── • sort
-        │ estimated row count: 5
-        │ order: +date_should_be_completed
-        │
-        └── • scan
-              estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
-              table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
-              spans: [/7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
-              limit: 5
+    └── • scan
+          estimated row count: 5 (0.05% of the table; stats collected <hidden> ago)
+          table: user_checklist_items@userchecklistitems_tenantid_userid_dateshouldbecompleted_locationname_orderitem
+          spans: [/7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f'/'2020-10-01' - /7/'a2a0dd49-23cf-4cf2-b823-61701c416e60'/'01603523-c6f0-4e12-a43f-524c76b0fa8f']
+          limit: 5
