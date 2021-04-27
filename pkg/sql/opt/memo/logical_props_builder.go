@@ -83,7 +83,18 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 
 	// Not Null Columns
 	// ----------------
-	rel.NotNullCols = scan.notNullCols.Intersection(rel.OutputCols)
+	// Initialize not-NULL columns from the table schema.
+	rel.NotNullCols = tableNotNullCols(md, scan.Table)
+	// Union not-NULL columns with not-NULL columns in the constraint.
+	if scan.Constraint != nil {
+		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.evalCtx))
+	}
+	// Union not-NULL columns with not-NULL columns in the partial index
+	// predicate.
+	if pred != nil {
+		rel.NotNullCols.UnionWith(b.rejectNullCols(pred))
+	}
+	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
 	// Outer Columns
 	// -------------
@@ -91,8 +102,47 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 
 	// Functional Dependencies
 	// -----------------------
-	rel.FuncDeps.CopyFrom(&scan.internalFuncDeps)
-	rel.FuncDeps.ProjectCols(rel.OutputCols)
+	// Check the hard limit to determine whether there is at most one row. Note
+	// that def.HardLimit = 0 indicates there is no known limit.
+	if hardLimit == 1 {
+		rel.FuncDeps.MakeMax1Row(rel.OutputCols)
+	} else {
+		// Initialize key FD's from the table schema, including constant columns from
+		// the constraint, minus any columns that are not projected by the Scan
+		// operator.
+		rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, scan.Table))
+		if scan.Constraint != nil {
+			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.evalCtx))
+		}
+		if tabMeta := md.TableMeta(scan.Table); tabMeta.Constraints != nil {
+			b.addFiltersToFuncDep(*tabMeta.Constraints.(*FiltersExpr), &rel.FuncDeps)
+		}
+		if pred != nil {
+			b.addFiltersToFuncDep(pred, &rel.FuncDeps)
+
+			// Partial index keys are not added to the functional dependencies in
+			// MakeTableFuncDep, because they do not apply to the entire table. They are
+			// added here if the scan uses a partial index.
+			index := md.Table(scan.Table).Index(scan.Index)
+			var keyCols opt.ColSet
+			for col := 0; col < index.LaxKeyColumnCount(); col++ {
+				ord := index.Column(col).Ordinal()
+				keyCols.Add(scan.Table.ColumnID(ord))
+			}
+			allCols := keyCols.Union(rel.OutputCols)
+
+			// If index has a separate lax key, add a lax key FD. Otherwise, add a
+			// strict key. See the comment for cat.Index.LaxKeyColumnCount.
+			if index.LaxKeyColumnCount() < index.KeyColumnCount() {
+				// This case only occurs for a UNIQUE index having a NULL-able column.
+				rel.FuncDeps.AddLaxKey(keyCols, allCols)
+			} else {
+				rel.FuncDeps.AddStrictKey(keyCols, allCols)
+			}
+		}
+		rel.FuncDeps.MakeNotNull(rel.NotNullCols)
+		rel.FuncDeps.ProjectCols(rel.OutputCols)
+	}
 
 	// Cardinality
 	// -----------

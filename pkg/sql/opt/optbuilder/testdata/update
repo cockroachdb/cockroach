@@ -1405,12 +1405,15 @@ update mutation
       │    │    │    ├── limit
       │    │    │    │    ├── columns: m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12
       │    │    │    │    ├── internal-ordering: +7,+8
-      │    │    │    │    ├── scan mutation
+      │    │    │    │    ├── sort (segmented)
       │    │    │    │    │    ├── columns: m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12
-      │    │    │    │    │    ├── check constraint expressions
-      │    │    │    │    │    │    └── m:7 > 0
-      │    │    │    │    │    ├── ordering: +7
-      │    │    │    │    │    └── limit hint: 10.00
+      │    │    │    │    │    ├── ordering: +7,+8
+      │    │    │    │    │    ├── limit hint: 10.00
+      │    │    │    │    │    └── scan mutation
+      │    │    │    │    │         ├── columns: m:7!null n:8 o:9 p:10 q:11 crdb_internal_mvcc_timestamp:12
+      │    │    │    │    │         ├── check constraint expressions
+      │    │    │    │    │         │    └── m:7 > 0
+      │    │    │    │    │         └── ordering: +7
       │    │    │    │    └── 10
       │    │    │    └── projections
       │    │    │         └── 1 [as=m_new:13]

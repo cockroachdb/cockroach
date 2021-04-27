@@ -295,7 +295,7 @@ memo (optimized, ~7KB, required=[presentation: x:9,y:10])
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
-memo (optimized, ~5KB, required=[presentation: array_agg:4])
+memo (optimized, ~4KB, required=[presentation: array_agg:4])
  ├── G1: (scalar-group-by G2 G3 cols=())
  │    └── [presentation: array_agg:4]
  │         ├── best: (scalar-group-by G2 G3 cols=())

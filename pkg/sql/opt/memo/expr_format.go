@@ -202,18 +202,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		FormatPrivate(f, e.Private(), required)
 		f.Buffer.WriteByte(')')
 
-	case *ScanExpr:
-		// Try to simplify the required ordering based on the internal FDs.
-		if fds := t.InternalFDs(); required.Ordering.CanSimplify(fds) {
-			copy := *required
-			copy.Ordering = required.Ordering.Copy()
-			copy.Ordering.Simplify(fds)
-			required = &copy
-		}
-		fmt.Fprintf(f.Buffer, "%v", e.Op())
-		FormatPrivate(f, e.Private(), required)
-
-	case *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
+	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,

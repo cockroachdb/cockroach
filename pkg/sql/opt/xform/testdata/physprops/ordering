@@ -21,10 +21,6 @@ exec-ddl
 CREATE TABLE abcd (a INT, b INT, c INT, d INT, INDEX ab(a, b) STORING (c, d), INDEX cd(c, d) STORING (a, b))
 ----
 
-exec-ddl
-CREATE TABLE def (d INT NOT NULL CHECK (d IN (1, 3)), e INT, f INT, INDEX (d, e, f))
-----
-
 # --------------------------------------------------
 # Scan operator.
 # --------------------------------------------------
@@ -82,37 +78,6 @@ sort
  ├── ordering: -2
  └── scan a
       └── columns: y:2!null
-
-opt
-SELECT f FROM def ORDER BY e LIMIT 5
-----
-limit
- ├── columns: f:3  [hidden: e:2]
- ├── internal-ordering: +2
- ├── cardinality: [0 - 5]
- ├── ordering: +2
- ├── union
- │    ├── columns: e:2 f:3
- │    ├── left columns: e:7 f:8
- │    ├── right columns: e:12 f:13
- │    ├── cardinality: [0 - 10]
- │    ├── key: (2,3)
- │    ├── ordering: +2
- │    ├── limit hint: 5.00
- │    ├── scan def@secondary
- │    │    ├── columns: e:7 f:8
- │    │    ├── constraint: /6/7/8/9: [/1 - /1]
- │    │    ├── limit: 5
- │    │    ├── ordering: +7,+8 opt(6) [actual: +7,+8]
- │    │    └── limit hint: 5.00
- │    └── scan def@secondary
- │         ├── columns: e:12 f:13
- │         ├── constraint: /11/12/13/14: [/3 - /3]
- │         ├── limit: 5
- │         ├── ordering: +12,+13 opt(11) [actual: +12,+13]
- │         └── limit hint: 5.00
- └── 5
-
 
 # --------------------------------------------------
 # Select operator (pass through).
