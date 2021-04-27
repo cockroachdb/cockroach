@@ -168,11 +168,11 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, error) {
+) (context.Context, execinfra.OpChains, error) {
 	var err error
-	ctx, err = f.FlowBase.Setup(ctx, spec, opt)
+	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 	if log.V(1) {
 		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
@@ -189,7 +189,7 @@ func (f *vectorizedFlow) Setup(
 		GetPather:      f,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 	f.countingSemaphore = newCountingSemaphore(f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs)
 	flowCtx := f.GetFlowCtx()
@@ -209,24 +209,29 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	_, err = f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
-	if err == nil {
-		f.testingInfo.numClosers = f.creator.numClosers
-		f.testingInfo.numClosed = &f.creator.numClosed
+	opChains, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
+	if err != nil {
+		// It is (theoretically) possible that some of the memory monitoring
+		// infrastructure was created even in case of an error, and we need to
+		// clean that up.
+		f.creator.cleanup(ctx)
+		f.creator.Release()
 		if log.V(1) {
-			log.Info(ctx, "vectorized flow setup succeeded")
+			log.Infof(ctx, "failed to vectorize: %s", err)
 		}
-		return ctx, nil
+		return ctx, nil, err
 	}
-	// It is (theoretically) possible that some of the memory monitoring
-	// infrastructure was created even in case of an error, and we need to clean
-	// that up.
-	f.creator.cleanup(ctx)
-	f.creator.Release()
+	f.testingInfo.numClosers = f.creator.numClosers
+	f.testingInfo.numClosed = &f.creator.numClosed
 	if log.V(1) {
-		log.Infof(ctx, "failed to vectorize: %s", err)
+		log.Info(ctx, "vectorized flow setup succeeded")
 	}
-	return ctx, err
+	if !f.IsLocal() {
+		// For distributed flows set opChains to nil, per the contract of
+		// flowinfra.Flow.Setup.
+		opChains = nil
+	}
+	return ctx, opChains, nil
 }
 
 var _ colcontainer.GetPather = &vectorizedFlow{}
@@ -490,9 +495,9 @@ type vectorizedFlowCreator struct {
 	// procIdxQueue is a queue of indices into processorSpecs (the argument to
 	// setupFlow), for topologically ordered processing.
 	procIdxQueue []int
-	// leaves accumulates all operators that have no further outputs on the
+	// opChains accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
-	leaves []execinfra.OpNode
+	opChains execinfra.OpChains
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
 	// monitors contains all monitors (for both memory and disk usage) of the
@@ -554,7 +559,7 @@ func newVectorizedFlowCreator(
 		exprHelper:             creator.exprHelper,
 		typeResolver:           typeResolver,
 		procIdxQueue:           creator.procIdxQueue,
-		leaves:                 creator.leaves,
+		opChains:               creator.opChains,
 		monitors:               creator.monitors,
 		accounts:               creator.accounts,
 		releasables:            creator.releasables,
@@ -590,7 +595,7 @@ func (s *vectorizedFlowCreator) Release() {
 		streamIDToSpecIdx: s.streamIDToSpecIdx,
 		exprHelper:        s.exprHelper,
 		procIdxQueue:      s.procIdxQueue[:0],
-		leaves:            s.leaves[:0],
+		opChains:          s.opChains[:0],
 		monitors:          s.monitors[:0],
 		accounts:          s.accounts[:0],
 		releasables:       s.releasables[:0],
@@ -780,8 +785,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 		}
 	}
 	if !foundLocalOutput {
-		// No local output means that our router is a leaf node.
-		s.leaves = append(s.leaves, router)
+		// No local output means that our router is a root of its operator
+		// chain.
+		s.opChains = append(s.opChains, router)
 	}
 	return nil
 }
@@ -966,9 +972,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if err != nil {
 			return err
 		}
-		// An outbox is a leaf: there's nothing that sees it as an input on this
-		// node.
-		s.leaves = append(s.leaves, outbox)
+		// An outbox is a root of its operator chain: there's nothing that sees
+		// it as an input on this node.
+		s.opChains = append(s.opChains, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Make the materializer, which will write to the given receiver.
 		proc, err := colexec.NewMaterializer(
@@ -982,8 +988,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if err != nil {
 			return err
 		}
-		// A materializer is a leaf.
-		s.leaves = append(s.leaves, proc)
+		// A materializer is a root of its operator chain.
+		s.opChains = append(s.opChains, proc)
 		s.addMaterializer(proc)
 	default:
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
@@ -1010,7 +1016,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	processorSpecs []execinfrapb.ProcessorSpec,
 	localProcessors []execinfra.LocalProcessor,
 	opt flowinfra.FuseOpt,
-) (leaves []execinfra.OpNode, err error) {
+) (opChains execinfra.OpChains, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.
@@ -1155,9 +1161,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 		}
 	}); vecErr != nil {
-		return s.leaves, vecErr
+		return s.opChains, vecErr
 	}
-	return s.leaves, err
+	return s.opChains, err
 }
 
 type vectorizedInboundStreamHandler struct {
