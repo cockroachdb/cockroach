@@ -1,21 +1,25 @@
+# gazelle:exclude internal/**
+
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load(":gen.bzl", "gen_interval_btree")
 
 go_library(
     name = "generic",
     srcs = [
         "doc.go",
-        "example_interval_btree.go",
         "example_t.go",
+        ":example_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/interval/generic",
     visibility = ["//visibility:public"],
     deps = ["//pkg/roachpb"],
 )
 
+# keep
 go_test(
     name = "generic_test",
     size = "large",
-    srcs = ["example_interval_btree_test.go"],
+    srcs = [":example_interval_btree_test.go"],
     embed = [":generic"],
     deps = [
         "//pkg/keys",
@@ -23,4 +27,16 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+filegroup(
+    name = "gen_srcs",
+    srcs = ["gen.sh"] + glob(["internal/*.go"]),
+    visibility = ["//visibility:public"],
+)
+
+gen_interval_btree(
+    name = "example_interval_btree",
+    package = "generic",
+    type = "*example",
 )

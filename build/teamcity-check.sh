@@ -38,6 +38,11 @@ fi
 
 tc_start_block "Ensure generated code is up-to-date"
 # Buffer noisy output and only print it on failure.
+if ! run run_bazel build/bazelutil/check-genfiles.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false); then
+    # The command will output instructions on how to fix the error.
+    exit 1
+fi
+rm artifacts/buildshort.log
 TEAMCITY_BAZEL_SUPPORT_LINT=1  # See teamcity-bazel-support.sh.
 run run_bazel build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
 rm artifacts/buildshort.log
