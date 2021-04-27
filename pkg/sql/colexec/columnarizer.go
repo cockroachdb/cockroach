@@ -177,12 +177,13 @@ func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
 			"unexpectedly the columnarizer was removed from the flow when stats are being collected",
 		))
 	}
-	if !c.removedFromFlow && c.ExecStatsForTrace != nil {
-		s := c.ExecStatsForTrace()
-		s.Component = c.FlowCtx.ProcessorComponentID(c.ProcessorID)
-		return s
+	componentID := c.FlowCtx.ProcessorComponentID(c.ProcessorID)
+	if c.removedFromFlow || c.ExecStatsForTrace == nil {
+		return &execinfrapb.ComponentStats{Component: componentID}
 	}
-	return nil
+	s := c.ExecStatsForTrace()
+	s.Component = componentID
+	return s
 }
 
 // Next is part of the Operator interface.
