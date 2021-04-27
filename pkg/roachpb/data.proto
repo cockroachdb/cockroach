@@ -567,6 +567,18 @@ message SequencedWrite {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
 
+// LeaseAcquisitionType indicates the type of lease acquisition event that
+// resulted in the current lease.
+enum LeaseAcquisitionType {
+  Unspecified = 0;
+  // Transfer indicates that the current lease is a result of a (co-operative)
+  // lease transfer.
+  Transfer = 1;
+  // Request indicates that the current lease is a result of a (non-cooperative)
+  // lease request.
+  Request = 2;
+}
+
 // Lease contains information about range leases including the
 // expiration and lease holder.
 message Lease {
@@ -613,6 +625,10 @@ message Lease {
   // the same sequence number and two adjacent leases that are not equivalent
   // will have different sequence numbers.
   int64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
+
+  // The type of acquisition event that result in this lease (transfer or
+  // request).
+  LeaseAcquisitionType acquisition_type = 8;
 }
 
 // AbortSpanEntry contains information about a transaction which has

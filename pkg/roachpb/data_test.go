@@ -1021,6 +1021,7 @@ func TestLeaseEqual(t *testing.T) {
 		ProposedTS            *hlc.ClockTimestamp
 		Epoch                 int64
 		Sequence              LeaseSequence
+		AcquisitionType       LeaseAcquisitionType
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease

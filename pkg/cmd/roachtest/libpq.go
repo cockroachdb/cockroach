@@ -31,10 +31,16 @@ func registerLibPQ(r *testRegistry) {
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
-		version, err := fetchCockroachVersion(ctx, c, node[0])
-		require.NoError(t, err)
-		err = alterZoneConfigAndClusterSettings(ctx, version, c, node[0])
-		require.NoError(t, err)
+
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Status("cloning lib/pq and installing prerequisites")
 		latestTag, err := repeatGetLatestTag(
