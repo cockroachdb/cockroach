@@ -209,7 +209,7 @@ func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
 }
 
 // DeferCommitWait is part of the TxnSender interface.
-func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) {
+func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	panic("unimplemented")
 }
 

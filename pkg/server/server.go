@@ -926,7 +926,7 @@ func ensureClockMonotonicity(
 	clock *hlc.Clock,
 	startTime time.Time,
 	prevHLCUpperBound int64,
-	sleepUntilFn func(t hlc.Timestamp),
+	sleepUntilFn func(context.Context, hlc.Timestamp) error,
 ) {
 	var sleepUntil int64
 	if prevHLCUpperBound != 0 {
@@ -960,7 +960,7 @@ func ensureClockMonotonicity(
 			sleepUntil,
 			delta,
 		)
-		sleepUntilFn(hlc.Timestamp{WallTime: sleepUntil})
+		_ = sleepUntilFn(ctx, hlc.Timestamp{WallTime: sleepUntil})
 	}
 }
 
