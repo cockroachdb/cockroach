@@ -128,38 +128,48 @@ func (m *ManualClock) Set(nanos int64) {
 // ticks with the wall clock, but that can be moved arbitrarily
 // into the future or paused. HybridManualClock is thread safe.
 type HybridManualClock struct {
-	nanos         int64
-	physicalClock func() int64
-	// nanosAtPause records the timestamp of the clock if it was paused. A 0 value
-	// indicates the clock was never paused.
-	nanosAtPause int64
+	mu struct {
+		syncutil.RWMutex
+		// nanos, if not 0, is the amount of time the clock was manually incremented
+		// by; it is added to physicalClock.
+		nanos int64
+		// nanosAtPause records the timestamp of the physical clock when it gets
+		// paused. 0 means that the clock is not paused.
+		nanosAtPause int64
+	}
 }
 
 // NewHybridManualClock returns a new instance, initialized with
 // specified timestamp.
 func NewHybridManualClock() *HybridManualClock {
-	return &HybridManualClock{nanos: 0, physicalClock: UnixNano, nanosAtPause: 0}
+	return &HybridManualClock{}
 }
 
 // UnixNano returns the underlying hybrid manual clock's timestamp.
 func (m *HybridManualClock) UnixNano() int64 {
-	nanosAtPause := atomic.LoadInt64(&m.nanosAtPause)
-	nanos := atomic.LoadInt64(&m.nanos)
+	m.mu.RLock()
+	nanosAtPause := m.mu.nanosAtPause
+	nanos := m.mu.nanos
+	m.mu.RUnlock()
 	if nanosAtPause > 0 {
 		return nanos + nanosAtPause
 	}
-	return nanos + m.physicalClock()
+	return nanos + UnixNano()
 }
 
-// Increment atomically increments the hybrid manual clock's timestamp.
-func (m *HybridManualClock) Increment(incr int64) {
-	atomic.AddInt64(&m.nanos, incr)
+// Increment increments the hybrid manual clock's timestamp.
+func (m *HybridManualClock) Increment(nanos int64) {
+	m.mu.Lock()
+	m.mu.nanos += nanos
+	m.mu.Unlock()
 }
 
-// Pause pauses the hybrid manual clock and forces it to always return the
-// current timestamp.
+// Pause pauses the hybrid manual clock; the passage of time no longer causes
+// the clock to tick. Increment can still be used, though.
 func (m *HybridManualClock) Pause() {
-	atomic.StoreInt64(&m.nanosAtPause, m.physicalClock())
+	m.mu.Lock()
+	m.mu.nanosAtPause = UnixNano()
+	m.mu.Unlock()
 }
 
 // UnixNano returns the local machine's physical nanosecond

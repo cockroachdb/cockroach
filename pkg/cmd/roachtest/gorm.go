@@ -99,7 +99,7 @@ func registerGORM(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		err = c.RunE(ctx, node, `cockroach sql -e "CREATE DATABASE gorm" --insecure`)
+		err = c.RunE(ctx, node, `./cockroach sql -e "CREATE DATABASE gorm" --insecure`)
 		require.NoError(t, err)
 
 		t.Status("running gorm test suite and collecting results")
