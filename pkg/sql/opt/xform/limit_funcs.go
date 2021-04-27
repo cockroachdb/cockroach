@@ -333,6 +333,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	}
+	newScanPrivate.ExactPrefix = newScanPrivate.Constraint.ExactPrefix(c.e.evalCtx)
 	newScan := c.e.f.ConstructScan(newScanPrivate)
 	return makeNewUnion(last, newScan, sp.Cols.ToList())
 }
@@ -424,6 +425,7 @@ func (c *CustomFuncs) makeNewScan(
 		Spans:   newSpans,
 	}
 	newScanPrivate.Constraint = newConstraint
+	newScanPrivate.ExactPrefix = newConstraint.ExactPrefix(c.e.evalCtx)
 
 	return c.e.f.ConstructScan(newScanPrivate)
 }

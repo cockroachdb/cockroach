@@ -92,6 +92,9 @@ define ScanPrivate {
     # to constrain the lookup spans further. This flag is used to record telemetry
     # about how often this optimization is getting applied.
     PartitionConstrainedScan bool
+
+    # ExactPrefix caches the exact prefix of the Constraint.
+    ExactPrefix int
 }
 
 # PlaceholderScan is a special variant of Scan. It scans exactly one span of a

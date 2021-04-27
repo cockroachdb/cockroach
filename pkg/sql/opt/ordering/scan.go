@@ -92,6 +92,10 @@ func ScanPrivateCanProvide(
 		}
 		reqCol := &required.Columns[right]
 		if !reqCol.Group.Contains(indexColID) {
+			if left < s.ExactPrefix {
+				left++
+				continue
+			}
 			return false, false
 		}
 		// The directions of the index column and the required column impose either
@@ -128,16 +132,16 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	constCols := fds.ComputeClosure(opt.ColSet{})
 	numCols := index.KeyColumnCount()
 	provided := make(opt.Ordering, 0, numCols)
-	for i := 0; i < numCols; i++ {
+	for i := scan.ExactPrefix; i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal())
-		if !scan.Cols.Contains(colID) {
-			// Column not in output; we are done.
-			break
-		}
 		if constCols.Contains(colID) {
 			// Column constrained to a constant, ignore.
 			continue
+		}
+		if !scan.Cols.Contains(colID) {
+			// Column not in output; we are done.
+			break
 		}
 		direction := (indexCol.Descending != reverse) // != is bool XOR
 		provided = append(provided, opt.MakeOrderingColumn(colID, direction))
