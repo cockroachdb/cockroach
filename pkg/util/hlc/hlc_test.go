@@ -659,7 +659,7 @@ func TestSleepUntil(t *testing.T) {
 
 	doneC := make(chan struct{}, 1)
 	go func() {
-		c.SleepUntil(waitUntil)
+		_ = c.SleepUntil(context.Background(), waitUntil)
 		doneC <- struct{}{}
 	}()
 
@@ -671,6 +671,18 @@ func TestSleepUntil(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	<-doneC
+}
+
+func TestSleepUntilContextCancellation(t *testing.T) {
+	m := NewManualClock(100000)
+	c := NewClock(m.UnixNano, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	waitUntil := c.Now().Add(100000, 0)
+
+	err := c.SleepUntil(ctx, waitUntil)
+	require.Equal(t, context.DeadlineExceeded, err)
 }
 
 func BenchmarkUpdate(b *testing.B) {
