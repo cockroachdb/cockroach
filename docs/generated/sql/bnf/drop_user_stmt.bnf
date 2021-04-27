@@ -1,3 +1,0 @@
-drop_user_stmt ::=
-	'DROP' 'USER' name
-	| 'DROP' 'USER' 'IF' 'EXISTS' name
