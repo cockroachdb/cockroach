@@ -44,16 +44,17 @@ type batchInfoCollector struct {
 	componentID execinfrapb.ComponentID
 
 	mu struct {
-		// We need a mutex because finish() and Next() might be called from
-		// different goroutines.
+		// We need a mutex because finishAndGetStats() and Next() might be
+		// called from different goroutines.
 		syncutil.Mutex
+		initialized           bool
 		numBatches, numTuples uint64
 	}
 
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
 	// inputs spent doing work - this will be corrected when stats are reported
-	// in finish().
+	// in finishAndGetStats().
 	stopwatch *timeutil.StopWatch
 
 	// childStatsCollectors contains the stats collectors for all of the inputs
@@ -80,7 +81,17 @@ func makeBatchInfoCollector(
 	}
 }
 
-// Next is part of the Operator interface.
+// Init is part of the colexecop.Operator interface.
+func (bic *batchInfoCollector) Init(ctx context.Context) {
+	bic.Operator.Init(ctx)
+	bic.mu.Lock()
+	// If we got here, then Init above succeeded, so the wrapped operator has
+	// been properly initialized.
+	bic.mu.initialized = true
+	bic.mu.Unlock()
+}
+
+// Next is part of the colexecop.Operator interface.
 func (bic *batchInfoCollector) Next() coldata.Batch {
 	var batch coldata.Batch
 	bic.stopwatch.Start()
@@ -95,8 +106,13 @@ func (bic *batchInfoCollector) Next() coldata.Batch {
 	return batch
 }
 
-// finish calculates the final statistics.
-func (bic *batchInfoCollector) finish() (numBatches, numTuples uint64, time time.Duration) {
+// finishAndGetStats calculates the final execution statistics for the wrapped
+// operator. ok indicates whether the stats collection was successful.
+func (bic *batchInfoCollector) finishAndGetStats() (
+	numBatches, numTuples uint64,
+	time time.Duration,
+	ok bool,
+) {
 	tm := bic.stopwatch.Elapsed()
 	// Subtract the time spent in each of the child stats collectors, to produce
 	// the amount of time that the wrapped operator spent doing work itself, not
@@ -106,7 +122,7 @@ func (bic *batchInfoCollector) finish() (numBatches, numTuples uint64, time time
 	}
 	bic.mu.Lock()
 	defer bic.mu.Unlock()
-	return bic.mu.numBatches, bic.mu.numTuples, tm
+	return bic.mu.numBatches, bic.mu.numTuples, tm, bic.mu.initialized
 }
 
 // getElapsedTime implements the childStatsCollector interface.
@@ -153,16 +169,26 @@ type vectorizedStatsCollectorImpl struct {
 
 // GetStats is part of the colexecop.VectorizedStatsCollector interface.
 func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
-	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
+	numBatches, numTuples, time, ok := vsc.batchInfoCollector.finishAndGetStats()
+	if !ok {
+		// The stats collection wasn't successful for some reason, so we will
+		// return an empty object (since nil is not allowed by the contract of
+		// GetStats).
+		//
+		// Such scenario can occur, for example, if the operator wrapped by the
+		// batchInfoCollector wasn't properly initialized, yet the stats
+		// retrieval is attempted. In many places we assume that if an operator
+		// is interacted with in any way, it must have been successfully
+		// initialized. Having such a check in the vectorizedStatsCollectorImpl
+		// makes sure that we never violate those assumptions.
+		return &execinfrapb.ComponentStats{}
+	}
 
 	var s *execinfrapb.ComponentStats
 	if vsc.columnarizer != nil {
 		s = vsc.columnarizer.GetStats()
-	}
-	if s == nil {
-		// Either there was no root columnarizer or it has been
-		// removed from the flow (in which case the columnarizer will return
-		// nil). Create a new stats object.
+	} else {
+		// There was no root columnarizer, so create a new stats object.
 		s = &execinfrapb.ComponentStats{Component: vsc.componentID}
 	}
 
@@ -223,7 +249,20 @@ type networkVectorizedStatsCollectorImpl struct {
 
 // GetStats is part of the colexecop.VectorizedStatsCollector interface.
 func (nvsc *networkVectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
-	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
+	numBatches, numTuples, time, ok := nvsc.batchInfoCollector.finishAndGetStats()
+	if !ok {
+		// The stats collection wasn't successful for some reason, so we will
+		// return an empty object (since nil is not allowed by the contract of
+		// GetStats).
+		//
+		// Such scenario can occur, for example, if the operator wrapped by the
+		// batchInfoCollector wasn't properly initialized, yet the stats
+		// retrieval is attempted. In many places we assume that if an operator
+		// is interacted with in any way, it must have been successfully
+		// initialized. Having such a check in the vectorizedStatsCollectorImpl
+		// makes sure that we never violate those assumptions.
+		return &execinfrapb.ComponentStats{}
+	}
 
 	s := &execinfrapb.ComponentStats{Component: nvsc.componentID}
 
