@@ -34,7 +34,7 @@ sudo service cassandra stop;
 
   if [ ! -f "/usr/bin/thrift" ]; then
 	sudo apt-get update;
-	sudo apt-get install -qy automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config python-setuptools libglib2.0-dev
+	sudo apt-get install -qy automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config python-setuptools libglib2.0-dev python2 python-six
 
     sudo mkdir -p "${thrift_dir}"
     sudo chmod 777 "${thrift_dir}"
@@ -54,7 +54,7 @@ sudo service cassandra stop;
     sudo rm -rf "${charybde_dir}" "${nemesis_path}" /usr/local/bin/charybdefs{,-nemesis}
     sudo mkdir -p "${charybde_dir}"
     sudo chmod 777 "${charybde_dir}"
-    # TODO(bilal): Change URL back to scylladb/charybdefs once https://github.com/scylladb/charybdefs/pull/21 is merged.
+    # TODO(bilal): Change URL back to scylladb/charybdefs once https://github.com/scylladb/charybdefs/pull/28 is merged.
     git clone --depth 1 "https://github.com/itsbilal/charybdefs.git" "${charybde_dir}"
 
     cd "${charybde_dir}"
