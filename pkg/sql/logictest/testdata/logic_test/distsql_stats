@@ -1080,3 +1080,14 @@ job.typedesc_schema_change.successful
 job.schema_change.successful
 job.create_stats.successful
 job.auto_create_stats.successful
+
+# Regression test for #63387. Stats collection should succeed when partial index
+# predicates reference inverted-type columns.
+statement ok
+CREATE TABLE t63387 (
+    i INT,
+    j JSONB,
+    INDEX (i) WHERE j->>'a' = 'b'
+);
+INSERT INTO t63387 VALUES (1, '{}');
+CREATE STATISTICS s FROM t63387;
