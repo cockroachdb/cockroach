@@ -78,6 +78,16 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 		return nil, err
 	}
 
+	if tableDesc.IsLocalityRegionalByRow() {
+		if err := p.checkNoRegionChangeUnderway(
+			ctx,
+			tableDesc.GetParentID(),
+			"CREATE INDEX on a REGIONAL BY ROW table",
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 

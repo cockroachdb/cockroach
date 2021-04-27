@@ -277,6 +277,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				); err != nil {
 					return err
 				}
+
+				if n.tableDesc.IsLocalityRegionalByRow() {
+					if err := params.p.checkNoRegionChangeUnderway(
+						params.ctx,
+						n.tableDesc.GetParentID(),
+						"create an UNIQUE CONSTRAINT on a REGIONAL BY ROW table",
+					); err != nil {
+						return err
+					}
+				}
 			case *tree.CheckConstraintTableDef:
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
