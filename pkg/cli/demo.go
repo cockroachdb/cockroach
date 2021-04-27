@@ -13,11 +13,15 @@ package cli
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/gob"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -45,14 +49,18 @@ telemetry back to Cockroach Labs. In order to disable this behavior, set the
 environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
-	Args:    cobra.NoArgs,
+	Args:    cobra.RangeArgs(0, 1),
 	// Note: RunE is set in the init() function below to avoid an
 	// initialization cycle.
 }
 
 func init() {
-	demoCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
-		return runDemo(cmd, nil /* gen */)
+	demoCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+		var importTSFile string
+		if len(args) > 0 {
+			importTSFile = args[0]
+		}
+		return runDemo(cmd, nil /* gen */, importTSFile)
 	})
 }
 
@@ -150,7 +158,7 @@ func init() {
 			Short: meta.Description,
 			Args:  cobra.ArbitraryArgs,
 			RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
-				return runDemo(cmd, gen)
+				return runDemo(cmd, gen, "")
 			}),
 		}
 		if !meta.PublicFacing {
@@ -262,7 +270,7 @@ func checkDemoConfiguration(
 	return gen, nil
 }
 
-func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
+func runDemo(cmd *cobra.Command, gen workload.Generator, tsImport string) (err error) {
 	cmdIn, closeFn, err := getInputFile()
 	if err != nil {
 		return err
@@ -289,6 +297,52 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		return checkAndMaybeShout(err)
 	}
 	demoCtx.transientCluster = &c
+
+	if tsImport != "" {
+		f, err := os.Open(tsImport)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		db := c.firstServer.DB()
+		b := &kv.Batch{}
+		var n int
+		maybeFlush := func(force bool) error {
+			if n < 100 && !force {
+				return nil
+			}
+			err := db.Run(ctx, b)
+			if err != nil {
+				return err
+			}
+			printfUnlessEmbedded("imported %d ts pairs\n", n)
+			*b, n = kv.Batch{}, 0
+			return nil
+		}
+
+		dec := gob.NewDecoder(f)
+		for {
+			var v roachpb.KeyValue
+			err := dec.Decode(&v)
+			if err != nil {
+				if err == io.EOF {
+					if err := maybeFlush(true /* force */); err != nil {
+						return err
+					}
+					break
+				}
+				return err
+			}
+			p := roachpb.NewPut(v.Key, v.Value)
+			p.(*roachpb.PutRequest).Inline = true
+			b.AddRawRequest(p)
+			n++
+			if err := maybeFlush(false /* force */); err != nil {
+				return err
+			}
+		}
+	}
 
 	checkInteractive(cmdIn)
 
