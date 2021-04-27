@@ -398,6 +398,7 @@ func (s MetadataSources) DrainMeta(ctx context.Context) []execinfrapb.ProducerMe
 // "network" option (strictly for colrpc.Inboxes).
 type VectorizedStatsCollector interface {
 	Operator
-	// GetStats returns the execution statistics of a single Operator.
+	// GetStats returns the execution statistics of a single Operator. It will
+	// always return non-nil (but possibly empty) object.
 	GetStats() *execinfrapb.ComponentStats
 }
