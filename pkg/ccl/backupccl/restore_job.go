@@ -997,7 +997,7 @@ func spansForAllRestoreTableIndexes(
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
-		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
+		if rawTbl != nil && !rawTbl.Dropped() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			// We only import spans for physical tables.
 			if !tbl.IsPhysicalTable() {
@@ -2002,7 +2002,7 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		mutDB := mutDesc.(*dbdesc.Mutable)
 		// TODO(lucy,ajwerner): Remove this in 21.1.
-		if mutDB.GetState() != descpb.DescriptorState_OFFLINE {
+		if !mutDB.Offline() {
 			newDBs = append(newDBs, dbDesc)
 		} else {
 			allMutDescs = append(allMutDescs, mutDB)
@@ -2145,7 +2145,7 @@ func (r *restoreResumer) dropDescriptors(
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
-		tableToDrop.State = descpb.DescriptorState_DROP
+		tableToDrop.SetDropped()
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
 			b,
@@ -2184,7 +2184,7 @@ func (r *restoreResumer) dropDescriptors(
 			typDesc.Name,
 			false, /* kvTrace */
 		)
-		mutType.State = descpb.DescriptorState_DROP
+		mutType.SetDropped()
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
 			return errors.Wrap(err, "writing dropping type to batch")
 		}
