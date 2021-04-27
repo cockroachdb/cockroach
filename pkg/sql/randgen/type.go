@@ -52,19 +52,9 @@ func init() {
 	}
 
 	for _, typ := range types.OidToType {
-		// Don't include un-encodable types.
-		encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
-		if err != nil || encTyp == 0 {
-			continue
+		if IsAllowedForArray(typ) {
+			arrayContentsTypes = append(arrayContentsTypes, typ)
 		}
-
-		// Don't include reg types, since parser currently doesn't allow them to
-		// be declared as array element types.
-		if typ.Family() == types.OidFamily && typ.Oid() != oid.T_oid {
-			continue
-		}
-
-		arrayContentsTypes = append(arrayContentsTypes, typ)
 	}
 
 	// Sort these so randomly chosen indexes always point to the same element.
@@ -74,6 +64,23 @@ func init() {
 	sort.Slice(arrayContentsTypes, func(i, j int) bool {
 		return arrayContentsTypes[i].String() < arrayContentsTypes[j].String()
 	})
+}
+
+// IsAllowedForArray returns true iff the passed in type can be a valid ArrayContents()
+func IsAllowedForArray(typ *types.T) bool {
+	// Don't include un-encodable types.
+	encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
+	if err != nil || encTyp == 0 {
+		return false
+	}
+
+	// Don't include reg types, since parser currently doesn't allow them to
+	// be declared as array element types.
+	if typ.Family() == types.OidFamily && typ.Oid() != oid.T_oid {
+		return false
+	}
+
+	return true
 }
 
 // RandType returns a random type value.
@@ -121,16 +128,22 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 func RandColumnType(rng *rand.Rand) *types.T {
 	for {
 		typ := RandType(rng)
-		switch typ.Oid() {
-		case oid.T_int2vector, oid.T_oidvector:
-			// OIDVECTOR and INT2VECTOR are not valid column types for
-			// user-created tables.
-			continue
-		}
-		if err := colinfo.ValidateColumnDefType(typ); err == nil {
+		if IsLegalColumnType(typ) {
 			return typ
 		}
 	}
+}
+
+// IsLegalColumnType returns true if the given type can be
+// given to a column in a user-created table.
+func IsLegalColumnType(typ *types.T) bool {
+	switch typ.Oid() {
+	case oid.T_int2vector, oid.T_oidvector:
+		// OIDVECTOR and INT2VECTOR are not valid column types for
+		// user-created tables.
+		return false
+	}
+	return colinfo.ValidateColumnDefType(typ) == nil
 }
 
 // RandArrayType generates a random array type.
