@@ -301,7 +301,10 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 
 		if demoCtx.simulateLatency {
 			printfUnlessEmbedded(
-				"#\n# WARNING: the use of --%s is experimental. Some features may not work as expected.\n",
+				`# Communication between nodes will simulate real world latencies.
+#
+# WARNING: the use of --%s is experimental. Some features may not work as expected.
+`,
 				cliflags.Global.Name,
 			)
 		}
