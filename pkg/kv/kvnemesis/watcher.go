@@ -28,17 +28,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ClosedTimestampTargetInterval allows for setting the closed timestamp target
-// interval.
-type ClosedTimestampTargetInterval interface {
-	Set(context.Context, time.Duration) error
-	ResetToDefault(context.Context) error
-}
-
 // Watcher slurps all changes that happen to some span of kvs using RangeFeed.
 type Watcher struct {
-	ct ClosedTimestampTargetInterval
-	mu struct {
+	env *Env
+	mu  struct {
 		syncutil.Mutex
 		kvs             *Engine
 		frontier        *span.Frontier
@@ -49,16 +42,14 @@ type Watcher struct {
 }
 
 // Watch starts a new Watcher over the given span of kvs. See Watcher.
-func Watch(
-	ctx context.Context, dbs []*kv.DB, ct ClosedTimestampTargetInterval, dataSpan roachpb.Span,
-) (*Watcher, error) {
+func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (*Watcher, error) {
 	if len(dbs) < 1 {
 		return nil, errors.New(`at least one db must be given`)
 	}
 	firstDB := dbs[0]
 
 	w := &Watcher{
-		ct: ct,
+		env: env,
 	}
 	var err error
 	if w.mu.kvs, err = MakeEngine(); err != nil {
@@ -133,11 +124,11 @@ func (w *Watcher) Finish() *Engine {
 // guaranteed to have been ingested.
 func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr error) {
 	log.Infof(ctx, `watcher waiting for %s`, ts)
-	if err := w.ct.Set(ctx, 1*time.Millisecond); err != nil {
+	if err := w.env.SetClosedTimestampInterval(ctx, 1*time.Millisecond); err != nil {
 		return err
 	}
 	defer func() {
-		if err := w.ct.ResetToDefault(ctx); err != nil {
+		if err := w.env.ResetClosedTimestampInterval(ctx); err != nil {
 			retErr = errors.WithSecondaryError(retErr, err)
 		}
 	}()
