@@ -13,6 +13,7 @@ go_test(
         "kms_test.go",
         "main_test.go",
         "nodelocal_storage_test.go",
+        "nullsink_storage_test.go",
         "s3_storage_test.go",
     ],
     deps = [
