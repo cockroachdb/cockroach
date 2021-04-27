@@ -366,7 +366,7 @@ func EndTxn(
 			ctx, cArgs.EvalCtx, readWriter.(storage.Batch), ms, args, reply.Txn,
 		)
 		if err != nil {
-			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+			return result.Result{}, err
 		}
 		if err := txnResult.MergeAndDestroy(triggerResult); err != nil {
 			return result.Result{}, err
@@ -634,15 +634,39 @@ func RunCommitTrigger(
 		return result.Result{}, nil
 	}
 
+	// The transaction is committing with a commit trigger. This means that it has
+	// side-effects beyond those of the intents that it has written.
+
+	// The transaction should not have a commit timestamp in the future of present
+	// time, even it its commit timestamp is synthetic. Such cases should be
+	// caught in maybeCommitWaitBeforeCommitTrigger before getting here, which
+	// should sleep for long enough to ensure that the local clock leads the
+	// commit timestamp. An error here may indicate that the transaction's commit
+	// timestamp was bumped after it acquired latches.
+	if txn.WriteTimestamp.Synthetic && rec.Clock().Now().Less(txn.WriteTimestamp) {
+		return result.Result{}, errors.AssertionFailedf("txn %s with %s commit trigger needs "+
+			"commit wait. Was its timestamp bumped after acquiring latches?", txn, errors.Safe(ct.Kind()))
+	}
+
+	// Stage the commit trigger's side-effects so that they will go into effect on
+	// each Replica when the corresponding Raft log entry is applied. Only one
+	// commit trigger can be set.
 	if ct.GetSplitTrigger() != nil {
-		newMS, trigger, err := splitTrigger(
+		newMS, res, err := splitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
 		*ms = newMS
-		return trigger, err
+		return res, nil
 	}
 	if mt := ct.GetMergeTrigger(); mt != nil {
-		return mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
+		if err != nil {
+			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
+		}
+		return res, nil
 	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		// TODO(tbg): once we support atomic replication changes, check that
