@@ -1708,6 +1708,12 @@ Bottom Left.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>, parent_only: <a href="bool.html">bool</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+</span></td></tr>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta units across all dimensions.</p>
 </span></td></tr>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.</p>
