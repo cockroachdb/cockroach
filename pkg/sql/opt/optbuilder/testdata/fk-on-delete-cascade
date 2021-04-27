@@ -65,6 +65,42 @@ root
                 └── filters
                      └── child.p:9 = p:11
 
+# Delete with subquery; no fast path.
+build-cascades
+DELETE FROM parent WHERE EXISTS (SELECT p FROM parent)
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:3
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── fk_p_ref_parent
+ │    └── select
+ │         ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── scan parent
+ │         │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         └── filters
+ │              └── exists
+ │                   └── project
+ │                        ├── columns: p:5!null
+ │                        └── scan parent
+ │                             └── columns: p:5!null crdb_internal_mvcc_timestamp:6
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:10 child.p:11
+           └── semi-join (hash)
+                ├── columns: c:10!null child.p:11!null
+                ├── scan child
+                │    └── columns: c:10!null child.p:11!null
+                ├── with-scan &1
+                │    ├── columns: p:13!null
+                │    └── mapping:
+                │         └──  parent.p:3 => p:13
+                └── filters
+                     └── child.p:11 = p:13
+
 # Delete everything.
 build-cascades
 DELETE FROM parent
