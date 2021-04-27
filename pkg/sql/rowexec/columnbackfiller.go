@@ -35,7 +35,7 @@ type columnBackfiller struct {
 	// from a call to (*kv.Txn).DeferCommitWait when backfilling a single chunk
 	// of rows. The functions must be called to ensure consistency with any
 	// causally dependent readers.
-	commitWaitFns []func(context.Context)
+	commitWaitFns []func(context.Context) error
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
@@ -91,8 +91,7 @@ func (cb *columnBackfiller) prepare(ctx context.Context) error {
 	return nil
 }
 func (cb *columnBackfiller) flush(ctx context.Context) error {
-	cb.runCommitWait(ctx)
-	return nil
+	return cb.runCommitWait(ctx)
 }
 func (cb *columnBackfiller) CurrentBufferFill() float32 {
 	return 0
@@ -103,7 +102,7 @@ func (cb *columnBackfiller) runChunk(
 	ctx context.Context, sp roachpb.Span, chunkSize int64, _ hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
-	var commitWaitFn func(context.Context)
+	var commitWaitFn func(context.Context) error
 	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
 			if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
@@ -136,7 +135,9 @@ func (cb *columnBackfiller) runChunk(
 		cb.commitWaitFns = append(cb.commitWaitFns, commitWaitFn)
 		maxCommitWaitFns := int(backfillerMaxCommitWaitFns.Get(&cb.flowCtx.Cfg.Settings.SV))
 		if len(cb.commitWaitFns) >= maxCommitWaitFns {
-			cb.runCommitWait(ctx)
+			if err := cb.runCommitWait(ctx); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return key, err
@@ -146,10 +147,13 @@ func (cb *columnBackfiller) runChunk(
 // has accumulated across the chunks that it has backfilled. It calls each
 // commit-wait function to ensure that any dependent reads on the rows we just
 // backfilled observe the new column.
-func (cb *columnBackfiller) runCommitWait(ctx context.Context) {
+func (cb *columnBackfiller) runCommitWait(ctx context.Context) error {
 	for i, fn := range cb.commitWaitFns {
-		fn(ctx)
+		if err := fn(ctx); err != nil {
+			return err
+		}
 		cb.commitWaitFns[i] = nil
 	}
 	cb.commitWaitFns = cb.commitWaitFns[:0]
+	return nil
 }

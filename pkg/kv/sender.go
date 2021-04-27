@@ -319,7 +319,7 @@ type TxnSender interface {
 	// WARNING: failure to call the returned function could lead to consistency
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
-	DeferCommitWait(ctx context.Context) func(context.Context)
+	DeferCommitWait(ctx context.Context) func(context.Context) error
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

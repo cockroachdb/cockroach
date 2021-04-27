@@ -507,16 +507,23 @@ func (c *Clock) WallTimeUpperBound() int64 {
 // sleeping for longer or shorter, depending on the HLC clock's relation to its
 // physical time source (it may lead it) and whether it advances more rapidly
 // due to updates from other nodes.
-func (c *Clock) SleepUntil(t Timestamp) {
+//
+// If the provided context is canceled, the method will return the cancellation
+// error immediately. If an error is returned, no guarantee is made that the HLC
+// will have reached the specified timestamp.
+func (c *Clock) SleepUntil(ctx context.Context, t Timestamp) error {
 	// Don't busy loop if the HLC clock is out ahead of the system's
 	// physical clock.
 	const minSleep = 25 * time.Microsecond
 	// Refresh every second in case there was a clock jump.
 	const maxSleep = 1 * time.Second
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		now := c.Now()
 		if t.LessEq(now) {
-			return
+			return nil
 		}
 		d := now.GoTime().Sub(t.GoTime())
 		if d < minSleep {
@@ -524,6 +531,17 @@ func (c *Clock) SleepUntil(t Timestamp) {
 		} else if d > maxSleep {
 			d = maxSleep
 		}
-		time.Sleep(d)
+		// If we're going to sleep for at least 1ms, listen for context
+		// cancellation. Otherwise, don't bother with the select and the
+		// more expensive use of time.After.
+		if d < 1*time.Millisecond {
+			time.Sleep(d)
+		} else {
+			select {
+			case <-time.After(d):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	}
 }

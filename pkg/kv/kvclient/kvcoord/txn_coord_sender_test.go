@@ -1198,7 +1198,7 @@ func TestTxnCommitWait(t *testing.T) {
 		deferredWaitC := make(chan struct{})
 		errC := make(chan error, 1)
 		go func() {
-			var commitWaitFn func(context.Context)
+			var commitWaitFn func(context.Context) error
 			if deferred {
 				// If the test wants the caller to assume responsibility for commit
 				// waiting, we expect the transaction to return immediately after a
@@ -1246,7 +1246,7 @@ func TestTxnCommitWait(t *testing.T) {
 
 			if commitWaitFn != nil {
 				close(deferredWaitC)
-				commitWaitFn(ctx) // NOTE: blocks
+				_ = commitWaitFn(ctx) // NOTE: blocks
 			}
 
 			errC <- err
