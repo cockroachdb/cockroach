@@ -34,7 +34,7 @@ import (
 func RunNemesis(
 	ctx context.Context,
 	rng *rand.Rand,
-	ct ClosedTimestampTargetInterval,
+	env *Env,
 	config GeneratorConfig,
 	numSteps int,
 	dbs ...*kv.DB,
@@ -48,8 +48,8 @@ func RunNemesis(
 	if err != nil {
 		return nil, err
 	}
-	a := MakeApplier(dbs...)
-	w, err := Watch(ctx, dbs, ct, GeneratorDataSpan())
+	a := MakeApplier(env, dbs...)
+	w, err := Watch(ctx, env, dbs, GeneratorDataSpan())
 	if err != nil {
 		return nil, err
 	}

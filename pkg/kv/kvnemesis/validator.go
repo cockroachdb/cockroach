@@ -365,6 +365,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		} else {
 			v.failIfError(op, t.Result)
 		}
+	case *ChangeZoneOperation:
+		v.failIfError(op, t.Result)
 	case *BatchOperation:
 		if !resultIsRetryable(t.Result) {
 			v.failIfError(op, t.Result)

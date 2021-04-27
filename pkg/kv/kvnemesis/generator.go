@@ -43,6 +43,7 @@ type OperationConfig struct {
 	Merge          MergeConfig
 	ChangeReplicas ChangeReplicasConfig
 	ChangeLease    ChangeLeaseConfig
+	ChangeZone     ChangeZoneConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -143,6 +144,13 @@ type ChangeLeaseConfig struct {
 	TransferLease int
 }
 
+// ChangeZoneConfig configures the relative probability of generating a zone
+// configuration change operation.
+type ChangeZoneConfig struct {
+	// ToggleGlobalReads sets global_reads to a new value.
+	ToggleGlobalReads int
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
@@ -174,12 +182,12 @@ func newAllOperationsConfig() GeneratorConfig {
 			CommitBatchOps: clientOpConfig,
 		},
 		Split: SplitConfig{
-			SplitNew:   1,
+			SplitNew:   10,
 			SplitAgain: 1,
 		},
 		Merge: MergeConfig{
 			MergeNotSplit: 1,
-			MergeIsSplit:  1,
+			MergeIsSplit:  10,
 		},
 		ChangeReplicas: ChangeReplicasConfig{
 			AddReplica:        1,
@@ -188,6 +196,9 @@ func newAllOperationsConfig() GeneratorConfig {
 		},
 		ChangeLease: ChangeLeaseConfig{
 			TransferLease: 1,
+		},
+		ChangeZone: ChangeZoneConfig{
+			ToggleGlobalReads: 1,
 		},
 	}}
 }
@@ -215,12 +226,15 @@ func NewDefaultConfig() GeneratorConfig {
 	return config
 }
 
+// GeneratorDataTableID is the table ID that corresponds to GeneratorDataSpan.
+const GeneratorDataTableID = 50
+
 // GeneratorDataSpan returns a span that contains all of the operations created
 // by this Generator.
 func GeneratorDataSpan() roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.SystemSQLCodec.TablePrefix(50),
-		EndKey: keys.SystemSQLCodec.TablePrefix(51),
+		Key:    keys.SystemSQLCodec.TablePrefix(GeneratorDataTableID),
+		EndKey: keys.SystemSQLCodec.TablePrefix(GeneratorDataTableID + 1),
 	}
 }
 
@@ -345,6 +359,8 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 	transferLeaseFn := makeTransferLeaseFn(key, current)
 	addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+
+	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -516,6 +532,10 @@ func makeTransferLeaseFn(key string, current []roachpb.ReplicationTarget) opGenF
 	}
 }
 
+func toggleGlobalReads(_ *generator, _ *rand.Rand) Operation {
+	return changeZone(ChangeZoneType_ToggleGlobalReads)
+}
+
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
@@ -650,4 +670,8 @@ func changeReplicas(key string, changes ...roachpb.ReplicationChange) Operation 
 
 func transferLease(key string, target roachpb.StoreID) Operation {
 	return Operation{TransferLease: &TransferLeaseOperation{Key: []byte(key), Target: target}}
+}
+
+func changeZone(changeType ChangeZoneType) Operation {
+	return Operation{ChangeZone: &ChangeZoneOperation{Type: changeType}}
 }
