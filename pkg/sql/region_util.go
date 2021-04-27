@@ -730,7 +730,7 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		desc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
 			if err != nil {
 				return err
@@ -856,7 +856,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	if err := p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			ids = append(ids, tbDesc.GetID())
 			return nil
 		},
@@ -886,7 +886,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	return p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
-		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error {
 			return p.validateZoneConfigForMultiRegionTable(
 				tbDesc,
 				zoneConfigs[tbDesc.GetID()],
@@ -1683,5 +1683,105 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		)
 	}
 
+	return nil
+}
+
+// checkNoRegionalByRowChangeUnderway checks that no REGIONAL BY ROW
+// tables are undergoing a schema change that affect their partitions
+// and no tables are transitioning to or from REGIONAL BY ROW.
+func (p *planner) checkNoRegionalByRowChangeUnderway(
+	ctx context.Context, dbDesc catalog.DatabaseDescriptor,
+) error {
+	// forEachTableDesc touches all the table keys, which prevents a race
+	// with ADD/REGION committing at the same time as the user transaction.
+	return p.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, scName string, table *tabledesc.Mutable) error {
+			wrapErr := func(err error, detailSuffix string) error {
+				return errors.WithHintf(
+					errors.WithDetailf(
+						err,
+						"table %s.%s %s",
+						tree.Name(scName),
+						tree.Name(table.GetName()),
+						detailSuffix,
+					),
+					"cancel the existing job or try again when the change is complete",
+				)
+			}
+			for _, mut := range table.AllMutations() {
+				// Disallow any locality related swaps.
+				if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+					if lcSwap := pkSwap.PrimaryKeySwapDesc().LocalityConfigSwap; lcSwap != nil {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while a REGIONAL BY ROW transition is underway",
+							),
+							"is currently transitioning to or from REGIONAL BY ROW",
+						)
+					}
+					return wrapErr(
+						pgerror.Newf(
+							pgcode.ObjectNotInPrerequisiteState,
+							"cannot perform database region changes while a ALTER PRIMARY KEY is underway",
+						),
+						"is currently undergoing an ALTER PRIMARY KEY change",
+					)
+				}
+			}
+			// Disallow index changes for REGIONAL BY ROW tables.
+			// We do this on the second loop, as ALTER PRIMARY KEY may push
+			// CREATE/DROP INDEX before the ALTER PRIMARY KEY mutation itself.
+			// We should catch ALTER PRIMARY KEY before this ADD/DROP INDEX.
+			for _, mut := range table.AllMutations() {
+				if table.IsLocalityRegionalByRow() {
+					if idx := mut.AsIndex(); idx != nil {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+							),
+							fmt.Sprintf("is currently modifying index %s", tree.Name(idx.GetName())),
+						)
+					}
+				}
+			}
+			return nil
+		},
+	)
+}
+
+// checkNoRegionChangeUnderway checks whether the regions on the current
+// database are currently being modified.
+func (p *planner) checkNoRegionChangeUnderway(
+	ctx context.Context, dbID descpb.ID, op string,
+) error {
+	// SynthesizeRegionConfig touches the type descriptor row, which
+	// prevents a race with a racing conflicting schema change.
+	r, err := SynthesizeRegionConfig(
+		ctx,
+		p.txn,
+		dbID,
+		p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+	if len(r.TransitioningRegions()) > 0 {
+		return errors.WithDetailf(
+			errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot %s while a region is being added or dropped on the database",
+					op,
+				),
+				"cancel the job which is adding or dropping the region or try again later",
+			),
+			"region %s is currently being added or dropped",
+			r.TransitioningRegions()[0],
+		)
+	}
 	return nil
 }

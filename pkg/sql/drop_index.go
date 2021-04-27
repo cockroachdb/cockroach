@@ -255,6 +255,16 @@ func (p *planner) dropIndexByName(
 		return nil
 	}
 
+	if tableDesc.IsLocalityRegionalByRow() {
+		if err := p.checkNoRegionChangeUnderway(
+			ctx,
+			tableDesc.GetParentID(),
+			"DROP INDEX on a REGIONAL BY ROW table",
+		); err != nil {
+			return err
+		}
+	}
+
 	if idx.IsUnique() && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint && !idx.IsCreatedExplicitly() {
 		return errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,

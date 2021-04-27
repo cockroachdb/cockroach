@@ -103,7 +103,7 @@ func (p *planner) writeDatabaseChangeToBatch(
 func (p *planner) forEachMutableTableInDatabase(
 	ctx context.Context,
 	dbDesc catalog.DatabaseDescriptor,
-	fn func(ctx context.Context, tbDesc *tabledesc.Mutable) error,
+	fn func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error,
 ) error {
 	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -117,7 +117,7 @@ func (p *planner) forEachMutableTableInDatabase(
 			continue
 		}
 		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
-		if err := fn(ctx, mutable); err != nil {
+		if err := fn(ctx, lCtx.schemaNames[desc.GetParentSchemaID()], mutable); err != nil {
 			return err
 		}
 	}

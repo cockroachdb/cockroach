@@ -83,6 +83,16 @@ func (p *planner) addColumnImpl(
 
 	// Ensure all new indexes are partitioned appropriately.
 	if idx != nil {
+		if n.tableDesc.IsLocalityRegionalByRow() {
+			if err := params.p.checkNoRegionChangeUnderway(
+				params.ctx,
+				n.tableDesc.GetParentID(),
+				"add an UNIQUE COLUMN on a REGIONAL BY ROW table",
+			); err != nil {
+				return err
+			}
+		}
+
 		*idx, err = p.configureIndexDescForNewIndexPartitioning(
 			params.ctx,
 			desc,
