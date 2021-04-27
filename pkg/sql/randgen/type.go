@@ -52,19 +52,9 @@ func init() {
 	}
 
 	for _, typ := range types.OidToType {
-		// Don't include un-encodable types.
-		encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
-		if err != nil || encTyp == 0 {
-			continue
+		if IsAllowedForArray(typ) {
+			arrayContentsTypes = append(arrayContentsTypes, typ)
 		}
-
-		// Don't include reg types, since parser currently doesn't allow them to
-		// be declared as array element types.
-		if typ.Family() == types.OidFamily && typ.Oid() != oid.T_oid {
-			continue
-		}
-
-		arrayContentsTypes = append(arrayContentsTypes, typ)
 	}
 
 	// Sort these so randomly chosen indexes always point to the same element.
@@ -74,6 +64,22 @@ func init() {
 	sort.Slice(arrayContentsTypes, func(i, j int) bool {
 		return arrayContentsTypes[i].String() < arrayContentsTypes[j].String()
 	})
+}
+
+func IsAllowedForArray(typ *types.T) bool {
+	// Don't include un-encodable types.
+	encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
+	if err != nil || encTyp == 0 {
+		return false
+	}
+
+	// Don't include reg types, since parser currently doesn't allow them to
+	// be declared as array element types.
+	if typ.Family() == types.OidFamily && typ.Oid() != oid.T_oid {
+		return false
+	}
+
+	return true
 }
 
 // RandType returns a random type value.

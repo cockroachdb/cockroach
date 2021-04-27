@@ -173,15 +173,31 @@ func TestAvroSchema(t *testing.T) {
 			values: `(1, 1.23, 4.5)`,
 		},
 	}
-	// Generate a test for each column type with a random datum of that type.
-	for _, typ := range types.OidToType {
+
+	var skipType func(typ *types.T) bool
+	skipType = func(typ *types.T) bool {
 		switch typ.Family() {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
-			continue
-		case types.IntervalFamily, types.ArrayFamily, types.BitFamily,
+			return true
+		case types.IntervalFamily, types.BitFamily,
 			types.CollatedStringFamily:
 			// Implement these as customer demand dictates.
+			return true
+		case types.ArrayFamily:
+			if !randgen.IsAllowedForArray(typ.InternalType.ArrayContents) {
+				return true
+			}
+			if skipType(typ.InternalType.ArrayContents) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Generate a test for each column type with a random datum of that type.
+	for _, typ := range types.OidToType {
+		if skipType(typ) {
 			continue
 		}
 		datum := randgen.RandDatum(rng, typ, false /* nullOk */)
@@ -709,6 +725,10 @@ func randEncDatumRow(typ *types.T) rowenc.EncDatumRow {
 		rowenc.DatumToEncDatum(typ, randgen.RandDatum(rnd, typ, allowNull)),
 		rowenc.DatumToEncDatum(types.Int, randgen.RandDatum(rnd, types.Int, notNull)),
 	}
+}
+
+func BenchmarkEncodeIntArray(b *testing.B) {
+	benchmarkEncodeType(b, types.IntArray, randEncDatumRow(types.IntArray))
 }
 
 func BenchmarkEncodeInt(b *testing.B) {

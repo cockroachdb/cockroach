@@ -400,6 +400,42 @@ func TestAvroEncoder(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestAvroArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT[])`)
+		var ts1 string
+		sqlDB.QueryRow(t,
+			`INSERT INTO foo VALUES 
+			(1, ARRAY[10,20,30]), 
+			(2, NULL), 
+			(3, ARRAY[42, NULL, 42, 43]),
+			(4, ARRAY[])
+			 RETURNING cluster_logical_timestamp()`,
+		).Scan(&ts1)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2, diff, resolved`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"array":[{"long":10},{"long":20},{"long":30}]}}},"before":null}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null}},"before":null}`,
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"array":[{"long":42},null,{"long":42},{"long":43}]}}},"before":null}`,
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"array":[]}}},"before":null}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestAvroSchemaNaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
