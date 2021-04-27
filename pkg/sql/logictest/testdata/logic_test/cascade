@@ -4352,3 +4352,12 @@ SELECT * FROM child
 
 statement ok
 DROP TABLE child, parent
+
+# Regression test for #64179. A cascading delete with a subquery should not
+# error.
+statement ok
+CREATE TABLE a (a INT UNIQUE);
+CREATE TABLE b (b INT, FOREIGN KEY (b) REFERENCES a (a) ON DELETE CASCADE);
+
+statement ok
+DELETE FROM a WHERE EXISTS (SELECT a FROM a)

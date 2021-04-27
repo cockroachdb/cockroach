@@ -12,6 +12,7 @@ package pgwire
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -441,24 +442,15 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 		}
 		switch c := cmd.(type) {
 		case sql.DeletePreparedStmt:
-			// The client wants to close a portal or statement. We
-			// support the case where it is exactly this
-			// portal. This is done by closing the portal in
-			// the same way implicit transactions do, but also
-			// rewinding the stmtBuf to still point to the portal
-			// close so that the state machine can do its part of
-			// the cleanup. We are in effect peeking to see if the
+			// The client wants to close a portal or statement. We support the case
+			// where it is exactly this portal. We are in effect peeking to see if the
 			// next message is a delete portal.
 			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
 				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
 				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
 					"cannot close a portal while a different one is open")
 			}
-			r.typ = noCompletionMsg
-			// Rewind to before the delete so the AdvanceOne in
-			// connExecutor.execCmd ends up back on it.
-			r.conn.stmtBuf.Rewind(ctx, prevPos)
-			return sql.ErrLimitedResultClosed
+			return r.rewindAndClosePortal(ctx, prevPos)
 		case sql.ExecPortal:
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
@@ -482,12 +474,92 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 				return err
 			}
 		default:
+			// If the portal is immediately followed by a COMMIT, we can proceed and
+			// let the portal be destroyed at the end of the transaction.
+			if isCommit, err := r.isCommit(); err != nil {
+				return err
+			} else if isCommit {
+				return r.rewindAndClosePortal(ctx, prevPos)
+			}
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithSafeDetails(sql.ErrLimitedResultNotSupported,
-				"cannot perform operation %T while a different portal is open",
-				errors.Safe(c))
+			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
 		}
 		prevPos = curPos
 	}
+}
+
+// isCommit checks if the statement buffer has a COMMIT at the current
+// position. It may either be (1) a COMMIT in the simple protocol, or (2) a
+// Parse/Bind/Execute sequence for a COMMIT query.
+func (r *limitedCommandResult) isCommit() (bool, error) {
+	cmd, _, err := r.conn.stmtBuf.CurCmd()
+	if err != nil {
+		return false, err
+	}
+	// Case 1: Check if cmd is a simple COMMIT statement.
+	if execStmt, ok := cmd.(sql.ExecStmt); ok {
+		if _, isCommit := execStmt.AST.(*tree.CommitTransaction); isCommit {
+			return true, nil
+		}
+	}
+
+	commitStmtName := ""
+	commitPortalName := ""
+	// Case 2a: Check if cmd is a prepared COMMIT statement.
+	if prepareStmt, ok := cmd.(sql.PrepareStmt); ok {
+		if _, isCommit := prepareStmt.AST.(*tree.CommitTransaction); isCommit {
+			commitStmtName = prepareStmt.Name
+		} else {
+			return false, nil
+		}
+	} else {
+		return false, nil
+	}
+
+	r.conn.stmtBuf.AdvanceOne()
+	cmd, _, err = r.conn.stmtBuf.CurCmd()
+	if err != nil {
+		return false, err
+	}
+	// Case 2b: The next cmd must be a bind command.
+	if bindStmt, ok := cmd.(sql.BindStmt); ok {
+		// This bind command must be for the COMMIT statement that we just saw.
+		if bindStmt.PreparedStatementName == commitStmtName {
+			commitPortalName = bindStmt.PortalName
+		} else {
+			return false, nil
+		}
+	} else {
+		return false, nil
+	}
+
+	r.conn.stmtBuf.AdvanceOne()
+	cmd, _, err = r.conn.stmtBuf.CurCmd()
+	if err != nil {
+		return false, err
+	}
+	// Case 2c: The next cmd must be an exec portal command.
+	if execPortal, ok := cmd.(sql.ExecPortal); ok {
+		// This exec command must be for the portal that was just bound.
+		if execPortal.Name == commitPortalName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// rewindAndClosePortal closes the portal in the same way implicit transactions
+// do, but also rewinds the stmtBuf to still point to the portal close so that
+// the state machine can do its part of the cleanup.
+func (r *limitedCommandResult) rewindAndClosePortal(
+	ctx context.Context, rewindTo sql.CmdPos,
+) error {
+	// Don't send an CommandComplete for the portal; it got suspended.
+	r.typ = noCompletionMsg
+	// Rewind to before the delete so the AdvanceOne in connExecutor.execCmd ends
+	// up back on it.
+	r.conn.stmtBuf.Rewind(ctx, rewindTo)
+	return sql.ErrLimitedResultClosed
 }

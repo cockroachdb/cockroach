@@ -485,3 +485,453 @@ ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## No transaction; small limit
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s1", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s1"}
+Bind {"PreparedStatement": "s1", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## No transaction; exact limit
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s2", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s2"}
+Bind {"PreparedStatement": "s2", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## No transaction; larger limit
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s3", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s3"}
+Bind {"PreparedStatement": "s3", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 3}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction; smaller limit
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s4", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s4"}
+Bind {"PreparedStatement": "s4", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction with exact limit.
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s5", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s5"}
+Bind {"PreparedStatement": "s5", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction with larger limit.
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s6", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s6"}
+Bind {"PreparedStatement": "s6", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 3}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction; smaller limit; COMMIT in extended protocol
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s7", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s7"}
+Bind {"PreparedStatement": "s7", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "commit1", "Query": "COMMIT"}
+Bind {"PreparedStatement": "commit1"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction with exact limit; COMMIT in extended protocol
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s8", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s8"}
+Bind {"PreparedStatement": "s8", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "commit2", "Query": "COMMIT"}
+Bind {"PreparedStatement": "commit2"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction with larger limit; COMMIT in extended protocol
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s9", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s9"}
+Bind {"PreparedStatement": "s9", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 3}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "commit3", "Query": "COMMIT"}
+Bind {"PreparedStatement": "commit3"}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+## Transaction with smaller limit; portals interleaved
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# 83 = ASCII 'S' for Statement
+# 49 = ASCII '1'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s10", "Query": "select n::int4 from generate_series(0,$1::int8) n", "ParameterOIDs": [20]}
+Describe {"ObjectType": 83, "Name": "s10"}
+Bind {"PreparedStatement": "s10", "ParameterFormatCodes": [0], "ResultFormatCodes": [0], "Parameters": [[49]]}
+Execute {"MaxRows": 1}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[20]}
+{"Type":"RowDescription","Fields":[{"Name":"n","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "c4", "Query": "COMMIT"}
+Parse {"Name": "s11", "Query": "select n::int4 from generate_series(0,1) n"}
+Bind {"DestinationPortal": "por", "PreparedStatement": "s11"}
+Bind {"DestinationPortal": "pc4", "PreparedStatement": "c4"}
+Execute {"Portal": "por"}
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"0"}]}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+until crdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"0A000"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send noncrdb_only
+Execute {"Portal": "pc4"}
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "ROLLBACK"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
