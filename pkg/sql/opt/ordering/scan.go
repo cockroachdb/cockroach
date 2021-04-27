@@ -92,6 +92,11 @@ func ScanPrivateCanProvide(
 		}
 		reqCol := &required.Columns[right]
 		if !reqCol.Group.Contains(indexColID) {
+			if left < s.ExactPrefix {
+				// All columns in the exact prefix are constant and can be ignored.
+				left++
+				continue
+			}
 			return false, false
 		}
 		// The directions of the index column and the required column impose either
@@ -125,19 +130,21 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	// We generate the longest ordering that this scan can provide, then we trim
 	// it. This is the longest prefix of index columns that are output by the scan
 	// (ignoring constant columns, in the case of constrained scans).
+	// We start the for loop at the exact prefix since all columns in the exact
+	// prefix are constant and can be ignored.
 	constCols := fds.ComputeClosure(opt.ColSet{})
 	numCols := index.KeyColumnCount()
 	provided := make(opt.Ordering, 0, numCols)
-	for i := 0; i < numCols; i++ {
+	for i := scan.ExactPrefix; i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal())
-		if !scan.Cols.Contains(colID) {
-			// Column not in output; we are done.
-			break
-		}
 		if constCols.Contains(colID) {
 			// Column constrained to a constant, ignore.
 			continue
+		}
+		if !scan.Cols.Contains(colID) {
+			// Column not in output; we are done.
+			break
 		}
 		direction := (indexCol.Descending != reverse) // != is bool XOR
 		provided = append(provided, opt.MakeOrderingColumn(colID, direction))

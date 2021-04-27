@@ -65,6 +65,7 @@ func TestScan(t *testing.T) {
 
 	type testGroup struct {
 		p     memo.ScanPrivate
+		c     *constraint.Constraint
 		cases []testCase
 	}
 
@@ -149,11 +150,11 @@ func TestScan(t *testing.T) {
 		},
 		{ // group 5: scan with constraint.
 			p: memo.ScanPrivate{
-				Table:      tab,
-				Index:      1,
-				Cols:       opt.MakeColSet(1, 2, 3, 4),
-				Constraint: &c,
+				Table: tab,
+				Index: 1,
+				Cols:  opt.MakeColSet(1, 2, 3, 4),
 			},
+			c: &c,
 			cases: []testCase{
 				{req: "-3", exp: "fwd", prov: ""},                   // case 1
 				{req: "-3,+4", exp: "fwd", prov: "+4"},              // case 2
@@ -169,6 +170,7 @@ func TestScan(t *testing.T) {
 			for tcIdx, tc := range g.cases {
 				t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 					req := physical.ParseOrderingChoice(tc.req)
+					g.p.SetConstraint(evalCtx, g.c)
 					ok, rev := ScanPrivateCanProvide(md, &g.p, &req)
 					res := "no"
 					if ok {

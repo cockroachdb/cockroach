@@ -683,7 +683,7 @@ func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan
 	c.Init(&keyCtx, &spans)
 
 	private := scan.ScanPrivate
-	private.Constraint = &c
+	private.SetConstraint(b.evalCtx, &c)
 
 	params, outputCols, err := b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {

@@ -338,7 +338,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Constraint = constraint
+		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		// Record whether we were able to use partitions to constrain the scan.
 		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
 
@@ -776,7 +776,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
-		newScanPrivate.Constraint = constraint
+		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
 
 		// Calculate the PK columns once.
