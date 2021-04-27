@@ -3313,25 +3313,26 @@ Square overlapping left and right square  Square (right)                        
 Square overlapping left and right square  Square overlapping left and right square  2FFF1FFF2  2FFF0FFF2  false
 
 # ST_Envelope
-query TT
+query TTT
 SELECT
   a.dsc,
-  ST_AsEWKT(ST_Envelope(a.geom))
+  ST_AsEWKT(ST_Envelope(a.geom)),
+  ST_AsEWKT(ST_Envelope(a.geom::box2d))
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY
-Empty LineString                          LINESTRING EMPTY
-Empty Point                               POINT EMPTY
-Faraway point                             POINT (5 5)
-Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)
-NULL                                      NULL
-Nested Geometry Collection                POINT (0 0)
-Point middle of Left Square               POINT (-0.5 0.5)
-Point middle of Right Square              POINT (0.5 0.5)
-Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
-Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
-Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
+Empty GeometryCollection                  GEOMETRYCOLLECTION EMPTY                      NULL
+Empty LineString                          LINESTRING EMPTY                              NULL
+Empty Point                               POINT EMPTY                                   NULL
+Faraway point                             POINT (5 5)                                   POINT (5 5)
+Line going through left and right square  LINESTRING (-0.5 0.5, 0.5 0.5)                LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL                                          NULL
+Nested Geometry Collection                POINT (0 0)                                   POINT (0 0)
+Point middle of Left Square               POINT (-0.5 0.5)                              POINT (-0.5 0.5)
+Point middle of Right Square              POINT (0.5 0.5)                               POINT (0.5 0.5)
+Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))        POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))           POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
 
 # basic metadata
 query TTTIIIII
