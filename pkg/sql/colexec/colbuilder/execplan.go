@@ -550,6 +550,23 @@ func (r opResult) makeDiskBackedSorterConstructor(
 	}
 }
 
+// TODO(yuzefovich): introduce some way to unit test that the meta info tracking
+// works correctly. See #64256 for more details.
+
+// takeOverMetaInfo iterates over all meta components from the input trees and
+// passes the responsibility of handling those to target. The input objects are
+// updated in-place accordingly.
+func takeOverMetaInfo(target *colexecargs.OpWithMetaInfo, inputs []colexecargs.OpWithMetaInfo) {
+	for i := range inputs {
+		target.StatsCollectors = append(target.StatsCollectors, inputs[i].StatsCollectors...)
+		target.MetadataSources = append(target.MetadataSources, inputs[i].MetadataSources...)
+		target.ToClose = append(target.ToClose, inputs[i].ToClose...)
+		inputs[i].MetadataSources = nil
+		inputs[i].StatsCollectors = nil
+		inputs[i].ToClose = nil
+	}
+}
+
 // createAndWrapRowSource takes a processor spec, creating the row source and
 // wrapping it using wrapRowSources. Note that the post process spec is included
 // in the processor creation, so make sure to clear it if it will be inspected
@@ -628,6 +645,7 @@ func (r opResult) createAndWrapRowSource(
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
 	}
+	takeOverMetaInfo(&r.OpWithMetaInfo, inputs)
 	r.MetadataSources = append(r.MetadataSources, r.Root.(colexecop.MetadataSource))
 	r.ToClose = append(r.ToClose, c)
 	r.Releasables = append(r.Releasables, releasables...)
@@ -1404,14 +1422,7 @@ func NewColOperator(
 			r.Root = colexec.NewInvariantsChecker(r.Root)
 		}
 	}
-	// Handle the metadata components from the input trees. Note that it is
-	// possible that we have created materializers which took over the
-	// responsibility over those objects.
-	for i := range inputs {
-		r.StatsCollectors = append(r.StatsCollectors, inputs[i].StatsCollectors...)
-		r.MetadataSources = append(r.MetadataSources, inputs[i].MetadataSources...)
-		r.ToClose = append(r.ToClose, inputs[i].ToClose...)
-	}
+	takeOverMetaInfo(&result.OpWithMetaInfo, inputs)
 	if util.CrdbTestBuild {
 		r.AssertInvariants()
 	}
@@ -1452,9 +1463,11 @@ func (r opResult) planAndMaybeWrapFilter(
 			ProcessorID: processorID,
 			ResultTypes: args.Spec.ResultTypes,
 		}
+		inputToMaterializer := colexecargs.OpWithMetaInfo{Root: r.Root}
+		takeOverMetaInfo(&inputToMaterializer, args.Inputs)
 		return r.createAndWrapRowSource(
-			ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{r.OpWithMetaInfo}, [][]*types.T{r.ColumnTypes},
-			filtererSpec, factory, err,
+			ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{inputToMaterializer},
+			[][]*types.T{r.ColumnTypes}, filtererSpec, factory, err,
 		)
 	}
 	r.Root = op
@@ -1482,9 +1495,11 @@ func (r opResult) wrapPostProcessSpec(
 		Post:        *post,
 		ResultTypes: resultTypes,
 	}
+	inputToMaterializer := colexecargs.OpWithMetaInfo{Root: r.Root}
+	takeOverMetaInfo(&inputToMaterializer, args.Inputs)
 	return r.createAndWrapRowSource(
-		ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{r.OpWithMetaInfo}, [][]*types.T{r.ColumnTypes},
-		noopSpec, factory, causeToWrap,
+		ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{inputToMaterializer},
+		[][]*types.T{r.ColumnTypes}, noopSpec, factory, causeToWrap,
 	)
 }
 
