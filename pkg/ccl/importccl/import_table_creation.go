@@ -193,7 +193,7 @@ func MakeSimpleTableDescriptor(
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
 func fixDescriptorFKState(tableDesc *tabledesc.Mutable) error {
-	tableDesc.State = descpb.DescriptorState_PUBLIC
+	tableDesc.SetPublic()
 	for i := range tableDesc.OutboundFKs {
 		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
 	}
