@@ -1,3 +1,4 @@
+load("//pkg/util/interval/generic:gen.bzl", "gen_interval_btree")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,7 +9,7 @@ go_library(
         "latch_manager.go",
         "lock_table.go",
         "lock_table_waiter.go",
-        "lockstate_interval_btree.go",
+        ":lockstate_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency",
     visibility = ["//visibility:public"],
@@ -46,12 +47,11 @@ go_test(
         "datadriven_util_test.go",
         "lock_table_test.go",
         "lock_table_waiter_test.go",
-        "lockstate_interval_btree_test.go",
+        ":lockstate_interval_btree_test.go",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":concurrency"],
     deps = [
-        "//pkg/keys",
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/intentresolver",
@@ -80,4 +80,10 @@ go_test(
         "@org_golang_x_exp//rand",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+gen_interval_btree(
+    name = "lockstate_interval_btree",
+    package = "concurrency",
+    type = "*lockState",
 )
