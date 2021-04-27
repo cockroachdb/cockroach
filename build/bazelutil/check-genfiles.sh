@@ -4,8 +4,6 @@ set -euo pipefail
 
 # Avoid adding new exclusions unless necessary.
 STRINGER_EXCLUSIONS="
-pkg/kv/kvserver/closedts/sidetransport/cantclosereason_string.go
-pkg/sql/sem/tree/statementtype_string.go
 "
 
 git grep 'go:generate stringer' pkg | while read LINE; do
