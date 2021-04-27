@@ -147,6 +147,10 @@ type BaseConfig struct {
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
+
+	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
+	// back to the KV layer upon server start.
+	ImportTimeseriesFile string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

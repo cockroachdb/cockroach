@@ -14,6 +14,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -62,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1864,6 +1866,119 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	log.Event(ctx, "server initialized")
+
+	return maybeImportTS(ctx, s)
+}
+
+func maybeImportTS(ctx context.Context, s *Server) error {
+	tsImport := s.cfg.ImportTimeseriesFile
+	if tsImport == "" {
+		return nil
+	}
+	f, err := os.Open(tsImport)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	b := &kv.Batch{}
+	var n int
+	maybeFlush := func(force bool) error {
+		if n < 100 && !force {
+			return nil
+		}
+		err := s.db.Run(ctx, b)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "imported %d ts pairs\n", n)
+		*b, n = kv.Batch{}, 0
+		return nil
+	}
+
+	nodeIDs := map[string]struct{}{}
+	storeIDs := map[string]struct{}{}
+	dec := gob.NewDecoder(f)
+	for {
+		var v roachpb.KeyValue
+		err := dec.Decode(&v)
+		if err != nil {
+			if err == io.EOF {
+				if err := maybeFlush(true /* force */); err != nil {
+					return err
+				}
+				break
+			}
+			return err
+		}
+
+		name, source, _, _, err := ts.DecodeDataKey(v.Key)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(name, "cr.node.") {
+			nodeIDs[source] = struct{}{}
+		} else if strings.HasPrefix(name, "cr.store.") {
+			storeIDs[source] = struct{}{}
+		} else {
+			return errors.Errorf("unknown metric %s", name)
+		}
+
+		p := roachpb.NewPut(v.Key, v.Value)
+		p.(*roachpb.PutRequest).Inline = true
+		b.AddRawRequest(p)
+		n++
+		if err := maybeFlush(false /* force */); err != nil {
+			return err
+		}
+	}
+
+	nodeToStore := map[string][]string{}
+	for n := range nodeIDs {
+		// By default, assume that each node has one store, with a
+		// matching ID, i.e. n1->s1, n2->s2, etc.
+		nodeToStore[n] = []string{n}
+	}
+
+	for nodeString, storeStrings := range nodeToStore {
+		nid, err := strconv.ParseInt(nodeString, 10, 32)
+		if err != nil {
+			return err
+		}
+		nodeID := roachpb.NodeID(nid)
+
+		var ss []statuspb.StoreStatus
+		for _, storeString := range storeStrings {
+			sid, err := strconv.ParseInt(storeString, 10, 32)
+			if err != nil {
+				return err
+			}
+			ss = append(ss, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{StoreID: roachpb.StoreID(sid)}})
+			delete(storeIDs, nodeString)
+		}
+
+		ns := statuspb.NodeStatus{
+			Desc: roachpb.NodeDescriptor{
+				NodeID: nodeID,
+			},
+			StoreStatuses: ss,
+		}
+		key := keys.NodeStatusKey(nodeID)
+		if err := s.db.PutInline(ctx, key, &ns); err != nil {
+			return err
+		}
+	}
+	if len(storeIDs) == 0 {
+		log.Warningf(ctx, "*** guessed the assignment of nodes to stores: %v ***", nodeToStore)
+	} else {
+		// If you end up here, you can adjust nodeToStore above with the correct mapping and run
+		// a custom binary. We could add an env var that takes JSON if this becomes too burdensome.
+		// Another complication is the fact that at least n1 is live and will write regular statuses,
+		// and generally whatever nodes are running in the cluster have to have the right storeIDs
+		// or things will quickly be out of whack.
+		return errors.Errorf("unable to guess the assignment of remaining stores %v to nodes %v, needs manual mapping", storeIDs, nodeIDs)
+	}
+
 	return nil
 }
 

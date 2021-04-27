@@ -45,14 +45,18 @@ telemetry back to Cockroach Labs. In order to disable this behavior, set the
 environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
-	Args:    cobra.NoArgs,
+	Args:    cobra.RangeArgs(0, 1),
 	// Note: RunE is set in the init() function below to avoid an
 	// initialization cycle.
 }
 
 func init() {
-	demoCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
-		return runDemo(cmd, nil /* gen */)
+	demoCmd.RunE = MaybeDecorateGRPCError(func(cmd *cobra.Command, args []string) error {
+		var importTSFile string
+		if len(args) > 0 {
+			importTSFile = args[0]
+		}
+		return runDemo(cmd, nil /* gen */, importTSFile)
 	})
 }
 
@@ -150,7 +154,7 @@ func init() {
 			Short: meta.Description,
 			Args:  cobra.ArbitraryArgs,
 			RunE: MaybeDecorateGRPCError(func(cmd *cobra.Command, _ []string) error {
-				return runDemo(cmd, gen)
+				return runDemo(cmd, gen, "")
 			}),
 		}
 		if !meta.PublicFacing {
@@ -262,7 +266,7 @@ func checkDemoConfiguration(
 	return gen, nil
 }
 
-func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
+func runDemo(cmd *cobra.Command, gen workload.Generator, tsImport string) (err error) {
 	cmdIn, closeFn, err := getInputFile()
 	if err != nil {
 		return err
