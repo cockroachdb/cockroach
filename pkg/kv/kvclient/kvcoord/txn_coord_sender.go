@@ -450,7 +450,9 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	}
 	tc.finalizeAndCleanupTxnLocked(ctx)
 	if et.Commit {
-		tc.maybeCommitWait(ctx, false /* deferred */)
+		if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
+			return roachpb.NewError(err)
+		}
 	}
 	return nil
 }
@@ -519,7 +521,9 @@ func (tc *TxnCoordSender) Send(
 		if (et.Commit && pErr == nil) || !et.Commit {
 			tc.finalizeAndCleanupTxnLocked(ctx)
 			if et.Commit {
-				tc.maybeCommitWait(ctx, false /* deferred */)
+				if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
+					return nil, roachpb.NewError(err)
+				}
 			}
 		}
 	}
@@ -587,7 +591,7 @@ func (tc *TxnCoordSender) Send(
 //
 // For more, see https://www.cockroachlabs.com/blog/consistency-model/ and
 // docs/RFCS/20200811_non_blocking_txns.md.
-func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) {
+func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) error {
 	if tc.mu.txn.Status != roachpb.COMMITTED {
 		log.Fatalf(ctx, "maybeCommitWait called when not committed")
 	}
@@ -595,7 +599,7 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) {
 		// If this is an automatic commit-wait call and the user of this
 		// transaction has opted to defer the commit-wait and handle it
 		// externally, there's nothing to do yet.
-		return
+		return nil
 	}
 
 	commitTS := tc.mu.txn.WriteTimestamp
@@ -606,7 +610,7 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) {
 		// No need to wait. If !Synthetic then we know the commit timestamp
 		// leads the local HLC clock, and since that's all we'd need to wait
 		// for, we can short-circuit.
-		return
+		return nil
 	}
 
 	waitUntil := commitTS
@@ -620,12 +624,16 @@ func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) {
 
 	// NB: unlock while sleeping to avoid holding the lock for commit-wait.
 	tc.mu.Unlock()
-	tc.clock.SleepUntil(waitUntil)
+	err := tc.clock.SleepUntil(ctx, waitUntil)
 	tc.mu.Lock()
+	if err != nil {
+		return err
+	}
 
 	after := tc.clock.PhysicalTime()
 	log.VEventf(ctx, 2, "completed commit-wait sleep, took %s", after.Sub(before))
 	tc.metrics.CommitWaits.Inc(1)
+	return nil
 }
 
 // maybeRejectClientLocked checks whether the transaction is in a state that
@@ -1259,17 +1267,17 @@ func (tc *TxnCoordSender) ManualRefresh(ctx context.Context) error {
 }
 
 // DeferCommitWait is part of the TxnSender interface.
-func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Context) {
+func (tc *TxnCoordSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	tc.mu.commitWaitDeferred = true
-	return func(ctx context.Context) {
+	return func(ctx context.Context) error {
 		tc.mu.Lock()
 		defer tc.mu.Unlock()
 		if tc.mu.txn.Status != roachpb.COMMITTED {
 			// If transaction has not committed, there's nothing to do.
-			return
+			return nil
 		}
-		tc.maybeCommitWait(ctx, true /* deferred */)
+		return tc.maybeCommitWait(ctx, true /* deferred */)
 	}
 }

@@ -1328,7 +1328,7 @@ func (txn *Txn) ManualRefresh(ctx context.Context) error {
 // WARNING: failure to run the returned function could lead to consistency
 // violations where a future, causally dependent transaction may fail to
 // observe the writes performed by this transaction.
-func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) {
+func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.DeferCommitWait(ctx)
