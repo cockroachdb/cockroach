@@ -758,7 +758,14 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 // lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
 	if r.mu.zone.GlobalReads != nil && *r.mu.zone.GlobalReads {
-		return roachpb.LEAD_FOR_GLOBAL_READS
+		if !r.mu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
+			return roachpb.LEAD_FOR_GLOBAL_READS
+		}
+		// The node liveness range ignores zone configs and always uses a
+		// LAG_BY_CLUSTER_SETTING closed timestamp policy. If it was to begin
+		// closing timestamps in the future, it would break liveness updates,
+		// which perform a 1PC transaction with a commit trigger and can not
+		// tolerate being pushed into the future.
 	}
 	return roachpb.LAG_BY_CLUSTER_SETTING
 }
