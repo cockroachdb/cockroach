@@ -205,16 +205,15 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     const graphComponents = _.map(graphs, (graph, idx) => {
       const key = `nodes.${dashboard}.${idx}`;
       return (
-        <div key={key}>
-          <MetricsDataProvider
-            id={key}
-            setTimeRange={this.props.setTimeRange}
-            setTimeScale={this.props.setTimeScale}
-            history={this.props.history}
-          >
-            {React.cloneElement(graph, forwardParams)}
-          </MetricsDataProvider>
-        </div>
+        <MetricsDataProvider
+          id={key}
+          key={key}
+          setTimeRange={this.props.setTimeRange}
+          setTimeScale={this.props.setTimeScale}
+          history={this.props.history}
+        >
+          {React.cloneElement(graph, forwardParams)}
+        </MetricsDataProvider>
       );
     });
 
