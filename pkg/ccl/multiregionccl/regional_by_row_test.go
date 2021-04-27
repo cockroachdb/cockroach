@@ -701,43 +701,51 @@ func TestRegionChangeRacingRegionalByRowChange(t *testing.T) {
 
 	regionalByRowChanges := []struct {
 		setup                          string
-		alterCmd                       string
+		cmd                            string
 		errorOnAddOrDropRegionSandwich string
+		errorOnTableChangeSandwich     string
 	}{
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
-			alterCmd:                       `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+			cmd:                            `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway",
+			errorOnTableChangeSandwich:     "pq: cannot perform this locality change while a region is being added or dropped on the database",
 		},
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
-			alterCmd:                       `ALTER TABLE t.test SET LOCALITY GLOBAL`,
+			cmd:                            `ALTER TABLE t.test SET LOCALITY GLOBAL`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway",
+			errorOnTableChangeSandwich:     "pq: cannot perform this locality change while a region is being added or dropped on the database",
 		},
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
-			alterCmd:                       `CREATE INDEX v_idx ON t.test(v)`,
+			cmd:                            `CREATE INDEX v_idx ON t.test(v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+			errorOnTableChangeSandwich:     "pq: cannot CREATE INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT, INDEX v_idx (v)) LOCALITY REGIONAL BY ROW`,
-			alterCmd:                       `DROP INDEX t.test@v_idx`,
+			cmd:                            `DROP INDEX t.test@v_idx`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+			errorOnTableChangeSandwich:     "pq: cannot DROP INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
-			alterCmd:                       `ALTER TABLE t.test ADD CONSTRAINT v_uniq UNIQUE (v)`,
+			cmd:                            `ALTER TABLE t.test ADD CONSTRAINT v_uniq UNIQUE (v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+			errorOnTableChangeSandwich:     "pq: cannot create an UNIQUE CONSTRAINT on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
-			alterCmd:                       `ALTER TABLE t.test ADD COLUMN z INT UNIQUE`,
+			cmd:                            `ALTER TABLE t.test ADD COLUMN z INT UNIQUE`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+			errorOnTableChangeSandwich:     "pq: cannot add an UNIQUE COLUMN on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT NOT NULL) LOCALITY REGIONAL BY ROW`,
-			alterCmd:                       `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v)`,
+			cmd:                            `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a ALTER PRIMARY KEY is underway",
+			errorOnTableChangeSandwich:     "pq: cannot perform a primary key change on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 	}
 
@@ -771,7 +779,7 @@ USE t;
 	// Tests ADD/DROP REGION during a REGIONAL BY ROW index-related change.
 	for _, rbrChange := range regionalByRowChanges {
 		for _, regionChange := range regionChanges {
-			t.Run(fmt.Sprintf("from %s to %s with racing %s", rbrChange.setup, rbrChange.alterCmd, regionChange.cmd), func(t *testing.T) {
+			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, rbrChange.cmd, regionChange.cmd), func(t *testing.T) {
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})
 				performInterrupt := false
@@ -801,7 +809,7 @@ USE t;
 				rbrErrCh := make(chan error, 1)
 				performInterrupt = true
 				go func() {
-					_, err := sqlDB.Exec(rbrChange.alterCmd)
+					_, err := sqlDB.Exec(rbrChange.cmd)
 					rbrErrCh <- err
 				}()
 
@@ -816,6 +824,60 @@ USE t;
 
 				// Now finish up and ensure no errors.
 				require.NoError(t, <-rbrErrCh)
+
+				// Validate the zone configuration.
+				_, err = sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
+				require.NoError(t, err)
+			})
+		}
+	}
+
+	// Tests REGIONAL BY ROW during a ADD/DROP REGION index-related change.
+	for _, regionChange := range regionChanges {
+		for _, rbrChange := range regionalByRowChanges {
+			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, regionChange.cmd, rbrChange.cmd), func(t *testing.T) {
+				interruptStartCh := make(chan struct{})
+				interruptEndCh := make(chan struct{})
+				performInterrupt := false
+
+				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+					t,
+					3, /* numServers */
+					base.TestingKnobs{
+						SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+							RunBeforeExec: func() error {
+								if performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+					},
+					nil, /* baseDir */
+				)
+				defer cleanup()
+				setupDB(sqlDB, rbrChange.setup)
+				performInterrupt = true
+
+				regionChangeErr := make(chan error, 1)
+				go func() {
+					_, err := sqlDB.Exec(regionChange.cmd)
+					regionChangeErr <- err
+				}()
+
+				// Wait for the enum change to start.
+				<-interruptStartCh
+
+				// Perform the REGIONAL BY ROW transformation.
+				_, err := sqlDB.Exec(rbrChange.cmd)
+				close(interruptEndCh)
+				require.Error(t, err)
+				require.EqualError(t, err, rbrChange.errorOnTableChangeSandwich)
+
+				// Ensure the region change does not error.
+				require.NoError(t, <-regionChangeErr)
 
 				// Validate the zone configuration.
 				_, err = sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
