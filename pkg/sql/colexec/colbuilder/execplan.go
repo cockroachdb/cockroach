@@ -1433,13 +1433,13 @@ func (r opResult) planAndMaybeWrapFilter(
 		ctx, flowCtx, evalCtx, r.Root, r.ColumnTypes, filter, args.StreamingMemAccount, factory, args.ExprHelper,
 	)
 	if err != nil {
-		// ON expression planning failed. Fall back to planning the filter
+		// Filter expression planning failed. Fall back to planning the filter
 		// using row execution.
 		if log.V(2) {
 			log.Infof(
 				ctx,
-				"vectorized join ON expr planning failed with error %v ON expr is %s, attempting to wrap as a row source",
-				err, filter.String(),
+				"filter expr %s planning failed with error, attempting to wrap as a row source: %v",
+				filter.String(), err,
 			)
 		}
 
