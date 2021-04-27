@@ -1,4 +1,4 @@
-name:                Create doc issues on PR merge
+name: Create doc issues on PR merge
 
 # Action that creates issues in cockroachdb/docs when a PR is merged from
 # cockroachdb/cockroach in the master or release-* branch and has a
@@ -9,10 +9,12 @@ on:
     branches:
       - master
       - 'release-*'
-    types:           [closed]
+    types: [closed]
 
 jobs:
   create-doc-issue:
-    runs-on:         ubuntu-latest
-    if:              ${{ github.event.pull_request.merged == true }}
-    run: echo "I am merged."
+    name: Extract release notes 
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.merged == true }}
+    steps:
+      run: echo "I am merged."

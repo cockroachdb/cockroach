@@ -7,7 +7,7 @@ tests.
 
 ## Getting Started
 
-Before we get started, you need to download the CockroachDB source code and
+Before we get started, download the CockroachDB source code and
 ensure you have all of the prerequisites needed for development. See
 [CONTRIBUTING.md] doc for details.
 
