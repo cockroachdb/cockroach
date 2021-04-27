@@ -164,33 +164,6 @@ func (sr *txnSpanRefresher) SendLocked(
 
 	// Set the batch's CanForwardReadTimestamp flag.
 	ba.CanForwardReadTimestamp = sr.canForwardReadTimestampWithoutRefresh(ba.Txn)
-	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
-		et := rArgs.(*roachpb.EndTxnRequest)
-		// Assign the EndTxn's DeprecatedCanCommitAtHigherTimestamp flag if it
-		// isn't already set correctly. We don't write blindly because we could
-		// be dealing with a re-issued batch from splitEndTxnAndRetrySend after
-		// a refresh and we don't want to mutate previously issued requests or
-		// we risk a data race (checked by raceTransport). In these cases, we
-		// need to clone the EndTxn request first before mutating.
-		//
-		// We know this is a re-issued batch if the flag is already set and we
-		// need to unset it. We aren't able to detect the case where the flag is
-		// not set and we now need to set it to true, but such cases don't
-		// happen in practice (i.e. we'll never begin setting the flag after a
-		// refresh).
-		//
-		// TODO(nvanbenschoten): this is ugly. If we weren't about to delete
-		// this field, we'd want to do something better. Just delete this ASAP.
-		if et.DeprecatedCanCommitAtHigherTimestamp != ba.CanForwardReadTimestamp {
-			isReissue := et.DeprecatedCanCommitAtHigherTimestamp
-			if isReissue {
-				etCpy := *et
-				ba.Requests[len(ba.Requests)-1].MustSetInner(&etCpy)
-				et = &etCpy
-			}
-			et.DeprecatedCanCommitAtHigherTimestamp = ba.CanForwardReadTimestamp
-		}
-	}
 
 	// Attempt a refresh before sending the batch.
 	ba, pErr := sr.maybeRefreshPreemptivelyLocked(ctx, ba, false)
