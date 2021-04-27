@@ -5833,6 +5833,66 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 	),
 
 	//
+	// Table metadata
+	//
+
+	"st_estimatedextent": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySpatial,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"geocolumn_name", types.String},
+				{"parent_only", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(#64257): implement by looking at statistics.
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.
+
+The parent_only boolean is always ignored.`,
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"geocolumn_name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(#64257): implement by looking at statistics.
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_name", types.String},
+				{"geocolumn_name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(#64257): implement by looking at statistics.
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	//
 	// Schema changes
 	//
 
