@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -72,6 +73,7 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_maruel_panicparse//stack",
         "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
