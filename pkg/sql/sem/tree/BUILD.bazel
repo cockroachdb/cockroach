@@ -81,7 +81,6 @@ go_library(
         "set.go",
         "show.go",
         "split.go",
-        "statementtype_string.go",
         "stmt.go",
         "stream_ingestion.go",
         "survival_goal.go",
@@ -107,6 +106,7 @@ go_library(
         "zone.go",
         ":gen-createtypevariety-stringer",  # keep
         ":gen-statementreturntype-stringer",  # keep
+        ":gen-statementtype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
@@ -252,4 +252,10 @@ stringer(
     name = "gen-statementreturntype-stringer",
     src = "stmt.go",
     typ = "StatementReturnType",
+)
+
+stringer(
+    name = "gen-statementtype-stringer",
+    src = "stmt.go",
+    typ = "StatementType",
 )
