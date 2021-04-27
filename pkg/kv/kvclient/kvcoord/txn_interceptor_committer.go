@@ -473,7 +473,6 @@ func makeTxnCommitExplicitLocked(
 	et := roachpb.EndTxnRequest{Commit: true}
 	et.Key = txn.Key
 	et.LockSpans = lockSpans
-	et.DeprecatedCanCommitAtHigherTimestamp = canFwdRTS
 	ba.Add(&et)
 
 	_, pErr := s.SendLocked(ctx, ba)

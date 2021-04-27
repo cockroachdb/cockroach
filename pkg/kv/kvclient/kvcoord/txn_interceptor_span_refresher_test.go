@@ -1082,8 +1082,7 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 
-	// Send an EndTxn request. Should set DeprecatedCanCommitAtHigherTimestamp
-	// and CanForwardReadTimestamp flags.
+	// Send an EndTxn request. Should set CanForwardReadTimestamp flag.
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
 	ba.Add(&roachpb.EndTxnRequest{})
@@ -1092,7 +1091,6 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.True(t, ba.Requests[0].GetEndTxn().DeprecatedCanCommitAtHigherTimestamp)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1104,8 +1102,7 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	require.NotNil(t, br)
 
 	// Send an EndTxn request for a transaction with a fixed commit timestamp.
-	// Should NOT set DeprecatedCanCommitAtHigherTimestamp and
-	// CanForwardReadTimestamp flags.
+	// Should NOT set CanForwardReadTimestamp flag.
 	txnFixed := txn.Clone()
 	txnFixed.CommitTimestampFixed = true
 	var baFixed roachpb.BatchRequest
@@ -1116,7 +1113,6 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().DeprecatedCanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1139,8 +1135,7 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
 
-	// Send another EndTxn request. Should NOT set
-	// DeprecatedCanCommitAtHigherTimestamp and CanForwardReadTimestamp flags.
+	// Send another EndTxn request. Should NOT set CanForwardReadTimestamp flag.
 	ba.Requests = nil
 	ba.Add(&roachpb.EndTxnRequest{})
 
@@ -1148,7 +1143,6 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().DeprecatedCanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1169,8 +1163,8 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	// Send another EndTxn request. Still should NOT set
-	// DeprecatedCanCommitAtHigherTimestamp and CanForwardReadTimestamp flags.
+	// Send another EndTxn request. Still should NOT set CanForwardReadTimestamp
+	// flag.
 	ba.Requests = nil
 	ba.Add(&roachpb.EndTxnRequest{})
 
@@ -1178,7 +1172,6 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().DeprecatedCanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1190,8 +1183,7 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	require.NotNil(t, br)
 
 	// Increment the transaction's epoch and send another EndTxn request. Should
-	// set DeprecatedCanCommitAtHigherTimestamp and CanForwardReadTimestamp
-	// flags.
+	// set CanForwardReadTimestamp flag.
 	ba.Requests = nil
 	ba.Add(&roachpb.EndTxnRequest{})
 
@@ -1199,7 +1191,6 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.True(t, ba.Requests[0].GetEndTxn().DeprecatedCanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

@@ -650,15 +650,6 @@ message EndTxnRequest {
   // reliably for these transactions - a TransactionStatusError might be
   // returned instead if 1PC execution fails.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
-  // DeprecatedCanCommitAtHigherTimestamp indicates that the batch this EndTxn
-  // is part of can be evaluated at a higher timestamp than the transaction's
-  // read timestamp. This is set by the client if the transaction has not
-  // performed any reads that must be refreshed prior to sending this current
-  // batch. When set, it allows the server to handle pushes and write too old
-  // conditions locally.
-  // TODO(nvanbenschoten): remove this in favor of can_forward_read_timestamp
-  // in v21.1. The flag is not read in v20.2.
-  bool deprecated_can_commit_at_higher_timestamp = 8;
   // True to indicate that lock spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
@@ -679,7 +670,7 @@ message EndTxnRequest {
   // WARNING: this flag was introduced in the v20.2 release. v20.1 nodes may not
   // set this properly so it should not be relied upon for correctness.
   bool txn_heartbeating = 10;
-  reserved 7;
+  reserved 7, 8;
 }
 
 // An EndTxnResponse is the return value from the EndTxn() method. The final
