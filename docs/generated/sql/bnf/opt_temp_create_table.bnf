@@ -1,8 +1,0 @@
-opt_temp_create_table ::=
-	'TEMPORARY'
-	| 'TEMP'
-	| 
-	| 'LOCAL' 'TEMPORARY'
-	| 'LOCAL' 'TEMP'
-	| 'GLOBAL' 'TEMPORARY'
-	| 'GLOBAL' 'TEMP'
