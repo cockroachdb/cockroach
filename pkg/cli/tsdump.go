@@ -13,12 +13,12 @@ package cli
 import (
 	"context"
 	"encoding/csv"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -48,20 +48,8 @@ Dumps all of the raw timeseries values in a cluster.
 				return err
 			}
 
-			out := os.Stdout
-			enc := gob.NewEncoder(out)
-			for {
-				data, err := stream.Recv()
-				if err == io.EOF {
-					return out.Sync()
-				}
-				if err != nil {
-					return err
-				}
-				if err := enc.Encode(data); err != nil {
-					return err
-				}
-			}
+			defer os.Stdout.Sync()
+			return ts.DumpRawTo(stream, os.Stdout)
 		}
 
 		var w tsWriter
