@@ -189,6 +189,9 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
 			return nil, false
 		}
+		if sel.Relational().HasSubquery {
+			return nil, false
+		}
 		filters = sel.Filters
 
 	case opt.ScanOp:
