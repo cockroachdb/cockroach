@@ -2,7 +2,12 @@ import React from "react";
 import classNames from "classnames/bind";
 import Long from "long";
 
-import { FixLong, StatementSummary, StatementStatistics } from "src/util";
+import {
+  FixLong,
+  longToInt,
+  StatementSummary,
+  StatementStatistics,
+} from "src/util";
 import {
   countBarChart,
   rowsReadBarChart,
@@ -28,7 +33,6 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 const cx = classNames.bind(styles);
-const longToInt = (d: number | Long) => Number(FixLong(d));
 
 function makeCommonColumns(
   statements: AggregateStatistics[],
