@@ -31,7 +31,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 	ctx := context.Background()
 	dest := cloudimpl.MakeNullSinkStorageURI("foo")
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI(dest, security.RootUserName())
+	conf, err := cloudimpl.ExternalStorageConfFromURI(dest, security.RootUser)
 	if err != nil {
 		t.Fatal(err)
 	}

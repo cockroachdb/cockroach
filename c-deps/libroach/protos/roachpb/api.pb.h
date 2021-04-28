@@ -651,12 +651,13 @@ enum ExternalStorageProvider {
   Azure = 5,
   Workload = 6,
   FileTable = 7,
+  NullSink = 8,
   ExternalStorageProvider_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   ExternalStorageProvider_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ExternalStorageProvider_IsValid(int value);
 const ExternalStorageProvider ExternalStorageProvider_MIN = Unknown;
-const ExternalStorageProvider ExternalStorageProvider_MAX = FileTable;
+const ExternalStorageProvider ExternalStorageProvider_MAX = NullSink;
 const int ExternalStorageProvider_ARRAYSIZE = ExternalStorageProvider_MAX + 1;
 
 enum MVCCFilter {

@@ -14,7 +14,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -24,12 +26,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
+const exportLoggingPrefix = "export-csv"
+
+var logEveryNumChunkSetting = settings.RegisterIntSetting(
+	"bulkio.export.logging_frequency",
+	"the number of chunks after which we will log timing information",
+	30)
 
 // csvExporter data structure to augment the compression
 // and csv writer, encapsulating the internals to make
@@ -153,6 +163,14 @@ type csvWriter struct {
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
+	timings     struct {
+		totalTimeDecoding                 time.Duration
+		totalTimeWritingToCSV             time.Duration
+		totalTimeFlushing                 time.Duration
+		totalTimeWritingToExternalStorage time.Duration
+		totalTimeEmitingRow               time.Duration
+		totalChunkTime                    time.Duration
+	}
 }
 
 var _ execinfra.Processor = &csvWriter{}
@@ -192,6 +210,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		for {
 			var rows int64
 			writer.ResetBuffer()
+			chunkBegin := timeutil.Now()
 			for {
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
@@ -206,6 +225,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				}
 				rows++
 
+				rowDecodeBegin := timeutil.Now()
 				for i, ed := range row {
 					if ed.IsNull() {
 						csvRow[i] = nullsAs
@@ -218,17 +238,23 @@ func (sp *csvWriter) Run(ctx context.Context) {
 					csvRow[i] = f.String()
 					f.Reset()
 				}
+				sp.timings.totalTimeDecoding += timeutil.Since(rowDecodeBegin)
+				csvRowWriteBegin := timeutil.Now()
 				if err := writer.Write(csvRow); err != nil {
 					return err
 				}
+				sp.timings.totalTimeWritingToCSV += timeutil.Since(csvRowWriteBegin)
 			}
 			if rows < 1 {
 				break
 			}
+			writeFlushBegin := timeutil.Now()
 			if err := writer.Flush(); err != nil {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
+			sp.timings.totalTimeFlushing += timeutil.Since(writeFlushBegin)
 
+			externalStorageWriteBegin := timeutil.Now()
 			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
 			if err != nil {
 				return err
@@ -258,6 +284,8 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
+			sp.timings.totalTimeWritingToExternalStorage += timeutil.Since(externalStorageWriteBegin)
+			emittingRowBegin := timeutil.Now()
 			res := rowenc.EncDatumRow{
 				rowenc.DatumToEncDatum(
 					types.String,
@@ -277,12 +305,22 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err != nil {
 				return err
 			}
+			sp.timings.totalTimeEmitingRow += timeutil.Since(emittingRowBegin)
 			if cs != execinfra.NeedMoreRows {
 				// TODO(dt): presumably this is because our recv already closed due to
 				// another error... so do we really need another one?
 				return errors.New("unexpected closure of consumer")
 			}
+			sp.timings.totalChunkTime += timeutil.Since(chunkBegin)
+
+			if log.V(2) {
+				if int64(chunk)%logEveryNumChunkSetting.Get(&sp.flowCtx.EvalCtx.Settings.SV) == 0 {
+					sp.logTimings(ctx, chunk)
+				}
+			}
+
 			if done {
+				sp.logTimings(ctx, chunk)
 				break
 			}
 		}
@@ -293,6 +331,24 @@ func (sp *csvWriter) Run(ctx context.Context) {
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+}
+
+func (sp *csvWriter) logTimings(ctx context.Context, chunk int) {
+	log.Infof(ctx, "%s: processed %d chunks, %d rows in %s", exportLoggingPrefix, chunk,
+		int64(chunk)*sp.spec.ChunkRows, sp.timings.totalChunkTime.String())
+	log.Infof(ctx, "%s: time spent decoding %s, writing to csv %s, flushing %s, "+
+		"writing to external storage %s, emitting results row %s", exportLoggingPrefix,
+		sp.timings.totalTimeDecoding.String(), sp.timings.totalTimeWritingToCSV.String(),
+		sp.timings.totalTimeFlushing.String(), sp.timings.totalTimeWritingToExternalStorage.
+			String(), sp.timings.totalTimeEmitingRow.String())
+	log.Infof(ctx, "%s: rate in sec/chunk - total %d, decoding %d, writing %d, flushing %d,"+
+		" external storage %d, emitting result row %d", exportLoggingPrefix,
+		int64(sp.timings.totalChunkTime.Seconds())/int64(chunk),
+		int64(sp.timings.totalTimeDecoding.Seconds())/int64(chunk),
+		int64(sp.timings.totalTimeWritingToCSV.Seconds())/int64(chunk),
+		int64(sp.timings.totalTimeFlushing.Seconds())/int64(chunk),
+		int64(sp.timings.totalTimeWritingToExternalStorage.Seconds())/int64(chunk),
+		int64(sp.timings.totalTimeEmitingRow.Seconds())/int64(chunk))
 }
 
 func init() {
