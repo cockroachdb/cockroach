@@ -13,6 +13,7 @@ package colrpc
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -223,9 +224,9 @@ func (o *Outbox) handleStreamErr(
 	}
 }
 
-func (o *Outbox) moveToDraining(ctx context.Context) {
+func (o *Outbox) moveToDraining(ctx context.Context, reason string) {
 	if atomic.CompareAndSwapUint32(&o.draining, 0, 1) {
-		log.VEvent(ctx, 2, "Outbox moved to draining")
+		log.VEventf(ctx, 2, "Outbox moved to draining (%s)", reason)
 	}
 }
 
@@ -301,6 +302,7 @@ func (o *Outbox) sendBatches(
 func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
 	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
+		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", errToSend)
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
 		)
@@ -360,7 +362,7 @@ func (o *Outbox) runWithStream(
 			case msg.Handshake != nil:
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
-				o.moveToDraining(ctx)
+				o.moveToDraining(ctx, "consumer requested draining" /* reason */)
 			}
 		}
 		close(waitCh)
@@ -368,7 +370,11 @@ func (o *Outbox) runWithStream(
 
 	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	if terminatedGracefully || errToSend != nil {
-		o.moveToDraining(ctx)
+		reason := "terminated gracefully"
+		if errToSend != nil {
+			reason = fmt.Sprintf("encountered error when sending batches: %v", errToSend)
+		}
+		o.moveToDraining(ctx, reason)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
 			o.handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
