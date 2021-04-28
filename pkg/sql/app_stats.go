@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -225,6 +227,16 @@ func (a *appStats) recordStatement(
 		return stmtID
 	}
 
+	// Retrieve the list of all nodes which the statement was executed on.
+	var nodes []int64
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		// ForEach returns nodes in order.
+		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+			nodes = append(nodes, int64(i))
+		})
+	}
+
 	// Collect the per-statement statistics.
 	s.mu.Lock()
 	s.mu.data.Count++
@@ -251,7 +263,7 @@ func (a *appStats) recordStatement(
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
 	s.mu.data.LastExecTimestamp = timeutil.Now()
-	s.mu.database = planner.SessionData().Database
+	s.mu.data.Nodes = util.CombineUniqueInt64(s.mu.data.Nodes, nodes)
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -260,6 +272,7 @@ func (a *appStats) recordStatement(
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.fullScan = fullScan
+	s.mu.database = planner.CurrentDatabase()
 	s.mu.Unlock()
 
 	return s.ID

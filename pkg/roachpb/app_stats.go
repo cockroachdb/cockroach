@@ -139,6 +139,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
+	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
 
 	s.ExecStats.Add(other.ExecStats)
 

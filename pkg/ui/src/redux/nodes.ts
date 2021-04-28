@@ -27,6 +27,7 @@ export import LivenessStatus = protos.cockroach.kv.kvserver.liveness.livenesspb.
 import { cockroach } from "src/js/protos";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import INodeStatus = cockroach.server.status.statuspb.INodeStatus;
+import ILocality = cockroach.roachpb.ILocality;
 
 const { MetricConstants, BytesUsed } = util;
 
@@ -310,6 +311,27 @@ export const nodeDisplayNameByIDSelector = createSelector(
           ns,
           livenessStatusByNodeID[ns.desc.node_id],
         );
+      });
+    }
+    return result;
+  },
+);
+
+export function getRegionFromLocality(locality: ILocality): string {
+  for (let i = 0; i < locality.tiers.length; i++) {
+    if (locality.tiers[i].key === "region") return locality.tiers[i].value;
+  }
+  return "";
+}
+
+// nodeRegionsByIDSelector provides the region for each node.
+export const nodeRegionsByIDSelector = createSelector(
+  nodeStatusesSelector,
+  (nodeStatuses) => {
+    const result: { [key: string]: string } = {};
+    if (!_.isEmpty(nodeStatuses)) {
+      nodeStatuses.forEach((ns) => {
+        result[ns.desc.node_id] = getRegionFromLocality(ns.desc.locality);
       });
     }
     return result;

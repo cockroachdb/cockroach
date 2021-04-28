@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "util",
     srcs = [
+        "arrays.go",
         "constants.go",
         "crdb_test_off.go",
         "crdb_test_on.go",  # keep
@@ -42,6 +43,7 @@ go_test(
     name = "util_test",
     size = "small",
     srcs = [
+        "arrays_test.go",
         "every_n_test.go",
         "fast_int_map_test.go",
         "fast_int_set_test.go",
