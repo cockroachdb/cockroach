@@ -19,14 +19,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -363,4 +368,109 @@ func TestAdminRelocateRangeRandom(t *testing.T) {
 		voters, nonVoters := randomRelocationTargets()
 		relocateAndCheck(t, tc, k, tc.Targets(voters...), tc.Targets(nonVoters...))
 	}
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/64325
+// which makes sure an in-flight read operation during replica removal won't
+// return empty results.
+func TestReplicaRemovalDuringRequestEvaluation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type magicKey struct{}
+
+	// delayReadC is used to synchronize the in-flight read request with the main
+	// test goroutine. It is read from twice:
+	//
+	// 1. The first read allows the test to block until the request eval filter
+	//    is called, i.e. when the read request is ready.
+	// 2. The second read allows the test to close the channel to unblock
+	//    the eval filter, causing the read request to be evaluated.
+	delayReadC := make(chan struct{})
+	evalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+		if args.Ctx.Value(magicKey{}) != nil {
+			<-delayReadC
+			<-delayReadC
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	manual := hlc.NewHybridManualClock()
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: evalFilter,
+					},
+					// Required by TestCluster.MoveRangeLeaseNonCooperatively.
+					AllowLeaseRequestProposalsWhenNotLeader: true,
+				},
+				Server: &server.TestingKnobs{
+					ClockSource: manual.UnixNano,
+				},
+			},
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 2, args)
+	defer tc.Stopper().Stop(ctx)
+
+	// Create range and upreplicate.
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+	// Perform write.
+	pArgs := putArgs(key, []byte("foo"))
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	require.Nil(t, pErr)
+
+	// Perform read on write and wait for read to block.
+	type reply struct {
+		resp roachpb.Response
+		err  *roachpb.Error
+	}
+	readResC := make(chan reply)
+	err := tc.Stopper().RunAsyncTask(ctx, "get", func(ctx context.Context) {
+		readCtx := context.WithValue(ctx, magicKey{}, struct{}{})
+		gArgs := getArgs(key)
+		resp, pErr := kv.SendWrapped(readCtx, tc.Servers[0].DistSender(), gArgs)
+		readResC <- reply{resp, pErr}
+	})
+	require.NoError(t, err)
+	delayReadC <- struct{}{}
+
+	// Transfer leaseholder to other store.
+	rangeDesc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+	repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rangeDesc.RangeID)
+	require.NoError(t, err)
+	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1), manual)
+	require.NoError(t, err)
+
+	// Remove first store from raft group.
+	tc.RemoveVotersOrFatal(t, key, tc.Target(0))
+
+	// This is a bit iffy. We want to make sure that, in the buggy case, we
+	// will typically fail (i.e. the read returns empty because the replica was
+	// removed). However, in the non-buggy case the in-flight read request will
+	// be holding readOnlyCmdMu until evaluated, blocking the replica removal,
+	// so waiting for replica removal would deadlock. We therefore take the
+	// easy way out by starting an async replica GC and sleeping for a bit.
+	err = tc.Stopper().RunAsyncTask(ctx, "replicaGC", func(ctx context.Context) {
+		assert.NoError(t, tc.GetFirstStoreFromServer(t, 0).ManualReplicaGC(repl))
+	})
+	require.NoError(t, err)
+	time.Sleep(500 * time.Millisecond)
+
+	// Allow read to resume. Should return "foo".
+	close(delayReadC)
+	r := <-readResC
+	require.Nil(t, r.err)
+	require.NotNil(t, r.resp)
+	require.NotNil(t, r.resp.(*roachpb.GetResponse).Value)
+	val, err := r.resp.(*roachpb.GetResponse).Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), val)
 }
