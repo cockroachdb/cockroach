@@ -361,6 +361,8 @@ func (n *noopOperator) Reset(ctx context.Context) {
 
 // MetadataSource is an interface implemented by processors and columnar
 // operators that can produce metadata.
+// TODO(yuzefovich): remove this interface in favor of DrainableOperator and
+// clarify that calling DrainMeta on uninitialized operator is illegal.
 type MetadataSource interface {
 	// DrainMeta returns all the metadata produced by the processor or operator.
 	// It will be called exactly once, usually, when the processor or operator

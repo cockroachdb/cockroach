@@ -152,8 +152,13 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	for _, input := range s.inputs {
+	for i, input := range s.inputs {
 		input.Root.Init(s.Ctx)
+		s.nextBatch[i] = func(inputOp colexecop.Operator, inputIdx int) func() {
+			return func() {
+				s.batches[inputIdx] = inputOp.Next()
+			}
+		}(input.Root, i)
 	}
 }
 
@@ -175,11 +180,6 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 // synchronizer is minimally affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init() {
 	for i, input := range s.inputs {
-		s.nextBatch[i] = func(input colexecargs.OpWithMetaInfo, inputIdx int) func() {
-			return func() {
-				s.batches[inputIdx] = input.Root.Next()
-			}
-		}(input, i)
 		s.externalWaitGroup.Add(1)
 		s.internalWaitGroup.Add(1)
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
@@ -208,6 +208,11 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				case s.errCh <- err:
 				default:
 				}
+			}
+			if s.nextBatch[inputIdx] == nil {
+				// The initialization of this input wasn't successful, so it is
+				// invalid to call Next or DrainMeta on it. Exit early.
+				return
 			}
 			msg := &unorderedSynchronizerMsg{
 				inputIdx: inputIdx,
