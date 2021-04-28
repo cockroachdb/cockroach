@@ -1081,11 +1081,13 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
 		// commits by clearSubsumedReplicaInMemoryData() to finish the removal.
+		sr.readOnlyCmdMu.Lock()
 		sr.mu.Lock()
 		sr.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
 			destroyReasonRemoved)
 		sr.mu.Unlock()
+		sr.readOnlyCmdMu.Unlock()
 
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
