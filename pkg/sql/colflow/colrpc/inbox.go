@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -308,12 +310,11 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 				i.close()
 				return coldata.ZeroBatch
 			}
-			// Note that here err can be stream's context cancellation. If it
-			// was caused by the internal cancellation of the parallel
-			// unordered synchronizer, it'll get swallowed by the synchronizer
-			// goroutine. Regardless of the cause we want to propagate such
-			// error in all cases so that the caller could decide on how to
-			// handle it.
+			// Note that here err can be stream's context cancellation.
+			// Regardless of the cause we want to propagate such an error as
+			// expected on in all cases so that the caller could decide on how
+			// to handle it.
+			err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}
