@@ -37,6 +37,7 @@ const GetPGMetadataSQL = `
 	WHERE n.nspname = $1
 	AND a.attnum > 0
   AND c.relkind != 'i'
+  AND c.relname NOT LIKE 'pg_stat%'
 	ORDER BY 1, 2;
 `
 

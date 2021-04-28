@@ -7,7 +7,9 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/sql",
+        "//pkg/sql/types",
         "@com_github_jackc_pgx//:pgx",
+        "@com_github_lib_pq//oid",
     ],
 )
 
