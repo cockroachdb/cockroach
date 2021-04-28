@@ -275,6 +275,8 @@ const (
 	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
 	// privileges of the protected_ts_meta system table.
 	ProtectedTsMetaPrivilegesMigration
+	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
+	V21_1
 
 	// Step (1): Add new versions here.
 )
@@ -476,6 +478,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     ProtectedTsMetaPrivilegesMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
+	},
+	{
+		Key:     V21_1,
+		Version: roachpb.Version{Major: 21, Minor: 1},
 	},
 	// Step (2): Add new versions here.
 })
