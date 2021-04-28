@@ -45,6 +45,7 @@ type flowStreamClient interface {
 // given remote endpoint.
 type Outbox struct {
 	colexecop.OneInputNode
+	inputInitialized bool
 
 	typs []*types.T
 
@@ -261,6 +262,7 @@ func (o *Outbox) sendBatches(
 	}
 	errToSend = colexecerror.CatchVectorizedRuntimeError(func() {
 		o.Input.Init(o.runnerCtx)
+		o.inputInitialized = true
 		for {
 			if atomic.LoadUint32(&o.draining) == 1 {
 				terminatedGracefully = true
@@ -307,9 +309,16 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
 		)
 	}
-	if o.span != nil && o.getStats != nil {
-		for _, s := range o.getStats() {
-			o.span.RecordStructured(s)
+	if o.inputInitialized {
+		// Retrieving stats and draining the metadata is only safe if the input
+		// to the outbox was properly initialized.
+		if o.span != nil && o.getStats != nil {
+			for _, s := range o.getStats() {
+				o.span.RecordStructured(s)
+			}
+		}
+		for _, meta := range o.metadataSources.DrainMeta() {
+			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
 	}
 	if trace := execinfra.GetTraceData(ctx); trace != nil {
@@ -320,9 +329,6 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 				},
 			},
 		})
-	}
-	for _, meta := range o.metadataSources.DrainMeta() {
-		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 	}
 	if len(msg.Data.Metadata) == 0 {
 		return nil
