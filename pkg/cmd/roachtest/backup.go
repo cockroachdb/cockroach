@@ -139,6 +139,38 @@ func registerBackupNodeShutdown(r *testRegistry) {
 
 }
 
+// initBulkJobPerfArtifacts registers a histogram, creates a performance
+// artifact directory and returns a method that when invoked records a tick.
+func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time.Duration) func() {
+	// Register a named histogram to track the total time the bulk job took.
+	// Roachperf uses this information to display information about this
+	// roachtest.
+	reg := histogram.NewRegistry(timeout)
+	reg.GetHandle().Get(testName)
+
+	// Create the stats file where the roachtest will write perf artifacts.
+	// We probably don't want to fail the roachtest if we are unable to
+	// collect perf stats.
+	statsFile := perfArtifactsDir + "/stats.json"
+	err := os.MkdirAll(filepath.Dir(statsFile), 0755)
+	if err != nil {
+		log.Errorf(ctx, "%s failed to create perf artifacts directory %s: %s", testName,
+			statsFile, err.Error())
+	}
+	jsonF, err := os.Create(statsFile)
+	if err != nil {
+		log.Errorf(ctx, "%s failed to create perf artifacts directory %s: %s", testName,
+			statsFile, err.Error())
+	}
+	jsonEnc := json.NewEncoder(jsonF)
+	tick := func() {
+		reg.Tick(func(tick histogram.Tick) {
+			_ = jsonEnc.Encode(tick.Snapshot())
+		})
+	}
+	return tick
+}
+
 func registerBackup(r *testRegistry) {
 
 	backup2TBSpec := makeClusterSpec(10)
@@ -153,33 +185,7 @@ func registerBackup(r *testRegistry) {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
-
-			// Register a named histogram to track the total time the backup took.
-			// Roachperf uses this information to display information about this
-			// roachtest.
-			reg := histogram.NewRegistry(2 * time.Hour)
-			reg.GetHandle().Get("backup/2TB")
-
-			// Create the stats file where the roachtest will write perf artifacts.
-			// We probably don't want to fail the roachtest if we are unable to
-			// collect perf stats.
-			statsFile := perfArtifactsDir + "/stats.json"
-			err := os.MkdirAll(filepath.Dir(statsFile), 0755)
-			if err != nil {
-				log.Errorf(ctx, "backup/2TB failed to create perf artifacts directory %s: %s", statsFile,
-					err.Error())
-			}
-			jsonF, err := os.Create(statsFile)
-			if err != nil {
-				log.Errorf(ctx, "backup/2TB failed to create perf artifacts directory %s: %s", statsFile,
-					err.Error())
-			}
-			jsonEnc := json.NewEncoder(jsonF)
-			tick := func() {
-				reg.Tick(func(tick histogram.Tick) {
-					_ = jsonEnc.Encode(tick.Snapshot())
-				})
-			}
+			tick := initBulkJobPerfArtifacts(ctx, "backup/2TB", 2*time.Hour)
 
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
@@ -191,6 +197,12 @@ func registerBackup(r *testRegistry) {
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
 				tick()
+
+				// Upload the perf artifacts to any one of the nodes so that the test
+				// runner copies it into an appropriate directory path.
+				if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				}
 				return nil
 			})
 			m.Wait()
