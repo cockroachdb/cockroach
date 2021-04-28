@@ -174,7 +174,7 @@ var charts = []sectionDescription{
 		Charts: []chartDescription{
 			{
 				Title:   "goroutines",
-				Metrics: []string{"sys.goroutines"},
+				Metrics: []string{"sys.goroutines", "sys.runnable.goroutines.per.cpu"},
 			},
 			{
 				Title: "Memory",
