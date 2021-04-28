@@ -1,7 +1,7 @@
 import { assert } from "chai";
 import { filterTransactions, getStatementsById } from "./utils";
 import { Filters } from "../queryFilter/filter";
-import { data } from "./transactions.fixture";
+import { data, nodeRegions } from "./transactions.fixture";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
@@ -31,9 +31,17 @@ describe("Filter transactions", () => {
       app: "All",
       timeNumber: "0",
       timeUnit: "seconds",
+      nodes: "",
+      regions: "",
     };
     assert.equal(
-      filterTransactions(txData, filter, "$ internal").transactions.length,
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
       11,
     );
   });
@@ -43,9 +51,17 @@ describe("Filter transactions", () => {
       app: "$ TEST",
       timeNumber: "0",
       timeUnit: "seconds",
+      nodes: "",
+      regions: "",
     };
     assert.equal(
-      filterTransactions(txData, filter, "$ internal").transactions.length,
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
       3,
     );
   });
@@ -55,9 +71,17 @@ describe("Filter transactions", () => {
       app: "$ TEST EXACT",
       timeNumber: "0",
       timeUnit: "seconds",
+      nodes: "",
+      regions: "",
     };
     assert.equal(
-      filterTransactions(txData, filter, "$ internal").transactions.length,
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
       1,
     );
   });
@@ -67,9 +91,17 @@ describe("Filter transactions", () => {
       app: data.internal_app_name_prefix,
       timeNumber: "0",
       timeUnit: "seconds",
+      nodes: "",
+      regions: "",
     };
     assert.equal(
-      filterTransactions(txData, filter, "$ internal").transactions.length,
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
       7,
     );
   });
@@ -79,10 +111,98 @@ describe("Filter transactions", () => {
       app: "All",
       timeNumber: "40",
       timeUnit: "miliseconds",
+      nodes: "",
+      regions: "",
     };
     assert.equal(
-      filterTransactions(txData, filter, "$ internal").transactions.length,
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
       8,
+    );
+  });
+
+  it("filters by one node", () => {
+    const filter: Filters = {
+      app: "All",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      nodes: "n1",
+      regions: "",
+    };
+    assert.equal(
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
+      6,
+    );
+  });
+
+  it("filters by multiple nodes", () => {
+    const filter: Filters = {
+      app: "All",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      nodes: "n2,n4",
+      regions: "",
+    };
+    assert.equal(
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
+      8,
+    );
+  });
+
+  it("filters by one region", () => {
+    const filter: Filters = {
+      app: "All",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      nodes: "",
+      regions: "gcp-europe-west1",
+    };
+    assert.equal(
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
+      4,
+    );
+  });
+
+  it("filters by multiple regions", () => {
+    const filter: Filters = {
+      app: "All",
+      timeNumber: "0",
+      timeUnit: "seconds",
+      nodes: "",
+      regions: "gcp-us-west1,gcp-europe-west1",
+    };
+    assert.equal(
+      filterTransactions(
+        txData,
+        filter,
+        "$ internal",
+        data.statements,
+        nodeRegions,
+      ).transactions.length,
+      9,
     );
   });
 });
