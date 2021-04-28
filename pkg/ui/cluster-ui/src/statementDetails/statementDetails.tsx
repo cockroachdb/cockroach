@@ -49,6 +49,7 @@ import {
 } from "src/barCharts";
 import {
   AggregateStatistics,
+  populateRegionNodeForStatements,
   makeNodesColumns,
   StatementsSortedTable,
 } from "src/statementsTable";
@@ -458,9 +459,10 @@ export class StatementDetails extends React.Component<
 
     const statsByNode = this.props.statement.byNode;
     const totalWorkload = calculateTotalWorkload(statsByNode);
-    const nodes = stats.nodes
-      ? stats.nodes.sort().map(node => node.toString())
-      : [];
+    populateRegionNodeForStatements(statsByNode, nodeRegions);
+    const nodes: string[] = unique(
+      stats.nodes.map(node => node.toString()),
+    ).sort();
     const regions = unique(
       stats.nodes.map(node => nodeRegions[node.toString()]),
     ).sort();
@@ -818,6 +820,7 @@ export class StatementDetails extends React.Component<
                 statsByNode,
                 this.props.nodeNames,
                 totalWorkload,
+                nodeRegions,
               )}
               sortSetting={this.state.sortSetting}
               onChangeSortSetting={this.changeSortSetting}

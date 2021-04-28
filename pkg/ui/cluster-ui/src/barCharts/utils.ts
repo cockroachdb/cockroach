@@ -10,6 +10,7 @@
 
 import { format as d3Format } from "d3-format";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import { TransactionInfo } from "../transactionsTable";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
@@ -20,7 +21,7 @@ export const formatTwoPlaces = d3Format(".2f");
 
 export function bar(
   name: string,
-  value: (d: StatementStatistics | Transaction) => number,
+  value: (d: StatementStatistics | Transaction | TransactionInfo) => number,
 ) {
   return { name, value };
 }

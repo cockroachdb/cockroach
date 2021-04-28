@@ -21,6 +21,7 @@ import classNames from "classnames/bind";
 import { TableSpinner } from "./tableSpinner";
 import { TableHead } from "./tableHead";
 import { TableRow } from "./tableRow";
+import { Tooltip } from "@cockroachlabs/ui-components";
 
 export interface ISortedTablePagination {
   current: number;
@@ -380,4 +381,31 @@ export class SortedTable<T> extends React.Component<
       </div>
     );
   }
+}
+
+/**
+ * Creates an element limited by the max length and
+ * with a tooltip with one listed element per line.
+ * E.g. `value1, value2, value3` with maxLength 10 will display
+ * `value1, va...` on the table and
+ * `value1
+ * value2
+ * value3`  on the tooltip.
+ * @param value a string with elements separated by `, `.
+ * @param maxLength the max length to which it should display value
+ * and hide the remaining.
+ */
+export function longListWithTooltip(value: string, maxLength: number) {
+  const summary =
+    value.length > maxLength ? value.slice(0, maxLength) + "..." : value;
+  return (
+    <Tooltip
+      placement="bottom"
+      content={
+        <pre className={cx("break-line")}>{value.split(", ").join("\r\n")}</pre>
+      }
+    >
+      <div className="cl-table-link__tooltip-hover-area">{summary}</div>
+    </Tooltip>
+  );
 }
