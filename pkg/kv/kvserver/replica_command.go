@@ -2657,6 +2657,25 @@ func (s *Store) AdminRelocateRange(
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 ) error {
+	if containsDuplicates(voterTargets) {
+		return errors.AssertionFailedf(
+			"list of desired voter targets contains duplicates: %+v",
+			voterTargets,
+		)
+	}
+	if containsDuplicates(nonVoterTargets) {
+		return errors.AssertionFailedf(
+			"list of desired non-voter targets contains duplicates: %+v",
+			nonVoterTargets,
+		)
+	}
+	if containsDuplicates(append(voterTargets, nonVoterTargets...)) {
+		return errors.AssertionFailedf(
+			"list of voter targets overlaps with the list of non-voter targets: voters: %+v, non-voters: %+v",
+			voterTargets, nonVoterTargets,
+		)
+	}
+
 	// Remove learners so we don't have to think about relocating them, and leave
 	// the joint config if we're in one.
 	newDesc, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, s, &rangeDesc)
@@ -3088,6 +3107,17 @@ func getRelocationArgs(
 		args.targetType = nonVoterTarget
 	}
 	return args
+}
+
+func containsDuplicates(targets []roachpb.ReplicationTarget) bool {
+	for i := range targets {
+		for j := i + 1; j < len(targets); j++ {
+			if targets[i] == targets[j] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // subtractTargets returns the set of replica descriptors in `left` but not in
