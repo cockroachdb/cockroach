@@ -5388,6 +5388,24 @@ Bottom Left.`,
 			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
+				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(0 /* SRID */))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a bounding geometry for the given box.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_flipcoordinates": makeBuiltin(
 		defProps(),

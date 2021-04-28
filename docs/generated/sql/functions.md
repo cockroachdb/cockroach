@@ -1698,6 +1698,8 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_endpoint"></a><code>st_endpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_envelope"></a><code>st_envelope(box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding geometry for the given box.</p>
+</span></td></tr>
 <tr><td><a name="st_envelope"></a><code>st_envelope(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding envelope for the given geometry.</p>
 <p>For geometries which have a POINT or LINESTRING bounding box (i.e. is a single point
 or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise, the
