@@ -896,11 +896,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				opWithMetaInfo = colexecargs.OpWithMetaInfo{
 					Root:            sync,
 					MetadataSources: colexecop.MetadataSources{sync},
-					// ToClose is set to nil because the
-					// ParallelUnorderedSynchronizer takes care of closing these
-					// components itself since they need to be closed from the
-					// same goroutine as Next.
-					ToClose: nil,
+					ToClose:         colexecop.Closers{sync},
 				}
 				s.operatorConcurrency = true
 			}

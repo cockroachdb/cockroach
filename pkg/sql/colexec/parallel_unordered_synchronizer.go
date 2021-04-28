@@ -102,6 +102,9 @@ type ParallelUnorderedSynchronizer struct {
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
 
+var _ colexecop.DrainableOperator = &ParallelUnorderedSynchronizer{}
+var _ colexecop.ClosableOperator = &ParallelUnorderedSynchronizer{}
+
 // ChildCount implements the execinfra.OpNode interface.
 func (s *ParallelUnorderedSynchronizer) ChildCount(verbose bool) int {
 	return len(s.inputs)
@@ -411,4 +414,29 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta(
 	// Done.
 	s.setState(parallelUnorderedSynchronizerStateDone)
 	return s.bufferedMeta
+}
+
+// Close is part of the colexecop.ClosableOperator interface.
+func (s *ParallelUnorderedSynchronizer) Close(context.Context) error {
+	if state := s.getState(); state != parallelUnorderedSynchronizerStateUninitialized {
+		// Input goroutines have been started and will take care of closing the
+		// closers from the corresponding input trees, so we don't need to do
+		// anything.
+		return nil
+	}
+	// If the synchronizer is in "uninitialized" state, it means that the
+	// goroutines for each input haven't been started, so they won't be able to
+	// close the Closers from the corresponding trees. In such a scenario the
+	// synchronizer must close all of them from all input trees.
+	//
+	// Note that at this point we know that the input goroutines won't be
+	// spawned up (our consumer won't call Next/DrainMeta after calling Close),
+	// so it is safe to close all closers from this goroutine.
+	var lastErr error
+	for _, input := range s.inputs {
+		if err := input.ToClose.Close(s.Ctx); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
