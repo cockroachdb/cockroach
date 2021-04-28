@@ -54,9 +54,10 @@ func (p *planner) ResolveUncachedSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
 ) (found bool, schema catalog.ResolvedSchema, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		found, schema, err = p.LogicalSchemaAccessor().GetSchema(
-			ctx, p.txn, p.ExecCfg().Codec, dbID, name,
-			tree.SchemaLookupFlags{Required: required, RequireMutable: true},
+		found, schema, err = p.Accessor().GetSchemaByName(
+			ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
+				Required: required, RequireMutable: true,
+			},
 		)
 	})
 	return found, schema, err
@@ -67,11 +68,12 @@ func (p *planner) ResolveUncachedSchemaDescriptor(
 func (p *planner) ResolveMutableSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
 ) (found bool, schema catalog.ResolvedSchema, err error) {
-	return p.LogicalSchemaAccessor().GetSchema(
-		ctx, p.txn, p.ExecCfg().Codec, dbID, name, tree.SchemaLookupFlags{
+	return p.Accessor().GetSchemaByName(
+		ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
 			Required:       required,
 			RequireMutable: true,
-		})
+		},
+	)
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -173,10 +175,11 @@ func (p *planner) LookupSchema(
 	if err != nil || !found {
 		return false, nil, err
 	}
-	sc := p.LogicalSchemaAccessor()
+	sc := p.Accessor()
 	var resolvedSchema catalog.ResolvedSchema
-	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName,
-		p.CommonLookupFlags(false /* required */))
+	found, resolvedSchema, err = sc.GetSchemaByName(
+		ctx, p.txn, dbDesc.GetID(), scName, p.CommonLookupFlags(false /* required */),
+	)
 	if err != nil {
 		return false, nil, err
 	}
@@ -190,10 +193,10 @@ func (p *planner) LookupSchema(
 func (p *planner) LookupObject(
 	ctx context.Context, lookupFlags tree.ObjectLookupFlags, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
-	sc := p.LogicalSchemaAccessor()
+	sc := p.Accessor()
 	lookupFlags.CommonLookupFlags.Required = false
 	lookupFlags.CommonLookupFlags.AvoidCached = p.avoidCachedDescriptors
-	objDesc, err := sc.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings, p.ExecCfg().Codec, dbName, scName, tbName, lookupFlags)
+	objDesc, err := sc.GetObjectDesc(ctx, p.txn, dbName, scName, tbName, lookupFlags)
 
 	return objDesc != nil, objDesc, err
 }
@@ -627,14 +630,18 @@ func findTableContainingIndex(
 	idxName tree.UnrestrictedName,
 	lookupFlags tree.CommonLookupFlags,
 ) (result *tree.TableName, desc *tabledesc.Mutable, err error) {
-	sa := sc.LogicalSchemaAccessor()
-	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, codec, dbName, lookupFlags)
+	sa := sc.Accessor()
+	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, dbName, lookupFlags)
 	if dbDesc == nil || err != nil {
 		return nil, nil, err
 	}
 
-	tns, _, err := sa.GetObjectNamesAndIDs(ctx, txn, codec, dbDesc, scName,
-		tree.DatabaseListFlags{CommonLookupFlags: lookupFlags, ExplicitPrefix: true})
+	tns, _, err := sa.GetObjectNamesAndIDs(
+		ctx, txn, dbDesc, scName, tree.DatabaseListFlags{
+			CommonLookupFlags: lookupFlags,
+			ExplicitPrefix:    true,
+		},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -642,7 +649,9 @@ func findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := resolver.ResolveMutableExistingTableObject(ctx, sc, tn, false /*required*/, tree.ResolveAnyTableKind)
+		tableDesc, err := resolver.ResolveMutableExistingTableObject(
+			ctx, sc, tn, false /*required*/, tree.ResolveAnyTableKind,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -733,7 +742,9 @@ func expandIndexName(
 
 	lookupFlags := sc.CommonLookupFlags(requireTable)
 	var foundTn *tree.TableName
-	foundTn, desc, err = findTableContainingIndex(ctx, txn, sc, codec, tn.Catalog(), tn.Schema(), index.Index, lookupFlags)
+	foundTn, desc, err = findTableContainingIndex(
+		ctx, txn, sc, codec, tn.Catalog(), tn.Schema(), index.Index, lookupFlags,
+	)
 	if err != nil {
 		return nil, nil, err
 	}

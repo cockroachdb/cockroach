@@ -634,7 +634,7 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = descs.MakeCollection(
-		s.cfg.LeaseManager, s.cfg.Settings, sd, s.cfg.HydratedTables)
+		s.cfg.LeaseManager, s.cfg.Settings, sd, s.cfg.HydratedTables, s.cfg.VirtualSchemas)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -2174,8 +2174,6 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
-	scInterface := newSchemaInterface(&ex.extraTxnState.descCollection, ex.server.cfg.VirtualSchemas)
-
 	ie := MakeInternalExecutor(
 		ctx,
 		ex.server,
@@ -2219,7 +2217,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:       ex,
 		Jobs:                 &ex.extraTxnState.jobs,
 		SchemaChangeJobCache: ex.extraTxnState.schemaChangeJobsCache,
-		schemaAccessors:      scInterface,
 		sqlStatsCollector:    ex.statsCollector,
 	}
 }
