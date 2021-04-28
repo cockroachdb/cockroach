@@ -201,7 +201,7 @@ export const selectLastReset = createSelector(
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
   (state: AdminUIState) => state.localSettings,
-  "default",
+  null,
 );
 
 export default withRouter(
