@@ -12,6 +12,7 @@ syntax = "proto2";
 package cockroach.ts.tspb;
 option go_package = "tspb";
 
+import "roachpb/data.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 
@@ -184,4 +185,5 @@ service TimeSeries {
   // not returned. Data is returned in the order it is read from disk, meaning
   // that data from different series may be interleaved.
   rpc Dump(DumpRequest) returns (stream TimeSeriesData) {}
+  rpc DumpRaw(DumpRequest) returns (stream roachpb.KeyValue) {}
 }

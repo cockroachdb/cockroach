@@ -65,6 +65,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
@@ -89,5 +90,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
     ],
 )
