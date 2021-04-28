@@ -9,17 +9,11 @@
 // licenses/APL.txt.
 
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { stdDevLong } from "src/util";
-import { Duration, Bytes } from "src/util/format";
+import { stdDevLong, Duration, Bytes, longToInt } from "src/util";
 import classNames from "classnames/bind";
 import styles from "../barCharts/barCharts.module.scss";
 import { barChartFactory } from "src/barCharts/barChartFactory";
-import {
-  bar,
-  formatTwoPlaces,
-  longToInt,
-  approximify,
-} from "src/barCharts/utils";
+import { bar, approximify } from "src/barCharts/utils";
 
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 const cx = classNames.bind(styles);
