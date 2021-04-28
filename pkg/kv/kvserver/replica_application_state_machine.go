@@ -779,11 +779,13 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		//
 		// NB: we must be holding the raftMu here because we're in the midst of
 		// application.
+		b.r.readOnlyCmdMu.Lock()
 		b.r.mu.Lock()
 		b.r.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
 		b.r.mu.Unlock()
+		b.r.readOnlyCmdMu.Unlock()
 		b.changeRemovesReplica = true
 
 		// Delete all of the local data. We're going to delete the hard state too.
