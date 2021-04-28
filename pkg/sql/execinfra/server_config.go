@@ -213,10 +213,6 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
-	// were closed explicitly in flow.Cleanup.
-	CheckVectorizedFlowIsClosedCorrectly bool
-
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
 

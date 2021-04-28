@@ -285,7 +285,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if f.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
+	if util.CrdbTestBuild {
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
 			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
 		}
@@ -1088,7 +1088,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
 			}
-			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
+			if util.CrdbTestBuild {
 				toCloseCopy := append(colexecop.Closers{}, result.ToClose...)
 				for i := range toCloseCopy {
 					func(idx int) {
