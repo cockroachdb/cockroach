@@ -428,6 +428,10 @@ func (p *PhysicalPlan) EnsureSingleStreamOnGateway() {
 			panic("ensuring a single stream on the gateway failed")
 		}
 	}
+	// We now must have a single stream in the whole physical plan, so there is no
+	// ordering to be maintained for the merge of multiple streams. This also
+	// adheres to the comment on p.MergeOrdering.
+	p.MergeOrdering = execinfrapb.Ordering{}
 }
 
 // CheckLastStagePost checks that the processors of the last stage of the
