@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
@@ -77,7 +78,8 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 	v.Add("options", "factoring")
 	v.Add("options", "inline")
 
-	resp, err := httputil.Post(context.TODO(), rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
+	httpClient := httputil.NewClientWithTimeout(120 * time.Second)
+	resp, err := httpClient.Post(context.TODO(), rrAddr, "application/x-www-form-urlencoded", strings.NewReader(v.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +100,8 @@ func GenerateRRNet(bnf []byte) ([]byte, error) {
 func GenerateBNF(addr string) (ebnf []byte, err error) {
 	var b []byte
 	if strings.HasPrefix(addr, "http") {
-		resp, err := httputil.Get(context.TODO(), addr)
+		httpClient := httputil.NewClientWithTimeout(120 * time.Second)
+		resp, err := httpClient.Get(context.TODO(), addr)
 		if err != nil {
 			return nil, err
 		}
