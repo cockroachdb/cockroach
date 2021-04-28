@@ -11,3 +11,8 @@ export const unique = <T>(a: T[]): T[] => [...new Set([...a])];
 export const uniqueLong = (a: Long[]): Long[] => {
   return unique(a.map(longToInt)).map(n => Long.fromInt(n));
 };
+
+// Check if array `a` contains any element of array `b`.
+export const containAny = (a: string[], b: string[]): boolean => {
+  return a.some(item => b.includes(item));
+};
