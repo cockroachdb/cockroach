@@ -139,6 +139,8 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
+	s.Nodes = combineUniqueInt64(s.Nodes, other.Nodes)
+	s.Regions = combineUniqueStrings(s.Regions, other.Regions)
 
 	s.ExecStats.Add(other.ExecStats)
 
@@ -193,4 +195,30 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 
 	s.Count += s.Count
+}
+
+func combineUniqueInt64(a []int64, b []int64) []int64 {
+	check := make(map[int64]int)
+	d := append(a, b...)
+	array := make([]int64, 0)
+	for _, val := range d {
+		check[val] = 1
+	}
+	for element := range check {
+		array = append(array, element)
+	}
+	return array
+}
+
+func combineUniqueStrings(a []string, b []string) []string {
+	check := make(map[string]int)
+	d := append(a, b...)
+	array := make([]string, 0)
+	for _, val := range d {
+		check[val] = 1
+	}
+	for element := range check {
+		array = append(array, element)
+	}
+	return array
 }

@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -225,6 +227,23 @@ func (a *appStats) recordStatement(
 		return stmtID
 	}
 
+	// Retrieve the list of all nodes which the statement was executed on.
+	var nodes util.FastIntSet
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		nodes = execinfrapb.ExtractNodesFromSpans(trace)
+	}
+	// Retrieve which region each node is on.
+	regions := make(map[int64]string)
+	descriptors, err := getAllNodeDescriptors(planner)
+	for _, descriptor := range descriptors {
+		for _, tier := range descriptor.Locality.Tiers {
+			if tier.Key == "region" {
+				regions[int64(descriptor.NodeID)] = tier.Value
+			}
+		}
+	}
+
 	// Collect the per-statement statistics.
 	s.mu.Lock()
 	s.mu.data.Count++
@@ -251,7 +270,17 @@ func (a *appStats) recordStatement(
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
 	s.mu.data.LastExecTimestamp = timeutil.Now()
-	s.mu.database = planner.SessionData().Database
+	nodes.ForEach(func(i int) {
+		// Add node only if not already added.
+		if !containsInt(s.mu.data.Nodes, int64(i)) {
+			s.mu.data.Nodes = append(s.mu.data.Nodes, int64(i))
+		}
+		// Different nodes can have the same region.
+		// Add only if the region wasn't previously added.
+		if !containsString(s.mu.data.Regions, regions[int64(i)]) {
+			s.mu.data.Regions = append(s.mu.data.Regions, regions[int64(i)])
+		}
+	})
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -260,6 +289,7 @@ func (a *appStats) recordStatement(
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.fullScan = fullScan
+	s.mu.database = planner.CurrentDatabase()
 	s.mu.Unlock()
 
 	return s.ID
@@ -289,6 +319,24 @@ func (a *appStats) getStatsForStmt(
 		return a.getStatsForStmtWithKey(key, stmtID, createIfNonexistent), stmtID
 	}
 	return s, s.ID
+}
+
+func containsInt(s []int64, e int64) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *appStats) getStatsForStmtWithKey(
