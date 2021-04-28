@@ -139,6 +139,8 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
+	s.Nodes = combineUniqueInt64(s.Nodes, other.Nodes)
+	s.Regions = combineUniqueStrings(s.Regions, other.Regions)
 
 	s.ExecStats.Add(other.ExecStats)
 
@@ -193,4 +195,56 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 
 	s.Count += s.Count
+}
+
+// The arrays being combined are already in order.
+func combineUniqueInt64(a []int64, b []int64) []int64 {
+	res := make([]int64, 0, len(a))
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		if a[aIter] == b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+			bIter++
+		} else if a[aIter] < b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+		} else {
+			res = append(res, b[bIter])
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		res = append(res, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		res = append(res, b[bIter:]...)
+	}
+	return res
+}
+
+// The arrays being combined are already in order.
+func combineUniqueStrings(a []string, b []string) []string {
+	res := make([]string, 0, len(a))
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		if a[aIter] == b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+			bIter++
+		} else if a[aIter] < b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+		} else {
+			res = append(res, b[bIter])
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		res = append(res, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		res = append(res, b[bIter:]...)
+	}
+	return res
 }
