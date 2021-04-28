@@ -561,6 +561,51 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 	p.SetLastStagePost(post, newResultTypes)
 }
 
+// AddFinalProjection is used to add a final projection before rows are output.
+// If the last stage has no merge ordering or all ordering columns are
+// projected, AddFinalProjection behaves the same as AddProjection. If some
+// ordering columns need to be removed from the final output, however,
+// AddFinalProjection adds an extra Noop processor and applies the projection
+// there.
+func (p *PhysicalPlan) AddFinalProjection(columns []uint32) {
+	// If the projection we are trying to apply projects every column, don't
+	// update the spec.
+	if isIdentityProjection(columns, len(p.GetResultTypes())) {
+		return
+	}
+
+	var needExtraNoop bool
+
+	// Determine whether any ordering columns are not projected.
+	if len(p.MergeOrdering.Columns) > 0 {
+		for _, c := range p.MergeOrdering.Columns {
+			var found bool
+			for _, projCol := range columns {
+				if projCol == c.ColIdx {
+					found = true
+					break
+				}
+			}
+			if !found {
+				// At least one of the ordering columns is not projected.
+				needExtraNoop = true
+				break
+			}
+		}
+	}
+
+	if needExtraNoop {
+		p.AddSingleGroupStage(
+			p.GatewayNodeID,
+			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
+			execinfrapb.PostProcessSpec{},
+			p.GetResultTypes(),
+		)
+	}
+
+	p.AddProjection(columns)
+}
+
 // exprColumn returns the column that is referenced by the expression, if the
 // expression is just an IndexedVar.
 //

@@ -755,3 +755,57 @@ vectorized: true
               spans: FULL SCAN
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskt-Lm04Uxd-_f8XlPuk3U7L-WspAYLKNywpp3Kr0ByUPRm-zgqt2ZgJdQv73ohZ2TRPbtH2cM_O555yre1RfS-Tof7xfzoMVGIsgTuJ3Swbv_egmjH0TYn_pv0ngf7iNwrdgDI_pJssJglXiR3Erz5dLOPHChA93fuSDkcEMLBPmqwUYOcyATAijhR_BzSfYMMgY5AyIQYoMqzqnVfpICvlntHDNsJF1RkrVspX23YMg_4b8imFRNTvdymuGWS0J-R51oUtCjkm6KSmiNCc5vUKGOem0KLuxXTrRyOIxlU_IMG7SSnF4hesDw3qnn4cqnW4JuXVgv298W5SaJMmpNXTtdQ6GcNp9cM6DVfL6x1qECzMQnnk2gn1JhJfd7b_s7vxRd-dfdnfPRnh23lW1zElSPjBet-SvnpzocZeqh5h02EzdYZHkqSE-_PWRYUlftCEsJmwmHCZcJjxzJovtw08qMgx3msNQPtvcu2T5cS01yak3TCzsCRPOhAl3woQ1OWt1fYlVRKqpK0XHyz45-ardMOVb6r-Yqncyo3tZZ51Nfww7rhNyUrq_tfpDUPVXbcCXsDUKuwPYPobtUdgZd3YucLaOYXcU9sadvVH4-gheH_77HgAA__-rHNsg
+
+# Regression test for #64181. Ensure that a projection on top of an ordered
+# UNION ALL correctly projects away ordering columns.
+query T
+EXPLAIN (DISTSQL,VERBOSE) WITH q (x, y) AS (
+  SELECT * FROM (VALUES ('a', 'a'), ('b', 'b'), ('c', 'c'))
+  UNION ALL
+  SELECT * FROM (VALUES ('d', 'd'))
+)
+SELECT 'e', y FROM q
+ORDER BY x
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: ("?column?", y)
+│
+└── • render
+    │ columns: ("?column?", x, y)
+    │ ordering: +x
+    │ estimated row count: 4
+    │ render ?column?: 'e'
+    │ render x: column1
+    │ render y: column2
+    │
+    └── • union all
+        │ columns: (column1, column2)
+        │ ordering: +column1
+        │ estimated row count: 4
+        │
+        ├── • sort
+        │   │ columns: (column1, column2)
+        │   │ ordering: +column1
+        │   │ estimated row count: 3
+        │   │ order: +column1
+        │   │
+        │   └── • values
+        │         columns: (column1, column2)
+        │         size: 2 columns, 3 rows
+        │         row 0, expr 0: 'a'
+        │         row 0, expr 1: 'a'
+        │         row 1, expr 0: 'b'
+        │         row 1, expr 1: 'b'
+        │         row 2, expr 0: 'c'
+        │         row 2, expr 1: 'c'
+        │
+        └── • values
+              columns: (column1, column2)
+              size: 2 columns, 1 row
+              row 0, expr 0: 'd'
+              row 0, expr 1: 'd'
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkkFvm0AQhe_9FaO5LLRbGbB72RNOQ1skCik4aavKB8KOIkuUtXeXypHl_14BqlJHAdntbXb2vfctMxzQ7GoUGH27SZZxCs51XKyKLwmHuyi_yorIha_x6hPswNlzeHRhWYBTREn0fgWv4UOefQbnbpncRgU4rGQcWMlcDg677-r7oa66umKuC7dpnKWwTBIYy5CdVjLXdf9IGDEOj4NuB1l-HeVw9R32yLFRktLyJxkUP9DHNcetVhUZo3TXOvSCWO5ReBw3zba1XXvNsVKaUBzQbmxNKLBWVVnDr7JuyYA385CjJFtu6l5_5Kha--Q2tnwgFP6R_yPBn_lnEYJLCIXSlvQsOEnG0H-DY_Hz0finVKUlaZIvhb7whlS9VdvZ_FSdUyNJi26RQohilcfpRw5hwCH0R9_mXfLpA3Zxis1aKyD0eRiMQhaXQHIyW9UYOmtzXjcdkg80TNOoVld0o1XVY4Zj1vv6hiRjh9v5cIib_qr_xf42-5Pm4MTsPTcH_0OeT5oX0-TFpPndM_P6-Op3AAAA__9FkG_H

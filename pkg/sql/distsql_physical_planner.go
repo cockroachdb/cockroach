@@ -3705,7 +3705,7 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 			projection = append(projection, uint32(outputCol))
 		}
 	}
-	plan.AddProjection(projection)
+	plan.AddFinalProjection(projection)
 	// Update PlanToStreamColMap to nil since it is no longer necessary.
 	plan.PlanToStreamColMap = nil
 
