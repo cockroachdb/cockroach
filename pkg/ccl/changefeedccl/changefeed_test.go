@@ -13,6 +13,8 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"sort"
@@ -1180,31 +1182,68 @@ func TestChangefeedAuthorization(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func requireErrorSoon(
+	ctx context.Context, t *testing.T, f cdctest.TestFeed, errRegex *regexp.Regexp,
+) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		if _, err := f.Next(); err != nil {
+			assert.Regexp(t, errRegex, err)
+			done <- struct{}{}
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for changefeed to fail")
+	case <-done:
+	}
+}
+
+func TestChangefeedFailOnTableOffline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if _, err := w.Write([]byte("42,42\n")); err != nil {
+				t.Logf("failed to write: %s", err.Error())
+			}
+		}
+	}))
+	defer dataSrv.Close()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		t.Run("import fails changefeed", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE for_import`)
+			sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
+			forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import `)
+			defer closeFeed(t, forImport)
+			assertPayloads(t, forImport, []string{
+				`for_import: [0]->{"after": {"a": 0, "b": null}}`,
+			})
+			sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
+			requireErrorSoon(context.Background(), t, forImport,
+				regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
+		})
+	}
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run("enterprise", enterpriseTest(testFn))
+}
+
 func TestChangefeedFailOnRBRChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	rbrErrorRegex := regexp.MustCompile(`CHANGEFEED cannot target REGIONAL BY ROW tables: rbr`)
-	assertRBRError := func(ctx context.Context, f cdctest.TestFeed) {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		done := make(chan struct{})
-		go func() {
-			if _, err := f.Next(); err != nil {
-				assert.Regexp(t, rbrErrorRegex, err)
-				done <- struct{}{}
-			}
-		}()
-		select {
-		case <-ctx.Done():
-			t.Fatal("timed out waiting for changefeed to fail")
-		case <-done:
-		}
-	}
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		t.Run("regional by row", func(t *testing.T) {
+		t.Run("regional by row change fails changefeed", func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
 			defer sqlDB.Exec(t, `DROP TABLE rbr`)
 			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
@@ -1216,7 +1255,7 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 				`rbr: [1]->{"after": {"a": 1, "b": 2}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
-			assertRBRError(context.Background(), rbr)
+			requireErrorSoon(context.Background(), t, rbr, rbrErrorRegex)
 		})
 	}
 	withTestServerRegion := func(args *base.TestServerArgs) {
