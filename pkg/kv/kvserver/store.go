@@ -2659,7 +2659,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	// non-periodic callers of this method don't trigger expensive
 	// stats.
 	if tick%logSSTInfoTicks == 1 /* every 10m */ {
-		log.Infof(ctx, "%s", s.engine.GetCompactionStats())
+		log.Infof(ctx, "%s", redact.Safe(s.engine.GetCompactionStats()))
 	}
 	return nil
 }
