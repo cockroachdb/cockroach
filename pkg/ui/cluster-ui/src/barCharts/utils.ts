@@ -9,15 +9,10 @@
 // licenses/APL.txt.
 
 import { format as d3Format } from "d3-format";
-import Long from "long";
-import { FixLong } from "src/util/fixLong";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-
-export const longToInt = (d: number | Long) =>
-  Long.fromValue(FixLong(d)).toInt();
 
 export const clamp = (i: number) => (i < 0 ? 0 : i);
 

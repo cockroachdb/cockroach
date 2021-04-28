@@ -11,7 +11,7 @@
 import React from "react";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
-import { longToInt } from "./utils";
+import { longToInt } from "../util";
 
 const cx = classNames.bind(styles);
 

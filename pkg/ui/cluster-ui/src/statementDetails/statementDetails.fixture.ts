@@ -81,6 +81,7 @@ const statementStats: any = {
     nanos: 111613000,
   },
   database: "defaultdb",
+  nodes: [Long.fromInt(1), Long.fromInt(2)],
   sensitive_info: {
     last_err: "",
     most_recent_plan_description: {
