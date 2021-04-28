@@ -56,7 +56,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 
 	db := s0.DB()
 
-	descriptors := descs.NewCollection(s0.ClusterSettings(), s0.LeaseManager().(*lease.Manager), nil /* hydratedTables */)
+	descriptors := descs.NewCollection(
+		s0.ClusterSettings(),
+		s0.LeaseManager().(*lease.Manager),
+		nil, // hydratedTables
+		nil, // virtualSchemas
+	)
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
