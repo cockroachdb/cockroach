@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -287,6 +289,7 @@ func (i *Inbox) Next() coldata.Batch {
 			// Regardless of the cause we want to propagate such an error as
 			// expected on in all cases so that the caller could decide on how
 			// to handle it.
+			err = pgerror.Newf(pgcode.InternalConnectionFailure, "communication error: %s", err)
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}
