@@ -53,5 +53,9 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 		return errors.Errorf(`"%s" was dropped`, t.StatementTimeName)
 	}
 
+	if tableDesc.Offline() {
+		return errors.Errorf("CHANGEFEED cannot target offline table: %s (offline reason: %q)", tableDesc.GetName(), tableDesc.GetOfflineReason())
+	}
+
 	return nil
 }
