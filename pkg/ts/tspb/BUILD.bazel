@@ -19,6 +19,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@go_googleapis//google/api:annotations_proto",
     ],
@@ -34,6 +35,7 @@ go_proto_library(
     proto = ":tspb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
