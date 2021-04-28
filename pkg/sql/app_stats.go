@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -225,6 +227,31 @@ func (a *appStats) recordStatement(
 		return stmtID
 	}
 
+	// Retrieve which region each node is on.
+	regionsInfo := make(map[int64]string)
+	descriptors, err := getAllNodeDescriptors(planner)
+	for _, descriptor := range descriptors {
+		for _, tier := range descriptor.Locality.Tiers {
+			if tier.Key == "region" {
+				regionsInfo[int64(descriptor.NodeID)] = tier.Value
+			}
+		}
+	}
+
+	// Retrieve the list of all nodes which the statement was executed on
+	// and its respective region.
+	var nodes []int64
+	var regions []string
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		// ForEach returns nodes in order.
+		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+			nodes = append(nodes, int64(i))
+			regions = append(regions, regionsInfo[int64(i)])
+		})
+		sort.Strings(regions)
+	}
+
 	// Collect the per-statement statistics.
 	s.mu.Lock()
 	s.mu.data.Count++
@@ -251,7 +278,8 @@ func (a *appStats) recordStatement(
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
 	s.mu.data.LastExecTimestamp = timeutil.Now()
-	s.mu.database = planner.SessionData().Database
+	s.mu.data.Nodes = combineUniqueInt64(s.mu.data.Nodes, nodes)
+	s.mu.data.Regions = combineUniqueString(s.mu.data.Regions, regions)
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -260,9 +288,62 @@ func (a *appStats) recordStatement(
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.fullScan = fullScan
+	s.mu.database = planner.CurrentDatabase()
 	s.mu.Unlock()
 
 	return s.ID
+}
+
+// The arrays being combined are already in order.
+func combineUniqueInt64(a []int64, b []int64) []int64 {
+	res := make([]int64, 0, len(a))
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		if a[aIter] == b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+			bIter++
+		} else if a[aIter] < b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+		} else {
+			res = append(res, b[bIter])
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		res = append(res, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		res = append(res, b[bIter:]...)
+	}
+	return res
+}
+
+// The arrays being combined are already in order.
+func combineUniqueString(a []string, b []string) []string {
+	res := make([]string, 0, len(a))
+	aIter, bIter := 0, 0
+	for aIter < len(a) && bIter < len(b) {
+		if a[aIter] == b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+			bIter++
+		} else if a[aIter] < b[bIter] {
+			res = append(res, a[aIter])
+			aIter++
+		} else {
+			res = append(res, b[bIter])
+			bIter++
+		}
+	}
+	if aIter < len(a) {
+		res = append(res, a[aIter:]...)
+	}
+	if bIter < len(b) {
+		res = append(res, b[bIter:]...)
+	}
+	return res
 }
 
 // getStatsForStmt retrieves the per-stmt stat object. Regardless of if a valid
