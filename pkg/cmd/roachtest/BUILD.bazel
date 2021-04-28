@@ -60,6 +60,7 @@ go_library(
         "ledger.go",
         "libpq.go",
         "libpq_blocklist.go",
+        "liquibase.go",
         "log.go",
         "main.go",
         "many_splits.go",
