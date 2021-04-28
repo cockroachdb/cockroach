@@ -63,7 +63,11 @@ func (m TestFeedMessage) String() string {
 	return fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value)
 }
 
-// TestFeed abstracts over reading from the various types of changefeed sinks.
+// TestFeed abstracts over reading from the various types of
+// changefeed sinks.
+//
+// TODO(ssd): These functions need to take a context or otherwise
+// allow us to time them out safely.
 type TestFeed interface {
 	// Partitions returns the domain of values that may be returned as a partition
 	// by Next.
