@@ -8,6 +8,7 @@ go_library(
         "changefeed_dist.go",
         "changefeed_processors.go",
         "changefeed_stmt.go",
+        "doc.go",
         "encoder.go",
         "errors.go",
         "metrics.go",
