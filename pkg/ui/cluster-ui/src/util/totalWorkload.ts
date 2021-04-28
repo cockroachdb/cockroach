@@ -1,6 +1,6 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { longToInt } from "src/barCharts/utils";
 import { AggregateStatistics } from "src/statementsTable";
+import { longToInt } from "./fixLong";
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type statementType = AggregateStatistics | Statement;

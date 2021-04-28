@@ -1,9 +1,9 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { stdDevLong } from "src/util";
+import { stdDevLong, longToInt } from "src/util";
 import { Duration, Bytes, Percentage } from "src/util/format";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
-import { bar, formatTwoPlaces, longToInt, approximify } from "./utils";
+import { bar, formatTwoPlaces, approximify } from "./utils";
 import { barChartFactory, BarChartOptions } from "./barChartFactory";
 import { AggregateStatistics } from "src/statementsTable/statementsTable";
 

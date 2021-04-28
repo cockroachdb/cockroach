@@ -92,6 +92,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670290),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -199,6 +200,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670272),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -309,6 +311,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670192),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(3)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -413,6 +416,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670299),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -517,6 +521,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670242),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2), Long.fromInt(4)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -627,6 +632,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599650292),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -737,6 +743,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670282),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -850,6 +857,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670257),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },
@@ -957,6 +965,7 @@ export const statementsWithSameIdButDifferentNodeId: CollectedStatementStatistic
         seconds: Long.fromInt(1599670279),
         nanos: 111613000,
       },
+      nodes: [Long.fromInt(1), Long.fromInt(2)],
       exec_stats: {
         count: new Long(0),
         network_bytes: { mean: 0, squared_diffs: 0 },

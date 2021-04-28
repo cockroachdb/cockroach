@@ -9,3 +9,5 @@ export function FixLong(value: Long | number): Long {
   }
   return value as Long;
 }
+
+export const longToInt = (value: number | Long) => Number(FixLong(value));

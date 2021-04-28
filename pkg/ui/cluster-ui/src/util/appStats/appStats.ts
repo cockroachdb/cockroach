@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/camelcase */
 import _ from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { FixLong } from "src/util/fixLong";
+import { FixLong, uniqueLong } from "src/util";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
@@ -151,6 +151,7 @@ export function addStatementStats(
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
+    nodes: uniqueLong([...a.nodes, ...b.nodes]),
   };
 }
 
