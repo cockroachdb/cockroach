@@ -745,9 +745,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				reqStr := required.Ordering.String()
 				provStr := provided.String()
 				if provStr == reqStr {
-					tp.Childf("ordering: %s", required.Ordering.String())
+					tp.Childf("ordering: %s", reqStr)
 				} else {
-					tp.Childf("ordering: %s [actual: %s]", required.Ordering.String(), provided.String())
+					tp.Childf("ordering: %s [actual: %s]", reqStr, provStr)
 				}
 			}
 		}

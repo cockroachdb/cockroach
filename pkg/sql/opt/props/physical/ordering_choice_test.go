@@ -344,40 +344,54 @@ func TestOrderingChoice_Copy(t *testing.T) {
 	// ()-->(8)
 	// (3)==(9)
 	// (9)==(3)
+	// (6)==(7)
+	// (7)==(6)
 	var fd props.FuncDepSet
 	fd.AddConstants(opt.MakeColSet(8))
 	fd.AddEquivalency(3, 9)
+	fd.AddEquivalency(6, 7)
 	copied.Simplify(&fd)
 
-	if ordering.String() != "+1,-(2|3) opt(4,5,100)" {
-		t.Errorf("original was modified: %s", ordering.String())
+	original := "+1,-(2|3) opt(4,5,100)"
+	if ordering.String() != original {
+		t.Errorf("original %s was modified to %s", original, ordering.String())
 	}
 
-	if copied.String() != "+1,-(2|3|9),-(6|7) opt(4,5,8)" {
-		t.Errorf("copy is not correct: %s", copied.String())
+	expectedCopy := "+1,-2,-(6|7) opt(4,5,8)"
+	if copied.String() != expectedCopy {
+		t.Errorf("copy: expected %s, actual %s", expectedCopy, copied.String())
 	}
 }
 
 func TestOrderingChoice_Simplify(t *testing.T) {
 	// ()-->(4,5)
-	// (1)==(1,3)
-	// (2)==(1)
-	// (3)==(1)
+	// (1)==(2,3)
+	// (2)==(1,3)
+	// (3)==(1,2)
 	var fd1 props.FuncDepSet
 	fd1.AddConstants(opt.MakeColSet(4, 5))
 	fd1.AddEquivalency(1, 2)
 	fd1.AddEquivalency(1, 3)
+
+	// ()-->(2)
+	// (3)==(4,5)
+	// (4)==(3,5)
+	// (5)==(3,4)
+	var fd2 props.FuncDepSet
+	fd2.AddConstants(opt.MakeColSet(2))
+	fd2.AddEquivalency(3, 4)
+	fd2.AddEquivalency(3, 5)
 
 	// (1)-->(1,2,3,4,5)
 	// (2)-->(4)
 	// (4)-->(5)
 	// (2)==(3)
 	// (3)==(2)
-	var fd2 props.FuncDepSet
-	fd2.AddStrictKey(opt.MakeColSet(1), opt.MakeColSet(1, 2, 3, 4, 5))
-	fd2.AddSynthesizedCol(opt.MakeColSet(2), 4)
-	fd2.AddSynthesizedCol(opt.MakeColSet(4), 5)
-	fd2.AddEquivalency(2, 3)
+	var fd3 props.FuncDepSet
+	fd3.AddStrictKey(opt.MakeColSet(1), opt.MakeColSet(1, 2, 3, 4, 5))
+	fd3.AddSynthesizedCol(opt.MakeColSet(2), 4)
+	fd3.AddSynthesizedCol(opt.MakeColSet(4), 5)
+	fd3.AddEquivalency(2, 3)
 
 	testcases := []struct {
 		fdset    *props.FuncDepSet
@@ -397,13 +411,19 @@ func TestOrderingChoice_Simplify(t *testing.T) {
 		{fdset: &fd1, s: "+(4|5|6)", expected: "+6 opt(4,5)"},
 		{fdset: &fd1, s: "+(4|6)", expected: "+6 opt(4,5)"},
 
+		// Columns removed from ordering groups because they are not equivalent
+		// in the FD.
+		{fdset: &fd1, s: "+(2|4|5)", expected: "+(1|2|3) opt(4,5)"},
+		{fdset: &fd2, s: "+(1|3)", expected: "+1 opt(2)"},
+		{fdset: &fd2, s: "+(1|3|4|5)", expected: "+1 opt(2)"},
+
 		// Columns functionally determine one another.
-		{fdset: &fd2, s: "", expected: ""},
-		{fdset: &fd2, s: "+1,+2,+4", expected: "+1"},
-		{fdset: &fd2, s: "+2,+4,+5", expected: "+(2|3)"},
-		{fdset: &fd2, s: "+3,+5", expected: "+(2|3)"},
-		{fdset: &fd2, s: "-(2|3),+1,+5", expected: "-(2|3),+1"},
-		{fdset: &fd2, s: "-(2|4),+5,+1", expected: "-(2|3|4),+1"},
+		{fdset: &fd3, s: "", expected: ""},
+		{fdset: &fd3, s: "+1,+2,+4", expected: "+1"},
+		{fdset: &fd3, s: "+2,+4,+5", expected: "+(2|3)"},
+		{fdset: &fd3, s: "+3,+5", expected: "+(2|3)"},
+		{fdset: &fd3, s: "-(2|3),+1,+5", expected: "-(2|3),+1"},
+		{fdset: &fd3, s: "-(2|4),+5,+1", expected: "-(2|3),+1"},
 	}
 
 	for _, tc := range testcases {
