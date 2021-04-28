@@ -226,7 +226,7 @@ func generateTenantClusterSettingKV(
 	kvs, err := rowenc.EncodePrimaryIndex(
 		codec,
 		systemschema.SettingsTable,
-		systemschema.SettingsTable.GetPrimaryIndex(),
+		systemschema.SettingsTable.GetPrimaryIndex().IndexDesc(),
 		catalog.ColumnIDToOrdinalMap(systemschema.SettingsTable.PublicColumns()),
 		[]tree.Datum{
 			tree.NewDString(clusterversion.KeyVersionSetting),      // name
