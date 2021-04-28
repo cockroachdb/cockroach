@@ -22,7 +22,10 @@ import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
 } from "src/redux/apiReducers";
-import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
+import {
+  nodeDisplayNameByIDSelector,
+  nodeRegionsByIDSelector,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import {
   combineStatementStats,
@@ -190,6 +193,7 @@ const mapStateToProps = (
     statement,
     statementsError: state.cachedData.statements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
+    nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
       state,
       statementFingerprint,

@@ -90,6 +90,7 @@ export function addStatementStats(
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
+    nodes: combinesUnique(a.nodes, b.nodes),
   };
 }
 
@@ -134,6 +135,17 @@ function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
       countB,
     ),
   };
+}
+
+function combinesUnique<T>(a: Array<T>, b: Array<T>): Array<T> {
+  if (a !== undefined && b !== undefined) {
+    b.forEach((value: any) => {
+      if (!a.includes(value)) a.push(value);
+    });
+  } else if (b !== undefined) {
+    return b;
+  }
+  return a;
 }
 
 function addMaybeUnsetNumericStat(
