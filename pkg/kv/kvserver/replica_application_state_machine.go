@@ -683,11 +683,13 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
 		// commits by handleMergeResult() to finish the removal.
+		rhsRepl.readOnlyCmdMu.Lock()
 		rhsRepl.mu.Lock()
 		rhsRepl.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
 			destroyReasonRemoved)
 		rhsRepl.mu.Unlock()
+		rhsRepl.readOnlyCmdMu.Unlock()
 
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
@@ -779,11 +781,13 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		//
 		// NB: we must be holding the raftMu here because we're in the midst of
 		// application.
+		b.r.readOnlyCmdMu.Lock()
 		b.r.mu.Lock()
 		b.r.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
 		b.r.mu.Unlock()
+		b.r.readOnlyCmdMu.Unlock()
 		b.changeRemovesReplica = true
 
 		// Delete all of the local data. We're going to delete the hard state too.

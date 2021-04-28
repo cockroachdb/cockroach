@@ -279,7 +279,8 @@ type Replica struct {
 		syncutil.RWMutex
 		// The destroyed status of a replica indicating if it's alive, corrupt,
 		// scheduled for destruction or has been GCed.
-		// destroyStatus should only be set while also holding the raftMu.
+		// destroyStatus should only be set while also holding the raftMu and
+		// readOnlyCmdMu.
 		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
@@ -1711,6 +1712,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			}
 		}
 		r.raftMu.Lock()
+		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
 		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
 			// The merge committed but the left-hand replica on this store hasn't
@@ -1725,6 +1727,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		r.mu.mergeTxnID = uuid.UUID{}
 		close(mergeCompleteCh)
 		r.mu.Unlock()
+		r.readOnlyCmdMu.Unlock()
 		r.raftMu.Unlock()
 	})
 	if errors.Is(err, stop.ErrUnavailable) {
