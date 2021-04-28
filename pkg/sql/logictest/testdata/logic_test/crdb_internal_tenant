@@ -332,7 +332,7 @@ select crdb_internal.get_vmodule()
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-20.2
+21.1
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -420,7 +420,7 @@ select * from crdb_internal.gossip_alerts
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
 ----
-20.2
+21.1
 
 user root
 
