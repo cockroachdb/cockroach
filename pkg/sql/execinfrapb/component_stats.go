@@ -157,7 +157,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("max memory allocated", humanize.IBytes(s.Exec.MaxAllocatedMem.Value()))
 	}
 	if s.Exec.MaxAllocatedDisk.HasValue() {
-		fn("max sql temp disk usage:", humanize.IBytes(s.Exec.MaxAllocatedDisk.Value()))
+		fn("max sql temp disk usage", humanize.IBytes(s.Exec.MaxAllocatedDisk.Value()))
 	}
 
 	// Output stats.

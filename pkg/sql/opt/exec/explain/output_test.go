@@ -151,7 +151,7 @@ func TestMaxDiskSpillUsage(t *testing.T) {
 CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)
 `)
 	assert.NoError(t, err)
-	maxDiskUsageRE := regexp.MustCompile(`max sql temp disk usage:: (\d+)`)
+	maxDiskUsageRE := regexp.MustCompile(`max sql temp disk usage: (\d+)`)
 
 	queryMatchRE := func(query string, re *regexp.Regexp) bool {
 		rows, err := conn.QueryContext(ctx, query)
