@@ -55,12 +55,23 @@ const (
 	// many batches by the DistSender.
 	gcBatchSize = 1024
 
-	// intentResolverBatchSize is the maximum number of intents that will be
-	// resolved in a single batch. Batches that span many ranges (which is
-	// possible for the commit of a transaction that spans many ranges) will be
-	// split into many batches by the DistSender.
+	// intentResolverBatchSize is the maximum number of single-intent resolution
+	// requests that will be sent in a single batch. Batches that span many
+	// ranges (which is possible for the commit of a transaction that spans many
+	// ranges) will be split into many batches by the DistSender.
 	// TODO(ajwerner): justify this value
 	intentResolverBatchSize = 100
+
+	// intentResolverRangeBatchSize is the maximum number of ranged intent
+	// resolutions requests that will be sent in a single batch.  It is set
+	// lower that intentResolverBatchSize since each request can fan out to a
+	// large number of intents.
+	intentResolverRangeBatchSize = 10
+
+	// intentResolverRangeRequestSize is the maximum number of intents a single
+	// range request can resolve. When exceeded, the response will include a
+	// ResumeSpan and the batcher will send a new range request.
+	intentResolverRangeRequestSize = 200
 
 	// cleanupIntentsTxnsPerBatch is the number of transactions whose
 	// corresponding intents will be resolved at a time. Intents are batched
@@ -204,8 +215,10 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	intentResolutionBatchSize := intentResolverBatchSize
+	intentResolutionRangeBatchSize := intentResolverRangeBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
+		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		Name:            "intent_resolver_ir_batcher",
@@ -216,12 +229,9 @@ func New(c Config) *IntentResolver {
 		Sender:          c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
-		Name:            "intent_resolver_ir_range_batcher",
-		MaxMsgsPerBatch: intentResolutionBatchSize,
-		// NOTE: Allow each request sent in a batch to touch up to twice as
-		// many keys as messages in the batch to avoid pagination if only a
-		// few ResolveIntentRange requests touch multiple intents.
-		MaxKeysPerBatchReq: 2 * intentResolverBatchSize,
+		Name:               "intent_resolver_ir_range_batcher",
+		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
+		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
 		MaxWait:            c.MaxIntentResolutionBatchWait,
 		MaxIdle:            c.MaxIntentResolutionBatchIdle,
 		Stopper:            c.Stopper,
