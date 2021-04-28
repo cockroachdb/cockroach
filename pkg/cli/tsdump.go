@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"encoding/csv"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"os"
@@ -34,6 +35,35 @@ Dumps all of the raw timeseries values in a cluster.
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
+		if cliCtx.tableDisplayFormat == tableDisplayRaw {
+			conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+			if err != nil {
+				return err
+			}
+			defer finish()
+
+			tsClient := tspb.NewTimeSeriesClient(conn)
+			stream, err := tsClient.DumpRaw(context.Background(), &tspb.DumpRequest{})
+			if err != nil {
+				return err
+			}
+
+			out := os.Stdout
+			enc := gob.NewEncoder(out)
+			for {
+				data, err := stream.Recv()
+				if err == io.EOF {
+					return out.Sync()
+				}
+				if err != nil {
+					return err
+				}
+				if err := enc.Encode(data); err != nil {
+					return err
+				}
+			}
+		}
+
 		var w tsWriter
 		switch cliCtx.tableDisplayFormat {
 		case tableDisplayCSV:
@@ -42,8 +72,9 @@ Dumps all of the raw timeseries values in a cluster.
 			cw := csvTSWriter{w: csv.NewWriter(os.Stdout)}
 			cw.w.Comma = '\t'
 			w = cw
+
 		default:
-			w = rawTSWriter{w: os.Stdout}
+			w = defaultTSWriter{w: os.Stdout}
 		}
 
 		conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
@@ -98,16 +129,16 @@ func (w csvTSWriter) Flush() error {
 	return w.w.Error()
 }
 
-type rawTSWriter struct {
+type defaultTSWriter struct {
 	last struct {
 		name, source string
 	}
 	w io.Writer
 }
 
-func (w rawTSWriter) Flush() error { return nil }
+func (w defaultTSWriter) Flush() error { return nil }
 
-func (w rawTSWriter) Emit(data *tspb.TimeSeriesData) error {
+func (w defaultTSWriter) Emit(data *tspb.TimeSeriesData) error {
 	if w.last.name != data.Name || w.last.source != data.Source {
 		w.last.name, w.last.source = data.Name, data.Source
 		fmt.Fprintf(w.w, "%s %s\n", data.Name, data.Source)
