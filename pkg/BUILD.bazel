@@ -299,6 +299,7 @@ ALL_TESTS = [
     "//pkg/testutils:testutils_test",
     "//pkg/ts/testmodel:testmodel_test",
     "//pkg/ts:ts_test",
+    "//pkg/util/admission:admission_test",
     "//pkg/util/binfetcher:binfetcher_test",
     "//pkg/util/bitarray:bitarray_test",
     "//pkg/util/cache:cache_test",
