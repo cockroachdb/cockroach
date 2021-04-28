@@ -1510,7 +1510,7 @@ func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 			if ctx.flags.HasFlags(FmtShowPasswords) {
 				ctx.FormatNode(option.Value)
 			} else {
-				ctx.WriteString("*****")
+				ctx.WriteString("'*****'")
 			}
 		} else if option.Value == DNull {
 			ctx.WriteString(" ")
