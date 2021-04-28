@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -879,6 +880,11 @@ type ExecutorConfig struct {
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry
+
+	// RootMemoryMonitor is the root memory monitor of the entire server. Do not
+	// use this for normal purposes. It is to be used to establish any new
+	// root-level memory accounts that are not related to a user sessions.
+	RootMemoryMonitor *mon.BytesMonitor
 }
 
 // Organization returns the value of cluster.organization.
