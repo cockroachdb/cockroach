@@ -4212,14 +4212,15 @@ The paths themselves are given in the direction of the first geometry.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
-				ret, err := geomfn.Simplify(g.Geometry, tolerance)
+				ret, err := geomfn.SimplifyGEOS(g.Geometry, tolerance)
 				if err != nil {
 					return nil, err
 				}
 				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
-				info: `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
+				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
+				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -4257,7 +4258,8 @@ The paths themselves are given in the direction of the first geometry.`,
 				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
-				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
+				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
+				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
