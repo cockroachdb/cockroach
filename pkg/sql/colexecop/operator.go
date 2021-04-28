@@ -138,6 +138,9 @@ type BufferingInMemoryOperator interface {
 // if we have a simple project on top of a disk-backed operator, that simple
 // project needs to implement this interface so that Close() call could be
 // propagated correctly).
+// TODO(yuzefovich): clarify the contract that Close must be safe to call even
+// if the Operator - when it implements the Closer interface - hasn't been
+// initialized.
 type Closer interface {
 	Close(ctx context.Context) error
 }
