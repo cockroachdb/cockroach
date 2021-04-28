@@ -1646,6 +1646,9 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
 				// Using deprecated WireLength call.
 				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
+				// goschedstats contains partial copies of go runtime structures, with
+				// many fields that we're not using.
+				stream.GrepNot(`pkg/util/goschedstats/runtime.*\.go:.*is unused`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
