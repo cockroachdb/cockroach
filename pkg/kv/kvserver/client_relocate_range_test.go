@@ -19,11 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -363,4 +367,84 @@ func TestAdminRelocateRangeRandom(t *testing.T) {
 		voters, nonVoters := randomRelocationTargets()
 		relocateAndCheck(t, tc, k, tc.Targets(voters...), tc.Targets(nonVoters...))
 	}
+}
+
+func TestReplicaRemovalDuringRequestEvaluation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type magicKey struct{}
+	delayReadC := make(chan chan struct{})
+	evalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
+		if args.Ctx.Value(magicKey{}) != nil {
+			resumeReadC := make(chan struct{})
+			delayReadC <- resumeReadC
+			<-resumeReadC
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	manual := hlc.NewHybridManualClock()
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: evalFilter,
+					},
+					// Required by TestCluster.MoveRangeLeaseNonCooperatively.
+					AllowLeaseRequestProposalsWhenNotLeader: true,
+				},
+				Server: &server.TestingKnobs{
+					ClockSource: manual.UnixNano,
+				},
+			},
+		},
+	}
+	tc := testcluster.StartTestCluster(t, 2, args)
+	defer tc.Stopper().Stop(ctx)
+
+	// Create range and upreplicate.
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+	// Perform write.
+	pArgs := putArgs(key, []byte("foo"))
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	require.Nil(t, pErr)
+
+	// Perform read on write and wait for read to block.
+	type reply struct {
+		resp roachpb.Response
+		err  *roachpb.Error
+	}
+	readResC := make(chan reply)
+	go func() {
+		readCtx := context.WithValue(ctx, magicKey{}, struct{}{})
+		gArgs := getArgs(key)
+		resp, pErr := kv.SendWrapped(readCtx, tc.Servers[0].DistSender(), gArgs)
+		readResC <- reply{resp, pErr}
+	}()
+	resumeReadC := <-delayReadC
+
+	// Transfer leaseholder to other store.
+	rangeDesc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1), manual)
+	require.NoError(t, err)
+
+	// Remove first store from raft group.
+	tc.RemoveVotersOrFatal(t, key, tc.Target(0))
+
+	// Allow read to resume. Should return "foo".
+	close(resumeReadC)
+	r := <-readResC
+	require.Nil(t, r.err)
+	require.NotNil(t, r.resp)
+	require.NotNil(t, r.resp.(*roachpb.GetResponse).Value)
+	val, err := r.resp.(*roachpb.GetResponse).Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), val)
 }

@@ -71,12 +71,14 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	var replicaID roachpb.ReplicaID
 	var tenantID roachpb.TenantID
 	{
+		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
 
 		if opts.DestroyData {
 			// Detect if we were already removed.
 			if rep.mu.destroyStatus.Removed() {
 				rep.mu.Unlock()
+				rep.readOnlyCmdMu.Unlock()
 				return nil // already removed, noop
 			}
 		} else {
@@ -84,6 +86,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 			// has done so, then it must have already also set the destroyStatus.
 			if !rep.mu.destroyStatus.Removed() {
 				rep.mu.Unlock()
+				rep.readOnlyCmdMu.Unlock()
 				log.Fatalf(ctx, "replica not marked as destroyed but data already destroyed: %v", rep)
 			}
 		}
@@ -91,6 +94,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		desc = rep.mu.state.Desc
 		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			// NB: This should not in any way be possible starting in 20.1.
 			log.Fatalf(ctx, "replica descriptor's ID has changed (%s >= %s)",
 				repDesc.ReplicaID, nextReplicaID)
@@ -100,6 +104,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		/// uninitialized.
 		if !rep.isInitializedRLocked() {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "uninitialized replica cannot be removed with removeInitializedReplica: %v", rep)
 		}
 
@@ -109,6 +114,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		replicaID = rep.mu.replicaID
 		tenantID = rep.mu.tenantID
 		rep.mu.Unlock()
+		rep.readOnlyCmdMu.Unlock()
 	}
 
 	// Proceed with the removal, all errors encountered from here down are fatal.
