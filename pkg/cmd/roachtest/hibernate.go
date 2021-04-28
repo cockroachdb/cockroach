@@ -34,7 +34,7 @@ var (
 		testDir:  "hibernate-core",
 		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb ` +
 			`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
-		testCmd:     "./gradlew test -Pdb=cockroachdb",
+		testCmd:     "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
 		blocklists:  hibernateBlocklists,
 		dbSetupFunc: nil,
 	}
@@ -150,6 +150,17 @@ func registerHibernate(r *testRegistry, opt hibernateOptions) {
 			node,
 			"building hibernate (without tests)",
 			opt.buildCmd,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// Delete the test result; the test will be executed again later.
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"delete test result from build output",
+			fmt.Sprintf(`rm -rf /mnt/data1/hibernate/%s/target/test-results/test`, opt.testDir),
 		); err != nil {
 			t.Fatal(err)
 		}
