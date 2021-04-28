@@ -30,6 +30,7 @@ storiesOf("StatementsSortedTable", module)
         statements,
         "(internal)",
         calculateTotalWorkload(statements),
+        { "1": "gcp-europe-west1", "2": "gcp-us-east1", "3": "gcp-us-west1" },
       )}
       sortSetting={{
         ascending: false,

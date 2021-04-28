@@ -59,6 +59,7 @@ export const statementColumnLabels = {
   networkBytes: "Network",
   retries: "Retries",
   workloadPct: "% of All Runtime",
+  regionNodes: "Regions/Nodes",
   diagnostics: "Diagnostics",
 };
 
@@ -91,15 +92,6 @@ export const StatementTableTitle: StatementTableTitleType = {
       {statementColumnLabels.statements}
     </Tooltip>
   ),
-  database: (
-    <Tooltip
-      placement="bottom"
-      style="tableTitle"
-      content={<p>Database on which the statement was executed.</p>}
-    >
-      Database
-    </Tooltip>
-  ),
   executionCount: (
     <Tooltip
       placement="bottom"
@@ -128,6 +120,15 @@ export const StatementTableTitle: StatementTableTitleType = {
       Execution Count
     </Tooltip>
   ),
+  database: (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={<p>Database on which the statement was executed.</p>}
+    >
+      {statementColumnLabels.database}
+    </Tooltip>
+  ),
   rowsRead: (
     <Tooltip
       placement="bottom"
@@ -154,7 +155,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Rows Read
+      {statementColumnLabels.rowsRead}
     </Tooltip>
   ),
   bytesRead: (
@@ -183,7 +184,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Bytes Read
+      {statementColumnLabels.bytesRead}
     </Tooltip>
   ),
   statementTime: (
@@ -208,7 +209,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Statement Time
+      {statementColumnLabels.statementTime}
     </Tooltip>
   ),
   transactionTime: (
@@ -233,7 +234,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Transaction Time
+      {statementColumnLabels.transactionTime}
     </Tooltip>
   ),
   contention: (
@@ -260,7 +261,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Contention
+      {statementColumnLabels.contention}
     </Tooltip>
   ),
   maxMemUsage: (
@@ -285,7 +286,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Max Memory
+      {statementColumnLabels.maxMemUsage}
     </Tooltip>
   ),
   networkBytes: (
@@ -318,7 +319,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Network
+      {statementColumnLabels.networkBytes}
     </Tooltip>
   ),
   retries: (
@@ -339,7 +340,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Retries
+      {statementColumnLabels.retries}
     </Tooltip>
   ),
   workloadPct: (
@@ -354,7 +355,16 @@ export const StatementTableTitle: StatementTableTitleType = {
         </p>
       }
     >
-      % of All Runtime
+      {statementColumnLabels.workloadPct}
+    </Tooltip>
+  ),
+  regionNodes: (
+    <Tooltip
+      placement="bottom"
+      style="tableTitle"
+      content={<p>Regions/Nodes in which the statement was executed.</p>}
+    >
+      {statementColumnLabels.regionNodes}
     </Tooltip>
   ),
   diagnostics: (
@@ -376,7 +386,7 @@ export const StatementTableTitle: StatementTableTitleType = {
         </>
       }
     >
-      Diagnostics
+      {statementColumnLabels.diagnostics}
     </Tooltip>
   ),
 };
@@ -534,10 +544,10 @@ export const StatementLink = (props: StatementLinkProps) => {
   );
 };
 
-export const NodeLink = (props: { nodeId: string; nodeNames: NodeNames }) => (
+export const NodeLink = (props: { nodeId: string; nodeNames?: NodeNames }) => (
   <Link to={`/node/${props.nodeId}`}>
     <div className={cx("node-name-tooltip__info-icon")}>
-      {props.nodeNames[props.nodeId]}
+      {props.nodeNames ? props.nodeNames[props.nodeId] : "N" + props.nodeId}
     </div>
   </Link>
 );

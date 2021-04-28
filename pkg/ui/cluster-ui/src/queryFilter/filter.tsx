@@ -33,9 +33,13 @@ interface QueryFilter {
   activeFilters: number;
   filters: Filters;
   dbNames?: string[];
+  regions?: string[];
+  nodes?: string[];
   showDB?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
+  showRegions?: boolean;
+  showNodes?: boolean;
 }
 interface FilterState {
   hide: boolean;
@@ -55,6 +59,8 @@ export interface Filters {
   sqlType?: string;
   fullScan?: boolean;
   distributed?: boolean;
+  regions?: string;
+  nodes?: string;
 }
 
 const timeUnit = [
@@ -69,6 +75,8 @@ export const defaultFilters: Filters = {
   fullScan: false,
   sqlType: "",
   database: "",
+  regions: "",
+  nodes: "",
 };
 
 /**
@@ -111,6 +119,8 @@ export const inactiveFiltersState: Filters = {
   fullScan: false,
   sqlType: "",
   database: "",
+  regions: "",
+  nodes: "",
 };
 
 export const calculateActiveFilters = (filters: Filters) => {
@@ -223,10 +233,14 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     const {
       appNames,
       dbNames,
+      regions,
+      nodes,
       activeFilters,
       showDB,
       showSqlType,
       showScan,
+      showRegions,
+      showNodes,
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
@@ -264,7 +278,6 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           isSelected: this.isOptionSelected(db, filters.database),
         }))
       : [];
-
     const databaseValue = databasesOptions.filter(option => {
       return filters.database.split(",").includes(option.label);
     });
@@ -277,6 +290,52 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           field="database"
           parent={this}
           value={databaseValue}
+        />
+      </div>
+    );
+
+    const regionsOptions = showRegions
+      ? regions.map(region => ({
+          label: region,
+          value: region,
+          isSelected: this.isOptionSelected(region, filters.regions),
+        }))
+      : [];
+    const regionsValue = regionsOptions.filter(option =>
+      filters.regions.split(",").includes(option.label),
+    );
+    const regionsFilter = (
+      <div>
+        <div className={filterLabel.margin}>Region</div>
+        <MultiSelectCheckbox
+          options={regionsOptions}
+          placeholder="All"
+          field="regions"
+          parent={this}
+          value={regionsValue}
+        />
+      </div>
+    );
+
+    const nodesOptions = showNodes
+      ? nodes.map(node => ({
+          label: node,
+          value: node,
+          isSelected: this.isOptionSelected(node, filters.nodes),
+        }))
+      : [];
+    const nodesValue = nodesOptions.filter(option => {
+      return filters.nodes.split(",").includes(option.label);
+    });
+    const nodesFilter = (
+      <div>
+        <div className={filterLabel.margin}>Node</div>
+        <MultiSelectCheckbox
+          options={nodesOptions}
+          placeholder="All"
+          field="nodes"
+          parent={this}
+          value={nodesValue}
         />
       </div>
     );
@@ -307,7 +366,6 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     const sqlTypeValue = sqlTypes.filter(option => {
       return filters.sqlType.split(",").includes(option.label);
     });
-
     const sqlTypeFilter = (
       <div>
         <div className={filterLabel.margin}>Statement Type</div>
@@ -320,6 +378,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
         />
       </div>
     );
+
     const fullScanFilter = (
       <div className={filterLabel.margin}>
         <input
@@ -354,6 +413,8 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             />
             {showDB ? dbFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
+            {showRegions ? regionsFilter : ""}
+            {showNodes ? nodesFilter : ""}
             <div className={filterLabel.margin}>
               Query fingerprint runs longer than
             </div>
