@@ -576,9 +576,11 @@ func assertEqualKVs(
 			var summary roachpb.BulkOpSummary
 			maxSize := uint64(0)
 			prevStart := start
-			sst, summary, start, err = e.ExportMVCCToSst(start, endKey, startTime, endTime,
-				exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization)
+			sstFile := &storage.MemFile{}
+			summary, start, err = e.ExportMVCCToSst(start, endKey, startTime, endTime,
+				exportAllRevisions, targetSize, maxSize, enableTimeBoundIteratorOptimization, sstFile)
 			require.NoError(t, err)
+			sst := sstFile.Data()
 			loaded := loadSST(t, sst, startKey, endKey)
 			// Ensure that the pagination worked properly.
 			if start != nil {

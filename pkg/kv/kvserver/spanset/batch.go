@@ -12,6 +12,7 @@ package spanset
 
 import (
 	"context"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -361,9 +362,10 @@ func (s spanSetReader) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	dest io.WriteCloser,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	return s.r.ExportMVCCToSst(startKey, endKey, startTS, endTS, exportAllRevisions, targetSize,
-		maxSize, useTBI)
+		maxSize, useTBI, dest)
 }
 
 func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {

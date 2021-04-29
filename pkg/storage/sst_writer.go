@@ -38,6 +38,14 @@ type writeCloseSyncer interface {
 	Sync() error
 }
 
+type NoopSync struct {
+	io.WriteCloser
+}
+
+func (NoopSync) Sync() error {
+	return nil
+}
+
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs. These
 // SSTs have bloom filters disabled and format set to LevelDB.
 func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
