@@ -13,3 +13,7 @@ package kvbase
 // FollowerReadServingMsg is a log message that needs to be used for tests in
 // other packages.
 const FollowerReadServingMsg = "serving via follower read"
+
+// ServingLocalReadMsg is a log message that needs to be used for tests in other
+// packages.
+const ServingLocalReadMsg = "sending request to local client"
