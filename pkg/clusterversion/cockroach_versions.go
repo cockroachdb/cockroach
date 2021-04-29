@@ -317,13 +317,6 @@ const (
 	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
 	// privileges of the protected_ts_meta system table.
 	ProtectedTsMetaPrivilegesMigration
-	// JoinTokensTable adds the system table for storing ephemeral generated
-	// join tokens.
-	JoinTokensTable
-	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
-	// include the type of lease acquisition event that resulted in that replica's
-	// current lease.
-	AcquisitionTypeInLeaseHistory
 	// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 	V21_1
 
@@ -331,6 +324,13 @@ const (
 	//
 	// Start21_2 demarcates work towards CockroachDB v21.2.
 	Start21_2
+	// JoinTokensTable adds the system table for storing ephemeral generated
+	// join tokens.
+	JoinTokensTable
+	// AcquisitionTypeInLeaseHistory augments the per-replica lease history to
+	// include the type of lease acquisition event that resulted in that replica's
+	// current lease.
+	AcquisitionTypeInLeaseHistory
 
 	// Step (1): Add new versions here.
 )
@@ -534,14 +534,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
 	},
 	{
-		Key:     JoinTokensTable,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 50},
-	},
-	{
-		Key:     AcquisitionTypeInLeaseHistory,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 52},
-	},
-	{
 		// V21_1 is CockroachDB v21.1. It's used for all v21.1.x patch releases.
 		Key:     V21_1,
 		Version: roachpb.Version{Major: 21, Minor: 1},
@@ -551,6 +543,14 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     Start21_2,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 2},
+	},
+	{
+		Key:     JoinTokensTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 4},
+	},
+	{
+		Key:     AcquisitionTypeInLeaseHistory,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 6},
 	},
 
 	// Step (2): Add new versions here.
