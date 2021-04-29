@@ -122,6 +122,15 @@ func (r *databaseRegionChangeFinalizer) finalize(ctx context.Context, txn *kv.Tx
 	return r.repartitionRegionalByRowTables(ctx, txn)
 }
 
+// preDrop is called in advance of dropping regions from a multi-region
+// database. This function just re-partitions the REGIONAL BY ROW tables in
+// advance of the type descriptor change, to ensure that the table and type
+// descriptors never become incorrect (from a query perspective). For more info,
+// see the caller.
+func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn) error {
+	return r.repartitionRegionalByRowTables(ctx, txn)
+}
+
 // updateDatabaseZoneConfig updates the zone config of the database that
 // encloses the multi-region enum such that there is an entry for all PUBLIC
 // region values.
