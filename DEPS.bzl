@@ -1,5 +1,21 @@
 load("@bazel_gazelle//:deps.bzl", "go_repository")
 
+# PRO-TIP: You can inject temorary changes to any of these dependencies by
+# by pointing to an alternate remote to clone from. Delete the `sum` and
+# `version` parameters, and add `vcs = "git"` as well as a custom `remote` and
+# `commit`. For example:
+#     go_repository(
+#        name = "com_github_cockroachdb_sentry_go",
+#        build_file_proto_mode = "disable_global",
+#        importpath = "github.com/cockroachdb/sentry-go",
+#        vcs = "git",
+#        remote = "https://github.com/rickystewart/sentry-go",  # Custom fork.
+#        commit = "6c8e10aca9672de108063d4953399bd331b54037",  # Custom commit.
+#    )
+# The `remote` can be EITHER a URL, or an absolute local path to a clone, such
+# as `/Users/ricky/go/src/github.com/cockroachdb/sentry-go`. Bazel will clone
+# from the remote and check out the commit you specify.
+
 def go_deps():
     go_repository(
         name = "co_honnef_go_tools",
