@@ -1094,10 +1094,15 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
-			clusterAdminUIAddr = w.Cluster().ExternalAdminUIAddr(
+			addrs, err := w.Cluster().ExternalAdminUIAddrE(
 				req.Context(),
 				w.Cluster().Node(1),
-			)[0]
+			)
+			// We drop the error on the floor; it's unclear what to do with it and we
+			// don't have a logger handy.
+			if err == nil {
+				clusterAdminUIAddr = addrs[0]
+			}
 		}
 		t := w.Test()
 		testStatus := "N/A"
