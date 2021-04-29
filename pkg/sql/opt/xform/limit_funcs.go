@@ -329,10 +329,10 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// If any spans could not be used to generate limited Scans, use them to
 	// construct an unlimited Scan and add it to the Union tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
-	newScanPrivate.Constraint = &constraint.Constraint{
+	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
 		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
-	}
+	})
 	newScan := c.e.f.ConstructScan(newScanPrivate)
 	return makeNewUnion(last, newScan, sp.Cols.ToList())
 }
@@ -423,7 +423,7 @@ func (c *CustomFuncs) makeNewScan(
 		Columns: columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   newSpans,
 	}
-	newScanPrivate.Constraint = newConstraint
+	newScanPrivate.SetConstraint(c.e.evalCtx, newConstraint)
 
 	return c.e.f.ConstructScan(newScanPrivate)
 }

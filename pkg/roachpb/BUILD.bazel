@@ -29,7 +29,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
