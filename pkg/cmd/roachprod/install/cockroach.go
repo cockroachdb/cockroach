@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
@@ -377,6 +378,84 @@ func (h *crdbInstallHelper) startNode(
 func (h *crdbInstallHelper) generateStartCmd(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
+
+	tpl, err := template.New("start").Parse(`#!/bin/bash
+set -euo pipefail
+
+helper="{{if .Local}}${HOME}/local{{else}}${HOME}{{end}}/run-cockroach-${{.NodeNum}}.sh"
+verb="{{if .Local}}run{{else}}run-systemd{{end}}"
+
+# \EOF ensures that no parameter expansion occurs in the heredoc. See:
+# https://unix.stackexchange.com/questions/376103/here-document-without-interpreting-escape-sequences-but-with-interpolation
+cat > "${helper}" << \EOF && chmod +x "${helper}" && "${helper}" "${verb}"
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${1}" == "run" ]]; then
+  local="{{if .Local}}true{{end}}"
+  ulimit -c unlimited
+  mkdir -p {{.LogDir}}
+  echo "cockroach start: $(date), logging to {{.LogDir}}" | tee -a {{.LogDir}}/{roachprod,cockroach.std{out,err}}.log
+  {{.KeyCmd}}
+  export ROACHPROD={{.NodeNum}}{{.Tag}} {{.EnvVars}}
+  background=""
+  if [[ "${local}" ]]; then
+    background="--background"
+  fi
+  CODE=0
+  set +e
+  {{.Binary}} {{.StartCmd}} {{.Args}} ${background} >> {{.LogDir}}/cockroach.stdout.log 2>> {{.LogDir}}/cockroach.stderr.log || CODE=$?
+  set -e
+  if [[ -z "${local}" ]]; then
+    echo "cockroach exited with code ${CODE}: $(date)" | tee -a {{.LogDir}}/{roachprod,cockroach.{exit,std{out,err}}}.log
+  fi
+  exit ${CODE}
+fi
+
+if [[ "${1}" != "run-systemd" ]]; then
+  echo "unsupported: ${1}"
+  exit 1
+fi
+
+if systemctl is-active -q cockroach; then
+  echo "cockroach service already active"
+	echo "To get more information: systemctl status cockroach"
+	exit 1
+fi
+
+# If cockroach failed, the service still exists; we need to clean it up before
+# we can start it again.
+sudo systemctl reset-failed cockroach 2>/dev/null || true
+
+# The first time we run, install a small script that shows some helpful
+# information when we ssh in.
+if [ ! -e ${HOME}/.profile-cockroach ]; then
+  cat > ${HOME}/.profile-cockroach <<'EOQ'
+echo ""
+if systemctl is-active -q cockroach; then
+	echo "cockroach is running; see: systemctl status cockroach"
+elif systemctl is-failed -q cockroach; then
+	echo "cockroach stopped; see: systemctl status cockroach"
+else
+	echo "cockroach not started"
+fi
+echo ""
+EOQ
+  echo ". ${HOME}/.profile-cockroach" >> ${HOME}/.profile
+fi
+
+# We run this script (with arg "run") as a service unit. We do not use --user
+# because memory limiting doesn't work in that mode. Instead we pass the uid and
+# gid that the process will run under.
+UID=$(id -u)
+GID=$(id -g)
+sudo systemd-run --unit cockroach --same-dir --uid ${UID} --gid ${GID} -p MemoryMax={{.MemoryMax}} bash $0 run
+EOF
+`)
+	if err != nil {
+		return "", err
+	}
+
 	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
 	if err != nil {
 		return "", err
@@ -390,108 +469,28 @@ func (h *crdbInstallHelper) generateStartCmd(
 	} else {
 		startCmd = "start"
 	}
-
 	nodes := h.c.ServerNodes()
-	logDir := h.c.Impl.LogDir(h.c, nodes[nodeIdx])
-	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
-	keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
-
-	preStartScript := fmt.Sprintf(`
-set -euo pipefail
-ulimit -c unlimited
-mkdir -p %[1]s
-STARTTIME=$(date)
-echo ">>> roachprod start: ${STARTTIME}" >> %[1]s/roachprod.log
-ps axeww -o pid -o command >> %[1]s/roachprod.log
-[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> %[1]s/roachprod.log
-echo -e "\n\n====== cockroach start: ${STARTTIME} ======\n" >> %[1]s/cockroach.stdout.log
-echo -e "\n\n====== cockroach start: ${STARTTIME} ======\n" >> %[1]s/cockroach.stderr.log
-%[2]s
-export ROACHPROD=%[3]d%[4]s`,
-		logDir,         // [1]
-		keyCmd,         // [2]
-		nodes[nodeIdx], // [3]
-		h.c.Tag,        // [4]
-	)
-
-	if h.c.IsLocal() {
-		// We cannot rely on sudo or systemd on the local machine; run using the
-		// background flag.
-		cmd := fmt.Sprintf(`
-%[2]s
-GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 %[3]s \
-  %[4]s %[5]s --background %[6]s >> %[1]s/cockroach.stdout.log \
-	2>> %[1]s/cockroach.stderr.log \
-	|| (x=$?; cat %[1]s/cockroach.stderr.log; exit $x)`,
-			logDir,                  // [1]
-			preStartScript,          // [2]
-			h.getEnvVars(),          // [3]
-			binary,                  // [4]
-			startCmd,                // [5]
-			strings.Join(args, " "), // [6]
-		)
-		return cmd, nil
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, struct {
+		LogDir, KeyCmd, Tag, EnvVars, Binary, StartCmd, Args, MemoryMax string
+		NodeNum                                                         int
+		Local                                                           bool
+	}{
+		LogDir:    h.c.Impl.LogDir(h.c, nodes[nodeIdx]),
+		KeyCmd:    h.generateKeyCmd(nodeIdx, extraArgs),
+		Tag:       h.c.Tag,
+		EnvVars:   "GOTRACEBACK=crash COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " + h.getEnvVars(),
+		Binary:    cockroachNodeBinary(h.c, nodes[nodeIdx]),
+		StartCmd:  startCmd,
+		Args:      strings.Join(args, " "),
+		MemoryMax: config.MemoryMax,
+		NodeNum:   nodes[nodeIdx],
+		Local:     h.c.IsLocal(),
+	}); err != nil {
+		return "", err
 	}
 
-	// We run cockroach as a systemd service unit. This allows us to apply a
-	// strict memory limit and provides tools to monitor the process.
-	cmd := fmt.Sprintf(`
-if systemctl is-active -q cockroach; then
-  echo "cockroach service already active"
-	echo "To get more information: systemctl status cockroach"
-	exit 1
-fi
-# If cockroach failed, the service still exists; we need to clean it up before
-# we can start it again.
-sudo systemctl reset-failed cockroach 2>/dev/null || true
-
-# The first time we run, install a small script that shows some helpful
-# information when we ssh in.
-if [ ! -e ${HOME}/.profile-cockroach ]; then
-  cat > ${HOME}/.profile-cockroach <<'EOF'
-echo ""
-if systemctl is-active -q cockroach; then
-	echo "cockroach is running; see: systemctl status cockroach"
-elif systemctl is-failed -q cockroach; then
-	echo "cockroach stopped; see: systemctl status cockroach"
-else
-	echo "cockroach not started"
-fi
-echo ""
-EOF
-  echo ". ${HOME}/.profile-cockroach" >> ${HOME}/.profile
-fi
-
-# We create a script and run it as a service unit. We do not use --user because
-# memory limiting doesn't work in that mode. Instead we pass the uid and gid
-that the process will run under.
-UID=$(id -u)
-GID=$(id -g)
-cat > ${HOME}/run-cockroach.sh <<'EOF' && \
-sudo systemd-run --unit cockroach --same-dir --uid ${UID} --gid ${GID} -p MemoryMax=%[7]s bash ${HOME}/run-cockroach.sh
-#!/bin/bash
-%[2]s
-# Output a message visible when checking the status (via sudo systemctl status).
-echo "Starting cockroach (output redirected to %[1]s)"
-CODE=0
-COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 %[3]s \
-  %[4]s %[5]s %[6]s \
-	>> %[1]s/cockroach.stdout.log 2>> %[1]s/cockroach.stderr.log || CODE=$?
-STOPTIME=$(date)
-echo "cockroach exited with exit code ${CODE} at ${STOPTIME}" >> %[1]s/roachprod.log
-echo "cockroach exited with exit code ${CODE} at ${STOPTIME}" >> %[1]s/cockroach.stderr.log
-exit ${CODE}
-EOF
-`,
-		logDir,                  // [1]
-		preStartScript,          // [2]
-		h.getEnvVars(),          // [3]
-		binary,                  // [4]
-		startCmd,                // [5]
-		strings.Join(args, " "), // [6]
-		config.MemoryMax,        // [7]
-	)
-	return cmd, nil
+	return buf.String(), nil
 }
 
 func (h *crdbInstallHelper) generateStartArgs(
