@@ -753,7 +753,7 @@ func MarshalColumnTypeValue(
 		}
 	case types.Box2DFamily:
 		if v, ok := val.(*tree.DBox2D); ok {
-			r.SetBox2D(v.CartesianBoundingBox)
+			r.SetBox2D(v.CartesianBoundingBox.BoundingBox)
 			return r, nil
 		}
 	case types.GeographyFamily:
@@ -921,7 +921,9 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: v}), nil
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: v},
+		}), nil
 	case types.GeographyFamily:
 		v, err := value.GetGeo()
 		if err != nil {
