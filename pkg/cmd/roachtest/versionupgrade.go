@@ -381,7 +381,7 @@ func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 }
 
 func upgradeNodes(
-	ctx context.Context, nodes nodeListOption, newVersion string, t *test, c *cluster,
+	ctx context.Context, nodes nodeListOption, newVersion string, t *test, c Cluster,
 ) {
 	// NB: We could technically stage the binary on all nodes before
 	// restarting each one, but on Unix it's invalid to write to an
