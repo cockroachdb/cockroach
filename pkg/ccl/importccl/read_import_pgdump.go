@@ -262,8 +262,7 @@ func createPostgresSchemas(
 		// We didn't allocate an ID above, so we must assign it a mock ID until it
 		// is assigned an actual ID later in the import.
 		desc.ID = getNextPlaceholderDescID()
-		desc.State = descpb.DescriptorState_OFFLINE
-		desc.OfflineReason = "importing"
+		desc.SetOffline("importing")
 		return desc, nil
 	}
 	var schemaDescs []*schemadesc.Mutable

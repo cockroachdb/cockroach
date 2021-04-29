@@ -1205,8 +1205,7 @@ func prepareNewTableDescsForIngestion(
 	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
-		newMutableTableDescriptors[i].State = descpb.DescriptorState_OFFLINE
-		newMutableTableDescriptors[i].OfflineReason = "importing"
+		newMutableTableDescriptors[i].SetOffline("importing")
 		tableDescs[i] = newMutableTableDescriptors[i]
 	}
 
@@ -1266,8 +1265,7 @@ func prepareExistingTableDescForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.State = descpb.DescriptorState_OFFLINE
-	importing.OfflineReason = "importing"
+	importing.SetOffline("importing")
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(
@@ -2224,8 +2222,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			if err != nil {
 				return err
 			}
-			newTableDesc.State = descpb.DescriptorState_PUBLIC
-			newTableDesc.OfflineReason = ""
+			newTableDesc.SetPublic()
 
 			if !tbl.IsNew {
 				// NB: This is not using AllNonDropIndexes or directly mutating the
@@ -2424,7 +2421,7 @@ func (r *importResumer) dropSchemas(
 			Dropped: true}
 
 		// Mark the descriptor as dropped and write it to the batch.
-		schemaDesc.State = descpb.DescriptorState_DROP
+		schemaDesc.SetDropped()
 		droppedSchemaIDs = append(droppedSchemaIDs, schemaDesc.GetID())
 
 		b := txn.NewBatch()
@@ -2545,7 +2542,7 @@ func (r *importResumer) dropTables(
 			return err
 		}
 		if tbl.IsNew {
-			newTableDesc.State = descpb.DescriptorState_DROP
+			newTableDesc.SetDropped()
 			// If the DropTime if set, a table uses RangeClear for fast data removal. This
 			// operation starts at DropTime + the GC TTL. If we used now() here, it would
 			// not clean up data until the TTL from the time of the error. Instead, use 1
@@ -2565,7 +2562,7 @@ func (r *importResumer) dropTables(
 			tablesToGC = append(tablesToGC, newTableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
-			newTableDesc.State = descpb.DescriptorState_PUBLIC
+			newTableDesc.SetPublic()
 		}
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, newTableDesc, b,
