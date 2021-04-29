@@ -1558,7 +1558,7 @@ func (c *cluster) Nodes(ns ...int) nodeListOption {
 	return r
 }
 
-// All returns a node list containing only the node i.
+// All returns a node list containing only the node with id i. IDs are 1-based.
 func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
