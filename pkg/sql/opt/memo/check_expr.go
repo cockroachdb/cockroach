@@ -76,6 +76,13 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Flags.NoIndexJoin && t.Flags.ForceIndex {
 			panic(errors.AssertionFailedf("NoIndexJoin and ForceIndex set"))
 		}
+		if evalCtx := m.logPropsBuilder.evalCtx; evalCtx != nil && t.Constraint != nil {
+			if expected := t.Constraint.ExactPrefix(evalCtx); expected != t.ExactPrefix {
+				panic(errors.AssertionFailedf(
+					"expected exact prefix %d but found %d", expected, t.ExactPrefix,
+				))
+			}
+		}
 
 	case *ProjectExpr:
 		if !t.Passthrough.SubsetOf(t.Input.Relational().OutputCols) {
