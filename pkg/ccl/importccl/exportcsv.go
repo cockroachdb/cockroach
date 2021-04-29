@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"strings"
 	"time"
 
@@ -148,12 +149,22 @@ func newCSVWriterProcessor(
 		spec:        spec,
 		input:       input,
 		output:      output,
+		csvFileCh:   make(chan csvFile),
+		resCh:       make(chan csvFile),
+		emitResDone: make(chan struct{}),
 	}
 	semaCtx := tree.MakeSemaContext()
 	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+type csvFile struct {
+	filename string
+	content  []byte
+	size     int
+	rows     int64
 }
 
 type csvWriter struct {
@@ -163,6 +174,9 @@ type csvWriter struct {
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
+	csvFileCh   chan csvFile
+	resCh       chan csvFile
+	emitResDone chan struct{}
 	timings     struct {
 		totalTimeDecoding                 time.Duration
 		totalTimeWritingToCSV             time.Duration
@@ -183,11 +197,98 @@ func (sp *csvWriter) OutputTypes() []*types.T {
 	return res
 }
 
+func (sp *csvWriter) uploadCSVFile(ctx context.Context) error {
+	conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
+	if err != nil {
+		return err
+	}
+	es, err := sp.flowCtx.Cfg.ExternalStorage(sp.flowCtx.EvalCtx.Context, conf)
+	if err != nil {
+		return err
+	}
+
+	for file := range sp.csvFileCh {
+		if err := es.WriteFile(ctx, file.filename, bytes.NewReader(file.content)); err != nil {
+			return err
+		}
+		select {
+		case <-sp.emitResDone:
+			// Goroutine emitting the result rows has closed unexpectedly.
+			return nil
+		case sp.resCh <- file:
+		}
+	}
+	return nil
+}
+
+func (sp *csvWriter) emitResultRow(ctx context.Context) error {
+	for res := range sp.resCh {
+		res := rowenc.EncDatumRow{
+			rowenc.DatumToEncDatum(
+				types.String,
+				tree.NewDString(res.filename),
+			),
+			rowenc.DatumToEncDatum(
+				types.Int,
+				tree.NewDInt(tree.DInt(res.rows)),
+			),
+			rowenc.DatumToEncDatum(
+				types.Int,
+				tree.NewDInt(tree.DInt(res.size)),
+			),
+		}
+		cs, err := sp.out.EmitRow(ctx, res)
+		if err != nil {
+			return err
+		}
+		if cs != execinfra.NeedMoreRows {
+			// TODO(dt): presumably this is because our recv already closed due to
+			// another error... so do we really need another one?
+			return errors.New("unexpected closure of consumer")
+		}
+	}
+	return nil
+}
+
 func (sp *csvWriter) Run(ctx context.Context) {
 	ctx, span := tracing.ChildSpan(ctx, "csvWriter")
 	defer tracing.FinishSpan(span)
 
+	numWorkers := 10
+	// Leave enough space for the upload workers and the goroutine emitting a row
+	// to buffer errors. We will only use the first when reporting an error.
+	errCh := make(chan error, numWorkers+1)
+	defer close(errCh)
+	group := ctxgroup.WithContext(ctx)
+	// Start workers responsible for uploading generated CSV files to external
+	// storage.
+	group.GoCtx(func(ctx context.Context) error {
+		// Once all the workers are done uploading files there will be no more
+		// result rows to be emitted.
+		defer close(sp.resCh)
+		return ctxgroup.GroupWorkers(ctx, numWorkers, func(ctx context.Context, _ int) error {
+			if err := sp.uploadCSVFile(ctx); err != nil {
+				errCh <- err
+				return err
+			}
+			return nil
+		})
+	})
+
+	// Start goroutine responsible for emitting rows corresponding to the files
+	// that have been uploaded by the above workers.
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(sp.emitResDone)
+		if err := sp.emitResultRow(ctx); err != nil {
+			errCh <- err
+			return err
+		}
+		return nil
+	})
+
 	err := func() error {
+		// No more CSV files will be uploaded once this function returns.
+		defer close(sp.csvFileCh)
 		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
@@ -210,7 +311,6 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		for {
 			var rows int64
 			writer.ResetBuffer()
-			chunkBegin := timeutil.Now()
 			for {
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
@@ -248,22 +348,9 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if rows < 1 {
 				break
 			}
-			writeFlushBegin := timeutil.Now()
 			if err := writer.Flush(); err != nil {
 				return errors.Wrap(err, "failed to flush csv writer")
 			}
-			sp.timings.totalTimeFlushing += timeutil.Since(writeFlushBegin)
-
-			externalStorageWriteBegin := timeutil.Now()
-			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
-			if err != nil {
-				return err
-			}
-			es, err := sp.flowCtx.Cfg.ExternalStorage(ctx, conf)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
 
 			nodeID, err := sp.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(47970)
 			if err != nil {
@@ -281,53 +368,39 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 			size := writer.Len()
 
-			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
+			// Check for an error reported by the upload workers or goroutine emitting
+			// result rows. If an error is reported we can stop reading and converting
+			// chunks.
+			select {
+			case err := <-errCh:
 				return err
-			}
-			sp.timings.totalTimeWritingToExternalStorage += timeutil.Since(externalStorageWriteBegin)
-			emittingRowBegin := timeutil.Now()
-			res := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(
-					types.String,
-					tree.NewDString(filename),
-				),
-				rowenc.DatumToEncDatum(
-					types.Int,
-					tree.NewDInt(tree.DInt(rows)),
-				),
-				rowenc.DatumToEncDatum(
-					types.Int,
-					tree.NewDInt(tree.DInt(size)),
-				),
+			default:
 			}
 
-			cs, err := sp.out.EmitRow(ctx, res)
-			if err != nil {
-				return err
+			// Send CSV file to the upload workers.
+			f := csvFile{
+				filename: filename,
+				content:  make([]byte, len(writer.Bytes())),
+				size:     size,
+				rows:     rows,
 			}
-			sp.timings.totalTimeEmitingRow += timeutil.Since(emittingRowBegin)
-			if cs != execinfra.NeedMoreRows {
-				// TODO(dt): presumably this is because our recv already closed due to
-				// another error... so do we really need another one?
-				return errors.New("unexpected closure of consumer")
-			}
-			sp.timings.totalChunkTime += timeutil.Since(chunkBegin)
-
-			if log.V(2) {
-				if int64(chunk)%logEveryNumChunkSetting.Get(&sp.flowCtx.EvalCtx.Settings.SV) == 0 {
-					sp.logTimings(ctx, chunk)
-				}
-			}
+			copy(f.content, writer.Bytes())
+			sp.csvFileCh <- f
 
 			if done {
-				sp.logTimings(ctx, chunk)
 				break
 			}
 		}
 
 		return nil
 	}()
+	if err != nil {
+		// Signal to the other goroutines to give up.
+		execinfra.DrainAndClose(
+			ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
+	}
 
+	err = group.Wait()
 	// TODO(dt): pick up tracing info in trailing meta
 	execinfra.DrainAndClose(
 		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
