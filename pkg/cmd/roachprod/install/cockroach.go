@@ -382,7 +382,8 @@ func (h *crdbInstallHelper) generateStartCmd(
 	tpl, err := template.New("start").Parse(`#!/bin/bash
 set -euo pipefail
 
-helper="{{if .Local}}${HOME}/local{{else}}${HOME}{{end}}/run-cockroach-${{.NodeNum}}.sh"
+mkdir -p {{.LogDir}}
+helper="{{if .Local}}{{.LogDir}}{{else}}${HOME}{{end}}/cockroach-helper.sh"
 verb="{{if .Local}}run{{else}}run-systemd{{end}}"
 
 # \EOF ensures that no parameter expansion occurs in the heredoc. See:
@@ -406,7 +407,7 @@ if [[ "${1}" == "run" ]]; then
   set +e
   {{.Binary}} {{.StartCmd}} {{.Args}} ${background} >> {{.LogDir}}/cockroach.stdout.log 2>> {{.LogDir}}/cockroach.stderr.log || CODE=$?
   set -e
-  if [[ -z "${local}" ]]; then
+  if [[ -z "${local}" || ${CODE} -ne 0 ]]; then
     echo "cockroach exited with code ${CODE}: $(date)" | tee -a {{.LogDir}}/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi
   exit ${CODE}
@@ -447,9 +448,7 @@ fi
 # We run this script (with arg "run") as a service unit. We do not use --user
 # because memory limiting doesn't work in that mode. Instead we pass the uid and
 # gid that the process will run under.
-UID=$(id -u)
-GID=$(id -g)
-sudo systemd-run --unit cockroach --same-dir --uid ${UID} --gid ${GID} -p MemoryMax={{.MemoryMax}} bash $0 run
+sudo systemd-run --unit cockroach --same-dir --uid $(id -u) --gid $(id -g) -p MemoryMax={{.MemoryMax}} bash $0 run
 EOF
 `)
 	if err != nil {
