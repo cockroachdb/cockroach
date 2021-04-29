@@ -33,8 +33,7 @@ import (
 // tenant id and first table id / index id prefix removed. If matches is false,
 // the key is from a different table, and the returned remainingKey indicates a
 // "seek prefix": the next key that might be part of the table being searched
-// for. The input key will also be mutated if matches is false. See the analog
-// in sqlbase/index_encoding.go.
+// for. See the analog in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
 	da *rowenc.DatumAlloc,
 	vecs []coldata.Vec,
@@ -67,7 +66,8 @@ func DecodeIndexKeyToCols(
 					// We don't match. Return a key with the table ID / index ID we're
 					// searching for, so the caller knows what to seek to.
 					curPos := len(origKey) - len(key)
-					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos], ancestor.TableID, ancestor.IndexID)
+					// Prevent unwanted aliasing on the origKey by setting the capacity.
+					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], ancestor.TableID, ancestor.IndexID)
 					return key, false, false, nil
 				}
 			}
@@ -93,7 +93,8 @@ func DecodeIndexKeyToCols(
 				// We're expecting an interleaved sentinel but didn't find one. Append
 				// one so the caller can seek to it.
 				curPos := len(origKey) - len(key)
-				key = encoding.EncodeInterleavedSentinel(origKey[:curPos])
+				// Prevent unwanted aliasing on the origKey by setting the capacity.
+				key = encoding.EncodeInterleavedSentinel(origKey[:curPos:curPos])
 				return key, false, false, nil
 			}
 		}
@@ -106,7 +107,8 @@ func DecodeIndexKeyToCols(
 			// We don't match. Return a key with the table ID / index ID we're
 			// searching for, so the caller knows what to seek to.
 			curPos := len(origKey) - len(key)
-			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos], desc.GetID(), index.GetID())
+			// Prevent unwanted aliasing on the origKey by setting the capacity.
+			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], desc.GetID(), index.GetID())
 			return key, false, false, nil
 		}
 	}
@@ -125,7 +127,8 @@ func DecodeIndexKeyToCols(
 	// table.
 	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
 		curPos := len(origKey) - len(key)
-		key = encoding.EncodeNullDescending(origKey[:curPos])
+		// Prevent unwanted aliasing on the origKey by setting the capacity.
+		key = encoding.EncodeNullDescending(origKey[:curPos:curPos])
 		return key, false, false, nil
 	}
 
