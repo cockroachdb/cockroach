@@ -51,13 +51,16 @@ func TestClosest(t *testing.T) {
 		return time.Millisecond, true
 	}
 	o := of.Oracle(nil)
-	info, err := o.ChoosePreferredReplica(ctx, &roachpb.RangeDescriptor{
-		InternalReplicas: []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1},
-			{NodeID: 2, StoreID: 2},
-			{NodeID: 3, StoreID: 3},
+	info, err := o.ChoosePreferredReplica(
+		ctx,
+		&roachpb.RangeDescriptor{
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+			},
 		},
-	}, nil /* leaseHolder */, QueryState{})
+		nil /* leaseHolder */, QueryState{})
 	if err != nil {
 		t.Fatalf("Failed to choose closest replica: %v", err)
 	}
