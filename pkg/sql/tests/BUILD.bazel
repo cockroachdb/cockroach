@@ -60,6 +60,7 @@ go_test(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/roachpb",
         "//pkg/security",

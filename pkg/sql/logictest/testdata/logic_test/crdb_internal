@@ -594,10 +594,14 @@ start_pretty   end_pretty
 statement ok
 TRUNCATE TABLE foo
 
-query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+# Ensure that there are no longer any splits left over on the original indexes.
+# TRUNCATE will have created equivalent splits points on the new indexes, so
+# this test just checks that there are no more on the old indexes.
+query TT
+SELECT start_pretty, end_pretty FROM crdb_internal.ranges
+WHERE split_enforced_until IS NOT NULL
+AND (start_pretty LIKE '/Table/58/1%' OR start_pretty LIKE '/Table/58/2%')
 ----
-start_pretty   end_pretty
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
