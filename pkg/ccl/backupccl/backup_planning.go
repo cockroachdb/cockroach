@@ -355,7 +355,7 @@ func spansForAllTableIndexes(
 		// state. We want (and do) ignore tables that have been dropped for the
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
-		if rawTbl != nil && rawTbl.State == descpb.DescriptorState_PUBLIC {
+		if rawTbl != nil && rawTbl.Public() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
