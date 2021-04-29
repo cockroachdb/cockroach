@@ -19,7 +19,7 @@ import {
   NodeArcPercentageTooltip,
   NodeArcUsedCapacityTooltip,
   NodeArcTotalCapacityTooltip,
-} from "src/views/clusterviz/components/nodeOrLocality/tooltips.tsx";
+} from "src/views/clusterviz/components/nodeOrLocality/tooltips";
 
 const ARC_INNER_RADIUS = 56;
 const ARC_WIDTH = 6;
