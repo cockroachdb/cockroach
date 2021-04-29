@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/types",
+        "//pkg/util/cancelchecker",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/timeutil",
