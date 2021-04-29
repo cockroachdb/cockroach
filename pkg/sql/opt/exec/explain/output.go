@@ -405,7 +405,7 @@ func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
 // include this field is bytes is greater than zero.
 func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	if !ob.flags.Redact.Has(RedactVolatile) && bytes > 0 {
-		ob.AddTopLevelField("max sql temp disk usage:",
+		ob.AddTopLevelField("max sql temp disk usage",
 			humanizeutil.IBytes(bytes))
 	}
 }

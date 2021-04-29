@@ -80,7 +80,7 @@ KV bytes read: 80 B`,
 			expected: `
 execution time: 0µs
 max memory allocated: 0 B
-max sql temp disk usage:: 0 B`,
+max sql temp disk usage: 0 B`,
 		},
 		{ // 5
 			stats: ComponentStats{
@@ -185,7 +185,7 @@ KV rows read: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
-max sql temp disk usage:: 1.0 KiB
+max sql temp disk usage: 1.0 KiB
 batches output: 10
 rows output: 100`,
 		},
@@ -237,7 +237,7 @@ KV rows read: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
-max sql temp disk usage:: 1.0 KiB
+max sql temp disk usage: 1.0 KiB
 batches output: 10
 rows output: 100`,
 		},
@@ -305,7 +305,7 @@ KV rows read: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
-max sql temp disk usage:: 1.0 KiB
+max sql temp disk usage: 1.0 KiB
 batches output: 10
 rows output: 100`,
 		},
