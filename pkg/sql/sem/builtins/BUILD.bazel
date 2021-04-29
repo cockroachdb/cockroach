@@ -30,6 +30,7 @@ go_library(
         "//pkg/geo/geoprojbase",
         "//pkg/geo/geos",
         "//pkg/geo/geotransform",
+        "//pkg/geo/twkb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient",
