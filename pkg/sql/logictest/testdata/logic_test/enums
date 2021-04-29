@@ -1092,6 +1092,8 @@ CREATE TYPE local_type AS ENUM ('local');
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
 
+# Note: using EXPLAIN in this test without the !metamorphic directive at the top
+# of the file is acceptable because only the first row is printed.
 query T
 SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 ----
@@ -1106,6 +1108,8 @@ ALTER TYPE greeting RENAME TO greeting_local;
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
 
+# Note: using EXPLAIN in this test without the !metamorphic directive at the top
+# of the file is acceptable because only the first row is printed.
 query T
 SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
 ----

@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local !metamorphic
 
 # Note that statistics are populated for TPCH Scale Factor 1.
 

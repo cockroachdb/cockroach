@@ -138,9 +138,12 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
-// There is a special blocklist directive '!metamorphic' that skips the whole
-// test when TAGS=metamorphic is specified for the logic test invocation.
-// NOTE: metamorphic directive takes precedence over all other directives.
+// There is a special blocklist directive '!metamorphic' that disables specific
+// execution and optimizer randomizations for all tests in the file when
+// TAGS=crdb_test or TESTFLAGS='-optimizer-cost-perturbation=0.x' are specified
+// for the logic test invocation. See TestServerArgs.forceProductionBatchSizes
+// for details on the execution randomizations that are disable. If an optimizer
+// cost perturbation was specified, it is ignored for these tests.
 //
 // The Test-Script language is extended here for use with CockroachDB. The
 // supported directives are:
@@ -1340,7 +1343,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 					AssertUnaryExprReturnTypes:      true,
 					AssertFuncExprReturnTypes:       true,
 					DisableOptimizerRuleProbability: *disableOptRuleProbability,
-					OptimizerCostPerturbation:       *optimizerCostPerturbation,
+					OptimizerCostPerturbation:       serverArgs.optimizerCostPerturbation,
 					ForceProductionBatchSizes:       serverArgs.forceProductionBatchSizes,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -1700,7 +1703,8 @@ func processConfigs(
 		blocklist[blockedConfig] = issueNo
 	}
 
-	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
+	metamorphicBuild := util.IsMetamorphicBuild() || *optimizerCostPerturbation != 0
+	if _, ok := blocklist["metamorphic"]; ok && metamorphicBuild {
 		onlyNonMetamorphic = true
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
@@ -3143,6 +3147,10 @@ type TestServerArgs struct {
 	// If set, mutations.MaxBatchSize and row.getKVBatchSize will be overridden
 	// to use the non-test value.
 	forceProductionBatchSizes bool
+	// If set to 0.X, the optimizer will perturb the cost of expressions by up
+	// to X%, causing alternate query plans to be chosen at random. Must be a
+	// value between 0 and 1.
+	optimizerCostPerturbation float64
 }
 
 // RunLogicTest is the main entry point for the logic test. The globs parameter
@@ -3317,7 +3325,13 @@ func RunLogicTestWithDefaultConfig(
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					serverArgs.forceProductionBatchSizes = onlyNonMetamorphic
+					if onlyNonMetamorphic {
+						serverArgs.forceProductionBatchSizes = true
+						serverArgs.optimizerCostPerturbation = 0
+					} else {
+						serverArgs.forceProductionBatchSizes = false
+						serverArgs.optimizerCostPerturbation = *optimizerCostPerturbation
+					}
 					lt.setup(cfg, serverArgs)
 					lt.runFile(path, cfg)
 

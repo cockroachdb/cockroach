@@ -1,4 +1,4 @@
-# LogicTest: 5node-default-configs !5node-metadata
+# LogicTest: 5node-default-configs !5node-metadata !metamorphic
 
 statement ok
 CREATE TABLE ltable(

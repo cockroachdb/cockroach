@@ -38,3 +38,14 @@ run_json_test build/builder.sh \
   PKG=./pkg/sql/opt... \
   TESTFLAGS='-v'
 tc_end_block "Run opt tests with fast_int_set_small"
+
+# Run logic tests and perturb the cost of each expression by up to 90% to
+# randomize query plans.
+run_json_test build/builder.sh \
+  stdbuf -oL -eL \
+  make test \
+  GOTESTFLAGS=-json \
+  PKG=./pkg/sql/logictest \
+  TESTS='^TestLogic/local$$' \
+  TESTTIMEOUT='24h' \
+  TESTFLAGS='-optimizer-cost-perturbation=0.9'

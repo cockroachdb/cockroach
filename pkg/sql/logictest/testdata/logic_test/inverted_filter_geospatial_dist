@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node !metamorphic
 
 statement ok
 CREATE TABLE geo_table(
