@@ -226,6 +226,11 @@ func (ss StoreSpec) String() string {
 	return buffer.String()
 }
 
+// IsEncrypted returns whether the StoreSpec has encryption enabled.
+func (ss StoreSpec) IsEncrypted() bool {
+	return len(ss.EncryptionOptions) > 0
+}
+
 // fractionRegex is the regular expression that recognizes whether
 // the specified size is a fraction of the total available space.
 // Proportional sizes can be expressed as fractional numbers, either
