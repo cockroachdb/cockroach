@@ -4,29 +4,25 @@
 
 # Finding triage_column_id:
 #   TriageColumnID is the column id of the project column the team uses to
-#   triage issues. Unfortunately, there appears to be no way to retrieve this
-#   programmatically from the API.
+#   triage issues. This is tricky to get, but is doable by installing
+#   https://github.com/cockroachlabs/github-find-triage-column-id using
+#   `go install github.com/cockroachlabs/github-find-triage-column-id@latest`.
 #
-#   To find the triage column for a project, run the following curl command:
-#     curl -u yourusername:githubaccesstoken -H "Accept: application/vnd.github.inertia-preview+json" \
-#     https://api.github.com/repos/cockroachdb/cockroach/projects
-#
-#   Then, for the project you care about, curl its columns URL, which looks like this:
-#     https://api.github.com/projects/3842382/columns
-#
-#   Find the triage column you want, and pick its ID field.
-#
-#   TODO(otan): make this a tool.
+#   Then to retrieve triage_column_id from a repo-based project, run:
+#     github-get-column-id --repo "cockroach" --project "Bazel" --column "To do"
+#   Or retrieve the triage_column_id from a organization-based project, run:
+#     github-get-column-id --project "Spatial" --column "Backlog"
 
 cockroachdb/docs:
   triage_column_id: 0 # TODO
 cockroachdb/sql-experience:
-  triage_column_id: 9056630
+  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sqlproxy-prs]
+  triage_column_id: 7259065
 cockroachdb/sql-schema:
   triage_column_id: 8946818
 cockroachdb/sql-queries:
-  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sql-optimizer, cockroachdb/sql-opt-prs, cockroachdb/sqlproxy-prs]
-  triage_column_id: 6837155
+  aliases: [cockroachdb/sql-optimizer, cockroachdb/sql-opt-prs]
+  triage_column_id: 13549252
 cockroachdb/sql-observability:
   aliases: [cockroachdb/sql-api-prs]
   triage_column_id: 0 # TODO
