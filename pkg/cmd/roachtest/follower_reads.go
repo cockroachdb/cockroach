@@ -481,8 +481,11 @@ func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
 	return followerReadCounts, nil
 }
 
-var prometheusMetricStringPattern = "(?P<metric>\\w+)\\{" +
-	"(?P<labelvalues>(\\w+=\".*\",)*(\\w+=\".*\")?)\\}\\s+(?P<value>.*)"
+// parse rows like:
+// sql_select_count  1.652807e+06
+// follower_reads_success_count{store="1"} 27606
+var prometheusMetricStringPattern = `^(?P<metric>\w+)(?:\{` +
+	`(?P<labelvalues>(\w+=\".*\",)*(\w+=\".*\")?)\})?\s+(?P<value>.*)$`
 var promethusMetricStringRE = regexp.MustCompile(prometheusMetricStringPattern)
 
 type prometheusMetric struct {
