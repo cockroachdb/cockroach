@@ -478,6 +478,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 
 		// Signal readiness. This unblocks the process when running with
 		// --background or under systemd.
+		time.Sleep(10 * time.Second)
 		if err := sdnotify.Ready(); err != nil {
 			log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 		}

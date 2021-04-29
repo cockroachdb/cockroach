@@ -159,8 +159,10 @@ func (c *SyncedCluster) newSession(i int) (session, error) {
 // Stop is used to stop cockroach on all nodes in the cluster.
 //
 // It sends a signal to all processes that have been started with ROACHPROD env
-// var and optionally waits until the processes stop. By default, the signal is
-// 9 (SIGKILL) and wait is true.
+// var and optionally waits until the processes stop.
+//
+// When running roachprod stop without other flags, the signal is 9 (SIGKILL)
+// and wait is true.
 func (c *SyncedCluster) Stop(sig int, wait bool) {
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {

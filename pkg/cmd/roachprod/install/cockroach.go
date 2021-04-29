@@ -386,9 +386,8 @@ mkdir -p {{.LogDir}}
 helper="{{if .Local}}{{.LogDir}}{{else}}${HOME}{{end}}/cockroach-helper.sh"
 verb="{{if .Local}}run{{else}}run-systemd{{end}}"
 
-# \EOF ensures that no parameter expansion occurs in the heredoc. See:
-# https://unix.stackexchange.com/questions/376103/here-document-without-interpreting-escape-sequences-but-with-interpolation
-cat > "${helper}" << \EOF && chmod +x "${helper}" && "${helper}" "${verb}"
+# 'EOF' disables parameter substitution in the heredoc.
+cat > "${helper}" << 'EOF' && chmod +x "${helper}" && "${helper}" "${verb}"
 #!/bin/bash
 set -euo pipefail
 
@@ -404,9 +403,7 @@ if [[ "${1}" == "run" ]]; then
     background="--background"
   fi
   CODE=0
-  set +e
   {{.Binary}} {{.StartCmd}} {{.Args}} ${background} >> {{.LogDir}}/cockroach.stdout.log 2>> {{.LogDir}}/cockroach.stderr.log || CODE=$?
-  set -e
   if [[ -z "${local}" || ${CODE} -ne 0 ]]; then
     echo "cockroach exited with code ${CODE}: $(date)" | tee -a {{.LogDir}}/{roachprod,cockroach.{exit,std{out,err}}}.log
   fi
@@ -448,7 +445,14 @@ fi
 # We run this script (with arg "run") as a service unit. We do not use --user
 # because memory limiting doesn't work in that mode. Instead we pass the uid and
 # gid that the process will run under.
-sudo systemd-run --unit cockroach --same-dir --uid $(id -u) --gid $(id -g) -p MemoryMax={{.MemoryMax}} bash $0 run
+# The "notify" service type means that systemd-run waits until cockroach
+# notifies systemd that it is ready; NotifyAccess=all is needed because this
+# notification doesn't come from the main PID (which is bash).
+sudo systemd-run --unit cockroach \
+  --same-dir --uid $(id -u) --gid $(id -g) \
+	--service-type=notify -p NotifyAccess=all \
+	-p MemoryMax={{.MemoryMax}} \
+	bash $0 run
 EOF
 `)
 	if err != nil {
