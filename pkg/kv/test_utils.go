@@ -35,6 +35,22 @@ func OnlyFollowerReads(rec tracing.Recording) bool {
 	return foundFollowerRead
 }
 
+// OnlyFollowerReads looks through all the RPCs and asserts that every single
+// one resulted in a local read. Returns false if no RPCs are found.
+func OnlyLocalReads(rec tracing.Recording) bool {
+	foundLocalReads := false
+	for _, sp := range rec {
+		if sp.Operation == "dist sender send" {
+			if tracing.LogsContainMsg(sp, kvbase.ServingLocalReadMsg) {
+				foundLocalReads = true
+			} else {
+				return false
+			}
+		}
+	}
+	return foundLocalReads
+}
+
 // IsExpectedRelocateError maintains an allowlist of errors related to
 // atomic-replication-changes we want to ignore / retry on for tests.
 // See:
