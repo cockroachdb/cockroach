@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -181,9 +182,13 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		name string
 		node *roachpb.NodeDescriptor
 		// map from node address (see nodeDesc()) to latency to that node.
-		latencies  map[string]time.Duration
-		slice      ReplicaSlice
-		expOrdered ReplicaSlice
+		latencies map[string]time.Duration
+		slice     ReplicaSlice
+		// expOrder is the expected order in which the replicas sort. Replicas are
+		// only identified by their node. If multiple replicas are on different
+		// stores of the same node, the node only appears once in this list (as the
+		// ordering between replicas on the same node is not deterministic).
+		expOrdered []roachpb.NodeID
 	}{
 		{
 			name: "order by locality matching",
@@ -191,13 +196,10 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			slice: ReplicaSlice{
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 3, 33, []string{"country=uk", "city=london"}),
 				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
 			},
-			expOrdered: ReplicaSlice{
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-			},
+			expOrdered: []roachpb.NodeID{2, 4, 3},
 		},
 		{
 			name: "order by locality matching, put node first",
@@ -206,14 +208,10 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 3, 33, []string{"country=uk", "city=london"}),
 				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
 			},
-			expOrdered: ReplicaSlice{
-				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-			},
+			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
 		},
 		{
 			name: "order by latency",
@@ -226,13 +224,10 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			slice: ReplicaSlice{
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
 			},
-			expOrdered: ReplicaSlice{
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-			},
+			expOrdered: []roachpb.NodeID{4, 3, 2},
 		},
 	}
 	for _, test := range testCases {
@@ -244,9 +239,19 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 					return lat, ok
 				}
 			}
+			// Randomize the input order, as it's not supposed to matter.
+			shuffle.Shuffle(test.slice)
 			test.slice.OptimizeReplicaOrder(test.node, latencyFn)
-			if !reflect.DeepEqual(test.slice, test.expOrdered) {
-				t.Errorf("expected order %+v; got %+v", test.expOrdered, test.slice)
+			var sortedNodes []roachpb.NodeID
+			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
+			for i := 1; i < len(test.slice); i++ {
+				l := len(sortedNodes)
+				if nid := test.slice[i].NodeID; nid != sortedNodes[l-1] {
+					sortedNodes = append(sortedNodes, nid)
+				}
+			}
+			if !reflect.DeepEqual(sortedNodes, test.expOrdered) {
+				t.Errorf("expected node order %+v; got %+v", test.expOrdered, test.slice)
 			}
 		})
 	}
