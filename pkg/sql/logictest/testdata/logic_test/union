@@ -543,3 +543,19 @@ SELECT a, b FROM ab EXCEPT ALL SELECT x, y FROM xy ORDER BY a
 ----
 2  2
 4  4
+
+# Regression test for #64181. Ensure that a projection on top of an ordered
+# UNION ALL correctly projects away ordering columns.
+query TT
+WITH q (x, y) AS (
+  SELECT * FROM (VALUES ('a', 'a'), ('b', 'b'), ('c', 'c'))
+  UNION ALL
+  SELECT * FROM (VALUES ('d', 'd'))
+)
+SELECT 'e', y FROM q
+ORDER BY x
+----
+e  a
+e  b
+e  c
+e  d
