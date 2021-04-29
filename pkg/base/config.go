@@ -513,6 +513,11 @@ type StorageConfig struct {
 	EncryptionOptions []byte
 }
 
+// IsEncrypted returns whether the StorageConfig has encryption enabled.
+func (sc StorageConfig) IsEncrypted() bool {
+	return len(sc.EncryptionOptions) > 0
+}
+
 const (
 	// DefaultTempStorageMaxSizeBytes is the default maximum budget
 	// for temp storage.
