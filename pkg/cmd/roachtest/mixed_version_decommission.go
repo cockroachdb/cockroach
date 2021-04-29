@@ -251,7 +251,7 @@ func checkAllMembership(from int, membership string) versionStep {
 func uploadVersionStep(nodes nodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// Put the binary.
-		u.uploadVersion(ctx, t, nodes, version)
+		uploadVersion(ctx, t, u.c, nodes, version)
 	}
 }
 
