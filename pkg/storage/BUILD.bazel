@@ -120,6 +120,7 @@ go_test(
         "disk_map_test.go",
         "engine_key_test.go",
         "engine_test.go",
+        "file_util_test.go",
         "intent_interleaving_iter_test.go",
         "intent_reader_writer_test.go",
         "main_test.go",

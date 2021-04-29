@@ -12,23 +12,26 @@ package storage
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-// SafeWriteToFile writes the byte slice to the filename, contained in dir, using the given fs.
-// It returns after both the file and the containing directory are synced.
+// SafeWriteToFile writes the byte slice to the filename, contained in dir,
+// using the given fs.  It returns after both the file and the containing
+// directory are synced.
 func SafeWriteToFile(fs vfs.FS, dir string, filename string, b []byte) error {
 	tempName := filename + ".crdbtmp"
 	f, err := fs.Create(tempName)
 	if err != nil {
-		fmt.Printf("%v\n", err)
 		return err
 	}
 	bReader := bytes.NewReader(b)
 	if _, err = io.Copy(f, bReader); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
 		f.Close()
 		return err
 	}
