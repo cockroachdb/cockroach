@@ -71,7 +71,9 @@ func TestInboxCancellation(t *testing.T) {
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
-		require.True(t, testutils.IsError(err, "while waiting for stream"), err)
+		// We expect no error from the stream handler since we canceled it
+		// ourselves (a graceful termination).
+		require.Nil(t, err)
 	})
 
 	t.Run("DuringRecv", func(t *testing.T) {
@@ -98,7 +100,9 @@ func TestInboxCancellation(t *testing.T) {
 		// Cancel the context.
 		cancelFn()
 		err = <-streamHandlerErrCh
-		require.True(t, testutils.IsError(err, "readerCtx in Inbox stream handler"), err)
+		// Reader context cancellation is a graceful termination, so no error
+		// should be returned.
+		require.Nil(t, err)
 
 		// The mock RPC layer does not unblock the Recv for us on the server side,
 		// so manually send an io.EOF to the reader goroutine.

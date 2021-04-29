@@ -92,7 +92,7 @@ func TestSpillingQueue(t *testing.T) {
 				NumBatches: numBatches,
 				BatchSize:  inputBatchSize,
 				Nulls:      true,
-				BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
+				BatchAccumulator: func(_ context.Context, b coldata.Batch, typs []*types.T) {
 					if b.Length() == 0 {
 						return
 					}
