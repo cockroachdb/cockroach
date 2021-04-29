@@ -163,6 +163,7 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 
 func nodeDesc(t *testing.T, nid roachpb.NodeID, locStrs []string) *roachpb.NodeDescriptor {
 	return &roachpb.NodeDescriptor{
+		NodeID:   nid,
 		Locality: locality(t, locStrs),
 		Address:  util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:26257", nid)),
 	}
@@ -217,6 +218,27 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
 			},
 			expOrdered: []roachpb.NodeID{4, 3, 2},
+		},
+		{
+			// Test that replicas on the local node sort first, regardless of factors
+			// like their latency measurement (in production they won't have any
+			// latency measurement).
+			name: "local node comes first",
+			node: nodeDesc(t, 1, nil),
+			latencies: map[string]time.Duration{
+				"1:26257": 10 * time.Hour,
+				"2:26257": time.Hour,
+				"3:26257": time.Minute,
+				"4:26257": time.Second,
+			},
+			slice: ReplicaSlice{
+				info(t, 1, 1, nil),
+				info(t, 1, 2, nil),
+				info(t, 2, 2, nil),
+				info(t, 3, 3, nil),
+				info(t, 4, 4, nil),
+			},
+			expOrdered: []roachpb.NodeID{1, 4, 3, 2},
 		},
 	}
 	for _, test := range testCases {
