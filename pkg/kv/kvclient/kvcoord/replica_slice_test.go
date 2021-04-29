@@ -160,19 +160,17 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 	return locality
 }
 
-func nodeDesc(
-	t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string,
-) *roachpb.NodeDescriptor {
+func nodeDesc(t *testing.T, nid roachpb.NodeID, locStrs []string) *roachpb.NodeDescriptor {
 	return &roachpb.NodeDescriptor{
 		Locality: locality(t, locStrs),
-		Address:  addr(nid, sid),
+		Address:  util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:26257", nid)),
 	}
 }
 
 func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
 	return ReplicaInfo{
 		ReplicaDescriptor: desc(nid, sid),
-		NodeDesc:          nodeDesc(t, nid, sid, locStrs),
+		NodeDesc:          nodeDesc(t, nid, locStrs),
 	}
 }
 
@@ -180,15 +178,16 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
-		name       string
-		node       *roachpb.NodeDescriptor
+		name string
+		node *roachpb.NodeDescriptor
+		// map from node address (see nodeDesc()) to latency to that node.
 		latencies  map[string]time.Duration
 		slice      ReplicaSlice
 		expOrdered ReplicaSlice
 	}{
 		{
 			name: "order by locality matching",
-			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
@@ -202,7 +201,7 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		},
 		{
 			name: "order by locality matching, put node first",
-			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
 				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
@@ -218,11 +217,11 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		},
 		{
 			name: "order by latency",
-			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
 			latencies: map[string]time.Duration{
-				"2:2": time.Hour,
-				"3:3": time.Minute,
-				"4:4": time.Second,
+				"2:26257": time.Hour,
+				"3:26257": time.Minute,
+				"4:26257": time.Second,
 			},
 			slice: ReplicaSlice{
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
