@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local !metamorphic
 
 # SRID of the geometry column is unspecified, so default index bounds are used.
 statement ok

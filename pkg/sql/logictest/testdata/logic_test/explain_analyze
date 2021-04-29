@@ -1,4 +1,4 @@
-# LogicTest: local fakedist fakedist-disk !local-spec-planning !fakedist-spec-planning
+# LogicTest: local fakedist fakedist-disk !local-spec-planning !fakedist-spec-planning !metamorphic
 #
 # TODO(yuzefovich): we run this file only with vectorize=on configs because
 # EXPLAIN ANALYZE (PLAN, VERBOSE) output differs depending on the execution

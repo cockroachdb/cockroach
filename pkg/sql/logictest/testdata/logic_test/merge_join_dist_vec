@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node !metamorphic
 
 # Regression test for #39317.
 

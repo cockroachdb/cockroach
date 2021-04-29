@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local !metamorphic
 
 statement ok
 CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b))
