@@ -159,5 +159,6 @@
 /pkg/util/                   @cockroachdb/unowned
 /pkg/util/log                @cockroachdb/server-prs
 /pkg/util/metric             @cockroachdb/obs-infra
+/pkg/util/stop               @cockroachdb/server-prs
 /pkg/util/tracing            @cockroachdb/obs-infra
 /pkg/workload/               @cockroachdb/sql-experience
