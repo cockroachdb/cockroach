@@ -87,14 +87,14 @@ func TestTableSet(t *testing.T) {
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			s.expiration = hlc.Timestamp{WallTime: op.expiration}
+			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.insert(s)
 
 		case remove:
 			s := &descriptorVersionState{
 				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
-			s.expiration = hlc.Timestamp{WallTime: op.expiration}
+			s.mu.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.remove(s)
 
 		case newest:
@@ -104,7 +104,7 @@ func TestTableSet(t *testing.T) {
 			}
 			s := "<nil>"
 			if n != nil {
-				s = fmt.Sprintf("%d:%d", n.GetVersion(), n.expiration.WallTime)
+				s = fmt.Sprintf("%d:%d", n.GetVersion(), n.getExpiration().WallTime)
 			}
 			if d.expected != s {
 				t.Fatalf("%d: expected %s, but found %s", i, d.expected, s)
@@ -166,15 +166,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err := leaseManager.AcquireFreshestFromStore(context.Background(), tableDesc.GetID()); err != nil {
 				t.Fatal(err)
 			}
-			table, exp, err := leaseManager.Acquire(context.Background(), s.Clock().Now(), tableDesc.GetID())
+			table, err := leaseManager.Acquire(context.Background(), s.Clock().Now(), tableDesc.GetID())
 			if err != nil {
 				t.Fatal(err)
 			}
-			tables = append(tables, table.(catalog.TableDescriptor))
-			expiration = exp
-			if err := leaseManager.Release(table); err != nil {
-				t.Fatal(err)
-			}
+			tables = append(tables, table.Desc().(catalog.TableDescriptor))
+			expiration = table.Expiration()
+			table.Release(context.Background())
 		}
 	}
 	getLeases()
@@ -206,7 +204,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ts.mu.Lock()
 	correctLease := ts.mu.active.data[0].GetID() == tables[5].GetID() &&
 		ts.mu.active.data[0].GetVersion() == tables[5].GetVersion()
-	correctExpiration := ts.mu.active.data[0].expiration == expiration
+	correctExpiration := ts.mu.active.data[0].getExpiration() == expiration
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
@@ -220,8 +218,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ts.mu.Lock()
 	tableVersion := &descriptorVersionState{
 		Descriptor: tables[0],
-		expiration: tables[5].GetModificationTime(),
 	}
+	tableVersion.mu.expiration = tables[5].GetModificationTime()
 	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
 	if numLeases := getNumVersions(ts); numLeases != 2 {
@@ -284,14 +282,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err := leaseManager.AcquireFreshestFromStore(ctx, tableDesc.GetID()); err != nil {
 			t.Fatal(err)
 		}
-		table, _, err := leaseManager.Acquire(ctx, futureTime, tableDesc.GetID())
+		table, err := leaseManager.Acquire(ctx, futureTime, tableDesc.GetID())
 		if err != nil {
 			t.Fatal(err)
 		}
-		latestDesc := table.(catalog.TableDescriptor)
-		if err := leaseManager.Release(table); err != nil {
-			t.Fatal(err)
-		}
+		latestDesc := table.Desc().(catalog.TableDescriptor)
+		table.Release(ctx)
 		return latestDesc
 	}
 	origDesc := getLatestDesc()
@@ -434,9 +430,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.GetID() != tableDesc.GetID() {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.GetID())
 	}
-	if err := leaseManager.Release(lease.Descriptor); err != nil {
-		t.Fatal(err)
-	}
+	lease.Release(context.Background())
 
 	// Rename to a different database.
 	if _, err := db.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
@@ -461,9 +455,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if lease.GetID() != tableDesc.GetID() {
 		t.Fatalf("new name has wrong ID: %d (expected: %d)", lease.GetID(), tableDesc.GetID())
 	}
-	if err := leaseManager.Release(lease.Descriptor); err != nil {
-		t.Fatal(err)
-	}
+	lease.Release(context.Background())
 }
 
 // Tests that a name cache entry with by an expired lease is not returned.
@@ -494,9 +486,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease := leaseManager.names.get(tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now()); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	} else {
-		if err := leaseManager.Release(lease.Descriptor); err != nil {
-			t.Fatal(err)
-		}
+		lease.Release(context.Background())
 	}
 
 	leaseManager.ExpireLeases(s.Clock())
@@ -544,7 +534,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-
+	expiration := lease.Expiration()
 	tracker := removalTracker.TrackRemoval(lease.Descriptor)
 
 	// Acquire another lease.
@@ -557,22 +547,19 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
-	if newLease == lease {
-		t.Fatalf("same lease %s", newLease.expiration.GoTime())
+	if newLease.Expiration() == expiration {
+		t.Fatalf("same lease %s %s", expiration.GoTime(), newLease.Expiration().GoTime())
 	}
 
-	if err := leaseManager.Release(lease.Descriptor); err != nil {
-		t.Fatal(err)
-	}
+	// TODO(ajwerner): does this matter?
+	lease.Release(context.Background())
 
 	// The first lease acquisition was released.
 	if err := tracker.WaitForRemoval(); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := leaseManager.Release(lease.Descriptor); err != nil {
-		t.Fatal(err)
-	}
+	newLease.Release(context.Background())
 }
 
 // Test that table names are treated as case sensitive by the name cache.
@@ -634,7 +621,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Populate the name cache.
 	ctx := context.Background()
-	table, _, err := leaseManager.AcquireByName(
+	table, err := leaseManager.AcquireByName(
 		ctx,
 		leaseManager.storage.clock.Now(),
 		tableDesc.GetParentID(),
@@ -644,27 +631,26 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := leaseManager.Release(table); err != nil {
-		t.Fatal(err)
-	}
+	table.Release(ctx)
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
 	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
-	tableChan := make(chan catalog.TableDescriptor)
-	errChan := make(chan error)
+	tableChan := make(chan LeasedDescriptor)
+	releaseChan := make(chan struct{})
 	go func() {
 		for table := range tableChan {
 			// Move errors to the main goroutine.
-			errChan <- leaseManager.Release(table)
+			table.Release(ctx)
+			releaseChan <- struct{}{}
 		}
 	}()
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 1; i++ {
 		timestamp := leaseManager.storage.clock.Now()
 		ctx := context.Background()
-		desc, _, err := leaseManager.AcquireByName(
+		desc, err := leaseManager.AcquireByName(
 			ctx,
 			timestamp,
 			tableDesc.GetParentID(),
@@ -674,7 +660,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		table := desc.(catalog.TableDescriptor)
+		table := desc.Desc().(catalog.TableDescriptor)
 		// This test will need to wait until leases are removed from the store
 		// before creating new leases because the jitter used in the leases'
 		// expiration causes duplicate key errors when trying to create new
@@ -685,8 +671,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		tracker := removalTracker.TrackRemoval(table)
 		// Start the race: signal the other guy to release, and we do another
 		// acquire at the same time.
-		tableChan <- table
-		tableByName, _, err := leaseManager.AcquireByName(
+		tableChan <- desc
+		tableByName, err := leaseManager.AcquireByName(
 			ctx,
 			timestamp,
 			tableDesc.GetParentID(),
@@ -698,15 +684,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 
 		// See if there was an error releasing lease.
-		err = <-errChan
-		if err != nil {
-			t.Fatal(err)
-		}
+		<-releaseChan
 
 		// Release the lease for the last time.
-		if err := leaseManager.Release(tableByName); err != nil {
-			t.Fatal(err)
-		}
+		tableByName.Release(ctx)
 
 		// There are 2 possible results of the race above: Either we acquired before
 		// releasing (causing us to acquire the same lease, incrementing and then
@@ -753,13 +734,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			if err := leaseManager.AcquireFreshestFromStore(context.Background(), tableDesc.GetID()); err != nil {
 				t.Error(err)
 			}
-			table, _, err := leaseManager.Acquire(context.Background(), s.Clock().Now(), tableDesc.GetID())
+			table, err := leaseManager.Acquire(context.Background(), s.Clock().Now(), tableDesc.GetID())
 			if err != nil {
 				t.Error(err)
 			}
-			if err := leaseManager.Release(table); err != nil {
-				t.Error(err)
-			}
+			table.Release(context.Background())
 		}()
 	}
 	wg.Wait()
@@ -803,13 +782,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			table, _, err := leaseManager.Acquire(context.Background(), now, tableDesc.GetID())
+			table, err := leaseManager.Acquire(context.Background(), now, tableDesc.GetID())
 			if err != nil {
 				t.Error(err)
 			}
-			if err := leaseManager.Release(table); err != nil {
-				t.Error(err)
-			}
+			table.Release(context.Background())
 		}()
 	}
 
@@ -843,9 +820,17 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {
-		table catalog.TableDescriptor
+		table LeasedDescriptor
 		exp   hlc.Timestamp
 		err   error
+	}
+	mkResult := func(table LeasedDescriptor, err error) Result {
+		res := Result{err: err}
+		if table != nil {
+			res.table = table
+			res.exp = table.Expiration()
+		}
+		return res
 	}
 
 	descID := descpb.ID(keys.LeaseTableID)
@@ -856,8 +841,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		m *Manager,
 		acquireChan chan Result,
 	) {
-		table, e, err := m.Acquire(ctx, m.storage.clock.Now(), descID)
-		acquireChan <- Result{err: err, exp: e, table: table.(catalog.TableDescriptor)}
+		acquireChan <- mkResult(m.Acquire(ctx, m.storage.clock.Now(), descID))
 	}
 
 	testCases := []struct {
@@ -936,12 +920,11 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			serverArgs := base.TestServerArgs{Knobs: testingKnobs}
 
-			serverArgs.LeaseManagerConfig = base.NewLeaseManagerConfig()
 			// The LeaseJitterFraction is zero so leases will have
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			serverArgs.LeaseManagerConfig.DescriptorLeaseJitterFraction = 0.0
+			LeaseJitterFraction.Override(&serverArgs.SV, 0)
 
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)
@@ -956,11 +939,10 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			if test.isSecondCallAcquireFreshest {
 				go func(ctx context.Context, m *Manager, acquireChan chan Result) {
 					if err := m.AcquireFreshestFromStore(ctx, descID); err != nil {
-						acquireChan <- Result{err: err, exp: hlc.Timestamp{}, table: nil}
+						acquireChan <- mkResult(nil, err)
 						return
 					}
-					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
-					acquireChan <- Result{err: err, exp: e, table: table.(catalog.TableDescriptor)}
+					acquireChan <- mkResult(m.Acquire(ctx, s.Clock().Now(), descID))
 				}(ctx, leaseManager, acquireResultChan)
 
 			} else {
@@ -986,10 +968,8 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			// Release the lease. This also causes it to get removed as the
 			// knob RemoveOnceDereferenced is set.
-			tracker := removalTracker.TrackRemoval(result1.table)
-			if err := leaseManager.Release(result1.table); err != nil {
-				t.Fatal(err)
-			}
+			tracker := removalTracker.TrackRemoval(result1.table.Desc())
+			result1.table.Release(ctx)
 			// Wait until the lease is removed.
 			if err := tracker.WaitForRemoval(); err != nil {
 				t.Fatal(err)
