@@ -178,13 +178,8 @@ v          root  NULL  {}  NULL
 statement ok
 SET vectorize=on
 
-query T
+statement ok
 EXPLAIN ALTER DATABASE v RENAME TO x
-----
-distribution: local
-vectorized: true
-·
-• rename database
 
 statement ok
 RESET vectorize

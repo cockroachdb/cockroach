@@ -254,13 +254,8 @@ public  kv  table  root  0  NULL
 statement ok
 SET vectorize=on
 
-query T
+statement ok
 EXPLAIN ALTER TABLE kv RENAME TO kv2
-----
-distribution: local
-vectorized: true
-·
-• rename table
 
 statement ok
 RESET vectorize

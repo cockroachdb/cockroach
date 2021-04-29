@@ -122,13 +122,8 @@ username
 statement ok
 SET vectorize=on
 
-query T
+statement ok
 EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
-----
-distribution: local
-vectorized: true
-·
-• alter table
 
 statement ok
 RESET vectorize
