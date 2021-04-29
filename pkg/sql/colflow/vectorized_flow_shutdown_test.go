@@ -182,7 +182,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				}
 				createMetadataSourceForID := func(id int) colexecop.MetadataSource {
 					return colexectestutils.CallbackMetadataSource{
-						DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+						DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 							return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
 						},
 					}

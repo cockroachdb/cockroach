@@ -269,7 +269,7 @@ func (o *routerOutputOp) Next() coldata.Batch {
 	return b
 }
 
-func (o *routerOutputOp) DrainMeta(_ context.Context) []execinfrapb.ProducerMetadata {
+func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
 	o.mu.Lock()
 	o.mu.state = routerOutputOpDraining
 	o.maybeUnblockLocked()
@@ -550,12 +550,14 @@ func (r *HashRouter) Run(ctx context.Context) {
 	if span != nil {
 		defer span.Finish()
 	}
+	var inputInitialized bool
 	// Since HashRouter runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
 	// method with a catcher. Note that we also have "internal" catchers as
 	// well for more fine-grained control of error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		r.Input.Init(ctx)
+		inputInitialized = true
 		var done bool
 		processNextBatch := func() {
 			done = r.processNextBatch(ctx)
@@ -609,15 +611,19 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}); err != nil {
 		r.cancelOutputs(ctx, err)
 	}
-	if span != nil {
-		for _, s := range r.inputMetaInfo.StatsCollectors {
-			span.RecordStructured(s.GetStats())
+	if inputInitialized {
+		// Retrieving stats and draining the metadata is only safe if the input
+		// to the hash router was properly initialized.
+		if span != nil {
+			for _, s := range r.inputMetaInfo.StatsCollectors {
+				span.RecordStructured(s.GetStats())
+			}
+			if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+				r.bufferedMeta = append(r.bufferedMeta, *meta)
+			}
 		}
-		if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
-			r.bufferedMeta = append(r.bufferedMeta, *meta)
-		}
+		r.bufferedMeta = append(r.bufferedMeta, r.inputMetaInfo.MetadataSources.DrainMeta()...)
 	}
-	r.bufferedMeta = append(r.bufferedMeta, r.inputMetaInfo.MetadataSources.DrainMeta(ctx)...)
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.
 	r.waitForMetadata <- r.bufferedMeta

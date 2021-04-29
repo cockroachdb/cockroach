@@ -314,7 +314,7 @@ func (i *statsInvariantChecker) GetStats() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{}
 }
 
-func (i *statsInvariantChecker) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+func (i *statsInvariantChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 	if !i.statsRetrieved {
 		return []execinfrapb.ProducerMetadata{{Err: errors.New("GetStats wasn't called before DrainMeta")}}
 	}

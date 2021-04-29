@@ -82,6 +82,23 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph
+      title="Runnable Goroutines per CPU"
+      sources={nodeSources}
+      tooltip={`The number of Goroutines waiting for CPU ${tooltipSelection}.
+           This count should rise and fall based on load.`}
+    >
+      <Axis label="goroutines">
+        {nodeIDs.map((nid) => (
+          <Metric
+            name="cr.node.sys.runnable.goroutines.per.cpu"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={[nid]}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
     // TODO(mrtracy): The following two graphs are a good first example of a graph with
     // two axes; the two series should be highly correlated, but have different units.
     <LineGraph
