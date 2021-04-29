@@ -247,6 +247,13 @@ func (u *versionUpgradeTest) uploadVersion(
 		return startArgs("--binary=" + target)
 	}
 
+	// If an override has been specified for newVersion, use that binary.
+	if binary, ok := t.versionsBinaryOverride[newVersion]; ok {
+		target := "./cockroach-" + newVersion
+		u.c.Put(ctx, binary, target, nodes)
+		return startArgs("--binary=" + target)
+	}
+
 	newVersion = "v" + newVersion
 	dir := newVersion
 	target := filepath.Join(dir, "cockroach")
