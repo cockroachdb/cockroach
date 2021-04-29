@@ -184,6 +184,7 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	stmt := &planner.stmt
+	shouldIncludeInLatencyMetrics := shouldIncludeStmtInLatencyMetrics(stmt)
 	flags := planner.curPlan.flags
 	if automaticRetryCount == 0 {
 		ex.updateOptCounters(flags)
@@ -192,11 +193,15 @@ func (ex *connExecutor) recordStatementSummary(
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
-			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			if shouldIncludeInLatencyMetrics {
+				m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+				m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			}
 		}
-		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		if shouldIncludeInLatencyMetrics {
+			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		}
 	}
 
 	stmtID := ex.statsCollector.recordStatement(
@@ -256,4 +261,29 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	} else if planFlags.IsSet(planFlagOptCacheMiss) {
 		m.SQLOptPlanCacheMisses.Inc(1)
 	}
+}
+
+// Bulk IO operations cause spikes in our time series chart for service latency. We exclude them from the service
+// latency metrics to avoid confusions.
+func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
+	switch stmt.AST.(type) {
+	case *tree.Backup:
+		return false
+	case *tree.ShowBackup:
+		return false
+	case *tree.Restore:
+		return false
+	case *tree.Import:
+		return false
+	case *tree.Export:
+		return false
+	case *tree.ScheduledBackup:
+		return false
+	case *tree.StreamIngestion:
+		return false
+	case *tree.ReplicationStream:
+		return false
+	}
+
+	return true
 }
