@@ -683,11 +683,13 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
 		// commits by handleMergeResult() to finish the removal.
+		rhsRepl.readOnlyCmdMu.Lock()
 		rhsRepl.mu.Lock()
 		rhsRepl.mu.destroyStatus.Set(
 			roachpb.NewRangeNotFoundError(rhsRepl.RangeID, rhsRepl.store.StoreID()),
 			destroyReasonRemoved)
 		rhsRepl.mu.Unlock()
+		rhsRepl.readOnlyCmdMu.Unlock()
 
 		// Use math.MaxInt32 (mergedTombstoneReplicaID) as the nextReplicaID as an
 		// extra safeguard against creating new replicas of the RHS. This isn't
