@@ -40,6 +40,7 @@ func main() {
 	var debugEnabled bool
 	var clusterID string
 	var count = 1
+	var versionsBinaryOverride map[string]string
 
 	cobra.EnableCommandSorting = false
 
@@ -148,15 +149,16 @@ the test tags.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerTests, cliCfg{
-				args:         args,
-				count:        count,
-				cpuQuota:     cpuQuota,
-				debugEnabled: debugEnabled,
-				httpPort:     httpPort,
-				parallelism:  parallelism,
-				artifactsDir: artifacts,
-				user:         username,
-				clusterID:    clusterID,
+				args:                   args,
+				count:                  count,
+				cpuQuota:               cpuQuota,
+				debugEnabled:           debugEnabled,
+				httpPort:               httpPort,
+				parallelism:            parallelism,
+				artifactsDir:           artifacts,
+				user:                   username,
+				clusterID:              clusterID,
+				versionsBinaryOverride: versionsBinaryOverride,
 			})
 		},
 	}
@@ -180,15 +182,16 @@ the test tags.
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerBenchmarks, cliCfg{
-				args:         args,
-				count:        count,
-				cpuQuota:     cpuQuota,
-				debugEnabled: debugEnabled,
-				httpPort:     httpPort,
-				parallelism:  parallelism,
-				artifactsDir: artifacts,
-				user:         username,
-				clusterID:    clusterID,
+				args:                   args,
+				count:                  count,
+				cpuQuota:               cpuQuota,
+				debugEnabled:           debugEnabled,
+				httpPort:               httpPort,
+				parallelism:            parallelism,
+				artifactsDir:           artifacts,
+				user:                   username,
+				clusterID:              clusterID,
+				versionsBinaryOverride: versionsBinaryOverride,
 			})
 		},
 	}
@@ -228,6 +231,12 @@ the test tags.
 			&localSSDArg, "local-ssd", true, "Use a local SSD instead of an EBS volume (only for use with AWS) (defaults to true if instance type supports local SSDs)")
 		cmd.Flags().StringSliceVar(
 			&createArgs, "create-args", []string{}, "extra args to pass onto the roachprod create command")
+		cmd.Flags().StringToStringVar(
+			&versionsBinaryOverride, "versions-binary-override", nil,
+			"List of <version>=<path to cockroach binary>. If a certain version <ver> "+
+				"is present in the list,"+"the respective binary will be used when a "+
+				"multi-version test asks for the respective binary, instead of "+
+				"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
 	}
 
 	rootCmd.AddCommand(listCmd)
@@ -241,15 +250,16 @@ the test tags.
 }
 
 type cliCfg struct {
-	args         []string
-	count        int
-	cpuQuota     int
-	debugEnabled bool
-	httpPort     int
-	parallelism  int
-	artifactsDir string
-	user         string
-	clusterID    string
+	args                   []string
+	count                  int
+	cpuQuota               int
+	debugEnabled           bool
+	httpPort               int
+	parallelism            int
+	artifactsDir           string
+	user                   string
+	clusterID              string
+	versionsBinaryOverride map[string]string
 }
 
 func runTests(register func(*testRegistry), cfg cliCfg) error {
@@ -312,7 +322,10 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
-	err = runner.Run(ctx, tests, cfg.count, cfg.parallelism, opt, cfg.artifactsDir, lopt)
+	err = runner.Run(
+		ctx, tests, cfg.count, cfg.parallelism, opt,
+		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
+		lopt)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's

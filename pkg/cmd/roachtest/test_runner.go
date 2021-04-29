@@ -138,6 +138,10 @@ func (c clustersOpt) validate() error {
 	return nil
 }
 
+type testOpts struct {
+	versionsBinaryOverride map[string]string
+}
+
 // Run runs tests.
 //
 // Args:
@@ -155,7 +159,7 @@ func (r *testRunner) Run(
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
-	artifactsDir string,
+	topt testOpts,
 	lopt loggingOpt,
 ) error {
 	// Validate options.
@@ -288,6 +292,7 @@ func (r *testRunner) Run(
 				clustersOpt.keepClustersOnTestFailure,
 				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
 				allocateCluster,
+				topt,
 				l,
 			); err != nil {
 				// A worker returned an error. Let's shut down.
@@ -369,6 +374,7 @@ func (r *testRunner) runWorker(
 	teeOpt teeOptType,
 	stdout io.Writer,
 	allocateCluster clusterAllocatorFn,
+	topt testOpts,
 	l *logger,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
@@ -463,11 +469,12 @@ func (r *testRunner) runWorker(
 			return err
 		}
 		t := &test{
-			spec:          &testToRun.spec,
-			buildVersion:  r.buildVersion,
-			artifactsDir:  artifactsDir,
-			artifactsSpec: artifactsSpec,
-			l:             testL,
+			spec:                   &testToRun.spec,
+			buildVersion:           r.buildVersion,
+			artifactsDir:           artifactsDir,
+			artifactsSpec:          artifactsSpec,
+			l:                      testL,
+			versionsBinaryOverride: topt.versionsBinaryOverride,
 		}
 		// Tell the cluster that, from now on, it will be run "on behalf of this
 		// test".
