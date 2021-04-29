@@ -181,17 +181,6 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			name: "order by locality matching",
 			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-				info(t, 3, 33, []string{"country=uk", "city=london"}),
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-			},
-			expOrdered: []roachpb.NodeID{2, 4, 3},
-		},
-		{
-			name: "order by locality matching, put node first",
-			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
-			slice: ReplicaSlice{
 				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
