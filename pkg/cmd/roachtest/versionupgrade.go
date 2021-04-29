@@ -373,29 +373,39 @@ func uploadAndStartFromCheckpointFixture(nodes nodeListOption, v string) version
 // Use a waitForUpgradeStep() for that.
 func binaryUpgradeStep(nodes nodeListOption, newVersion string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		c := u.c
+		upgradeNodes(ctx, nodes, newVersion, t, u.c)
+		// TODO(nvanbenschoten): add upgrade qualification step. What should we
+		// test? We could run logictests. We could add custom logic here. Maybe
+		// this should all be pushed to nightly migration tests instead.
+	}
+}
 
-		// NB: We could technically stage the binary on all nodes before
-		// restarting each one, but on Unix it's invalid to write to an
-		// executable file while it is currently running. So we do the
-		// simple thing and upload it serially instead.
+func upgradeNodes(
+	ctx context.Context, nodes nodeListOption, newVersion string, t *test, c *cluster,
+) {
+	// NB: We could technically stage the binary on all nodes before
+	// restarting each one, but on Unix it's invalid to write to an
+	// executable file while it is currently running. So we do the
+	// simple thing and upload it serially instead.
 
-		// Restart nodes in a random order; otherwise node 1 would be running all
-		// the migrations and it probably also has all the leases.
-		rand.Shuffle(len(nodes), func(i, j int) {
-			nodes[i], nodes[j] = nodes[j], nodes[i]
-		})
-		for _, node := range nodes {
-			t.l.Printf("restarting node %d", node)
-			c.Stop(ctx, c.Node(node))
-			args := u.uploadVersion(ctx, t, c.Node(node), newVersion)
-			c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
-			t.l.Printf("node %d now running binary version %s", node, u.binaryVersion(ctx, t, node))
-
-			// TODO(nvanbenschoten): add upgrade qualification step. What should we
-			// test? We could run logictests. We could add custom logic here. Maybe
-			// this should all be pushed to nightly migration tests instead.
+	// Restart nodes in a random order; otherwise node 1 would be running all
+	// the migrations and it probably also has all the leases.
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
+	for _, node := range nodes {
+		v := newVersion
+		if v == "" {
+			v = "<latest>"
 		}
+		newVersionMsg := newVersion
+		if newVersion == "" {
+			newVersionMsg = "<current>"
+		}
+		t.l.Printf("restarting node %d into version %s", node, newVersionMsg)
+		c.Stop(ctx, c.Node(node))
+		args := startArgs("--binary=" + uploadVersion(ctx, t, c, c.Node(node), newVersion))
+		c.Start(ctx, t, c.Node(node), args, startArgsDontEncrypt)
 	}
 }
 
