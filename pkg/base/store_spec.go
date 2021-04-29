@@ -182,9 +182,10 @@ type StoreSpec struct {
 	// Pebble OPTIONS file but treating any whitespace as a newline:
 	// (Eg, "[Options] delete_range_flush_delay=2s flush_split_bytes=4096")
 	PebbleOptions string
-	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
-	// to C CCL code.
-	ExtraOptions []byte
+	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
+	// through to C CCL code to set up encryption-at-rest.  Must be set if and
+	// only if encryption is enabled, otherwise left empty.
+	EncryptionOptions []byte
 }
 
 // String returns a fully parsable version of the store spec.
@@ -223,6 +224,11 @@ func (ss StoreSpec) String() string {
 		buffer.Truncate(l - 1)
 	}
 	return buffer.String()
+}
+
+// IsEncrypted returns whether the StoreSpec has encryption enabled.
+func (ss StoreSpec) IsEncrypted() bool {
+	return len(ss.EncryptionOptions) > 0
 }
 
 // fractionRegex is the regular expression that recognizes whether

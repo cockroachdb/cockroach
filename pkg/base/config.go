@@ -507,9 +507,15 @@ type StorageConfig struct {
 	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
 	// This may force the store version to versionFileRegistry if currently lower.
 	UseFileRegistry bool
-	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
-	// to C CCL code.
-	ExtraOptions []byte
+	// EncryptionOptions is a serialized protobuf set by Go CCL code and passed
+	// through to C CCL code to set up encryption-at-rest.  Must be set if and
+	// only if encryption is enabled, otherwise left empty.
+	EncryptionOptions []byte
+}
+
+// IsEncrypted returns whether the StorageConfig has encryption enabled.
+func (sc StorageConfig) IsEncrypted() bool {
+	return len(sc.EncryptionOptions) > 0
 }
 
 const (
