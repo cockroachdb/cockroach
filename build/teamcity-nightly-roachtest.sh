@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+source "$(dirname "${0}")/teamcity-support.sh"
+
 # Entry point for the nightly roachtests. These are run from CI and require
 # appropriate secrets for the ${CLOUD} parameter (along with other things,
 # apologies, you're going to have to dig around for them below or even better
