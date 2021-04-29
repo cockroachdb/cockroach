@@ -32,7 +32,7 @@ func TestFormatStatement(t *testing.T) {
 		expected string
 	}{
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimple,
-			`CREATE USER 'foo' WITH PASSWORD *****`},
+			`CREATE USER 'foo' WITH PASSWORD '*****'`},
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtShowPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 
