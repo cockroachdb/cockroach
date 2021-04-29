@@ -484,7 +484,7 @@ func ResolveEncryptedEnvOptions(
 	}
 
 	var statsHandler EncryptionStatsHandler
-	if len(cfg.ExtraOptions) > 0 {
+	if cfg.IsEncrypted() {
 		// Encryption is enabled.
 		if !cfg.UseFileRegistry {
 			return nil, nil, fmt.Errorf("file registry is needed to support encryption")
@@ -494,7 +494,7 @@ func ResolveEncryptedEnvOptions(
 		}
 		var err error
 		cfg.Opts.FS, statsHandler, err =
-			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.ExtraOptions)
+			NewEncryptedEnvFunc(cfg.Opts.FS, fileRegistry, cfg.Dir, cfg.Opts.ReadOnly, cfg.EncryptionOptions)
 		if err != nil {
 			return nil, nil, err
 		}

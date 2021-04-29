@@ -390,8 +390,8 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// the first encrypted store as temp dir target, if any.
 	// If we can't find one, we use the first StoreSpec in the list.
 	var specIdx = 0
-	for i := range serverCfg.Stores.Specs {
-		if serverCfg.Stores.Specs[i].ExtraOptions != nil {
+	for i, spec := range serverCfg.Stores.Specs {
+		if spec.IsEncrypted() {
 			specIdx = i
 		}
 	}
