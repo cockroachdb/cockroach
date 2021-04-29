@@ -368,7 +368,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				}
 			}
 		}
-		if c := private.Constraint; c != nil {
+		if c := private.Constraint(); c != nil {
 			if c.IsContradiction() {
 				tp.Childf("constraint: contradiction")
 			} else if c.Spans.Count() == 1 {

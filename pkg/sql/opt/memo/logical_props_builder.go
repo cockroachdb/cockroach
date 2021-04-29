@@ -86,8 +86,8 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// Initialize not-NULL columns from the table schema.
 	rel.NotNullCols = tableNotNullCols(md, scan.Table)
 	// Union not-NULL columns with not-NULL columns in the constraint.
-	if scan.Constraint != nil {
-		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.evalCtx))
+	if scan.Constraint() != nil {
+		rel.NotNullCols.UnionWith(scan.Constraint().ExtractNotNullCols(b.evalCtx))
 	}
 	// Union not-NULL columns with not-NULL columns in the partial index
 	// predicate.
@@ -111,8 +111,8 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		// the constraint, minus any columns that are not projected by the Scan
 		// operator.
 		rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, scan.Table))
-		if scan.Constraint != nil {
-			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.evalCtx))
+		if scan.Constraint() != nil {
+			rel.FuncDeps.AddConstants(scan.Constraint().ExtractConstCols(b.evalCtx))
 		}
 		if tabMeta := md.TableMeta(scan.Table); tabMeta.Constraints != nil {
 			b.addFiltersToFuncDep(*tabMeta.Constraints.(*FiltersExpr), &rel.FuncDeps)
@@ -149,7 +149,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// Restrict cardinality based on constraint, partial index predicate, FDs,
 	// and hard limit.
 	rel.Cardinality = props.AnyCardinality
-	if scan.Constraint != nil && scan.Constraint.IsContradiction() {
+	if scan.Constraint() != nil && scan.Constraint().IsContradiction() {
 		rel.Cardinality = props.ZeroCardinality
 	} else if rel.FuncDeps.HasMax1Row() {
 		rel.Cardinality = rel.Cardinality.Limit(1)
@@ -157,8 +157,8 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		if hardLimit > 0 && hardLimit < math.MaxUint32 {
 			rel.Cardinality = rel.Cardinality.Limit(uint32(hardLimit))
 		}
-		if scan.Constraint != nil {
-			b.updateCardinalityFromConstraint(scan.Constraint, rel)
+		if scan.Constraint() != nil {
+			b.updateCardinalityFromConstraint(scan.Constraint(), rel)
 		}
 		if pred != nil {
 			b.updateCardinalityFromFilters(pred, rel)

@@ -56,7 +56,7 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 	}
 
 	md := c.e.mem.Metadata()
-	if scanPrivate.Constraint == nil && scanPrivate.PartialIndexPredicate(md) == nil {
+	if scanPrivate.Constraint() == nil && scanPrivate.PartialIndexPredicate(md) == nil {
 		// This is not a constrained scan nor a partial index scan, so skip it.
 		// The GenerateLimitedScans rule is responsible for limited
 		// unconstrained scans on non-partial indexes.
@@ -330,7 +330,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// construct an unlimited Scan and add it to the Union tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
-		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
+		Columns: sp.Constraint().Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	})
 	newScan := c.e.f.ConstructScan(newScanPrivate)
@@ -436,9 +436,9 @@ func (c *CustomFuncs) makeNewScan(
 func (c *CustomFuncs) getKnownScanConstraint(
 	sp *memo.ScanPrivate,
 ) (cons *constraint.Constraint, found bool) {
-	if sp.Constraint != nil {
+	if sp.Constraint() != nil {
 		// The ScanPrivate has a constraint, so return it.
-		cons = sp.Constraint
+		cons = sp.Constraint()
 	} else {
 		// Build a constraint set with the check constraints of the underlying
 		// table.

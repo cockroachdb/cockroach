@@ -635,7 +635,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// If the constraints and pred are nil, then this scan is an unconstrained
 	// scan on a non-partial index. The stats of the scan are the same as the
 	// underlying table stats.
-	if scan.Constraint == nil && scan.InvertedConstraint == nil && pred == nil {
+	if scan.Constraint() == nil && scan.InvertedConstraint == nil && pred == nil {
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -643,7 +643,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// If the constraints are nil but pred is not, then this scan is an
 	// unconstrained scan over a partial index. The selectivity of the partial
 	// index predicate expression must be applied to the underlying table stats.
-	if scan.Constraint == nil && scan.InvertedConstraint == nil {
+	if scan.Constraint() == nil && scan.InvertedConstraint == nil {
 		notNullCols := relProps.NotNullCols.Copy()
 		// Add any not-null columns from the predicate constraints.
 		for i := range pred {
@@ -659,8 +659,8 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// If the constraint is nil or it has a single span, apply the constraint
 	// selectivity, the inverted constraint selectivity, and the partial index
 	// predicate (if they exist) to the underlying table stats.
-	if scan.Constraint == nil || scan.Constraint.Spans.Count() < 2 {
-		sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
+	if scan.Constraint() == nil || scan.Constraint().Spans.Count() < 2 {
+		sb.constrainScan(scan, scan.Constraint(), pred, relProps, s)
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -677,24 +677,24 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 
 	var spanStats, spanStatsUnion props.Statistics
 	var c constraint.Constraint
-	keyCtx := constraint.KeyContext{EvalCtx: sb.evalCtx, Columns: scan.Constraint.Columns}
+	keyCtx := constraint.KeyContext{EvalCtx: sb.evalCtx, Columns: scan.Constraint().Columns}
 
 	// Make a copy of the stats so we don't modify the original.
 	spanStatsUnion.CopyFrom(s)
 
 	// Get the stats for each span and union them together.
-	c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(0))
+	c.InitSingleSpan(&keyCtx, scan.Constraint().Spans.Get(0))
 	sb.constrainScan(scan, &c, pred, relProps, &spanStatsUnion)
-	for i, n := 1, scan.Constraint.Spans.Count(); i < n; i++ {
+	for i, n := 1, scan.Constraint().Spans.Count(); i < n; i++ {
 		spanStats.CopyFrom(s)
-		c.InitSingleSpan(&keyCtx, scan.Constraint.Spans.Get(i))
+		c.InitSingleSpan(&keyCtx, scan.Constraint().Spans.Get(i))
 		sb.constrainScan(scan, &c, pred, relProps, &spanStats)
 		spanStatsUnion.UnionWith(&spanStats)
 	}
 
 	// Now that we have the correct row count, use the combined spans and the
 	// partial index predicate (if it exists) to get the correct column stats.
-	sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
+	sb.constrainScan(scan, scan.Constraint(), pred, relProps, s)
 
 	// Copy in the row count and selectivity that were calculated above, if
 	// less than the values calculated from the combined spans.

@@ -50,9 +50,9 @@ define ScanPrivate {
     Cols ColSet
 
     # If set, the scan is a constrained scan; the constraint contains the spans
-    # that need to be scanned. If InvertedConstraint is also set, Constraint
+    # that need to be scanned. If InvertedConstraint is also set, constraint
     # contains non-ranging spans that constrain the non-inverted prefix columns.
-    Constraint Constraint
+    constraint Constraint
 
     # If set, the scan is a constrained scan of an inverted index; the
     # InvertedConstraint contains the spans that need to be scanned.
@@ -93,8 +93,8 @@ define ScanPrivate {
     # about how often this optimization is getting applied.
     PartitionConstrainedScan bool
 
-    # ExactPrefix caches the exact prefix of the Constraint.
-    ExactPrefix int
+    # exactPrefix caches the exact prefix of the constraint.
+    exactPrefix int
 }
 
 # PlaceholderScan is a special variant of Scan. It scans exactly one span of a

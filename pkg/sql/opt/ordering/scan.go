@@ -92,7 +92,7 @@ func ScanPrivateCanProvide(
 		}
 		reqCol := &required.Columns[right]
 		if !reqCol.Group.Contains(indexColID) {
-			if left < s.ExactPrefix {
+			if left < s.ExactPrefix() {
 				// All columns in the exact prefix are constant and can be ignored.
 				left++
 				continue
@@ -135,7 +135,7 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	constCols := fds.ComputeClosure(opt.ColSet{})
 	numCols := index.KeyColumnCount()
 	provided := make(opt.Ordering, 0, numCols)
-	for i := scan.ExactPrefix; i < numCols; i++ {
+	for i := scan.ExactPrefix(); i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal())
 		if constCols.Contains(colID) {

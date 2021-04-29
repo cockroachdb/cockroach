@@ -740,7 +740,7 @@ func (b *Builder) buildDeleteRange(
 	root, err := b.factory.ConstructDeleteRange(
 		tab,
 		needed,
-		scan.Constraint,
+		scan.Constraint(),
 		interleavedTables,
 		autoCommit,
 	)

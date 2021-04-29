@@ -581,8 +581,8 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
 	numSpans := 1
-	if scan.Constraint != nil {
-		numSpans = scan.Constraint.Spans.Count()
+	if scan.Constraint() != nil {
+		numSpans = scan.Constraint().Spans.Count()
 	} else if scan.InvertedConstraint != nil {
 		numSpans = len(scan.InvertedConstraint)
 	}

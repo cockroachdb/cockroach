@@ -476,7 +476,7 @@ func (b *Builder) getColumns(
 func (b *Builder) indexConstraintMaxResults(
 	scan *memo.ScanPrivate, relProps *props.Relational,
 ) (maxRows uint64, ok bool) {
-	c := scan.Constraint
+	c := scan.Constraint()
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
 		return 0, false
 	}
@@ -570,7 +570,7 @@ func (b *Builder) scanParams(
 			// row: it does nothing in this case except litter EXPLAINs.
 			// There are still cases where the flag doesn't do anything when the spans
 			// cover a single range, but there is nothing we can do about that.
-			if !(maxResults == 1 && scan.Constraint.Spans.Count() == 1) {
+			if !(maxResults == 1 && scan.Constraint().Spans.Count() == 1) {
 				parallelize = true
 			}
 		}
@@ -589,7 +589,7 @@ func (b *Builder) scanParams(
 
 	return exec.ScanParams{
 		NeededCols:         needed,
-		IndexConstraint:    scan.Constraint,
+		IndexConstraint:    scan.Constraint(),
 		InvertedConstraint: scan.InvertedConstraint,
 		HardLimit:          hardLimit,
 		SoftLimit:          softLimit,
@@ -626,7 +626,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
-	if !tab.IsVirtualTable() && scan.Constraint == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
+	if !tab.IsVirtualTable() && scan.Constraint() == nil && scan.InvertedConstraint == nil && !scan.HardLimit.IsSet() {
 		if scan.Index == cat.PrimaryIndex {
 			b.ContainsFullTableScan = true
 		} else {
@@ -639,7 +639,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 }
 
 func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan, error) {
-	if scan.Constraint != nil || scan.InvertedConstraint != nil {
+	if scan.Constraint() != nil || scan.InvertedConstraint != nil {
 		return execPlan{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
 	}
 

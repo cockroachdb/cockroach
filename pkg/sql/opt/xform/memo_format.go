@@ -278,7 +278,7 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 		if tab.ColumnCount() != t.Cols.Len() {
 			fmt.Fprintf(mf.buf, ",cols=%s", t.Cols)
 		}
-		if t.Constraint != nil {
+		if t.Constraint() != nil {
 			fmt.Fprintf(mf.buf, ",constrained")
 		}
 		if t.InvertedConstraint != nil {

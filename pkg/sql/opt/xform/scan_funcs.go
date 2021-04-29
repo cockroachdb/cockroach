@@ -115,13 +115,13 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 
 	// This scan should have at least two spans, or we won't be able to move one
 	// of the spans to a separate remote scan.
-	if scanPrivate.Constraint == nil || scanPrivate.Constraint.Spans.Count() < 2 {
+	if scanPrivate.Constraint() == nil || scanPrivate.Constraint().Spans.Count() < 2 {
 		return false
 	}
 
 	// Don't apply the rule if there are too many spans, since the rule code is
 	// O(# spans * # prefixes * # datums per prefix).
-	if scanPrivate.Constraint.Spans.Count() > 10000 {
+	if scanPrivate.Constraint().Spans.Count() > 10000 {
 		return false
 	}
 
@@ -175,14 +175,14 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		return
 	}
 
-	localSpans := c.getLocalSpans(index, localPartitions, scanPrivate.Constraint)
-	if localSpans.Len() == 0 || localSpans.Len() == scanPrivate.Constraint.Spans.Count() {
+	localSpans := c.getLocalSpans(index, localPartitions, scanPrivate.Constraint())
+	if localSpans.Len() == 0 || localSpans.Len() == scanPrivate.Constraint().Spans.Count() {
 		// The spans target all local or all remote partitions.
 		return
 	}
 
 	// Split the spans into local and remote sets.
-	localConstraint, remoteConstraint := c.splitSpans(scanPrivate.Constraint, localSpans)
+	localConstraint, remoteConstraint := c.splitSpans(scanPrivate.Constraint(), localSpans)
 
 	// Create the local scan.
 	localScanPrivate := c.DuplicateScanPrivate(scanPrivate)

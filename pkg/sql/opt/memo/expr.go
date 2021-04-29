@@ -633,7 +633,7 @@ func (f *WindowFrame) String() string {
 // primary index Scan operator (i.e. unconstrained and not limited).
 func (s *ScanPrivate) IsCanonical() bool {
 	return s.Index == cat.PrimaryIndex &&
-		s.Constraint == nil &&
+		s.constraint == nil &&
 		s.HardLimit == 0 &&
 		!s.LocalityOptimized
 }
@@ -641,7 +641,7 @@ func (s *ScanPrivate) IsCanonical() bool {
 // IsUnfiltered returns true if the ScanPrivate will produce all rows in the
 // table.
 func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
-	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
+	return (s.constraint == nil || s.constraint.IsUnconstrained()) &&
 		s.InvertedConstraint == nil &&
 		s.HardLimit == 0 &&
 		s.PartialIndexPredicate(md) == nil
@@ -672,12 +672,22 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 // prefix. This function should always be used instead of modifying the
 // constraint directly.
 func (s *ScanPrivate) SetConstraint(evalCtx *tree.EvalContext, c *constraint.Constraint) {
-	s.Constraint = c
+	s.constraint = c
 	if c == nil {
-		s.ExactPrefix = 0
+		s.exactPrefix = 0
 	} else {
-		s.ExactPrefix = c.ExactPrefix(evalCtx)
+		s.exactPrefix = c.ExactPrefix(evalCtx)
 	}
+}
+
+// Constraint returns the ScanPrivate's constraint.
+func (s *ScanPrivate) Constraint() *constraint.Constraint {
+	return s.constraint
+}
+
+// ExactPrefix returns the exact prefix of the ScanPrivate's constraint.
+func (s *ScanPrivate) ExactPrefix() int {
+	return s.exactPrefix
 }
 
 // UsesPartialIndex returns true if the LookupJoinPrivate looks-up via a
