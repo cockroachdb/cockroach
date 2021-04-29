@@ -156,7 +156,13 @@ func (c *SyncedCluster) newSession(i int) (session, error) {
 	return newRemoteSession(c.user(i), c.host(i), c.DebugDir)
 }
 
-// Stop TODO(peter): document
+// Stop is used to stop cockroach on all nodes in the cluster.
+//
+// It sends a signal to all processes that have been started with ROACHPROD env
+// var and optionally waits until the processes stop.
+//
+// When running roachprod stop without other flags, the signal is 9 (SIGKILL)
+// and wait is true.
 func (c *SyncedCluster) Stop(sig int, wait bool) {
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {
@@ -181,14 +187,15 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
       sleep 1
     done
     echo "${pid}: dead" >> %[1]s/roachprod.log
-  done
-`, c.Impl.LogDir(c, c.Nodes[i]))
+  done`,
+				c.Impl.LogDir(c, c.Nodes[i]), // [1]
+			)
 		}
 
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
-mkdir -p logs
+mkdir -p %[1]s
 echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
 ps axeww -o pid -o command >> %[1]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
@@ -197,8 +204,13 @@ pids=$(ps axeww -o pid -o command | \
 if [ -n "${pids}" ]; then
   kill -%[4]d ${pids}
 %[5]s
-fi
-`, c.Impl.LogDir(c, c.Nodes[i]), c.Nodes[i], c.escapedTag(), sig, waitCmd)
+fi`,
+			c.Impl.LogDir(c, c.Nodes[i]), // [1]
+			c.Nodes[i],                   // [2]
+			c.escapedTag(),               // [3]
+			sig,                          // [4]
+			waitCmd,                      // [5]
+		)
 		return sess.CombinedOutput(cmd)
 	})
 }
