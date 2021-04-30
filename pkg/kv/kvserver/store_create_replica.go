@@ -159,6 +159,9 @@ func (s *Store) tryGetOrCreateReplica(
 	repl.creatingReplica = creatingReplica
 	repl.raftMu.Lock() // not unlocked
 
+	// Take out read-only lock. Not strictly necessary here, but follows the
+	// normal lock protocol for destroyStatus.Set().
+	repl.readOnlyCmdMu.Lock()
 	// Install the replica in the store's replica map. The replica is in an
 	// inconsistent state, but nobody will be accessing it while we hold its
 	// locks.
@@ -166,7 +169,6 @@ func (s *Store) tryGetOrCreateReplica(
 	// Grab the internal Replica state lock to ensure nobody mucks with our
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
-	repl.readOnlyCmdMu.Lock()
 	repl.mu.Lock()
 	repl.mu.tombstoneMinReplicaID = tombstone.NextReplicaID
 
@@ -188,8 +190,8 @@ func (s *Store) tryGetOrCreateReplica(
 	// might have snuck in and created the replica, so we retry on error.
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		repl.mu.Unlock()
-		repl.readOnlyCmdMu.Unlock()
 		s.mu.Unlock()
+		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, errRetry
 	}
@@ -226,10 +228,10 @@ func (s *Store) tryGetOrCreateReplica(
 		// ensure nobody tries to use it.
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
-		repl.readOnlyCmdMu.Unlock()
 		s.mu.Lock()
 		s.unlinkReplicaByRangeIDLocked(ctx, rangeID)
 		s.mu.Unlock()
+		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
 	}
