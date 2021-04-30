@@ -535,6 +535,8 @@ func (m execNodeTraceMetadata) annotateExplain(
 				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
 				nodeStats.KVBytesRead.MaybeAdd(stats.KV.BytesRead)
 				nodeStats.KVRowsRead.MaybeAdd(stats.KV.TuplesRead)
+				nodeStats.NumMVCCKeys.MaybeAdd(stats.KV.NumMvccKeys)
+				nodeStats.NumSeeks.MaybeAdd(stats.KV.NumSeeks)
 				nodeStats.VectorizedBatchCount.MaybeAdd(stats.Output.NumBatches)
 			}
 			// If we didn't get statistics for all processors, we don't show the

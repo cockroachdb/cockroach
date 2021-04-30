@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/dustin/go-humanize"
@@ -884,6 +885,16 @@ func mvccGet(
 
 	mvccScanner.init(opts.Txn, opts.LocalUncertaintyLimit)
 	mvccScanner.get()
+
+	// If we have a trace, emit the scan stats that we produced.
+	traceSpan := tracing.SpanFromContext(ctx)
+
+	if traceSpan != nil {
+		traceSpan.RecordStructured(&roachpb.ScanStats{
+			NumMvccKeys: mvccScanner.numMVCCKeysRead,
+			NumSeeks:    mvccScanner.numSeeks,
+		})
+	}
 
 	if mvccScanner.err != nil {
 		return optionalValue{}, nil, mvccScanner.err
@@ -2391,6 +2402,16 @@ func mvccScanToBytes(
 	res.KVData = mvccScanner.results.finish()
 	res.NumKeys = mvccScanner.results.count
 	res.NumBytes = mvccScanner.results.bytes
+
+	// If we have a trace, emit the scan stats that we produced.
+	traceSpan := tracing.SpanFromContext(ctx)
+
+	if traceSpan != nil {
+		traceSpan.RecordStructured(&roachpb.ScanStats{
+			NumMvccKeys: mvccScanner.numMVCCKeysRead,
+			NumSeeks:    mvccScanner.numSeeks,
+		})
+	}
 
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {

@@ -318,6 +318,9 @@ type ExecutionStats struct {
 	KVBytesRead optional.Uint
 	KVRowsRead  optional.Uint
 
+	NumMVCCKeys optional.Uint
+	NumSeeks    optional.Uint
+
 	// Nodes on which this operator was executed.
 	Nodes []string
 }

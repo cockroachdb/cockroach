@@ -39,7 +39,7 @@ import (
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
 var invertedJoinerBatchSize = util.ConstantWithMetamorphicTestValue(
-	"invered-joiner-batch-size",
+	"inverted-joiner-batch-size",
 	100, /* defaultValue */
 	1,   /* metamorphicValue */
 )
@@ -159,6 +159,8 @@ type invertedJoiner struct {
 
 	spanBuilder           *span.Builder
 	outputContinuationCol bool
+
+	scanStats execinfra.ScanStats
 }
 
 var _ execinfra.Processor = &invertedJoiner{}
@@ -770,6 +772,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
+	ij.scanStats = execinfra.GetScanStats(ij.Ctx)
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
@@ -777,6 +780,8 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx)),
+			NumMvccKeys:    optional.MakeUint(ij.scanStats.NumMVCCKeys),
+			NumSeeks:       optional.MakeUint(ij.scanStats.NumSeeks),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),

@@ -142,6 +142,10 @@ type joinReader struct {
 	// detailed comment in the spec). This can never be true for index joins,
 	// and requires that the spec has MaintainOrdering set to true.
 	outputGroupContinuationForLeftRow bool
+
+	// scanStats is collected from the trace after we finish doing work for this
+	// join.
+	scanStats execinfra.ScanStats
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -709,6 +713,11 @@ func (jr *joinReader) ConsumerClosed() {
 }
 
 func (jr *joinReader) close() {
+	// Make sure to clone any tracing span so that stats can pick it up later.
+	// Stats are only collected after we finish closing the processor.
+	if !jr.Closed {
+		jr.scanStats = execinfra.GetScanStats(jr.Ctx)
+	}
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
 			jr.fetcher.Close(jr.Ctx)
@@ -740,6 +749,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
+			NumMvccKeys:    optional.MakeUint(jr.scanStats.NumMVCCKeys),
+			NumSeeks:       optional.MakeUint(jr.scanStats.NumSeeks),
 			KVTime:         fis.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx)),
 		},

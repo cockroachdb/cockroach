@@ -105,6 +105,10 @@ message ResponseHeader {
   // measures the bytes in the timestamps, keys, and values of the returned
   // rows.
   int64 num_bytes = 8;
+
+  // The total number of keys that were read, including keys that were skipped
+  // because they were too old to care about MVCC-wise.
+  int64 num_keys_read = 9;
   reserved 6;
 }
 
@@ -2252,4 +2256,13 @@ message ContentionEvent {
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
                                          (gogoproto.stdduration) = true];
+}
+
+// ScanStats is a message that will be attached to BatchResponses containing
+// information about what happened during each scan and get in the request.
+message ScanStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  uint64 num_mvcc_keys = 1;
+  uint64 num_seeks = 2;
 }

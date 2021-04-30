@@ -50,3 +50,32 @@ func GetCumulativeContentionTime(ctx context.Context) time.Duration {
 	}
 	return cumulativeContentionTime
 }
+
+type ScanStats struct {
+	NumMVCCKeys uint64
+	NumSeeks    uint64
+}
+
+// GetScanStats is a helper function to calculate scan stats from the tracing
+// span from the context.
+func GetScanStats(ctx context.Context) (ss ScanStats) {
+	recording := GetTraceData(ctx)
+	if recording == nil {
+		return ScanStats{}
+	}
+	var ev roachpb.ScanStats
+	for i := range recording {
+		recording[i].Structured(func(any *pbtypes.Any) {
+			if !pbtypes.Is(any, &ev) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+
+			ss.NumMVCCKeys += ev.NumMvccKeys
+			ss.NumSeeks += ev.NumSeeks
+		})
+	}
+	return ss
+}

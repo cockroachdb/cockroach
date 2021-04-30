@@ -140,6 +140,14 @@ type pebbleMVCCScanner struct {
 	curValue     []byte
 	results      pebbleResults
 	intents      pebble.Batch
+
+	// numMVCCKeysRead is the number of keys that this scanner had to read and then
+	// skip due to having too-old MVCC timestamps.
+	numMVCCKeysRead uint64
+	// numSeeks is the number of times that this scanner had to seek due to
+	// exceeding its itersBeforeSeek configuration value for a given key.
+	numSeeks uint64
+
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -182,6 +190,7 @@ func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit
 // get iterates exactly once and adds one KV to the result set.
 func (p *pebbleMVCCScanner) get() {
 	p.isGet = true
+	p.numSeeks++
 	p.parent.SeekGE(MVCCKey{Key: p.start})
 	if !p.updateCurrent() {
 		return
@@ -621,6 +630,7 @@ func (p *pebbleMVCCScanner) advanceKeyAtEnd() bool {
 		// Iterating to the next key might have caused the iterator to reach the
 		// end of the key space. If that happens, back up to the very last key.
 		p.peeked = false
+		p.numSeeks++
 		p.parent.SeekLT(MVCCKey{Key: p.end})
 		if !p.updateCurrent() {
 			return false
@@ -711,6 +721,7 @@ func (p *pebbleMVCCScanner) seekVersion(seekTS hlc.Timestamp, uncertaintyCheck b
 		return p.advanceKeyAtEnd()
 	}
 	for {
+		// While we have the same key that we looked at least time...
 		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
 			return p.advanceKeyAtNewKey(origKey)
 		}
@@ -761,6 +772,7 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 // iterSeek seeks to the latest revision of the specified key (or a greater key).
 func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
 	p.clearPeeked()
+	p.numSeeks++
 	p.parent.SeekGE(key)
 	return p.updateCurrent()
 }
@@ -768,6 +780,7 @@ func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
 // iterSeekReverse seeks to the latest revision of the key before the specified key.
 func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 	p.clearPeeked()
+	p.numSeeks++
 	p.parent.SeekLT(key)
 	if !p.updateCurrent() {
 		// We have seeked to before the start key. Return.
@@ -785,6 +798,7 @@ func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 
 // iterNext advances to the next MVCC key.
 func (p *pebbleMVCCScanner) iterNext() bool {
+	p.numMVCCKeysRead++
 	if p.reverse && p.peeked {
 		// If we have peeked at the previous entry, we need to advance the iterator
 		// twice.
@@ -792,6 +806,7 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		if !p.iterValid() {
 			// We were peeked off the beginning of iteration. Seek to the first
 			// entry, and then advance one step.
+			p.numSeeks++
 			p.parent.SeekGE(MVCCKey{Key: p.start})
 			if !p.iterValid() {
 				return false

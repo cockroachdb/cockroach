@@ -142,6 +142,12 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.ContentionTime.HasValue() {
 		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
 	}
+	if s.KV.NumMvccKeys.HasValue() {
+		fn("KV mvcc keys read", humanizeutil.Count(s.KV.NumMvccKeys.Value()))
+	}
+	if s.KV.NumSeeks.HasValue() {
+		fn("KV mvcc seeks", humanizeutil.Count(s.KV.NumSeeks.Value()))
+	}
 	if s.KV.TuplesRead.HasValue() {
 		fn("KV rows read", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}
@@ -213,6 +219,12 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.KV.ContentionTime.HasValue() {
 		result.KV.ContentionTime = other.KV.ContentionTime
+	}
+	if !result.KV.NumMvccKeys.HasValue() {
+		result.KV.NumMvccKeys = other.KV.NumMvccKeys
+	}
+	if !result.KV.NumSeeks.HasValue() {
+		result.KV.NumSeeks = other.KV.NumSeeks
 	}
 	if !result.KV.TuplesRead.HasValue() {
 		result.KV.TuplesRead = other.KV.TuplesRead
@@ -303,6 +315,8 @@ func (s *ComponentStats) MakeDeterministic() {
 	// KV.
 	timeVal(&s.KV.KVTime)
 	timeVal(&s.KV.ContentionTime)
+	resetUint(&s.KV.NumMvccKeys)
+	resetUint(&s.KV.NumSeeks)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())

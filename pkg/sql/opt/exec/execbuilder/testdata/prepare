@@ -124,6 +124,8 @@ network usage: <hidden>
   actual row count: 1
   KV rows read: 1
   KV bytes read: 8 B
+  KV MVCC keys read: 0
+  KV MVCC seeks: 0
   estimated row count: 0
   table: ab@primary
   spans: [/1 - /1]
@@ -143,6 +145,8 @@ network usage: <hidden>
   actual row count: 0
   KV rows read: 0
   KV bytes read: 0 B
+  KV MVCC keys read: 0
+  KV MVCC seeks: 0
   estimated row count: 0
   table: ab@primary
   spans: [/2 - /2]

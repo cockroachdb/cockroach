@@ -350,6 +350,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if s.KVBytesRead.HasValue() {
 			e.ob.AddField("KV bytes read", humanize.IBytes(s.KVBytesRead.Value()))
 		}
+		if s.NumMVCCKeys.HasValue() {
+			e.ob.AddField("KV MVCC keys read", humanizeutil.Count(s.NumMVCCKeys.Value()))
+		}
+		if s.NumSeeks.HasValue() {
+			e.ob.AddField("KV MVCC seeks", humanizeutil.Count(s.NumSeeks.Value()))
+		}
 	}
 
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
