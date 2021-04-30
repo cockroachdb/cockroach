@@ -55,11 +55,6 @@ func (m *mockLockedSender) MockSend(
 	m.mockFn = fn
 }
 
-// Reset resets the mockLockedSender mocking function to a no-op.
-func (m *mockLockedSender) Reset() {
-	m.mockFn = nil
-}
-
 // ChainMockSend sets a series of mocking functions on the mockLockedSender.
 // The provided mocking functions are set in the order that they are provided
 // and a given mocking function is set after the previous one has been called.
