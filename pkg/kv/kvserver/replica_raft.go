@@ -90,6 +90,8 @@ func (r *Replica) evalAndPropose(
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
 		return nil, nil, 0, pErr
+	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+		return nil, nil, 0, pErr
 	}
 
 	// Attach the endCmds to the proposal and assume responsibility for
