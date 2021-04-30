@@ -105,30 +105,6 @@ func (o Ordering) ColSet() ColSet {
 	return colSet
 }
 
-// Provides returns true if the required ordering is a prefix of this ordering.
-func (o Ordering) Provides(required Ordering) bool {
-	if len(o) < len(required) {
-		return false
-	}
-
-	for i := range required {
-		if o[i] != required[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// CommonPrefix returns the longest ordering that is a prefix of both orderings.
-func (o Ordering) CommonPrefix(other Ordering) Ordering {
-	for i := range o {
-		if i >= len(other) || o[i] != other[i] {
-			return o[:i]
-		}
-	}
-	return o
-}
-
 // Equals returns true if the two orderings are identical.
 func (o Ordering) Equals(rhs Ordering) bool {
 	if len(o) != len(rhs) {
@@ -141,70 +117,4 @@ func (o Ordering) Equals(rhs Ordering) bool {
 		}
 	}
 	return true
-}
-
-// restrictToCols returns an ordering that refers only to columns in the given
-// set. The equivCols argument allows ordering columns that are not in the given
-// set to be remapped to equivalent columns that are in the given set. A column
-// is only remapped if:
-//
-//   1. It does not exist in cols.
-//   2. And equivCols returns at least one column that:
-//     A. Exists in cols.
-//     B. And does not exist in any preceding columns of the ordering.
-//
-// Note that a new ordering is allocated if one or more of its columns are
-// remapped in order to prevent mutating the original ordering. If no columns
-// are remapped, the returned ordering is a slice of the original.
-func (o Ordering) restrictToCols(cols ColSet, equivCols func(ColumnID) ColSet) Ordering {
-	// Find the longest prefix of the ordering that contains only columns in
-	// the set.
-	newOrd, isCopy := o, false
-	for i, c := range o {
-		if cols.Contains(c.ID()) {
-			// If a new ordering was created in a previous iteration of the
-			// loop and it already contains the current column, do not
-			// duplicate it in the ordering.
-			// TODO(mgartner): If we ignore this column and shift the remaining
-			// columns to the left and continue rather than returning early,
-			// then longer orderings can be generated in some cases.
-			if isCopy && newOrd[:i].ColSet().Contains(c.ID()) {
-				return newOrd[:i]
-			}
-
-			// Otherwise, continue to the next column in the ordering.
-			continue
-		}
-
-		// If the current column does not exist in cols, check if there is
-		// an equivalent column in cols if equivCols was provided.
-		if equivCols == nil {
-			return newOrd[:i]
-		}
-
-		// Get all the equivalent columns.
-		eqCols := equivCols(c.ID())
-		if eqCols.Empty() {
-			return newOrd[:i]
-		}
-
-		// Find the first column equivalent to c that is not already in the
-		// ordering.
-		currCols := newOrd[:i].ColSet()
-		eqCol, ok := eqCols.Difference(currCols).Intersection(cols).Next(0)
-		if !ok {
-			return newOrd[:i]
-		}
-
-		// Copy the ordering to avoid mutating the original.
-		if !isCopy {
-			newOrd = make(Ordering, len(o))
-			copy(newOrd, o)
-			isCopy = true
-		}
-
-		// Replace the i-th column with the equivalent column.
-		newOrd[i] = MakeOrderingColumn(eqCol, c.Descending())
-	}
-	return newOrd
 }

@@ -39,7 +39,7 @@ project
  │    │    ├── fd: (3)-->(1,2)
  │    │    ├── prune: (3,8)
  │    │    ├── reject-nulls: (5,6,8)
- │    │    ├── interesting orderings: (+3) (+5)
+ │    │    ├── interesting orderings: (+3)
  │    │    ├── scan uv
  │    │    │    ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │    │    ├── key: (3)
@@ -53,7 +53,6 @@ project
  │    │    │    ├── cardinality: [0 - 4]
  │    │    │    ├── fd: ()-->(5,6)
  │    │    │    ├── prune: (8)
- │    │    │    ├── interesting orderings: (+5)
  │    │    │    ├── select
  │    │    │    │    ├── columns: x:5(int!null) y:6(int)
  │    │    │    │    ├── outer: (1)
@@ -61,7 +60,6 @@ project
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(5,6)
  │    │    │    │    ├── prune: (6)
- │    │    │    │    ├── interesting orderings: (+5)
  │    │    │    │    ├── scan xy
  │    │    │    │    │    ├── columns: x:5(int!null) y:6(int)
  │    │    │    │    │    ├── key: (5)

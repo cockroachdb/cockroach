@@ -11,7 +11,6 @@
 package opt_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -25,22 +24,6 @@ func TestOrdering(t *testing.T) {
 
 	if ordering.Empty() {
 		t.Error("ordering not empty")
-	}
-
-	if !ordering.Provides(ordering) {
-		t.Error("ordering should provide itself")
-	}
-
-	if !ordering.Provides(opt.Ordering{1}) {
-		t.Error("ordering should provide the prefix ordering")
-	}
-
-	if (opt.Ordering{}).Provides(ordering) {
-		t.Error("empty ordering should not provide ordering")
-	}
-
-	if !ordering.Provides(opt.Ordering{}) {
-		t.Error("ordering should provide the empty ordering")
 	}
 
 	if !ordering.ColSet().Equals(opt.MakeColSet(1, 5)) {
@@ -61,19 +44,6 @@ func TestOrdering(t *testing.T) {
 
 	if (opt.Ordering{}).Equals(ordering) {
 		t.Error("empty ordering should not equal ordering")
-	}
-
-	common := ordering.CommonPrefix(opt.Ordering{1})
-	if exp := (opt.Ordering{1}); !reflect.DeepEqual(common, exp) {
-		t.Errorf("expected common prefix %s, got %s", exp, common)
-	}
-	common = ordering.CommonPrefix(opt.Ordering{1, 2, 3})
-	if exp := (opt.Ordering{1}); !reflect.DeepEqual(common, exp) {
-		t.Errorf("expected common prefix %s, got %s", exp, common)
-	}
-	common = ordering.CommonPrefix(opt.Ordering{1, 5, 6})
-	if exp := (opt.Ordering{1, 5}); !reflect.DeepEqual(common, exp) {
-		t.Errorf("expected common prefix %s, got %s", exp, common)
 	}
 }
 

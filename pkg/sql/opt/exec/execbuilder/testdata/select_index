@@ -922,6 +922,7 @@ vectorized: true
 │
 └── • group
     │ group by: resource_key
+    │ ordered: +resource_key
     │
     └── • scan
           missing stats

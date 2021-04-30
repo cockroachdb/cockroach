@@ -56,6 +56,32 @@ func TestOrderingChoice_ToOrdering(t *testing.T) {
 	}
 }
 
+func TestOrderingChoice_ToOrderingLong(t *testing.T) {
+	testcases := []struct {
+		s string
+		o opt.Ordering
+	}{
+		{s: " ", o: opt.Ordering{}},
+		{s: "+1", o: opt.Ordering{1}},
+		{s: "-1,+(2|3) opt(4,5)", o: opt.Ordering{4, 5, -1, 2, 3}},
+		{s: "+(1|2),-(3|4),+5", o: opt.Ordering{1, 2, -3, -4, 5}},
+	}
+
+	for _, tc := range testcases {
+		choice := props.ParseOrderingChoice(tc.s)
+		ordering := choice.ToOrderingLong()
+		if len(ordering) != len(tc.o) {
+			t.Errorf("%s: expected %s, actual: %s", tc.s, tc.o, ordering)
+		} else {
+			for i := range ordering {
+				if ordering[i] != tc.o[i] {
+					t.Errorf("%s: expected %s, actual: %s", tc.s, tc.o, ordering)
+				}
+			}
+		}
+	}
+}
+
 func TestOrderingChoice_ColSet(t *testing.T) {
 	testcases := []struct {
 		s  string
@@ -145,7 +171,6 @@ func TestOrderingChoice_Intersection(t *testing.T) {
 		{left: "+(1|2) opt(4)", right: "+(1|2|3) opt(4)", expected: "+(1|2) opt(4)"},
 
 		{left: "+1 opt(2,3,4)", right: "+1 opt(4,5)", expected: "+1 opt(4)"},
-		{left: "+1 opt(2,3,4)", right: "+1 opt(4,5)", expected: "+1 opt(4)"},
 		{left: "+1,+4,+5", right: "+4,+5 opt(1)", expected: "+1,+4,+5"},
 		{left: "+(1|2),+(3|4)", right: "+(2|3),+(4|5)", expected: "+2,+4"},
 		{left: "+(1|2|3),+(4|5)", right: "+(2|3),+(4|5|6)", expected: "+(2|3),+(4|5)"},
@@ -216,6 +241,103 @@ func TestOrderingChoice_Intersection(t *testing.T) {
 			if res2 := getRes(right, left); res2 != res {
 				t.Errorf(
 					"intersection not commutative: left='%s' right='%s': '%s' vs '%s'",
+					left, right, res, res2,
+				)
+			}
+		}
+	}
+}
+
+// TestOrderingChoice_CommonPrefix tests CommonPrefix.
+func TestOrderingChoice_CommonPrefix(t *testing.T) {
+	testcases := []struct {
+		left           string
+		right          string
+		expected       string
+		nonCommutative bool
+	}{
+		{left: "", right: "", expected: ""},
+		{left: "+1", right: "", expected: ""},
+		{left: "+1 opt(2)", right: "", expected: ""},
+		{left: "+1", right: "+1", expected: "+1"},
+		{left: "+1,-2", right: "+1", expected: "+1"},
+		{left: "+1,-2", right: "+1,-2", expected: "+1,-2"},
+		{left: "+1", right: "+1 opt(2)", expected: "+1"},
+		{left: "+1", right: "+2 opt(1)", expected: "+1"},
+		{left: "-2,+1", right: "+1 opt(2)", expected: "-2,+1"},
+		{left: "+1", right: "+(1|2)", expected: "+1"},
+		{left: "+(1|2)", right: "+(1|2|3)", expected: "+(1|2)"},
+		{left: "+(1|2),-4", right: "+(1|2|3),-(4|5)", expected: "+(1|2),-4"},
+		{left: "+(1|2) opt(4)", right: "+(1|2|3) opt(4)", expected: "+(1|2) opt(4)"},
+
+		{left: "+1 opt(2,3,4)", right: "+1 opt(4,5)", expected: "+1 opt(4)"},
+		{left: "+1,+4,+5", right: "+4,+5 opt(1)", expected: "+1,+4,+5"},
+		{left: "+(1|2),+(3|4)", right: "+(2|3),+(4|5)", expected: "+2,+4"},
+		{left: "+(1|2|3),+(4|5)", right: "+(2|3),+(4|5|6)", expected: "+(2|3),+(4|5)"},
+
+		{left: "+1", right: "+2", expected: ""},
+		{left: "+1", right: "+2 opt(2)", expected: ""},
+		{left: "+1", right: "-1 opt(2)", expected: ""},
+		{left: "+(1|2),+(3|4)", right: "+(2|5),+(6|7)", expected: "+2"},
+
+		// Non-commutative cases.
+		{
+			left:           "+1 opt(2,5)",
+			right:          "+2 opt(1,5)",
+			expected:       "+1,+2 opt(5)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+2 opt(1,5)",
+			right:          "+1 opt(2,5)",
+			expected:       "+2,+1 opt(5)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+(1|2),+(3|4) opt(6)",
+			right:          "+(2|3),+(5|6) opt(4)",
+			expected:       "+2,+4,+6",
+			nonCommutative: true,
+		},
+		{
+			left:           "+(2|3),+(5|6) opt(4)",
+			right:          "+(1|2),+(3|4) opt(6)",
+			expected:       "+2,+6,+4",
+			nonCommutative: true,
+		},
+		{
+			left:           "+(1|2|3),-(4|5|6) opt(7)",
+			right:          "-7 opt(2,3,5,6)",
+			expected:       "+(2|3),-(5|6),-7",
+			nonCommutative: true,
+		},
+		{
+			left:           "-7 opt(2,3,5,6)",
+			right:          "+(1|2|3),-(4|5|6) opt(7)",
+			expected:       "-7,+(2|3),-(5|6)",
+			nonCommutative: true,
+		},
+	}
+
+	getRes := func(left, right props.OrderingChoice) string {
+		return left.CommonPrefix(&right).String()
+	}
+
+	for _, tc := range testcases {
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
+
+		res := getRes(left, right)
+		if res != tc.expected {
+			t.Errorf(
+				"common prefix between '%s' and '%s': expected '%s', got '%s'",
+				left, right, tc.expected, res,
+			)
+		}
+		if !tc.nonCommutative {
+			if res2 := getRes(right, left); res2 != res {
+				t.Errorf(
+					"common prefix not commutative: left='%s' right='%s': '%s' vs '%s'",
 					left, right, res, res2,
 				)
 			}
@@ -490,6 +612,32 @@ func TestOrderingChoice_ProjectCols(t *testing.T) {
 	}
 }
 
+func TestOrderingChoice_ProjectColsNoError(t *testing.T) {
+	testcases := []struct {
+		s        string
+		cols     []opt.ColumnID
+		expected string
+	}{
+		{s: "", cols: []opt.ColumnID{}, expected: ""},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 3, 4, 5, 6}, expected: "+1,+(2|3),-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 4, 5, 6}, expected: "+1,+2,-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 3, 4, 5, 6}, expected: "+1,+3,-4 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 4, 5}, expected: "+1,+2,-4 opt(5)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 2, 4}, expected: "+1,+2,-4"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 4, 5, 6}, expected: "+1 opt(5,6)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{1, 3, 5}, expected: "+1,+3 opt(5)"},
+		{s: "+1,+(2|3),-4 opt(5,6)", cols: []opt.ColumnID{2, 4, 5}, expected: "opt(5)"},
+	}
+
+	for _, tc := range testcases {
+		choice := props.ParseOrderingChoice(tc.s)
+		choice.ProjectColsNoError(opt.MakeColSet(tc.cols...))
+		if choice.String() != tc.expected {
+			t.Errorf("%s: cols=%v, expected: %s, actual: %s", tc.s, tc.cols, tc.expected, choice.String())
+		}
+	}
+}
+
 func TestOrderingChoice_Equals(t *testing.T) {
 	testcases := []struct {
 		left     string
@@ -576,56 +724,81 @@ func TestOrderingChoice_PrefixIntersection(t *testing.T) {
 }
 
 func TestOrderingSet(t *testing.T) {
-	expect := func(s opt.OrderingSet, exp string) {
+	expect := func(s props.OrderingSet, exp string) {
 		t.Helper()
 		if actual := s.String(); actual != exp {
 			t.Errorf("expected %s; got %s", exp, actual)
 		}
 	}
-	var s opt.OrderingSet
+	orderingChoice := func(cols ...opt.OrderingColumn) *props.OrderingChoice {
+		ord := opt.Ordering(cols)
+		var oc props.OrderingChoice
+		oc.FromOrdering(ord)
+		return &oc
+	}
+	var s props.OrderingSet
 	expect(s, "")
-	s.Add(opt.Ordering{1, 2})
+	s.Add(orderingChoice(1, 2))
 	expect(s, "(+1,+2)")
-	s.Add(opt.Ordering{1, -2, 3})
+	s.Add(orderingChoice(1, -2, 3))
 	expect(s, "(+1,+2) (+1,-2,+3)")
 	// Add an ordering that already exists.
-	s.Add(opt.Ordering{1, -2, 3})
+	s.Add(orderingChoice(1, -2, 3))
 	expect(s, "(+1,+2) (+1,-2,+3)")
 	// Add an ordering that is a prefix of an existing ordering.
-	s.Add(opt.Ordering{1, -2})
+	s.Add(orderingChoice(1, -2))
 	expect(s, "(+1,+2) (+1,-2,+3)")
 	// Add an ordering that has an existing ordering as a prefix.
-	s.Add(opt.Ordering{1, 2, 5})
+	s.Add(orderingChoice(1, 2, 5))
 	expect(s, "(+1,+2,+5) (+1,-2,+3)")
 
 	s2 := s.Copy()
-	s2.RestrictToPrefix(opt.Ordering{1})
+	// Add an ordering that is already implied by both orderings.
+	oc := props.ParseOrderingChoice("+1 opt(2)")
+	s2.Add(&oc)
+	expect(s2, "(+1,+2,+5) (+1,-2,+3)")
+	// Add an ordering that extends an existing ordering.
+	oc = props.ParseOrderingChoice("+1,+3,+(5|6) opt(2,4,7)")
+	s2.Add(&oc)
+	expect(s2, "(+1,+2,+5) (+1,-2,+3,+(5|6))")
+	// Add a new ordering choice with a column group and optional columns.
+	oc = props.ParseOrderingChoice("+1,+3,+(5|6) opt(4,7,8)")
+	s2.Add(&oc)
+	expect(s2, "(+1,+2,+5) (+1,-2,+3,+(5|6)) (+1,+3,+(5|6) opt(4,7,8))")
+	// Add an ordering that removes the column group and reduces the optional
+	// columns of the previous ordering.
+	oc = props.ParseOrderingChoice("+1,+(3|4),+6 opt(7)")
+	s2.Add(&oc)
+	expect(s2, "(+1,+2,+5) (+1,-2,+3,+(5|6)) (+1,+3,+6 opt(7))")
+
+	s2 = s.Copy()
+	s2.RestrictToImplies(orderingChoice(1))
 	expect(s2, "(+1,+2,+5) (+1,-2,+3)")
 	s2 = s.Copy()
-	s2.RestrictToPrefix(opt.Ordering{1, 2})
+	s2.RestrictToImplies(orderingChoice(1, 2))
 	expect(s2, "(+1,+2,+5)")
 	s2 = s.Copy()
-	s2.RestrictToPrefix(opt.Ordering{2})
+	s2.RestrictToImplies(orderingChoice(2))
 	expect(s2, "")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(opt.MakeColSet(1, 2, 3, 5), nil /* equivCols */)
+	s2.RestrictToCols(opt.MakeColSet(1, 2, 3, 5), &props.FuncDepSet{})
 	expect(s2, "(+1,+2,+5) (+1,-2,+3)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(opt.MakeColSet(1, 2, 3), nil /* equivCols */)
+	s2.RestrictToCols(opt.MakeColSet(1, 2, 3), &props.FuncDepSet{})
 	expect(s2, "(+1,+2) (+1,-2,+3)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(opt.MakeColSet(1, 2), nil /* equivCols */)
+	s2.RestrictToCols(opt.MakeColSet(1, 2), &props.FuncDepSet{})
 	expect(s2, "(+1,+2) (+1,-2)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(opt.MakeColSet(1, 3), nil /* equivCols */)
+	s2.RestrictToCols(opt.MakeColSet(1, 3), &props.FuncDepSet{})
 	expect(s2, "(+1)")
 
 	s2 = s.Copy()
-	s2.RestrictToCols(opt.MakeColSet(2, 3), nil /* equivCols */)
+	s2.RestrictToCols(opt.MakeColSet(2, 3), &props.FuncDepSet{})
 	expect(s2, "")
 
 	sStr := s.String()
@@ -672,7 +845,7 @@ func TestOrderingSet(t *testing.T) {
 
 	s2 = s.Copy()
 	s2.RestrictToCols(opt.MakeColSet(1, 3, 5, 6), eq(2, 5, 6))
-	expect(s2, "(+1,+5) (+1,-5,+3)")
+	expect(s2, "(+1,+(5|6)) (+1,-(5|6),+3)")
 	checkForMutation()
 
 	s2 = s.Copy()
@@ -682,21 +855,50 @@ func TestOrderingSet(t *testing.T) {
 
 	s2 = s.Copy()
 	s2.RestrictToCols(opt.MakeColSet(2, 3, 5), eq(1, 2))
-	expect(s2, "(+2)")
+	expect(s2, "(+2,+5) (+2,+3)")
 	checkForMutation()
+
+	// Tests for Simplify and RestrictToCols using FDs with some constants.
+	var fds props.FuncDepSet
+	fds.AddConstants(opt.MakeColSet(1, 5))
+	s2 = s.Copy()
+	s2.Simplify(&fds)
+	expect(s2, "(+2 opt(1,5)) (-2,+3 opt(1,5))")
+
+	fds.AddEquivalency(3, 4)
+	fds.AddEquivalency(1, 6)
+	s2 = s.Copy()
+	s2.Simplify(&fds)
+	expect(s2, "(+2 opt(1,5,6)) (-2,+(3|4) opt(1,5,6))")
+
+	s2.Add(orderingChoice(8, -4))
+	expect(s2, "(+2 opt(1,5,6)) (-2,+(3|4) opt(1,5,6)) (+8,-4)")
+
+	// Ensure that 2 is remapped to 7, and cols that are not projected are
+	// removed from the column groups and optional columns. The third ordering
+	// is removed entirely.
+	fds.AddEquivalency(2, 7)
+	s2.RestrictToCols(opt.MakeColSet(3, 5, 7), &fds)
+	expect(s2, "(+7 opt(5)) (-7,+3 opt(5))")
+	checkForMutation()
+
+	s2.Simplify(&fds)
+	expect(s2, "(+(2|7) opt(1,5,6)) (-(2|7),+(3|4) opt(1,5,6))")
+
+	// Check that columns are remapped successfully.
+	s3 := s2.RemapColumns(opt.ColList{1, 2, 3, 4, 5, 6, 7}, opt.ColList{11, 12, 13, 14, 15, 16, 17})
+	expect(s3, "(+(12|17) opt(11,15,16)) (-(12|17),+(13|14) opt(11,15,16))")
 }
 
-// eq returns a function that can be passed to OrderingSet.RestrictToCols. The
-// function represents equivalency between all the given columns. When the
-// returned function is called with a column c, if c exists in cols, all the
-// columns in cols except for c will be returned. If c does not exist in cols,
-// an empty set will be returned.
-func eq(cols ...opt.ColumnID) func(opt.ColumnID) opt.ColSet {
-	set := opt.MakeColSet(cols...)
-	return func(col opt.ColumnID) opt.ColSet {
-		if set.Contains(col) {
-			return set.Difference(opt.MakeColSet(col))
-		}
-		return opt.ColSet{}
+// eq returns a FuncDepSet that represents equivalency between all the given columns.
+func eq(cols ...opt.ColumnID) *props.FuncDepSet {
+	if len(cols) <= 1 {
+		return &props.FuncDepSet{}
 	}
+	var fds props.FuncDepSet
+	c1 := cols[0]
+	for _, c2 := range cols[1:] {
+		fds.AddEquivalency(c1, c2)
+	}
+	return &fds
 }

@@ -51,24 +51,38 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
 	orders := DeriveInterestingOrderings(left).Copy()
-	orders.RestrictToCols(leftEq.ToSet(), nil /* equivCols */)
+	leftCols, leftFDs := leftEq.ToSet(), &left.Relational().FuncDeps
+	orders.RestrictToCols(leftCols, leftFDs)
+
+	var mustGenerateMergeJoin bool
+	if len(orders) == 0 && leftCols.SubsetOf(leftFDs.ConstantCols()) {
+		// All left equality columns are constant, so we can trivially create
+		// an ordering.
+		mustGenerateMergeJoin = true
+	}
 
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := DeriveInterestingOrderings(right).Copy()
-		rightOrders.RestrictToCols(leftEq.ToSet(), nil /* equivCols */)
+		rightOrders.RestrictToCols(rightEq.ToSet(), &right.Relational().FuncDeps)
 		orders = append(orders, rightOrders...)
 
 		// If we don't allow hash join, we must do our best to generate a merge
-		// join, even if it means sorting both sides. We append an arbitrary
-		// ordering, in case the interesting orderings don't result in any merge
-		// joins.
+		// join, even if it means sorting both sides.
+		mustGenerateMergeJoin = true
+	}
+
+	if mustGenerateMergeJoin {
+		// We append an arbitrary ordering, in case the interesting orderings don't
+		// result in any merge joins.
 		o := make(opt.Ordering, len(leftEq))
 		for i := range o {
 			o[i] = opt.MakeOrderingColumn(leftEq[i], false /* descending */)
 		}
-		orders.Add(o)
+		var oc props.OrderingChoice
+		oc.FromOrdering(o)
+		orders.Add(&oc)
 	}
 
 	if len(orders) == 0 {
@@ -83,7 +97,8 @@ func (c *CustomFuncs) GenerateMergeJoins(
 
 	var remainingFilters memo.FiltersExpr
 
-	for _, o := range orders {
+	for _, ord := range orders {
+		o := ord.ToOrderingLong()
 		if len(o) < n {
 			// TODO(radu): we have a partial ordering on the equality columns. We
 			// should augment it with the other columns (in arbitrary order) in the

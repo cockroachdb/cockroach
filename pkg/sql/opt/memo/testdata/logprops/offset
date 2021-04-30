@@ -145,12 +145,14 @@ offset
  ├── columns: x:7(int!null)
  ├── cardinality: [1 - 11]
  ├── prune: (7)
+ ├── interesting orderings: (+7)
  ├── union-all
  │    ├── columns: x:7(int!null)
  │    ├── left columns: xyzs.x:1(int)
  │    ├── right columns: column1:6(int)
  │    ├── cardinality: [3 - 13]
  │    ├── prune: (7)
+ │    ├── interesting orderings: (+7)
  │    ├── limit
  │    │    ├── columns: xyzs.x:1(int!null)
  │    │    ├── cardinality: [0 - 10]

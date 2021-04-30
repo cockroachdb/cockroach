@@ -115,9 +115,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := ordering.ScanPrivateCanProvide(
-			c.e.mem.Metadata(), &newScanPrivate, &required,
-		)
+		ok, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), &newScanPrivate, &required)
 		if !ok {
 			return
 		}
