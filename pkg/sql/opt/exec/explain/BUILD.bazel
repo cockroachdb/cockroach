@@ -76,5 +76,5 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execexplain $(locations //pkg/sql/opt/exec:defs)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )
