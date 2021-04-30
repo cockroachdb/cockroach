@@ -96,7 +96,9 @@ func getSink(
 		return nil, err
 	}
 
-	if err := sink.Dial(); err != nil {
+	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.Dial != nil {
+		knobs.Dial(sink)
+	} else if err := sink.Dial(); err != nil {
 		return nil, err
 	}
 
