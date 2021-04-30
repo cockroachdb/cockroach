@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "admitter",
+    srcs = [
+        "local.go",
+        "mocks_generated.go",
+        "service.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/admitter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",
+    ],
+)
+
+go_test(
+    name = "admitter_test",
+    srcs = ["local_test.go"],
+    embed = [":admitter"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
