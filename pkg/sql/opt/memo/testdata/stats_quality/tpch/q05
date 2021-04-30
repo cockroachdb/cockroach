@@ -108,7 +108,7 @@ sort
       │    │    │    │    │    ├── save-table-name: q5_lookup_join_9
       │    │    │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) n_nationkey:45(int!null) n_name:46(char!null) n_regionkey:47(int!null) r_regionkey:50(int!null) r_name:51(char!null)
       │    │    │    │    │    ├── key columns: [45] = [4]
-      │    │    │    │    │    ├── stats: [rows=30000, distinct(1)=27672.3293, null(1)=0, distinct(4)=5, null(4)=0, distinct(45)=5, null(45)=0, distinct(46)=5, null(46)=0, distinct(47)=1, null(47)=0, distinct(50)=1, null(50)=0, distinct(51)=0.996222107, null(51)=0]
+      │    │    │    │    │    ├── stats: [rows=30000, distinct(1)=27672.3293, null(1)=0, distinct(4)=5, null(4)=0, distinct(45)=5, null(45)=0, distinct(46)=5, null(46)=0, distinct(47)=1, null(47)=0, distinct(50)=1, null(50)=0, distinct(51)=0.996222107, null(51)=0, distinct(4,45)=25, null(4,45)=0]
       │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    ├── fd: ()-->(51), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4)
       │    │    │    │    │    ├── inner-join (hash)

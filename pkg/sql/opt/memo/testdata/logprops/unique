@@ -42,14 +42,12 @@ project
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── prune: (1-6)
- ├── interesting orderings: (+1)
  └── select
       ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal)
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-7)
       ├── prune: (1,3-7)
-      ├── interesting orderings: (+1)
       ├── scan t
       │    ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal)
       │    ├── key: (1)
@@ -72,14 +70,12 @@ project
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── prune: (1-6)
- ├── interesting orderings: (+1)
  └── select
       ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int!null) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal)
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-7)
       ├── prune: (1-3,6,7)
-      ├── interesting orderings: (+1)
       ├── scan t
       │    ├── columns: x:1(int!null) y:2(int) z:3(int!null) a:4(int) b:5(int!null) c:6(int!null) crdb_internal_mvcc_timestamp:7(decimal)
       │    ├── key: (1)

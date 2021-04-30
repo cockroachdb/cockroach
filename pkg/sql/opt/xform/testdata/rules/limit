@@ -1266,7 +1266,7 @@ index-join index_tab
       │    ├── key: (1,3,6,7)
       │    ├── ordering: +6
       │    ├── limit hint: 10.00
-      │    ├── sort
+      │    ├── sort (segmented)
       │    │    ├── columns: id:11!null region:13!null data1:16!null data2:17!null
       │    │    ├── cardinality: [0 - 10]
       │    │    ├── key: (11)
@@ -1278,8 +1278,9 @@ index-join index_tab
       │    │         ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST']
       │    │         ├── limit: 10
       │    │         ├── key: (11)
-      │    │         └── fd: ()-->(13), (11)-->(16,17)
-      │    └── sort
+      │    │         ├── fd: ()-->(13), (11)-->(16,17)
+      │    │         └── ordering: +16 opt(13) [actual: +16]
+      │    └── sort (segmented)
       │         ├── columns: id:21!null region:23!null data1:26!null data2:27!null
       │         ├── cardinality: [0 - 10]
       │         ├── key: (21)
@@ -1291,7 +1292,8 @@ index-join index_tab
       │              ├── constraint: /23/26/27/21: [/'US_WEST' - /'US_WEST']
       │              ├── limit: 10
       │              ├── key: (21)
-      │              └── fd: ()-->(23), (21)-->(26,27)
+      │              ├── fd: ()-->(23), (21)-->(26,27)
+      │              └── ordering: +26 opt(23) [actual: +26]
       └── 10
 
 # Case where check constraints are used.

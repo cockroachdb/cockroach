@@ -18,6 +18,7 @@ union
  ├── left columns: xy.x:1(int) xy.y:2(int)
  ├── right columns: u:4(int) v:5(int)
  ├── key: (8,9)
+ ├── interesting orderings: (+8)
  ├── project
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── key: (1)
@@ -48,6 +49,7 @@ intersect
  ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── right columns: v:5(int) u:4(int) rowid:6(int)
  ├── key: (1,2)
+ ├── interesting orderings: (+1)
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -65,13 +67,13 @@ intersect
       ├── key: (6)
       ├── fd: ()-->(4), (6)-->(5)
       ├── prune: (4-6)
-      ├── interesting orderings: (+6)
+      ├── interesting orderings: (+6 opt(4))
       └── select
            ├── columns: u:4(int!null) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
            ├── key: (6)
            ├── fd: ()-->(4), (6)-->(5,7)
            ├── prune: (5-7)
-           ├── interesting orderings: (+6)
+           ├── interesting orderings: (+6 opt(4))
            ├── scan uv
            │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
            │    ├── key: (6)
@@ -91,6 +93,7 @@ except
  ├── left columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── right columns: u:4(int) v:5(int) v:5(int)
  ├── key: (1,2)
+ ├── interesting orderings: (+1)
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
@@ -112,7 +115,7 @@ except
            ├── key: (6)
            ├── fd: ()-->(4), (6)-->(5,7)
            ├── prune: (5-7)
-           ├── interesting orderings: (+6)
+           ├── interesting orderings: (+6 opt(4))
            ├── scan uv
            │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
            │    ├── key: (6)
@@ -362,12 +365,13 @@ union
  ├── right columns: abc.a:5(int) abc.b:6(int) abc.c:7(int)
  ├── key: (10,11)
  ├── fd: (9)==(11), (11)==(9)
+ ├── interesting orderings: (+(9|11))
  ├── select
  │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
  │    ├── prune: (2)
- │    ├── interesting orderings: (+1)
+ │    ├── interesting orderings: (+(1|3))
  │    ├── scan abc
  │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  │    │    ├── key: (1)
@@ -386,7 +390,7 @@ union
       ├── key: (5)
       ├── fd: (5)-->(6), (5)==(7), (7)==(5)
       ├── prune: (6)
-      ├── interesting orderings: (+5)
+      ├── interesting orderings: (+(5|7))
       ├── scan abc
       │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
       │    ├── key: (5)
@@ -412,12 +416,13 @@ union
  ├── left columns: abc.a:1(int) abc.b:2(int) abc.c:3(int)
  ├── right columns: abc.a:5(int) abc.b:6(int) abc.c:7(int)
  ├── key: (9-11)
+ ├── interesting orderings: (+9)
  ├── select
  │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
  │    ├── prune: (2)
- │    ├── interesting orderings: (+1)
+ │    ├── interesting orderings: (+(1|3))
  │    ├── scan abc
  │    │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  │    │    ├── key: (1)
@@ -436,7 +441,7 @@ union
       ├── key: (5)
       ├── fd: (5)-->(7), (5)==(6), (6)==(5)
       ├── prune: (7)
-      ├── interesting orderings: (+5)
+      ├── interesting orderings: (+(5|6))
       ├── scan abc
       │    ├── columns: abc.a:5(int!null) abc.b:6(int) abc.c:7(int)
       │    ├── key: (5)
@@ -464,12 +469,13 @@ intersect
  ├── right columns: a:5(int) b:6(int) c:7(int)
  ├── key: (2,3)
  ├── fd: (1)==(3), (3)==(1)
+ ├── interesting orderings: (+1)
  ├── select
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
  │    ├── prune: (2)
- │    ├── interesting orderings: (+1)
+ │    ├── interesting orderings: (+(1|3))
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int) c:3(int)
  │    │    ├── key: (1)
@@ -488,7 +494,7 @@ intersect
       ├── key: (5)
       ├── fd: (5)-->(7), (5)==(6), (6)==(5)
       ├── prune: (7)
-      ├── interesting orderings: (+5)
+      ├── interesting orderings: (+(5|6))
       ├── scan abc
       │    ├── columns: a:5(int!null) b:6(int) c:7(int)
       │    ├── key: (5)
@@ -516,12 +522,13 @@ except
  ├── right columns: a:5(int) b:6(int) c:7(int)
  ├── key: (2,3)
  ├── fd: (1)==(3), (3)==(1)
+ ├── interesting orderings: (+1)
  ├── select
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2), (1)==(3), (3)==(1)
  │    ├── prune: (2)
- │    ├── interesting orderings: (+1)
+ │    ├── interesting orderings: (+(1|3))
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int) c:3(int)
  │    │    ├── key: (1)
@@ -540,7 +547,7 @@ except
       ├── key: (5)
       ├── fd: (5)-->(7), (5)==(6), (6)==(5)
       ├── prune: (7)
-      ├── interesting orderings: (+5)
+      ├── interesting orderings: (+(5|6))
       ├── scan abc
       │    ├── columns: a:5(int!null) b:6(int) c:7(int)
       │    ├── key: (5)
