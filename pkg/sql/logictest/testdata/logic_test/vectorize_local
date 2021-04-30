@@ -215,10 +215,9 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
 │
 └ Node 1
   └ *colexec.orderedAggregator
-    └ *colexecbase.distinctChainOps
-      └ *colexecbase.constInt64Op
-        └ *rowexec.filtererProcessor
-          └ *colfetcher.ColBatchScan
+    └ *colexecbase.constInt64Op
+      └ *rowexec.filtererProcessor
+        └ *colfetcher.ColBatchScan
 
 # Regression test for #46122.
 statement ok
@@ -274,8 +273,7 @@ EXPLAIN (VEC) SELECT max(c) FROM a
 │
 └ Node 1
   └ *colexec.orderedAggregator
-    └ *colexecbase.distinctChainOps
-      └ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
 
 # Verify that binary operations on integers of any width return INT8.
 statement ok
@@ -345,8 +343,7 @@ EXPLAIN (VEC) SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
 │
 └ Node 1
   └ *colexec.orderedAggregator
-    └ *colexecbase.distinctChainOps
-      └ *colfetcher.ColBatchScan
+    └ *colfetcher.ColBatchScan
 
 statement ok
 CREATE TABLE t63792 (c INT);
