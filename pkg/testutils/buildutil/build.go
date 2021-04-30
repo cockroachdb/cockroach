@@ -11,18 +11,18 @@
 package buildutil
 
 import (
-	"go/build"
-	"runtime"
+	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/tools/go/packages"
 )
 
-func short(in string) string {
-	return strings.Replace(in, "github.com/cockroachdb/cockroach/pkg/", "./pkg/", -1)
-}
+// CDeps is a magic
+const CDeps = "c-deps"
 
 // VerifyNoImports verifies that a package doesn't depend (directly or
 // indirectly) on forbidden packages. The forbidden packages are specified as
@@ -31,6 +31,11 @@ func short(in string) string {
 // is listed in the allowlist.
 // If GOPATH isn't set, it is an indication that the source is not available and
 // the test is skipped.
+//
+// Note that this test is skipped under stress, race, and short.
+//
+// The cgo parameter is now a no-op.
+// TODO(ajwerner): Remove the cgo parameter.
 func VerifyNoImports(
 	t testing.TB,
 	pkgPath string,
@@ -39,82 +44,133 @@ func VerifyNoImports(
 	allowlist ...string,
 ) {
 
-	// Skip test if source is not available.
-	if build.Default.GOPATH == "" {
-		skip.IgnoreLint(t, "GOPATH isn't set")
+	skip.UnderRace(t)
+	skip.UnderStress(t)
+	skip.UnderShort(t)
+
+	pkgs, err := packages.Load(&packages.Config{
+		Mode: packages.NeedName | packages.NeedImports | packages.NeedDeps |
+			packages.NeedFiles | packages.NeedTypes | packages.NeedTypesInfo,
+		Logf: t.Logf,
+	}, pkgPath)
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	rootPkg := pkgs[0]
+	v := verifier{
+		cgo:               cgo,
+		rootPkg:           rootPkg,
+		forbiddenPkgs:     forbiddenPkgs,
+		forbiddenPrefixes: forbiddenPrefixes,
+		allowedPkgs:       allowlist,
 	}
+	v.verifyTransitiveImports(t, map[string]struct{}{}, []*packages.Package{rootPkg})
+}
 
-	buildContext := build.Default
-	buildContext.CgoEnabled = cgo
+// verifier is used to verify that a package has valid imports.
+type verifier struct {
+	cgo               bool // check for some cgo imports
+	rootPkg           *packages.Package
+	forbiddenPkgs     []string
+	forbiddenPrefixes []string
+	allowedPkgs       []string
+}
 
-	checked := make(map[string]struct{})
+// verifyTransitiveImports recursively verifies that all imports of the last
+// element in the stack are returning early if that element is in the checkedSet,
+// and populating into the check set before recurring into transitive imports.
+//
+// The stack is used to provide helpful advice on determining how a package is
+// imported.
+func (v *verifier) verifyTransitiveImports(
+	t testing.TB, checkedSet map[string]struct{}, stack []*packages.Package,
+) {
+	cur := stack[len(stack)-1]
+	if _, checked := checkedSet[cur.PkgPath]; checked {
+		return
+	}
+	v.verifyImport(t, stack)
+	checkedSet[cur.PkgPath] = struct{}{}
+	for _, imp := range importsToSortedSlice(cur.Imports) {
+		v.verifyTransitiveImports(t, checkedSet, append(stack, imp))
+	}
+}
 
-	var check func(string) error
-	check = func(path string) error {
-		pkg, err := buildContext.Import(path, "", build.FindOnly)
-		if err != nil {
-			t.Fatal(err)
+func importsToSortedSlice(m map[string]*packages.Package) (s []*packages.Package) {
+	s = make([]*packages.Package, 0, len(m))
+	for _, p := range m {
+		s = append(s, p)
+	}
+	sort.Slice(s, func(i, j int) bool {
+		return s[i].PkgPath < s[j].PkgPath
+	})
+	return s
+}
+
+func (v *verifier) report(
+	t testing.TB, stack []*packages.Package, format string, args ...interface{},
+) {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "%s imports %s: ", short(v.rootPkg.PkgPath), short(stack[len(stack)-1].PkgPath))
+	fmt.Fprintf(&buf, format, args...)
+	buf.WriteString("\nvia:\n")
+	for i := len(stack) - 2; i >= 0; i-- {
+		fmt.Fprintf(&buf, "\t%s\n", stack[i].PkgPath)
+	}
+	t.Errorf(buf.String())
+}
+
+func (v *verifier) verifyImport(t testing.TB, stack []*packages.Package) {
+	imp := stack[len(stack)-1]
+	for _, forbidden := range v.forbiddenPkgs {
+		v.checkIfImportIsForbidden(t, stack, forbidden, imp)
+		v.verifyCgoPackageForbidden(t, stack, forbidden, imp)
+	}
+	for _, prefix := range v.forbiddenPrefixes {
+		if strings.HasPrefix(imp.PkgPath, prefix) {
+			v.report(t, stack, "prefix %s forbidden", prefix)
 		}
-		for _, imp := range pkg.Imports {
-			for _, forbidden := range forbiddenPkgs {
-				if forbidden == imp {
-					allowlisted := false
-					for _, w := range allowlist {
-						if path == w {
-							allowlisted = true
-							break
-						}
-					}
-					if !allowlisted {
-						return errors.Errorf("%s imports %s, which is forbidden", short(path), short(imp))
-					}
-				}
-				if forbidden == "c-deps" &&
-					imp == "C" &&
-					strings.HasPrefix(path, "github.com/cockroachdb/cockroach/pkg") &&
-					path != "github.com/cockroachdb/cockroach/pkg/geo/geoproj" {
-					for _, name := range pkg.CgoFiles {
-						if strings.Contains(name, "zcgo_flags") {
-							return errors.Errorf("%s imports %s (%s), which is forbidden", short(path), short(imp), name)
-						}
-					}
-				}
-			}
-			for _, prefix := range forbiddenPrefixes {
-				if strings.HasPrefix(imp, prefix) {
-					return errors.Errorf("%s imports %s which has prefix %s, which is forbidden", short(path), short(imp), prefix)
-				}
-			}
+	}
+}
 
-			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L159
-			if imp == "C" {
-				continue // "C" is fake
-			}
+// verifyCgoPackageForbidden reports an error if the forbidden string is CDeps and
+// the package is in the cockroach tree and it's not some special geoproj package
+// and it has some generated zcgo_flags files.
+//
+// TODO(ajwerner): Reconsider this cgo logic.
+func (v *verifier) verifyCgoPackageForbidden(
+	t testing.TB, stack []*packages.Package, forbidden string, imp *packages.Package,
+) {
+	if forbidden != CDeps {
+		return
+	}
 
-			importPkg, err := buildContext.Import(imp, pkg.Dir, build.FindOnly)
-			if err != nil {
-				// go/build does not know that gccgo's standard packages don't have
-				// source, and will report an error saying that it can not find them.
-				//
-				// See https://github.com/golang/go/issues/16701
-				// and https://github.com/golang/go/issues/23607.
-				if runtime.Compiler == "gccgo" {
-					continue
-				}
-				t.Fatal(err)
-			}
-			imp = importPkg.ImportPath
-			if _, ok := checked[imp]; ok {
-				continue
-			}
-			if err := check(imp); err != nil {
-				return errors.Wrapf(err, "%s depends on", short(path))
-			}
-			checked[pkg.ImportPath] = struct{}{}
+	_, importsCgo := imp.Imports["runtime/cgo"]
+	if !importsCgo ||
+		!strings.HasPrefix(imp.PkgPath, "github.com/cockroachdb/cockroach/pkg") ||
+		imp.PkgPath == "github.com/cockroachdb/cockroach/pkg/geo/geoproj" {
+		return
+	}
+	for _, name := range imp.GoFiles {
+		if strings.Contains(name, "zcgo_flags") {
+			v.report(t, stack, "cgo forbidden")
 		}
-		return nil
 	}
-	if err := check(pkgPath); err != nil {
-		t.Fatal(err)
+}
+
+func (v *verifier) checkIfImportIsForbidden(
+	t testing.TB, stack []*packages.Package, forbidden string, imp *packages.Package,
+) {
+	if forbidden != imp.PkgPath {
+		return
 	}
+	for _, w := range v.allowedPkgs {
+		if imp.PkgPath == w {
+			return
+		}
+	}
+	v.report(t, stack, "forbidden")
+}
+
+func short(in string) string {
+	return strings.Replace(in, "github.com/cockroachdb/cockroach/pkg/", "./pkg/", -1)
 }
