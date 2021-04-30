@@ -72,6 +72,9 @@ type KVReader interface {
 	// GetCumulativeContentionTime returns the amount of time KV reads spent
 	// contending. It must be safe for concurrent use.
 	GetCumulativeContentionTime() time.Duration
+	// GetScanStats returns statistics about the scan that happened during the
+	// KV reads. It must be safe for concurrent use.
+	GetScanStats() execinfra.ScanStats
 }
 
 // ZeroInputNode is an execinfra.OpNode with no inputs.

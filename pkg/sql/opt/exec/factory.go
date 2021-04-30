@@ -318,6 +318,11 @@ type ExecutionStats struct {
 	KVBytesRead optional.Uint
 	KVRowsRead  optional.Uint
 
+	StepCount         optional.Uint
+	InternalStepCount optional.Uint
+	SeekCount         optional.Uint
+	InternalSeekCount optional.Uint
+
 	// Nodes on which this operator was executed.
 	Nodes []string
 

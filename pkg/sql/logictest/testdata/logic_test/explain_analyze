@@ -26,6 +26,8 @@ cluster regions: <hidden>
   actual row count: 0
   KV rows read: 0
   KV bytes read: 0 B
+  MVCC step count: 0
+  MVCC seek count: 0
   missing stats
   table: kv@primary
   spans: [/2 - ]
@@ -51,6 +53,8 @@ cluster regions: <hidden>
   actual row count: 3
   KV rows read: 3
   KV bytes read: 24 B
+  MVCC step count: 0
+  MVCC seek count: 0
   missing stats
   table: kv@primary
   spans: [/2 - ]
@@ -89,6 +93,10 @@ cluster regions: <hidden>
 │     vectorized batch count: 0
 │     KV rows read: 4
 │     KV bytes read: 32 B
+│     MVCC step count: 0
+│     MVCC seek count: 0
+│     MVCC internal step count: 0
+│     MVCC internal seek count: 0
 │     estimated row count: 1,000 (missing stats)
 │     table: kv@primary
 │     spans: FULL SCAN
@@ -101,6 +109,10 @@ cluster regions: <hidden>
       vectorized batch count: 0
       KV rows read: 3
       KV bytes read: 24 B
+      MVCC step count: 0
+      MVCC seek count: 0
+      MVCC internal step count: 0
+      MVCC internal seek count: 0
       estimated row count: 1,000 (missing stats)
       table: ab@primary
       spans: FULL SCAN
