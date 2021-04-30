@@ -63,6 +63,10 @@ func makeIDKey() kvserverbase.CmdIDKey {
 // tok.Move() it into this method. It will be used to untrack the request once
 // it comes out of the proposal buffer.
 //
+// Nothing here or below can take out a raftMu lock, since executeWriteBatch()
+// is already holding readOnlyCmdMu when calling this. Locking raftMu after it
+// would violate the locking order specified for Store.mu.
+//
 // Return values:
 // - a channel which receives a response or error upon application
 // - a closure used to attempt to abandon the command. When called, it unbinds
@@ -89,6 +93,8 @@ func (r *Replica) evalAndPropose(
 	// proagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
+		return nil, nil, 0, pErr
+	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		return nil, nil, 0, pErr
 	}
 
