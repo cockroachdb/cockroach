@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,14 +32,6 @@ var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"the QPS over which, the range becomes a candidate for load based splitting",
 	2500, // 2500 req/s
 ).WithPublic()
-
-// SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
-var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
-	"kv.range_split.by_load_merge_delay",
-	"the delay that range splits created due to load will wait before considering being merged away",
-	5*time.Minute,
-	settings.NonNegativeDuration,
-)
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
 func (r *Replica) SplitByLoadQPSThreshold() float64 {
