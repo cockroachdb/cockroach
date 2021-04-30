@@ -1,0 +1,1 @@
+exports_files(["write_reports.go.tmpl"])
