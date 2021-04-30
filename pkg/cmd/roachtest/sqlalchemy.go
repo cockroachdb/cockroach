@@ -32,7 +32,7 @@ func registerSQLAlchemy(r *testRegistry) {
 		Name:       "sqlalchemy",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSQLAlchemy(ctx, t, c)

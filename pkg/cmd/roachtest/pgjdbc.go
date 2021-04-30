@@ -183,7 +183,7 @@ func registerPgjdbc(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Name:       "pgjdbc",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),

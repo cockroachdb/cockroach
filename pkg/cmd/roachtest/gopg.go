@@ -148,7 +148,7 @@ func registerGopg(r *testRegistry) {
 		Name:       "gopg",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runGopg(ctx, t, c)
