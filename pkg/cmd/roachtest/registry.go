@@ -72,6 +72,7 @@ func registerTests(r *testRegistry) {
 	registerPgjdbc(r)
 	registerPgx(r)
 	registerNodeJSPostgres(r)
+	registerPop(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerQuitAllNodes(r)
