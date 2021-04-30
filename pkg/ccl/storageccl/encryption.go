@@ -80,16 +80,6 @@ func AppearsEncrypted(text []byte) bool {
 // EncryptFile encrypts a file with the supplied key and a randomly chosen IV
 // which is prepended in a header on the returned ciphertext.
 func EncryptFile(plaintext, key []byte) ([]byte, error) {
-	return encryptFile(plaintext, key, false)
-}
-
-// EncryptFileChunked is like EncryptFile but chunks the file into fixed-size
-// messages encrypted individually, allowing streaming (by-chunk) decryption.
-func EncryptFileChunked(plaintext, key []byte) ([]byte, error) {
-	return encryptFile(plaintext, key, true)
-}
-
-func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
 		return nil, err
@@ -97,21 +87,13 @@ func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 
 	// Allocate our output buffer: preamble + 1B version + iv, plus additional
 	// pre-allocated capacity for the ciphertext.
-
-	numChunks := 1
-	var version byte
-	if chunked {
-		version = encryptionVersionChunk
-		numChunks = (len(plaintext) / encryptionChunkSizeV2) + 1
-	} else {
-		version = encryptionVersionIVPrefix
-	}
+	numChunks := (len(plaintext) / encryptionChunkSizeV2) + 1
 
 	ciphertext := make([]byte, headerSize, headerSize+len(plaintext)+numChunks*gcm.Overhead())
 
 	// Write our header (preamble+version+IV) to the ciphertext buffer.
 	copy(ciphertext, encryptionPreamble)
-	ciphertext[len(encryptionPreamble)] = version
+	ciphertext[len(encryptionPreamble)] = encryptionVersionChunk
 
 	// Pick a unique IV for this file and write it in the header.
 	ivStart := len(encryptionPreamble) + 1
@@ -120,10 +102,6 @@ func encryptFile(plaintext, key []byte, chunked bool) ([]byte, error) {
 	}
 	// Make a copy of the IV to increment for each chunk.
 	iv := append([]byte{}, ciphertext[ivStart:ivStart+nonceSize]...)
-
-	if !chunked {
-		return gcm.Seal(ciphertext, iv, plaintext, nil), nil
-	}
 
 	for {
 		chunk := plaintext
