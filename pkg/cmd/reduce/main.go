@@ -10,7 +10,7 @@
 
 // reduce reduces SQL passed over stdin using cockroach demo. The input is
 // simplified such that the contains argument is present as an error during SQL
-// execution.
+// execution. Run `make bin/reduce` to compile the reduce program.
 package main
 
 import (
@@ -51,24 +51,36 @@ var (
 	}()
 	flags    = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	path     = flags.String("path", "./cockroach", "path to cockroach binary")
-	verbose  = flags.Bool("v", false, "log progress")
+	verbose  = flags.Bool("v", false, "print progress to standard output")
 	contains = flags.String("contains", "", "error regex to search for")
 	unknown  = flags.Bool("unknown", false, "print unknown types during walk")
 	workers  = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 )
 
+const description = `
+The reduce utility attempts to simplify SQL that produces an error in
+CockroachDB. The problematic SQL, passed via standard input, is
+repeatedly reduced as long as it produces an error in the CockroachDB
+demo that matches the provided -contains regex.
+
+The following options are available:
+
+`
+
 func usage() {
 	fmt.Fprintf(flags.Output(), "Usage of %s:\n", os.Args[0])
+	fmt.Fprint(flags.Output(), description)
 	flags.PrintDefaults()
 	os.Exit(1)
 }
 
 func main() {
+	flags.Usage = usage
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		usage()
 	}
 	if *contains == "" {
-		fmt.Print("missing contains\n\n")
+		fmt.Printf("%s: -contains must be provided\n\n", os.Args[0])
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
