@@ -38,7 +38,7 @@ genrule(
     cat $(location wkt_generated.go) | sed -e 's/wktErrorVerbose = false/wktErrorVerbose = true/' > wkt_generated.go.tmp
     mv wkt_generated.go.tmp $(location wkt_generated.go)
     """,
-    tools = [
+    exec_tools = [
         "@org_golang_x_tools//cmd/goyacc",
     ],
 )
