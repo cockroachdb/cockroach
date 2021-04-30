@@ -709,7 +709,8 @@ EXPLAIN (VEC) SELECT _time + _date FROM many_types
 ----
 │
 └ Node 1
-  └ *rowexec.tableReader
+  └ *rowexec.noopProcessor
+    └ *colfetcher.ColBatchScan
 
 # Regression #50261 (not handling constant datum-backed values on the left
 # correctly).
