@@ -4972,7 +4972,7 @@ may increase either contention or retry errors, or both.`,
 				storeID := int32(tree.MustBeDInt(args[1]))
 				startKey := []byte(tree.MustBeDBytes(args[2]))
 				endKey := []byte(tree.MustBeDBytes(args[3]))
-				if err := ctx.Planner.CompactEngineSpan(
+				if err := ctx.CompactEngineSpan(
 					ctx.Context, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err
 				}
