@@ -35,25 +35,25 @@ update abcde
       ├── key: (12)
       ├── fd: ()-->(8,15,16), (12)-->(9-11,13,14), (9,10)-->(11), (10)-->(17)
       ├── prune: (8-17)
-      ├── interesting orderings: (+12)
+      ├── interesting orderings: (+12 opt(8,15,16))
       ├── project
       │    ├── columns: column16:16(int!null) a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal) b_new:15(int!null)
       │    ├── key: (12)
       │    ├── fd: ()-->(8,15,16), (12)-->(9-11,13,14), (9,10)-->(11)
       │    ├── prune: (8-16)
-      │    ├── interesting orderings: (+12)
+      │    ├── interesting orderings: (+12 opt(8,15,16))
       │    ├── project
       │    │    ├── columns: b_new:15(int!null) a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
       │    │    ├── key: (12)
       │    │    ├── fd: ()-->(8,15), (12)-->(9-11,13,14), (9,10)-->(11)
       │    │    ├── prune: (8-15)
-      │    │    ├── interesting orderings: (+12)
+      │    │    ├── interesting orderings: (+12 opt(8,15))
       │    │    ├── select
       │    │    │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
       │    │    │    ├── key: (12)
       │    │    │    ├── fd: ()-->(8), (12)-->(9-11,13,14), (9,10)-->(11)
       │    │    │    ├── prune: (9-14)
-      │    │    │    ├── interesting orderings: (+12)
+      │    │    │    ├── interesting orderings: (+12 opt(8))
       │    │    │    ├── scan abcde
       │    │    │    │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
       │    │    │    │    ├── computed column expressions
@@ -107,25 +107,25 @@ project
            ├── key: (12)
            ├── fd: ()-->(8,15,16), (12)-->(9-11,13,14), (9,10)-->(11), (10)-->(17)
            ├── prune: (8-17)
-           ├── interesting orderings: (+12)
+           ├── interesting orderings: (+12 opt(8,15,16))
            ├── project
            │    ├── columns: column16:16(int!null) a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal) b_new:15(int!null)
            │    ├── key: (12)
            │    ├── fd: ()-->(8,15,16), (12)-->(9-11,13,14), (9,10)-->(11)
            │    ├── prune: (8-16)
-           │    ├── interesting orderings: (+12)
+           │    ├── interesting orderings: (+12 opt(8,15,16))
            │    ├── project
            │    │    ├── columns: b_new:15(int!null) a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    ├── key: (12)
            │    │    ├── fd: ()-->(8,15), (12)-->(9-11,13,14), (9,10)-->(11)
            │    │    ├── prune: (8-15)
-           │    │    ├── interesting orderings: (+12)
+           │    │    ├── interesting orderings: (+12 opt(8,15))
            │    │    ├── select
            │    │    │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    │    ├── key: (12)
            │    │    │    ├── fd: ()-->(8), (12)-->(9-11,13,14), (9,10)-->(11)
            │    │    │    ├── prune: (9-14)
-           │    │    │    ├── interesting orderings: (+12)
+           │    │    │    ├── interesting orderings: (+12 opt(8))
            │    │    │    ├── scan abcde
            │    │    │    │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    │    │    ├── computed column expressions
@@ -183,28 +183,24 @@ project
            ├── key: ()
            ├── fd: ()-->(8-17)
            ├── prune: (8-17)
-           ├── interesting orderings: (+12)
            ├── project
            │    ├── columns: column16:16(int!null) a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal) b_new:15(int!null)
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
            │    ├── fd: ()-->(8-16)
            │    ├── prune: (8-16)
-           │    ├── interesting orderings: (+12)
            │    ├── project
            │    │    ├── columns: b_new:15(int!null) a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    ├── cardinality: [0 - 1]
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(8-15)
            │    │    ├── prune: (8-15)
-           │    │    ├── interesting orderings: (+12)
            │    │    ├── select
            │    │    │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    │    ├── cardinality: [0 - 1]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(8-14)
            │    │    │    ├── prune: (8-11,13,14)
-           │    │    │    ├── interesting orderings: (+12)
            │    │    │    ├── scan abcde
            │    │    │    │    ├── columns: a:8(int!null) b:9(int) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    │    │    ├── computed column expressions
@@ -257,19 +253,19 @@ project
            ├── key: (12)
            ├── fd: ()-->(15,16), (12)-->(8-11,13,14), (9,10)-->(11), (9)==(10), (10)==(9), (10)-->(17)
            ├── prune: (8-17)
-           ├── interesting orderings: (+12)
+           ├── interesting orderings: (+12 opt(15,16))
            ├── project
            │    ├── columns: column16:16(int!null) a:8(int!null) b:9(int!null) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal) a_new:15(int!null)
            │    ├── key: (12)
            │    ├── fd: ()-->(15,16), (12)-->(8-11,13,14), (9,10)-->(11), (9)==(10), (10)==(9)
            │    ├── prune: (8-16)
-           │    ├── interesting orderings: (+12)
+           │    ├── interesting orderings: (+12 opt(15,16))
            │    ├── project
            │    │    ├── columns: a_new:15(int!null) a:8(int!null) b:9(int!null) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    ├── key: (12)
            │    │    ├── fd: ()-->(15), (12)-->(8-11,13,14), (9,10)-->(11), (9)==(10), (10)==(9)
            │    │    ├── prune: (8-15)
-           │    │    ├── interesting orderings: (+12)
+           │    │    ├── interesting orderings: (+12 opt(15))
            │    │    ├── select
            │    │    │    ├── columns: a:8(int!null) b:9(int!null) c:10(int!null) d:11(int) rowid:12(int!null) e:13(int) crdb_internal_mvcc_timestamp:14(decimal)
            │    │    │    ├── key: (12)

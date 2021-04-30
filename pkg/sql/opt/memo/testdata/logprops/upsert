@@ -60,7 +60,7 @@ project
            ├── fd: ()-->(6,7,10,11,17), (15)-->(12-14,16,20-23), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14), (14)-->(18), (18)-->(19)
            ├── prune: (6,7,10-23)
            ├── reject-nulls: (12-16,18,19)
-           ├── interesting orderings: (+15) (+12) (+13,+14,+15)
+           ├── interesting orderings: (+15 opt(6,7,10,11,17)) (+12 opt(6,7,10,11,17)) (+13,+15 opt(6,7,10,11,17))
            ├── project
            │    ├── columns: column19:19(int) x:6(int!null) y:7(int!null) column10:10(int) column11:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal) a_new:17(int!null) b_new:18(int)
            │    ├── cardinality: [0 - 1]
@@ -69,7 +69,7 @@ project
            │    ├── fd: ()-->(6,7,10,11,17), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14), (14)-->(18), (18)-->(19)
            │    ├── prune: (6,7,10-19)
            │    ├── reject-nulls: (12-16,18,19)
-           │    ├── interesting orderings: (+15) (+12) (+13,+14,+15)
+           │    ├── interesting orderings: (+15 opt(6,7,10,11,17)) (+12 opt(6,7,10,11,17)) (+13,+15 opt(6,7,10,11,17))
            │    ├── project
            │    │    ├── columns: a_new:17(int!null) b_new:18(int) x:6(int!null) y:7(int!null) column10:10(int) column11:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal)
            │    │    ├── cardinality: [0 - 1]
@@ -78,7 +78,7 @@ project
            │    │    ├── fd: ()-->(6,7,10,11,17), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14), (14)-->(18)
            │    │    ├── prune: (6,7,10-18)
            │    │    ├── reject-nulls: (12-16,18)
-           │    │    ├── interesting orderings: (+15) (+12) (+13,+14,+15)
+           │    │    ├── interesting orderings: (+15 opt(6,7,10,11,17)) (+12 opt(6,7,10,11,17)) (+13,+15 opt(6,7,10,11,17))
            │    │    ├── left-join (hash)
            │    │    │    ├── columns: x:6(int!null) y:7(int!null) column10:10(int) column11:11(int!null) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal)
            │    │    │    ├── cardinality: [0 - 1]
@@ -88,7 +88,7 @@ project
            │    │    │    ├── fd: ()-->(6,7,10,11), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)~~>(14)
            │    │    │    ├── prune: (12,15,16)
            │    │    │    ├── reject-nulls: (12-16)
-           │    │    │    ├── interesting orderings: (+15) (+12) (+13,+14,+15)
+           │    │    │    ├── interesting orderings: (+15) (+12) (+13,+15)
            │    │    │    ├── ensure-upsert-distinct-on
            │    │    │    │    ├── columns: x:6(int!null) y:7(int!null) column10:10(int) column11:11(int!null)
            │    │    │    │    ├── grouping columns: y:7(int!null) column11:11(int!null)
@@ -103,26 +103,26 @@ project
            │    │    │    │    │    ├── key: (6)
            │    │    │    │    │    ├── fd: ()-->(7,11), (6)-->(10)
            │    │    │    │    │    ├── prune: (6,7,10,11)
-           │    │    │    │    │    ├── interesting orderings: (+6) (+7)
+           │    │    │    │    │    ├── interesting orderings: (+6 opt(7,11))
            │    │    │    │    │    ├── project
            │    │    │    │    │    │    ├── columns: column10:10(int) x:6(int!null) y:7(int!null)
            │    │    │    │    │    │    ├── volatile
            │    │    │    │    │    │    ├── key: (6)
            │    │    │    │    │    │    ├── fd: ()-->(7), (6)-->(10)
            │    │    │    │    │    │    ├── prune: (6,7,10)
-           │    │    │    │    │    │    ├── interesting orderings: (+6) (+7)
+           │    │    │    │    │    │    ├── interesting orderings: (+6 opt(7))
            │    │    │    │    │    │    ├── project
            │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int!null)
            │    │    │    │    │    │    │    ├── key: (6)
            │    │    │    │    │    │    │    ├── fd: ()-->(7)
            │    │    │    │    │    │    │    ├── prune: (6,7)
-           │    │    │    │    │    │    │    ├── interesting orderings: (+6) (+7)
+           │    │    │    │    │    │    │    ├── interesting orderings: (+6 opt(7))
            │    │    │    │    │    │    │    └── select
            │    │    │    │    │    │    │         ├── columns: x:6(int!null) y:7(int!null) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
            │    │    │    │    │    │    │         ├── key: (6)
            │    │    │    │    │    │    │         ├── fd: ()-->(7), (6)-->(8,9), (7,8)~~>(6,9)
            │    │    │    │    │    │    │         ├── prune: (6,8,9)
-           │    │    │    │    │    │    │         ├── interesting orderings: (+6) (+7,+8,+6) (+8,+7,+6)
+           │    │    │    │    │    │    │         ├── interesting orderings: (+6 opt(7)) (+8,+6 opt(7))
            │    │    │    │    │    │    │         ├── scan xyz
            │    │    │    │    │    │    │         │    ├── columns: x:6(int!null) y:7(int) z:8(int) xyz.crdb_internal_mvcc_timestamp:9(decimal)
            │    │    │    │    │    │    │         │    ├── key: (6)
@@ -154,7 +154,7 @@ project
            │    │    │    │    ├── key: (15)
            │    │    │    │    ├── fd: (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16), (13)-->(14)
            │    │    │    │    ├── prune: (12-16)
-           │    │    │    │    ├── interesting orderings: (+15) (+12) (+13,+14,+15)
+           │    │    │    │    ├── interesting orderings: (+15) (+12) (+13,+15)
            │    │    │    │    └── unfiltered-cols: (12-16)
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
@@ -314,7 +314,7 @@ project
            │    │    │    │    │    │    ├── key: (15)
            │    │    │    │    │    │    ├── fd: (15)-->(12-14), (12)-->(13-15), (13,14)~~>(12,15), (13)-->(14)
            │    │    │    │    │    │    ├── prune: (12-15)
-           │    │    │    │    │    │    ├── interesting orderings: (+15) (+12) (+13,+14,+15)
+           │    │    │    │    │    │    ├── interesting orderings: (+15) (+12) (+13,+15)
            │    │    │    │    │    │    └── unfiltered-cols: (12-16)
            │    │    │    │    │    └── filters
            │    │    │    │    │         └── eq [type=bool, outer=(10,15), constraints=(/10: (/NULL - ]; /15: (/NULL - ]), fd=(10)==(15), (15)==(10)]
@@ -330,7 +330,7 @@ project
            │    │    │    │    │    ├── key: (20)
            │    │    │    │    │    ├── fd: (20)-->(17-19), (17)-->(18-20), (18,19)~~>(17,20), (18)-->(19)
            │    │    │    │    │    ├── prune: (17-20)
-           │    │    │    │    │    ├── interesting orderings: (+20) (+17) (+18,+19,+20)
+           │    │    │    │    │    ├── interesting orderings: (+20) (+17) (+18,+20)
            │    │    │    │    │    └── unfiltered-cols: (17-21)
            │    │    │    │    └── filters
            │    │    │    │         └── eq [type=bool, outer=(6,17), constraints=(/6: (/NULL - ]; /17: (/NULL - ]), fd=(6)==(17), (17)==(6)]
@@ -346,7 +346,7 @@ project
            │    │    │    │    ├── key: (25)
            │    │    │    │    ├── fd: (25)-->(22-24), (22)-->(23-25), (23,24)~~>(22,25), (23)-->(24)
            │    │    │    │    ├── prune: (22-25)
-           │    │    │    │    ├── interesting orderings: (+25) (+22) (+23,+24,+25)
+           │    │    │    │    ├── interesting orderings: (+25) (+22) (+23,+25)
            │    │    │    │    └── unfiltered-cols: (22-26)
            │    │    │    └── filters
            │    │    │         ├── eq [type=bool, outer=(7,23), constraints=(/7: (/NULL - ]; /23: (/NULL - ]), fd=(7)==(23), (23)==(7)]
@@ -411,7 +411,7 @@ project
  │         ├── fd: ()-->(7,9), (8)~~>(6), (13)-->(10-12,14,16,17), (10)-->(11-14), (11,12)~~>(10,13,14), (11)~~>(12), (11)-->(15), (8,13)-->(18)
  │         ├── prune: (6-18)
  │         ├── reject-nulls: (10-15)
- │         ├── interesting orderings: (+13) (+10) (+11,+12,+13)
+ │         ├── interesting orderings: (+13 opt(7,9)) (+10 opt(7,9)) (+11,+13 opt(7,9))
  │         ├── project
  │         │    ├── columns: column15:15(int) column1:6(int!null) column7:7(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) crdb_internal_mvcc_timestamp:14(decimal)
  │         │    ├── cardinality: [1 - 2]
@@ -420,7 +420,7 @@ project
  │         │    ├── fd: ()-->(7,9), (8)~~>(6), (13)-->(10-12,14), (10)-->(11-14), (11,12)~~>(10,13,14), (11)~~>(12), (11)-->(15)
  │         │    ├── prune: (6-15)
  │         │    ├── reject-nulls: (10-15)
- │         │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
+ │         │    ├── interesting orderings: (+13 opt(7,9)) (+10 opt(7,9)) (+11,+13 opt(7,9))
  │         │    ├── left-join (hash)
  │         │    │    ├── columns: column1:6(int!null) column7:7(int!null) column8:8(int) column9:9(int!null) a:10(int) b:11(int) c:12(int) rowid:13(int) crdb_internal_mvcc_timestamp:14(decimal)
  │         │    │    ├── cardinality: [1 - 2]
@@ -430,7 +430,7 @@ project
  │         │    │    ├── fd: ()-->(7,9), (8)~~>(6), (13)-->(10-12,14), (10)-->(11-14), (11,12)~~>(10,13,14), (11)~~>(12)
  │         │    │    ├── prune: (10-12,14)
  │         │    │    ├── reject-nulls: (10-14)
- │         │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
+ │         │    │    ├── interesting orderings: (+13) (+10) (+11,+13)
  │         │    │    ├── ensure-upsert-distinct-on
  │         │    │    │    ├── columns: column1:6(int!null) column7:7(int!null) column8:8(int) column9:9(int!null)
  │         │    │    │    ├── grouping columns: column8:8(int)
@@ -483,7 +483,7 @@ project
  │         │    │    │    ├── key: (13)
  │         │    │    │    ├── fd: (13)-->(10-12,14), (10)-->(11-14), (11,12)~~>(10,13,14), (11)-->(12)
  │         │    │    │    ├── prune: (10-14)
- │         │    │    │    ├── interesting orderings: (+13) (+10) (+11,+12,+13)
+ │         │    │    │    ├── interesting orderings: (+13) (+10) (+11,+13)
  │         │    │    │    └── unfiltered-cols: (10-14)
  │         │    │    └── filters
  │         │    │         └── eq [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
@@ -553,7 +553,7 @@ upsert abc
       ├── fd: ()-->(10,12,18,19), (7)-->(11,13-17,20), (16)-->(13-15,17), (13)-->(14-17,21,22), (14,15)~~>(13,16,17), (14)~~>(15), (11,16)-->(23)
       ├── prune: (7,10-23)
       ├── reject-nulls: (13-17)
-      ├── interesting orderings: (+16) (+13) (+14,+15,+16)
+      ├── interesting orderings: (+16 opt(10,12,18,19)) (+13 opt(10,12,18,19)) (+14,+16 opt(10,12,18,19))
       ├── project
       │    ├── columns: column19:19(int!null) y:7(int!null) column10:10(int!null) column11:11(int) column12:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal) b_new:18(int!null)
       │    ├── volatile
@@ -561,7 +561,7 @@ upsert abc
       │    ├── fd: ()-->(10,12,18,19), (7)-->(11,13-17), (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)~~>(15)
       │    ├── prune: (7,10-19)
       │    ├── reject-nulls: (13-17)
-      │    ├── interesting orderings: (+16) (+13) (+14,+15,+16)
+      │    ├── interesting orderings: (+16 opt(10,12,18,19)) (+13 opt(10,12,18,19)) (+14,+16 opt(10,12,18,19))
       │    ├── project
       │    │    ├── columns: b_new:18(int!null) y:7(int!null) column10:10(int!null) column11:11(int) column12:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal)
       │    │    ├── volatile
@@ -569,7 +569,7 @@ upsert abc
       │    │    ├── fd: ()-->(10,12,18), (7)-->(11,13-17), (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)~~>(15)
       │    │    ├── prune: (7,10-18)
       │    │    ├── reject-nulls: (13-17)
-      │    │    ├── interesting orderings: (+16) (+13) (+14,+15,+16)
+      │    │    ├── interesting orderings: (+16 opt(10,12,18)) (+13 opt(10,12,18)) (+14,+16 opt(10,12,18))
       │    │    ├── left-join (hash)
       │    │    │    ├── columns: y:7(int!null) column10:10(int!null) column11:11(int) column12:12(int!null) a:13(int) b:14(int) c:15(int) rowid:16(int) abc.crdb_internal_mvcc_timestamp:17(decimal)
       │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
@@ -578,7 +578,7 @@ upsert abc
       │    │    │    ├── fd: ()-->(10,12), (7)-->(11,13-17), (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)~~>(15)
       │    │    │    ├── prune: (14-17)
       │    │    │    ├── reject-nulls: (13-17)
-      │    │    │    ├── interesting orderings: (+16) (+13) (+14,+15,+16)
+      │    │    │    ├── interesting orderings: (+16) (+13) (+14,+16)
       │    │    │    ├── ensure-upsert-distinct-on
       │    │    │    │    ├── columns: y:7(int!null) column10:10(int!null) column11:11(int) column12:12(int!null)
       │    │    │    │    ├── grouping columns: y:7(int!null)
@@ -591,13 +591,13 @@ upsert abc
       │    │    │    │    │    ├── volatile
       │    │    │    │    │    ├── fd: ()-->(10,12)
       │    │    │    │    │    ├── prune: (7,10-12)
-      │    │    │    │    │    ├── interesting orderings: (+7)
+      │    │    │    │    │    ├── interesting orderings: (+7 opt(10,12))
       │    │    │    │    │    ├── project
       │    │    │    │    │    │    ├── columns: column10:10(int!null) column11:11(int) y:7(int!null)
       │    │    │    │    │    │    ├── volatile
       │    │    │    │    │    │    ├── fd: ()-->(10)
       │    │    │    │    │    │    ├── prune: (7,10,11)
-      │    │    │    │    │    │    ├── interesting orderings: (+7)
+      │    │    │    │    │    │    ├── interesting orderings: (+7 opt(10))
       │    │    │    │    │    │    ├── project
       │    │    │    │    │    │    │    ├── columns: y:7(int!null)
       │    │    │    │    │    │    │    ├── prune: (7)
@@ -642,7 +642,7 @@ upsert abc
       │    │    │    │    ├── key: (16)
       │    │    │    │    ├── fd: (16)-->(13-15,17), (13)-->(14-17), (14,15)~~>(13,16,17), (14)-->(15)
       │    │    │    │    ├── prune: (13-17)
-      │    │    │    │    ├── interesting orderings: (+16) (+13) (+14,+15,+16)
+      │    │    │    │    ├── interesting orderings: (+16) (+13) (+14,+16)
       │    │    │    │    └── unfiltered-cols: (13-17)
       │    │    │    └── filters
       │    │    │         └── eq [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]

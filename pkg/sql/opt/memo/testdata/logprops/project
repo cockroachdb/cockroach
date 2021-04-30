@@ -19,7 +19,7 @@ project
  ├── key: (1)
  ├── fd: ()-->(7), (1)-->(2,6)
  ├── prune: (1,2,6,7)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1 opt(7))
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) crdb_internal_mvcc_timestamp:5(decimal)
  │    ├── key: (1)
@@ -92,7 +92,6 @@ project
                 │              │    ├── key: ()
                 │              │    ├── fd: ()-->(6-9)
                 │              │    ├── prune: (7-9)
-                │              │    ├── interesting orderings: (+6)
                 │              │    ├── scan kuv
                 │              │    │    ├── columns: k:6(int!null) u:7(float) v:8(string) kuv.crdb_internal_mvcc_timestamp:9(decimal)
                 │              │    │    ├── key: (6)
@@ -253,7 +252,6 @@ project
                           ├── key: ()
                           ├── fd: ()-->(5-9)
                           ├── prune: (6-9)
-                          ├── interesting orderings: (+5) (-7,+8,+5)
                           ├── scan xysd
                           │    ├── columns: x:5(int!null) xysd.y:6(int) s:7(string) d:8(decimal!null) xysd.crdb_internal_mvcc_timestamp:9(decimal)
                           │    ├── key: (5)
@@ -310,7 +308,6 @@ project
                                     ├── key: ()
                                     ├── fd: ()-->(10-14)
                                     ├── prune: (11-14)
-                                    ├── interesting orderings: (+10) (-12,+13,+10)
                                     ├── scan xysd
                                     │    ├── columns: x:10(int!null) y:11(int) s:12(string) d:13(decimal!null) xysd.crdb_internal_mvcc_timestamp:14(decimal)
                                     │    ├── key: (10)
@@ -390,7 +387,7 @@ project
  ├── key: (1)
  ├── fd: (1)==(6), (6)==(1)
  ├── prune: (1,6)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+(1|6))
  ├── scan xysd
  │    ├── columns: x:1(int!null)
  │    ├── key: (1)

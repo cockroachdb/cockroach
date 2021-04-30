@@ -183,4 +183,4 @@ scan xyzs@secondary
  ├── key: (1)
  ├── fd: ()-->(4)
  ├── prune: (1)
- └── interesting orderings: (+1) (-4)
+ └── interesting orderings: (+1 opt(4))

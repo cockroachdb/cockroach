@@ -37,14 +37,14 @@ insert abcde
       ├── volatile
       ├── fd: ()-->(12,14), (9)-->(15)
       ├── prune: (9,12-15)
-      ├── interesting orderings: (+9)
+      ├── interesting orderings: (+9 opt(12,14))
       ├── project
       │    ├── columns: column12:12(int!null) column13:13(int) column14:14(int) y:9(int!null)
       │    ├── cardinality: [0 - 10]
       │    ├── volatile
       │    ├── fd: ()-->(12,14)
       │    ├── prune: (9,12-14)
-      │    ├── interesting orderings: (+9)
+      │    ├── interesting orderings: (+9 opt(12,14))
       │    ├── limit
       │    │    ├── columns: y:9(int!null) z:10(float)
       │    │    ├── internal-ordering: +9,+10
@@ -105,14 +105,14 @@ project
            ├── volatile
            ├── fd: ()-->(12,14), (9)-->(15)
            ├── prune: (9,12-15)
-           ├── interesting orderings: (+9)
+           ├── interesting orderings: (+9 opt(12,14))
            ├── project
            │    ├── columns: column12:12(int!null) column13:13(int) column14:14(int) y:9(int!null)
            │    ├── cardinality: [0 - 10]
            │    ├── volatile
            │    ├── fd: ()-->(12,14)
            │    ├── prune: (9,12-14)
-           │    ├── interesting orderings: (+9)
+           │    ├── interesting orderings: (+9 opt(12,14))
            │    ├── limit
            │    │    ├── columns: y:9(int!null) z:10(float)
            │    │    ├── internal-ordering: +9,+10
@@ -288,7 +288,7 @@ project
            │    │    │    ├── key: (8)
            │    │    │    ├── fd: ()-->(9), (8)-->(10,11)
            │    │    │    ├── prune: (8,10,11)
-           │    │    │    ├── interesting orderings: (+8)
+           │    │    │    ├── interesting orderings: (+8 opt(9))
            │    │    │    ├── scan xyz
            │    │    │    │    ├── columns: x:8(string!null) y:9(int!null) z:10(float) xyz.crdb_internal_mvcc_timestamp:11(decimal)
            │    │    │    │    ├── key: (8)

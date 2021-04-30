@@ -67,7 +67,8 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 ) {
 	orders := DeriveInterestingOrderings(input)
 	intraOrd := private.Ordering
-	for _, o := range orders {
+	for _, ord := range orders {
+		o := ord.ToOrdering()
 		// We are looking for a prefix of o that satisfies the intra-group ordering
 		// if we ignore grouping columns.
 		oIdx, intraIdx := 0, 0

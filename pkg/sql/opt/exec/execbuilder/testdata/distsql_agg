@@ -975,7 +975,7 @@ group-by
  │    ├── fd: ()-->(1)
  │    ├── ordering: +2 opt(1) [actual: +2]
  │    ├── prune: (2)
- │    └── interesting orderings: (+1,+2) (+2,+1)
+ │    └── interesting orderings: (+2 opt(1))
  └── aggregations
       └── count-rows [as=count_rows:5]
 

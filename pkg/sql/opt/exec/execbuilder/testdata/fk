@@ -411,7 +411,7 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • merge join (anti)
             │ equality: (p_new) = (p)
             │ right cols are key
             │
@@ -667,7 +667,7 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • merge join (anti)
             │ equality: (p_new) = (p)
             │ right cols are key
             │
@@ -811,7 +811,7 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • merge join (anti)
             │ equality: (p_new) = (p)
             │ right cols are key
             │
@@ -853,7 +853,7 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • merge join (anti)
             │ equality: (y_new) = (x)
             │ right cols are key
             │
