@@ -1734,6 +1734,7 @@ bins = \
   bin/publish-provisional-artifacts \
   bin/optfmt \
   bin/optgen \
+  bin/reduce \
   bin/returncheck \
   bin/roachvet \
   bin/roachprod \
