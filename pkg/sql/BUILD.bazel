@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/util/fsm/gen:REPORTS.bzl", "gen_reports")
 
 go_library(
     name = "sql",
@@ -650,4 +651,11 @@ stringer(
     name = "gen-nodestatus-stringer",
     src = "distsql_physical_planner.go",
     typ = "NodeStatus",
+)
+
+gen_reports(
+    name = "txnstatetransitions_report",
+    dep = "//pkg/sql",
+    starting_state_name = "stateNoTxn",
+    transitions_variable = "TxnStateTransitions",
 )
