@@ -130,6 +130,15 @@ export class LocalSetting<S, T> {
   };
 
   /**
+   * Selector which retrieves this setting from the LocalSettingsState
+   * and return as an array.
+   * @param state The current top-level redux state of the application.
+   */
+  selectorToArray = (state: S): string[] => {
+    return this._value(state) ? this._value(state).toString().split(",") : null;
+  };
+
+  /**
    * Construct a new LocalSetting manager.
    * @param key The unique key of the setting.
    * @param innerSelector A selector which retrieves the LocalSettingsState from
