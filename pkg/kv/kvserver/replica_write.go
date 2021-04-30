@@ -69,15 +69,17 @@ func (r *Replica) executeWriteBatch(
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
-	// TODO(nvanbenschoten): unlike on the read-path (executeReadOnlyBatch), we
-	// don't synchronize with r.readOnlyCmdMu here. Is that ok? What if the
-	// replica is destroyed concurrently with a write? We won't be able to
-	// successfully propose as the lease will presumably have changed, but what
-	// if we hit an error during evaluation (e.g. a ConditionFailedError)?
+	// Even though we're not a read-only operation by definition, we have to
+	// take out a read lock on readOnlyCmdMu while performing any reads during
+	// pre-Raft evaluation (e.g. conditional puts), otherwise we can race with
+	// replica removal and get evaluated on an empty replica. We must release
+	// this lock before Raft execution, to avoid deadlocks.
+	r.readOnlyCmdMu.RLock()
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceed(ctx, ba, g)
 	if err != nil {
+		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -135,6 +137,7 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
+		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
@@ -143,6 +146,13 @@ func (r *Replica) executeWriteBatch(
 	// evalAndPropose.
 	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
+		r.readOnlyCmdMu.RUnlock()
+		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+			r.raftMu.Lock()
+			defer r.raftMu.Unlock()
+			// This exits with a fatal error, but returns in tests.
+			return nil, g, r.setCorruptRaftMuLocked(ctx, cErr)
+		}
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
 				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
@@ -161,6 +171,10 @@ func (r *Replica) executeWriteBatch(
 	if maxLeaseIndex != 0 {
 		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
+
+	// We are done with pre-Raft evaluation at this point, and have to release the
+	// read-only command lock to avoid deadlocks during Raft evaluation.
+	r.readOnlyCmdMu.RUnlock()
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
