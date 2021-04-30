@@ -75,17 +75,20 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	var desc *roachpb.RangeDescriptor
 	var replicaID roachpb.ReplicaID
 	{
+		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
 
 		// Detect if we were already removed.
 		if !opts.ignoreDestroyStatus && rep.mu.destroyStatus.Removed() {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			return nil // already removed, noop
 		}
 
 		desc = rep.mu.state.Desc
 		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			// NB: This should not in any way be possible starting in 20.1.
 			log.Fatalf(ctx, "replica descriptor's ID has changed (%s >= %s)",
 				repDesc.ReplicaID, nextReplicaID)
@@ -95,6 +98,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		/// uninitialized.
 		if !rep.isInitializedRLocked() {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "uninitialized replica cannot be removed with removeInitializedReplica: %v",
 				rep)
 		}
@@ -104,6 +108,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 			destroyReasonRemoved)
 		replicaID = rep.mu.replicaID
 		rep.mu.Unlock()
+		rep.readOnlyCmdMu.Unlock()
 	}
 
 	// Proceed with the removal, all errors encountered from here down are fatal.
@@ -181,6 +186,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 
 	// Sanity check this removal and set the destroyStatus.
 	{
+		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
 
 		// Detect if we were already removed, this is a fatal error
@@ -188,11 +194,13 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		// before calling this method.
 		if rep.mu.destroyStatus.Removed() {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
 		}
 
 		if rep.isInitializedRLocked() {
 			rep.mu.Unlock()
+			rep.readOnlyCmdMu.Unlock()
 			log.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
 		}
 
@@ -201,6 +209,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 			destroyReasonRemoved)
 
 		rep.mu.Unlock()
+		rep.readOnlyCmdMu.Unlock()
 	}
 
 	// Proceed with the removal.

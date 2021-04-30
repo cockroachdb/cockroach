@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestManualReplication(t *testing.T) {
@@ -256,4 +258,29 @@ func TestStopServer(t *testing.T) {
 	if err := httputil.GetJSON(httpClient1, url, &response); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestExpirationBasedLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	key := tc.ScratchRangeWithExpirationLease(t)
+	repl := store.LookupReplica(roachpb.RKey(key))
+	lease, _ := repl.GetLease()
+	require.NotNil(t, lease.Expiration)
+
+	// Verify idempotence of ScratchRangeWithExpirationLease
+	keyAgain := tc.ScratchRangeWithExpirationLease(t)
+	replAgain := store.LookupReplica(roachpb.RKey(keyAgain))
+	require.Equal(t, repl, replAgain)
 }

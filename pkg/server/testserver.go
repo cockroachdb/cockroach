@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -312,6 +314,26 @@ func (ts *TestServer) MigrationManager() interface{} {
 		return ts.migMgr
 	}
 	return nil
+}
+
+// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
+func (ts *TestServer) HeartbeatNodeLiveness() error {
+	if ts == nil {
+		return errors.New("no node liveness instance")
+	}
+	nl := ts.nodeLiveness
+	l, err := nl.Self()
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
+			break
+		}
+	}
+	return err
 }
 
 // RPCContext returns the rpc context used by the TestServer.
@@ -905,6 +927,18 @@ func (ts *TestServer) ForceTableGC(
 	}
 	_, pErr := kv.SendWrapped(ctx, ts.distSender, &gcr)
 	return pErr.GoError()
+}
+
+// ScratchRangeWithExpirationLease is like ScratchRange but creates a range with
+// an expiration based lease.
+func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
+	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
+		roachpb.RKey("\x00aaa-testing")}, nil))
+	_, _, err := ts.SplitRange(scratchKey)
+	if err != nil {
+		return nil, err
+	}
+	return scratchKey, nil
 }
 
 type testServerFactoryImpl struct{}

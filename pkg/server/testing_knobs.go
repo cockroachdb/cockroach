@@ -65,6 +65,9 @@ type TestingKnobs struct {
 	// TODO(irfansharif): Update users of this testing knob to use the
 	// appropriate clusterversion.Handle instead.
 	BootstrapVersionOverride roachpb.Version
+	// Clock Source used to an inject a custom clock for testing the server. It is
+	// typically either an hlc.HybridManualClock or hlc.ManualClock.
+	ClockSource func() int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
