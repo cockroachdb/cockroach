@@ -482,3 +482,33 @@ func TestExportPrivileges(t *testing.T) {
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.NoError(t, err)
 }
+
+func TestExportTargetFileSizeSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `
+CREATE TABLE greeting_table (x string);
+INSERT INTO greeting_table VALUES ('hello'), ('hi'), ('morning'), ('night');
+SET CLUSTER SETTING bulkio.export.target_file_size='1b';
+`)
+
+	// Chunk 4 rows into a file but since we have a smaller target file size we
+	// should be respecting that instead.
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo' WITH chunk_rows='4' FROM TABLE greeting_table`)
+	files, err := ioutil.ReadDir(filepath.Join(dir, "foo"))
+	require.NoError(t, err)
+
+	require.Equal(t, 4, len(files))
+}

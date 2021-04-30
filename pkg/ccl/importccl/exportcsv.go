@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -31,6 +32,9 @@ import (
 
 const exportFilePatternPart = "%part%"
 const exportFilePatternDefault = exportFilePatternPart + ".csv"
+
+var targetFileSize = settings.RegisterByteSizeSetting("bulkio.export.target_file_size",
+	"target size of each csv file exported to the sink", 50<<20)
 
 // csvExporter data structure to augment the compression
 // and csv writer, encapsulating the internals to make
@@ -295,8 +299,12 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		done := false
 		for {
 			var rows int64
+			var bufferedBytes int64
 			writer.ResetBuffer()
 			for {
+				if bufferedBytes >= targetFileSize.Get(&sp.flowCtx.EvalCtx.Settings.SV) {
+					break
+				}
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
 				}
@@ -325,6 +333,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 					}
 					ed.Datum.Format(f)
 					csvRow[i] = f.String()
+					bufferedBytes += int64(len(f.String()))
 					f.Reset()
 				}
 				if err := writer.Write(csvRow); err != nil {
