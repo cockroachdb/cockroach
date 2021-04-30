@@ -1813,15 +1813,15 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/cluster-ui@^0.2.30":
-  version "0.2.30"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.30.tgz#2a2f96e2be242a08f3c24c9867489c0f4b3d1bb9"
-  integrity sha512-xf/TEGyUYS/U7CLJxDCgPg4BLeH1oKvpVinAk1FmwULSohVKfPAApKSJ9/jjPuutQ2ESJRSZdAblxUegYWYB9A==
+"@cockroachlabs/cluster-ui@^0.2.37":
+  version "0.2.37"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.37.tgz#a6a6d3013bf7f51f8c864f68e8a38a5688075b71"
+  integrity sha512-mYUcrK0TrIyoN4JHKOFbxJP6GTlblDwbGmGHMWEQKFYMkDdOoxqU7orkjvd7bTaQJ9HPo/zoLc9oHVgZcwvVbA==
   dependencies:
     "@babel/runtime" "^7.12.13"
-    "@cockroachlabs/crdb-protobuf-client" "^0.0.10-beta.0"
+    "@cockroachlabs/crdb-protobuf-client" "^0.0.11"
     "@cockroachlabs/icons" "0.3.0"
-    "@cockroachlabs/ui-components" "0.2.14-alpha.0"
+    "@cockroachlabs/ui-components" "0.2.19-alpha.2"
     "@popperjs/core" "^2.4.0"
     "@reduxjs/toolkit" "^1.5.0"
     babel-polyfill "^6.26.0"
@@ -1836,10 +1836,10 @@
     react-select "^4.3.0"
     reselect "^4.0.0"
 
-"@cockroachlabs/crdb-protobuf-client@^0.0.10-beta.0":
-  version "0.0.10-beta.0"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.10-beta.0.tgz#b1bb2283379d8cf9d75adf780ff19374b4485e65"
-  integrity sha512-FQ29hZTM7CnunHWG88a5pgWXYGy/aAFrW0tn0E0t++QG7BTGkDVEuPdPcoMSCEUcKbFpzYc7AaY050JnU27rAA==
+"@cockroachlabs/crdb-protobuf-client@^0.0.11":
+  version "0.0.11"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.11.tgz#02454d0800317bd0bea5487469009ed2ab8ad04a"
+  integrity sha512-ggW3HpjL1nD/YfJjO60K3tDXvAeuLn2VPCWYZS7O9C3puI/EKSaDduxPU6GcK8NglGqx9arvqYqdRJubxggahA==
 
 "@cockroachlabs/eslint-config@^0.1.11":
   version "0.1.11"
@@ -1849,18 +1849,24 @@
     "@typescript-eslint/parser" "^2.34.0"
     eslint-config-prettier "^6.11.0"
 
-"@cockroachlabs/icons@0.3.0", "@cockroachlabs/icons@^0.3.0":
+"@cockroachlabs/icons@0.3.0":
   version "0.3.0"
   resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.3.0.tgz#160573074396f266e92fcbe5e520c5ba1d8750f9"
   integrity sha512-GJxhlXy8Z3/PYFb9C3iM1dvU9wajGoaA/+VCj0an2ipfbkI2fhToq+h0b33vu7JuZ3dS4QMRjfVE4uhlyIUH2Q==
 
-"@cockroachlabs/ui-components@0.2.14-alpha.0":
-  version "0.2.14-alpha.0"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.14-alpha.0.tgz#d90a7ce6fbede9d8b177d9a940f24218c262d267"
-  integrity sha512-8zOZswstmBbJQxXmQ7yfEXEOEUJ4JT5xlzGQ5FD7z8sjy67UDXFoe6FMqFXrkpiFwlCrkK2Vd36LKhLvGY2xkA==
+"@cockroachlabs/icons@^0.4.1":
+  version "0.4.1"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/icons/-/icons-0.4.1.tgz#5772f94ce625279a4789f8e48c9b4e903c5bc5d7"
+  integrity sha512-JaiYFDhqhvGPqAFkHGCnEYiBe6Gas2HjqhLOQa4T5FRRMJ07liswOPARXyX120hTPwqEUaQyaHLxzqYDFwfdzQ==
+
+"@cockroachlabs/ui-components@0.2.19-alpha.2":
+  version "0.2.19-alpha.2"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/ui-components/-/ui-components-0.2.19-alpha.2.tgz#71c1323779db30a8fc5876d1e9b219e59155d9a5"
+  integrity sha512-vvFgptbRVpa97zEitqjLQNuwttgMUjV057xqrk3WMLhdC5Myo/o3Zv/ZUNmvMXls8aqBfhqeIEtNCgYkKkpaOw==
   dependencies:
-    "@cockroachlabs/icons" "^0.3.0"
+    "@cockroachlabs/icons" "^0.4.1"
     "@popperjs/core" "^2.4.3"
+    npm-run-all "^4.1.5"
     react-popper "^2.2.3"
 
 "@emotion/cache@^10.0.27":
