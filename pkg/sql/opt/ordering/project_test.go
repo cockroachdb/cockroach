@@ -39,7 +39,7 @@ func TestProject(t *testing.T) {
 
 	input := &testexpr.Instance{
 		Rel: &props.Relational{
-			OutputCols: opt.MakeColSet(1, 2, 3, 4),
+			OutputCols: opt.MakeColSet(1, 2, 3, 4, 6),
 			FuncDeps:   fds,
 		},
 	}
@@ -71,6 +71,14 @@ func TestProject(t *testing.T) {
 		},
 		{
 			req: "+5",
+			exp: "no",
+		},
+		{
+			// Regression test for #64399. projectCanProvideOrdering should not
+			// return true when the columns remaining in the ordering after
+			// simplification cannot be provided. This causes
+			// projectBuildChildReqOrdering to panic.
+			req: "+(5|6)",
 			exp: "no",
 		},
 	}
