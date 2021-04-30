@@ -16,6 +16,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -94,7 +96,22 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			}
 			val, valType = ws.EncodedDefault(), ws.Typ()
 		}
-		if err := u.Set(k, val, valType); err != nil {
+
+		// The system tenant (i.e. the KV layer) does not use the SettingsWatcher
+		// to propagate cluster version changes (it uses the BumpClusterVersion
+		// RPC). However, non-system tenants (i.e. SQL pods) (asynchronously) get
+		// word of the new cluster version below.
+		const versionSettingKey = "version"
+		if k == versionSettingKey && !s.codec.ForSystemTenant() {
+			var v clusterversion.ClusterVersion
+			if err := protoutil.Unmarshal([]byte(val), &v); err != nil {
+				log.Warningf(ctx, "failed to set cluster version: %v", err)
+			} else if err := s.settings.Version.SetActiveVersion(ctx, v); err != nil {
+				log.Warningf(ctx, "failed to set cluster version: %v", err)
+			} else {
+				log.Infof(ctx, "set cluster version to: %v", v)
+			}
+		} else if err := u.Set(k, val, valType); err != nil {
 			log.Warningf(ctx, "failed to set setting %s to %s: %v",
 				log.Safe(k), val, err)
 		}

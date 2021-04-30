@@ -44,6 +44,9 @@ func TestTenantLogic(t *testing.T) {
 	logictest.RunLogicTestWithDefaultConfig(
 		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
 		filepath.Join(testdataDir, logictestGlob))
+	logictest.RunLogicTestWithDefaultConfig(
+		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
+		filepath.Join("testdata/", logictestGlob))
 }
 
 func TestTenantSQLLiteLogic(t *testing.T) {

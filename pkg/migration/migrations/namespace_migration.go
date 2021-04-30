@@ -28,7 +28,7 @@ import (
 )
 
 func namespaceMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.SQLDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	// The migration runs in batches. For each batch, we need to materialize all
 	// the namespace rows in memory before updating the entries.

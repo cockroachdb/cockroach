@@ -77,9 +77,19 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	st := serverCfg.BaseConfig.Settings
 
-	// TODO(tbg): this has to be passed in. See the upgrade strategy in:
-	// https://github.com/cockroachdb/cockroach/issues/47919
-	if err := clusterversion.Initialize(ctx, st.Version.BinaryVersion(), &st.SV); err != nil {
+	// This value is injected in order to have something populated during startup.
+	// In the initial 20.2 release of multi-tenant clusters, no version state was
+	// ever populated in the version cluster setting. A value is populated during
+	// the activation of 21.1. See the documentation attached to the TenantCluster
+	// in migration/migrationcluster for more details on the tenant upgrade flow.
+	// Note that a the value of 21.1 is populated when a tenant cluster is created
+	// during 21.1 in crdb_internal.create_tenant.
+	//
+	// Note that the tenant will read the value in the system.settings table
+	// before accepting SQL connections.
+	if err := clusterversion.Initialize(
+		ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
+	); err != nil {
 		return err
 	}
 

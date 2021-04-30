@@ -76,8 +76,8 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewSQLMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.SQLDeps,
+						return migration.NewTenantMigration("test", cv, func(
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							ch <- canResume
@@ -196,7 +196,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewKVMigration("test", cv, func(
+						return migration.NewSystemMigration("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, c migration.Cluster,
 						) error {
 							return c.DB().Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
@@ -311,7 +311,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 						return versions
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (migration.Migration, bool) {
-						return migration.NewKVMigration("test", cv, func(
+						return migration.NewSystemMigration("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, c migration.Cluster,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
@@ -399,8 +399,8 @@ func TestPauseMigration(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return migration.NewSQLMigration("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps migration.SQLDeps,
+						return migration.NewTenantMigration("test", cv, func(
+							ctx context.Context, version clusterversion.ClusterVersion, deps migration.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							ch <- migrationEvent{

@@ -80,7 +80,7 @@ func (kv *kvNative) Update(rows, run int) error {
 		// Don't permute the rows, to be similar to SQL which sorts the spans in a
 		// batch.
 		for i := 0; i < rows; i++ {
-			b.Get(fmt.Sprintf("%s%08d", kv.prefix, i))
+			b.GetForUpdate(fmt.Sprintf("%s%08d", kv.prefix, i))
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			return err

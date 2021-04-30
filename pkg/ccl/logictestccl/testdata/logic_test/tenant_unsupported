@@ -35,40 +35,7 @@ SET experimental_enable_temp_tables = true
 statement ok
 CREATE TEMP TABLE users (id UUID, city STRING, CONSTRAINT "primary" PRIMARY KEY (id ASC, city ASC))
 
-# Missing status server
-
-statement error operation is unsupported in multi-tenancy mode
-SHOW SESSIONS
-
-statement error operation is unsupported in multi-tenancy mode
-SHOW QUERIES
-
-statement error operation is unsupported in multi-tenancy mode
-CANCEL QUERY ''
-
-statement error operation is unsupported in multi-tenancy mode
-CANCEL SESSION ''
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.node_transactions
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.node_sessions
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.node_queries
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.node_contention_events
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.cluster_sessions
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.cluster_queries
-
-statement error operation is unsupported in multi-tenancy mode
-SELECT * FROM crdb_internal.cluster_contention_events
+# Cannot read store or node status
 
 statement error operation is unsupported in multi-tenancy mode
 SELECT * FROM crdb_internal.kv_store_status
@@ -79,7 +46,7 @@ SELECT * FROM crdb_internal.kv_node_status
 # Cannot manipulate zone configurations
 
 # Selecting from crdb_internal.zones is allowed but no data is returned.
-query IITTTTTTTTTTT
+query IITTTTTTTTTTTT
 SELECT * FROM crdb_internal.zones
 ----
 
