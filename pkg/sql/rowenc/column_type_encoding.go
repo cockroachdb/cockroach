@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -99,9 +100,9 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return encoding.EncodeStringDescending(b, string(*t)), nil
 	case *tree.DBox2D:
 		if dir == encoding.Ascending {
-			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox)
+			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox.BoundingBox)
 		}
-		return encoding.EncodeBox2DDescending(b, t.CartesianBoundingBox)
+		return encoding.EncodeBox2DDescending(b, t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
 		so := t.Geography.SpatialObjectRef()
 		if dir == encoding.Ascending {
@@ -306,13 +307,15 @@ func DecodeTableKey(
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
 	case types.Box2DFamily:
-		var r geo.CartesianBoundingBox
+		var r geopb.BoundingBox
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBox2DAscending(key)
 		} else {
 			rkey, r, err = encoding.DecodeBox2DDescending(key)
 		}
-		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: r}), rkey, err
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: r},
+		}), rkey, err
 	case types.GeographyFamily:
 		g := a.NewDGeographyEmpty()
 		so := g.Geography.SpatialObjectRef()
@@ -469,7 +472,7 @@ func EncodeTableValue(
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
 	case *tree.DBox2D:
-		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox)
+		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
 		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
 	case *tree.DGeometry:
@@ -599,7 +602,9 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: data}), b, nil
+		return a.NewDBox2D(tree.DBox2D{
+			CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: data},
+		}), b, nil
 	case types.GeographyFamily:
 		g := a.NewDGeographyEmpty()
 		so := g.Geography.SpatialObjectRef()
@@ -1395,7 +1400,7 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
 	case *tree.DBox2D:
-		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox)
+		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox.BoundingBox)
 	case *tree.DGeography:
 		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObjectRef())
 	case *tree.DGeometry:
