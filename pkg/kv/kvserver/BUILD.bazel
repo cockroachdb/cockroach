@@ -10,6 +10,7 @@ go_library(
         "allocator.go",
         "allocator_scorer.go",
         "cclglue.go",
+        "compact_span_client.go",
         "consistency_queue.go",
         "debug_print.go",
         "doc.go",

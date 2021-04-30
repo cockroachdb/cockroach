@@ -3102,14 +3102,6 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
-	// CompactEngineSpan is used to compact an engine key span at the given
-	// (nodeID, storeID). If we add more overloads to the compact_span builtin,
-	// this parameter list should be changed to a struct union to accommodate
-	// those overloads.
-	CompactEngineSpan(
-		ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
-	) error
-
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3118,6 +3110,14 @@ type EvalPlanner interface {
 		member security.SQLUsername,
 	) (map[security.SQLUsername]bool, error)
 }
+
+// CompactEngineSpanFunc is used to compact an engine key span at the given
+// (nodeID, storeID). If we add more overloads to the compact_span builtin,
+// this parameter list should be changed to a struct union to accommodate
+// those overloads.
+type CompactEngineSpanFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) error
 
 // EvalSessionAccessor is a limited interface to access session variables.
 type EvalSessionAccessor interface {
@@ -3425,6 +3425,9 @@ type EvalContext struct {
 	SQLLivenessReader sqlliveness.Reader
 
 	SQLStatsResetter SQLStatsResetter
+
+	// CompactEngineSpan is used to force compaction of a span in a store.
+	CompactEngineSpan CompactEngineSpanFunc
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
