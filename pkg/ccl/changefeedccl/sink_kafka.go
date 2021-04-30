@@ -59,13 +59,25 @@ func init() {
 	sarama.Logger = &kafkaLogAdapter{ctx: ctx}
 }
 
+// kafkaClient is a small interface restricting the functionality in sarama.Client
+type kafkaClient interface {
+	// Partitions returns the sorted list of all partition IDs for the given topic.
+	Partitions(topic string) ([]int32, error)
+	// RefreshMetadata takes a list of topics and queries the cluster to refresh the
+	// available metadata for those topics. If no topics are provided, it will refresh
+	// metadata for all topics.
+	RefreshMetadata(topics ...string) error
+	// Close closes kafka connection.
+	Close() error
+}
+
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
 // calls to Emit and Flush should be from the same goroutine.
 type kafkaSink struct {
 	ctx            context.Context
 	bootstrapAddrs string
 	kafkaCfg       *sarama.Config
-	client         sarama.Client
+	client         kafkaClient
 	producer       sarama.AsyncProducer
 	topics         map[descpb.ID]string
 
@@ -147,17 +159,17 @@ func (s *kafkaSink) start() {
 
 // Dial implements the Sink interface.
 func (s *kafkaSink) Dial() error {
-	var err error
-	s.client, err = sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), s.kafkaCfg)
+	client, err := sarama.NewClient(strings.Split(s.bootstrapAddrs, `,`), s.kafkaCfg)
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
 	}
-	s.producer, err = sarama.NewAsyncProducerFromClient(s.client)
+	s.producer, err = sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.CannotConnectNow,
 			`connecting to kafka: %s`, s.bootstrapAddrs)
 	}
+	s.client = client
 	s.start()
 	return nil
 }
