@@ -22,18 +22,15 @@ func projectCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingCho
 	proj := expr.(*memo.ProjectExpr)
 	inputCols := proj.Input.Relational().OutputCols
 
-	if required.CanProjectCols(inputCols) {
-		return true
-	}
-
-	// We may be able to "remap" columns using the internal FD set.
-	if fdSet := proj.InternalFDs(); required.CanSimplify(fdSet) {
-		simplified := required.Copy()
+	// Use a simplified ordering if it exists. This must be kept consistent with
+	// projectBuildChildReqOrdering, which always simplifies the ordering if
+	// possible.
+	simplified := *required
+	if fdSet := proj.InternalFDs(); simplified.CanSimplify(fdSet) {
+		simplified = required.Copy()
 		simplified.Simplify(fdSet)
-		return simplified.CanProjectCols(inputCols)
 	}
-
-	return false
+	return simplified.CanProjectCols(inputCols)
 }
 
 func projectBuildChildReqOrdering(

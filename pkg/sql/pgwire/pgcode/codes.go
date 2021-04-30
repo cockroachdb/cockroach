@@ -374,17 +374,8 @@ var (
 	// RangeUnavailable signals that some data from the cluster cannot be
 	// accessed (e.g. because all replicas awol).
 	RangeUnavailable = MakeCode("58C00")
-	// DeprecatedRangeUnavailable is code that we used for RangeUnavailable until 19.2.
-	// 20.1 needs to recognize it coming from 19.2 nodes.
-	// TODO(andrei): remove in 20.2.
-	DeprecatedRangeUnavailable = MakeCode("XXC00")
 
 	// InternalConnectionFailure refers to a networking error encountered
 	// internally on a connection between different Cockroach nodes.
 	InternalConnectionFailure = MakeCode("58C01")
-	// DeprecatedInternalConnectionFailure is code that we used for
-	// InternalConnectionFailure until 19.2.
-	// 20.1 needs to recognize it coming from 19.2 nodes.
-	// TODO(andrei): remove in 20.2.
-	DeprecatedInternalConnectionFailure = ConnectionFailure
 )

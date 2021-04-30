@@ -68,7 +68,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ exprs $(location lang.opt)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
 )
 
 genrule(
@@ -78,7 +78,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/langgen) -out $@ ops $(location lang.opt)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/langgen"],
 )
 
 stringer(
