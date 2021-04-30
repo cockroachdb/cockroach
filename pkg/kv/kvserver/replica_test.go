@@ -3168,6 +3168,9 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 // TestReplicaAbortSpanReadError verifies that an error is returned
 // to the client in the event that a AbortSpan entry is found but is
 // not decodable.
+//
+// This doubles as a test that replica corruption errors are propagated
+// and handled correctly.
 func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
