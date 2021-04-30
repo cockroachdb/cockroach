@@ -23,6 +23,9 @@ import (
 // period of 10s". See grpc/grpc-go#2642.
 const minimumClientKeepaliveInterval = 10 * time.Second
 
+// This timeout is used to
+const serverKeepaliveTimeout = 2 * base.NetworkTimeout
+
 // To prevent unidirectional network partitions from keeping an unhealthy
 // connection alive, we use both client-side and server-side keepalive pings.
 var clientKeepalive = keepalive.ClientParameters{
@@ -43,7 +46,14 @@ var serverKeepalive = keepalive.ServerParameters{
 	// experiencing a network partition. gRPC will close the transport-level
 	// connection and all the pending RPCs (which may not have timeouts) will
 	// fail eagerly.
-	Timeout: base.NetworkTimeout,
+	//
+	// Exceeding this timeout is likely the cause of errors that look like the
+	// following. The reason is that, if this timeout is exceeded without seeing
+	// a ping, gRPC will close its underlying transport, which will cancel all
+	// gRPC streams. See internal/transport/http2_server.go in gRPC.
+	// ERROR: communication error: rpc error: code = Canceled desc = context canceled
+	// SQLSTATE: 58C01
+	Timeout: serverKeepaliveTimeout,
 }
 
 // By default, gRPC disconnects clients that send "too many" pings,
