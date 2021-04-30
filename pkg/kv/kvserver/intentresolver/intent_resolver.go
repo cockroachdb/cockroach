@@ -845,6 +845,23 @@ type ResolveOptions struct {
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
 	MinTimestamp hlc.Timestamp
+	// If set, instructs the IntentResolver to send the intent resolution requests
+	// immediately, instead of adding them to a batch and waiting for that batch
+	// to fill up with other intent resolution requests. This can be used to avoid
+	// any batching-induced latency, and should be used only by foreground traffic
+	// that is willing to trade off some throughput for lower latency.
+	//
+	// In addition to disabling batching, the option will also disable key count
+	// and byte size pagination. All requests will be sent in the same batch
+	// (subject to splitting on range boundaries) and no MaxSpanRequestKeys or
+	// TargetBytes limits will be assigned to limit the number or size of intents
+	// resolved by multi-point or ranged intent resolution. Users of the flag
+	// should be conscious of this.
+	//
+	// Because of these limitations, the flag is kept internal to this package. If
+	// we want to expose the flag and use it in more cases, we will first need to
+	// support key count and byte size pagination when bypassing the batcher.
+	sendImmediately bool
 }
 
 // lookupRangeID maps a key to a RangeID for best effort batching of intent
@@ -873,30 +890,45 @@ type lockUpdates interface {
 	Index(i int) roachpb.LockUpdate
 }
 
+var _ lockUpdates = (*txnLockUpdates)(nil)
+var _ lockUpdates = (*singleLockUpdate)(nil)
+var _ lockUpdates = (*sliceLockUpdates)(nil)
+
 type txnLockUpdates roachpb.Transaction
 
-// Len returns the number of LockSpans in a txnLockUpdates,
-// as part of the lockUpdates interface implementation.
+// Len implements the lockUpdates interface.
 func (t *txnLockUpdates) Len() int {
 	return len(t.LockSpans)
 }
 
-// Index produces a LockUpdate from the respective LockSpan, when called on
-// txnLockUpdates. txnLockUpdates implements the lockUpdates interface.
+// Index implements the lockUpdates interface.
 func (t *txnLockUpdates) Index(i int) roachpb.LockUpdate {
 	return roachpb.MakeLockUpdate((*roachpb.Transaction)(t), t.LockSpans[i])
 }
 
+type singleLockUpdate roachpb.LockUpdate
+
+// Len implements the lockUpdates interface.
+func (s *singleLockUpdate) Len() int {
+	return 1
+}
+
+// Index implements the lockUpdates interface.
+func (s *singleLockUpdate) Index(i int) roachpb.LockUpdate {
+	if i != 0 {
+		panic("index out of bounds")
+	}
+	return roachpb.LockUpdate(*s)
+}
+
 type sliceLockUpdates []roachpb.LockUpdate
 
-// Len returns the number of LockUpdates in sliceLockUpdates,
-// as part of the lockUpdates interface implementation.
+// Len implements the lockUpdates interface.
 func (s *sliceLockUpdates) Len() int {
 	return len(*s)
 }
 
-// Index trivially produces a LockUpdate when called on sliceLockUpdates.
-// sliceLockUpdates implements the lockUpdates interface.
+// Index implements the lockUpdates interface.
 func (s *sliceLockUpdates) Index(i int) roachpb.LockUpdate {
 	return (*s)[i]
 }
@@ -905,7 +937,17 @@ func (s *sliceLockUpdates) Index(i int) roachpb.LockUpdate {
 func (ir *IntentResolver) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, opts ResolveOptions,
 ) *kvpb.Error {
-	return ir.ResolveIntents(ctx, []roachpb.LockUpdate{intent}, opts)
+	if len(intent.EndKey) == 0 {
+		// If the caller wants to resolve a single point intent, let it send the
+		// request immediately. This is a performance optimization to resolve
+		// conflicting intents immediately for latency-sensitive requests.
+		//
+		// We don't set this flag when resolving a range of keys or when resolving
+		// multiple point intents (in ResolveIntents) due to the limitations around
+		// pagination described in the comment on ResolveOptions.sendImmediately.
+		opts.sendImmediately = true
+	}
+	return ir.resolveIntents(ctx, (*singleLockUpdate)(&intent), opts)
 }
 
 // ResolveIntents synchronously resolves intents according to opts.
@@ -943,35 +985,45 @@ func (ir *IntentResolver) resolveIntents(
 	var singleReq [1]kvpb.Request //gcassert:noescape
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
 
-	// Send the requests using their corresponding request batcher.
-	respChan := make(chan requestbatcher.Response, len(reqs))
-	for _, req := range reqs {
-		var batcher *requestbatcher.RequestBatcher
-		switch req.Method() {
-		case kvpb.ResolveIntent:
-			batcher = ir.irBatcher
-		case kvpb.ResolveIntentRange:
-			batcher = ir.irRangeBatcher
-		default:
-			panic("unexpected")
+	// Send the requests ...
+	if opts.sendImmediately {
+		// ... using a single batch.
+		b := &kv.Batch{}
+		b.AddRawRequest(reqs...)
+		if err := ir.db.Run(ctx, b); err != nil {
+			return b.MustPErr()
 		}
-		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
-			return kvpb.NewError(err)
-		}
-	}
-	// Collect responses.
-	for range reqs {
-		select {
-		case resp := <-respChan:
-			if resp.Err != nil {
-				return kvpb.NewError(resp.Err)
+	} else {
+		// ... using their corresponding request batcher.
+		respChan := make(chan requestbatcher.Response, len(reqs))
+		for _, req := range reqs {
+			var batcher *requestbatcher.RequestBatcher
+			switch req.Method() {
+			case kvpb.ResolveIntent:
+				batcher = ir.irBatcher
+			case kvpb.ResolveIntentRange:
+				batcher = ir.irRangeBatcher
+			default:
+				panic("unexpected")
 			}
-			_ = resp.Resp // ignore the response
-		case <-ctx.Done():
-			return kvpb.NewError(ctx.Err())
-		case <-ir.stopper.ShouldQuiesce():
-			return kvpb.NewErrorf("stopping")
+			rangeID := ir.lookupRangeID(ctx, req.Header().Key)
+			if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
+				return kvpb.NewError(err)
+			}
+		}
+		// Collect responses.
+		for range reqs {
+			select {
+			case resp := <-respChan:
+				if resp.Err != nil {
+					return kvpb.NewError(resp.Err)
+				}
+				_ = resp.Resp // ignore the response
+			case <-ctx.Done():
+				return kvpb.NewError(ctx.Err())
+			case <-ir.stopper.ShouldQuiesce():
+				return kvpb.NewErrorf("stopping")
+			}
 		}
 	}
 	return nil
