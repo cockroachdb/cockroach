@@ -15,7 +15,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/storageccl/engineccl",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/bulk",
