@@ -14,19 +14,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func selectCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func selectCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// Select operator can always pass through ordering to its input.
 	return true
 }
 
 func selectBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 	return trimColumnGroups(required, &parent.(*memo.SelectExpr).Input.Relational().FuncDeps)
 }
@@ -37,9 +36,7 @@ func selectBuildChildReqOrdering(
 // equivalences that the input expression does not (for example a Select with an
 // equality condition); the columns in a group must be equivalent at the level
 // of the operator where the ordering is required.
-func trimColumnGroups(
-	required *physical.OrderingChoice, fds *props.FuncDepSet,
-) physical.OrderingChoice {
+func trimColumnGroups(required *props.OrderingChoice, fds *props.FuncDepSet) props.OrderingChoice {
 	res := *required
 	copied := false
 	for i := range res.Columns {
@@ -56,7 +53,7 @@ func trimColumnGroups(
 	return res
 }
 
-func selectBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func selectBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	s := expr.(*memo.SelectExpr)
 	rel := s.Relational()
 	// We don't need to remap columns, but we want to remove columns that are now

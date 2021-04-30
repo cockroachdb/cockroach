@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 // DeriveInterestingOrderings calculates and returns the
@@ -131,7 +130,7 @@ func interestingOrderingsForGroupBy(rel memo.RelExpr) opt.OrderingSet {
 
 func interestingOrderingsForLimit(rel memo.RelExpr) opt.OrderingSet {
 	res := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
-	ord := rel.Private().(*physical.OrderingChoice).ToOrdering()
+	ord := rel.Private().(*props.OrderingChoice).ToOrdering()
 	if ord.Empty() {
 		return res
 	}

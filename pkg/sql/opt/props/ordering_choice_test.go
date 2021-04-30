@@ -8,18 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package physical_test
+package props_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
 func TestOrderingChoice_FromOrdering(t *testing.T) {
-	var oc physical.OrderingChoice
+	var oc props.OrderingChoice
 	oc.FromOrdering(opt.Ordering{1, -2, 3})
 	if exp, actual := "+1,-2,+3", oc.String(); exp != actual {
 		t.Errorf("expected %s, got %s", exp, actual)
@@ -43,7 +42,7 @@ func TestOrderingChoice_ToOrdering(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := physical.ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		ordering := choice.ToOrdering()
 		if len(ordering) != len(tc.o) {
 			t.Errorf("%s: expected %s, actual: %s", tc.s, tc.o, ordering)
@@ -69,7 +68,7 @@ func TestOrderingChoice_ColSet(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := physical.ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		colSet := choice.ColSet()
 		if !colSet.Equals(tc.cs) {
 			t.Errorf("%s: expected %s, actual: %s", tc.s, tc.cs, colSet)
@@ -111,8 +110,8 @@ func TestOrderingChoice_Implies(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		left := physical.ParseOrderingChoice(tc.left)
-		right := physical.ParseOrderingChoice(tc.right)
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
 		if left.Implies(&right) != tc.expected {
 			if tc.expected {
 				t.Errorf("expected %s to imply %s", tc.left, tc.right)
@@ -195,7 +194,7 @@ func TestOrderingChoice_Intersection(t *testing.T) {
 		},
 	}
 
-	getRes := func(left, right physical.OrderingChoice) string {
+	getRes := func(left, right props.OrderingChoice) string {
 		if !left.Intersects(&right) {
 			return "NO"
 		}
@@ -203,8 +202,8 @@ func TestOrderingChoice_Intersection(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		left := physical.ParseOrderingChoice(tc.left)
-		right := physical.ParseOrderingChoice(tc.right)
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
 
 		res := getRes(left, right)
 		if res != tc.expected {
@@ -244,7 +243,7 @@ func TestOrderingChoice_SubsetOfCols(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := physical.ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		if choice.SubsetOfCols(tc.cs) != tc.expected {
 			if tc.expected {
 				t.Errorf("%s: expected cols to be subset of %s", tc.s, tc.cs)
@@ -276,7 +275,7 @@ func TestOrderingChoice_CanProjectCols(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := physical.ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		if choice.CanProjectCols(tc.cs) != tc.expected {
 			if tc.expected {
 				t.Errorf("%s: expected CanProject(%s)", tc.s, tc.cs)
@@ -322,7 +321,7 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		ordering := physical.ParseOrderingChoice(tc.s)
+		ordering := props.ParseOrderingChoice(tc.s)
 		ordCol := opt.MakeOrderingColumn(tc.col, tc.desc)
 		if ordering.MatchesAt(tc.idx, ordCol) != tc.expected {
 			if tc.expected {
@@ -335,9 +334,9 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 }
 
 func TestOrderingChoice_Copy(t *testing.T) {
-	ordering := physical.ParseOrderingChoice("+1,-(2|3) opt(4,5,100)")
+	ordering := props.ParseOrderingChoice("+1,-(2|3) opt(4,5,100)")
 	copied := ordering.Copy()
-	col := physical.OrderingColumnChoice{Group: opt.MakeColSet(6, 7), Descending: true}
+	col := props.OrderingColumnChoice{Group: opt.MakeColSet(6, 7), Descending: true}
 	copied.Columns = append(copied.Columns, col)
 	copied.Optional.Remove(opt.ColumnID(100))
 
@@ -427,7 +426,7 @@ func TestOrderingChoice_Simplify(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		ordering := physical.ParseOrderingChoice(tc.s)
+		ordering := props.ParseOrderingChoice(tc.s)
 
 		if ordering.String() != tc.expected && !ordering.CanSimplify(tc.fdset) {
 			t.Errorf("%s: expected CanSimplify to be true", tc.s)
@@ -460,7 +459,7 @@ func TestOrderingChoice_Truncate(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := physical.ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		choice.Truncate(tc.n)
 		if choice.String() != tc.expected {
 			t.Errorf("%s: n=%d, expected: %s, actual: %s", tc.s, tc.n, tc.expected, choice.String())
@@ -483,7 +482,7 @@ func TestOrderingChoice_ProjectCols(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		choice := physical.ParseOrderingChoice(tc.s)
+		choice := props.ParseOrderingChoice(tc.s)
 		choice.ProjectCols(opt.MakeColSet(tc.cols...))
 		if choice.String() != tc.expected {
 			t.Errorf("%s: cols=%v, expected: %s, actual: %s", tc.s, tc.cols, tc.expected, choice.String())
@@ -512,8 +511,8 @@ func TestOrderingChoice_Equals(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		left := physical.ParseOrderingChoice(tc.left)
-		right := physical.ParseOrderingChoice(tc.right)
+		left := props.ParseOrderingChoice(tc.left)
+		right := props.ParseOrderingChoice(tc.right)
 		if left.Equals(&right) != tc.expected {
 			if tc.expected {
 				t.Errorf("expected %s to equal %s", tc.left, tc.right)
@@ -559,8 +558,8 @@ func TestOrderingChoice_PrefixIntersection(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		left := physical.ParseOrderingChoice(tc.x)
-		right := physical.ParseOrderingChoice(tc.y)
+		left := props.ParseOrderingChoice(tc.x)
+		right := props.ParseOrderingChoice(tc.y)
 
 		cols := tc.prefix.ToSet()
 

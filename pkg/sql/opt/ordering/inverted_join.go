@@ -14,10 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func invertedJoinCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func invertedJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// InvertedJoin can pass through its ordering if the ordering
 	// depends only on columns present in the input.
 	inputCols := expr.Child(0).(memo.RelExpr).Relational().OutputCols
@@ -25,10 +24,10 @@ func invertedJoinCanProvideOrdering(expr memo.RelExpr, required *physical.Orderi
 }
 
 func invertedJoinBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 
 	// We may need to remove ordering columns that are not output by the input
@@ -45,7 +44,7 @@ func invertedJoinBuildChildReqOrdering(
 	return trimColumnGroups(&res, &child.Relational().FuncDeps)
 }
 
-func invertedJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func invertedJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	invertedJoin := expr.(*memo.InvertedJoinExpr)
 	childProvided := invertedJoin.Input.ProvidedPhysical().Ordering
 

@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -101,8 +101,8 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		merge.JoinType = originalOp
 		merge.LeftEq = make(opt.Ordering, n)
 		merge.RightEq = make(opt.Ordering, n)
-		merge.LeftOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
-		merge.RightOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
+		merge.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		merge.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
 		for i := 0; i < n; i++ {
 			eqIdx, _ := colToEq.Get(int(o[i].ID()))
 			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
