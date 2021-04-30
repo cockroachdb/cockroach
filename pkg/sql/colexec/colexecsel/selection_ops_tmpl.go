@@ -76,15 +76,15 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			arg := col.Get(i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -94,18 +94,18 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		sel := batch.Selection()
 		_ = col.Get(n - 1)
 		for i := 0; i < n; i++ {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			// {{if .Left.Sliceable}}
 			//gcassert:bce
 			// {{end}}
 			arg := col.Get(i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -124,16 +124,16 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			arg1 := col1.Get(i)
 			arg2 := col2.Get(i)
 			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -144,6 +144,11 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 		_ = col1.Get(n - 1)
 		_ = col2.Get(n - 1)
 		for i := 0; i < n; i++ {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			// {{if .Left.Sliceable}}
 			//gcassert:bce
@@ -154,12 +159,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			// {{end}}
 			arg2 := col2.Get(i)
 			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -199,7 +199,6 @@ func (p *_OP_CONST_NAME) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
@@ -237,7 +236,6 @@ func (p *_OP_NAME) Next() coldata.Batch {
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
 		batch := p.Input.Next()
 		if batch.Length() == 0 {
