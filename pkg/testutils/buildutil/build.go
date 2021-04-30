@@ -33,15 +33,8 @@ const CDeps = "c-deps"
 // the test is skipped.
 //
 // Note that this test is skipped under stress, race, and short.
-//
-// The cgo parameter is now a no-op.
-// TODO(ajwerner): Remove the cgo parameter.
 func VerifyNoImports(
-	t testing.TB,
-	pkgPath string,
-	cgo bool,
-	forbiddenPkgs, forbiddenPrefixes []string,
-	allowlist ...string,
+	t testing.TB, pkgPath string, forbiddenPkgs, forbiddenPrefixes []string, allowlist ...string,
 ) {
 
 	skip.UnderRace(t)
@@ -57,7 +50,6 @@ func VerifyNoImports(
 	require.Len(t, pkgs, 1)
 	rootPkg := pkgs[0]
 	v := verifier{
-		cgo:               cgo,
 		rootPkg:           rootPkg,
 		forbiddenPkgs:     forbiddenPkgs,
 		forbiddenPrefixes: forbiddenPrefixes,
@@ -68,7 +60,6 @@ func VerifyNoImports(
 
 // verifier is used to verify that a package has valid imports.
 type verifier struct {
-	cgo               bool // check for some cgo imports
 	rootPkg           *packages.Package
 	forbiddenPkgs     []string
 	forbiddenPrefixes []string

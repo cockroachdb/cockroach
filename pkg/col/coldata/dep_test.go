@@ -21,10 +21,11 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/col/coldata", true,
+		"github.com/cockroachdb/cockroach/pkg/col/coldata",
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/catalog",
 			"github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
-		}, nil,
+		},
+		nil, // forbiddenPrefixes
 	)
 }

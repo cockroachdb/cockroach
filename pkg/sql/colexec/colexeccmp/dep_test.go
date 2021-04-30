@@ -20,8 +20,9 @@ func TestNoLinkForbidden(t *testing.T) {
 	// Prohibit introducing any new dependencies into this package since it
 	// should be very lightweight.
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp", true,
-		nil /* forbiddenPkgs */, nil, /* forbiddenPrefixes */
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp",
+		nil, /* forbiddenPkgs */
+		nil, /* forbiddenPrefixes */
 		// allowlist:
 		"github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
 		"github.com/cockroachdb/errors",

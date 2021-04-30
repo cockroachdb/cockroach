@@ -22,8 +22,7 @@ func TestNoLinkForbidden(t *testing.T) {
 	// Verify that the cockroach floss binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach-oss",
-		true,
-		nil,
+		nil, // forbiddenPkgs
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/ccl",
 			"github.com/cockroachdb/cockroach/pkg/ui/distccl",
