@@ -247,6 +247,8 @@ type zigzagJoiner struct {
 
 	rowAlloc           rowenc.EncDatumRowAlloc
 	fetchedInititalRow bool
+
+	scanStats execinfra.ScanStats
 }
 
 // zigzagJoinerBatchSize is a parameter which determines how many rows should
@@ -991,10 +993,13 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
+	z.scanStats = execinfra.GetScanStats(z.Ctx)
+
 	kvStats := execinfrapb.KVStats{
 		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
 		ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(z.Ctx)),
 	}
+	execinfra.PopulateKVMVCCStats(&kvStats, &z.scanStats)
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
 		if !ok {
