@@ -12,8 +12,8 @@ package row
 
 import (
 	"context"
-	"time"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
