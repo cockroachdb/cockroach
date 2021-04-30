@@ -77,6 +77,8 @@ var gopgBlockList20_2 = blocklist{
 
 var gopgIgnoreList21_2 = gopgIgnoreList21_1
 
+var gopgIgnoreList21_2 = gopgIgnoreList21_1
+
 var gopgIgnoreList21_1 = gopgIgnoreList20_2
 
 var gopgIgnoreList20_2 = blocklist{
