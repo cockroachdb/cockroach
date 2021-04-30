@@ -274,7 +274,11 @@ func runDecommission(ctx context.Context, t *test, c *cluster, nodes int, durati
 			db := c.Conn(ctx, pinnedNode)
 			defer db.Close()
 
-			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", c.InternalAddr(ctx, c.Node(pinnedNode))[0], node))
+			internalAddrs, err := c.InternalAddr(ctx, c.Node(pinnedNode))
+			if err != nil {
+				return err
+			}
+			sArgs := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", internalAddrs[0], node))
 			if err := c.StartE(ctx, c.Node(node), sArgs); err != nil {
 				return err
 			}
@@ -757,7 +761,11 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 			c.Wipe(ctx, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
-			joinAddr := c.InternalAddr(ctx, c.Node(joinNode))[0]
+			internalAddrs, err := c.InternalAddr(ctx, c.Node(joinNode))
+			if err != nil {
+				t.Fatal(err)
+			}
+			joinAddr := internalAddrs[0]
 			c.Start(ctx, t, c.Node(targetNode), startArgs(
 				fmt.Sprintf("-a=--join %s", joinAddr),
 			))

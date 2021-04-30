@@ -1130,7 +1130,11 @@ func (k kafkaManager) install(ctx context.Context) {
 
 func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	k.c.status("generating TLS certificates")
-	kafkaIP := k.c.InternalIP(ctx, k.nodes)[0]
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	kafkaIP := ips[0]
 
 	testCerts, err := makeTestCerts(kafkaIP)
 	if err != nil {
@@ -1295,23 +1299,43 @@ func (k kafkaManager) chaosLoop(
 }
 
 func (k kafkaManager) sinkURL(ctx context.Context) string {
-	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9092`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `kafka://` + ips[0] + `:9092`
 }
 
 func (k kafkaManager) sinkURLTLS(ctx context.Context) string {
-	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9093`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `kafka://` + ips[0] + `:9093`
 }
 
 func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
-	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9094`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `kafka://` + ips[0] + `:9094`
 }
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
-	return k.c.ExternalIP(ctx, k.nodes)[0] + `:9092`
+	ips, err := k.c.ExternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return ips[0] + `:9092`
 }
 
 func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
-	return `http://` + k.c.InternalIP(ctx, k.nodes)[0] + `:8081`
+	ips, err := k.c.InternalIP(ctx, k.nodes)
+	if err != nil {
+		k.c.t.Fatal(err)
+	}
+	return `http://` + ips[0] + `:8081`
 }
 
 func (k kafkaManager) createTopic(ctx context.Context, topic string) error {

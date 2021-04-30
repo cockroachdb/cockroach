@@ -117,8 +117,12 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 	// won't be able to connect. Give it the deadNodeAttr attribute that we've
 	// used as a negative constraint for "everything", which should prevent new
 	// replicas from being added to it.
+	internalAddrs, err := c.InternalAddr(ctx, c.Node(4))
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.Start(ctx, t, c.Node(3), startArgs(
-		"--args=--join="+c.InternalAddr(ctx, c.Node(4))[0],
+		"--args=--join="+internalAddrs[0],
 		"--args=--attrs="+deadNodeAttr,
 		"--args=--vmodule=raft=5,replicate_queue=5,allocator=5",
 		"--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms",
