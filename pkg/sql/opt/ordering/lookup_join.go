@@ -14,12 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func lookupOrIndexJoinCanProvideOrdering(
-	expr memo.RelExpr, required *physical.OrderingChoice,
-) bool {
+func lookupOrIndexJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// LookupJoin and IndexJoin can pass through their ordering if the ordering
 	// depends only on columns present in the input.
 	inputCols := expr.Child(0).(memo.RelExpr).Relational().OutputCols
@@ -50,10 +47,10 @@ func lookupOrIndexJoinCanProvideOrdering(
 }
 
 func lookupOrIndexJoinBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 
 	// We may need to remove ordering columns that are not output by the input
@@ -70,7 +67,7 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 	return trimColumnGroups(&res, &child.Relational().FuncDeps)
 }
 
-func indexJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func indexJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	// If an index join has a requirement on some input columns, those columns
 	// must be output columns (or equivalent to them). We may still need to remap
 	// using column equivalencies.
@@ -79,7 +76,7 @@ func indexJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice
 	return remapProvided(indexJoin.Input.ProvidedPhysical().Ordering, &rel.FuncDeps, rel.OutputCols)
 }
 
-func lookupJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	lookupJoin := expr.(*memo.LookupJoinExpr)
 	childProvided := lookupJoin.Input.ProvidedPhysical().Ordering
 

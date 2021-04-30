@@ -105,12 +105,12 @@ func TestDistinctOnProvided(t *testing.T) {
 					FuncDeps:   fd1eq5,
 				},
 				Provided: &physical.Provided{
-					Ordering: physical.ParseOrdering(tc.input),
+					Ordering: props.ParseOrdering(tc.input),
 				},
 			}
 			p := memo.GroupingPrivate{
 				GroupingCols: tc.groupingCols,
-				Ordering:     physical.ParseOrderingChoice(tc.internal),
+				Ordering:     props.ParseOrderingChoice(tc.internal),
 			}
 			var aggs memo.AggregationsExpr
 			tc.outCols.Difference(tc.groupingCols).ForEach(func(col opt.ColumnID) {
@@ -120,7 +120,7 @@ func TestDistinctOnProvided(t *testing.T) {
 				))
 			})
 			distinctOn := f.Memo().MemoizeDistinctOn(input, aggs, &p)
-			req := physical.ParseOrderingChoice(tc.required)
+			req := props.ParseOrderingChoice(tc.required)
 			res := distinctOnBuildProvided(distinctOn, &req).String()
 			if res != tc.expected {
 				t.Errorf("expected '%s', got '%s'", tc.expected, res)

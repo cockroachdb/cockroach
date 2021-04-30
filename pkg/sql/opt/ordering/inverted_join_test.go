@@ -104,21 +104,21 @@ func TestInvertedJoinProvided(t *testing.T) {
 			input := &testexpr.Instance{
 				Rel: &props.Relational{},
 				Provided: &physical.Provided{
-					Ordering: physical.ParseOrdering(tc.input),
+					Ordering: props.ParseOrdering(tc.input),
 				},
 			}
 			args := memo.ScalarListExpr{
 				f.ConstructVariable(opt.ColumnID(7)), f.ConstructVariable(opt.ColumnID(3)),
 			}
 			name := "st_intersects"
-			props, overload, ok := memo.FindFunction(&args, name)
+			funcProps, overload, ok := memo.FindFunction(&args, name)
 			if !ok {
 				panic(errors.AssertionFailedf("could not find overload for %s", name))
 			}
 			invertedExpr := f.ConstructFunction(args, &memo.FunctionPrivate{
 				Name:       name,
 				Typ:        types.Bool,
-				Properties: props,
+				Properties: funcProps,
 				Overload:   overload,
 			})
 
@@ -137,7 +137,7 @@ func TestInvertedJoinProvided(t *testing.T) {
 					Cols:         tc.outCols,
 				},
 			)
-			req := physical.ParseOrderingChoice(tc.required)
+			req := props.ParseOrderingChoice(tc.required)
 			res := invertedJoinBuildProvided(invertedJoin, &req).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)

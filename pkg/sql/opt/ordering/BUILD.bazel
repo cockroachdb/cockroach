@@ -25,7 +25,6 @@ go_library(
         "//pkg/sql/opt",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props",
-        "//pkg/sql/opt/props/physical",
         "//pkg/sql/sem/tree",
         "//pkg/util",
         "//pkg/util/log",

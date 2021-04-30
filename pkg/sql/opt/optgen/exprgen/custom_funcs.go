@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -86,7 +87,7 @@ func (c *customFuncs) MinPhysProps() *physical.Required {
 // MakePhysProps returns a set of physical properties corresponding to the
 // input presentation and OrderingChoice.
 func (c *customFuncs) MakePhysProps(
-	p physical.Presentation, o physical.OrderingChoice,
+	p physical.Presentation, o props.OrderingChoice,
 ) *physical.Required {
 	return c.mem.InternPhysicalProps(&physical.Required{
 		Presentation: p,
@@ -138,17 +139,17 @@ func (c *customFuncs) Ordering(str string) opt.Ordering {
 			panic(errorf("could not parse Ordering \"%s\"", str))
 		}
 	}()
-	return physical.ParseOrdering(c.substituteCols(str))
+	return props.ParseOrdering(c.substituteCols(str))
 }
 
 // OrderingChoice parses a string like "+a,-(b|c)" into an OrderingChoice.
-func (c *customFuncs) OrderingChoice(str string) physical.OrderingChoice {
+func (c *customFuncs) OrderingChoice(str string) props.OrderingChoice {
 	defer func() {
 		if r := recover(); r != nil {
 			panic(errorf("could not parse OrderingChoice \"%s\"", str))
 		}
 	}()
-	return physical.ParseOrderingChoice(c.substituteCols(str))
+	return props.ParseOrderingChoice(c.substituteCols(str))
 }
 
 // substituteCols extracts every word (sequence of letters, numbers, and
@@ -220,8 +221,8 @@ func (c *customFuncs) Presentation(cols opt.ColList) physical.Presentation {
 }
 
 // NoOrdering returns the empty OrderingChoice.
-func (c *customFuncs) NoOrdering() physical.OrderingChoice {
-	return physical.OrderingChoice{}
+func (c *customFuncs) NoOrdering() props.OrderingChoice {
+	return props.OrderingChoice{}
 }
 
 // Root can be used only at the top level on an expression, to annotate the
@@ -233,7 +234,7 @@ func (c *customFuncs) NoOrdering() physical.OrderingChoice {
 //     (OrderingChoice "+a")
 //   )
 func (c *customFuncs) Root(
-	root memo.RelExpr, presentation physical.Presentation, ordering physical.OrderingChoice,
+	root memo.RelExpr, presentation physical.Presentation, ordering props.OrderingChoice,
 ) *rootSentinel {
 	props := &physical.Required{
 		Presentation: presentation,

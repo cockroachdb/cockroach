@@ -14,37 +14,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func mutationCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func mutationCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// The mutation operator can always pass through ordering to its input.
 	return true
 }
 
 func mutationBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 
 	// Remap each of the required columns to corresponding input columns.
 	private := parent.Private().(*memo.MutationPrivate)
 
 	optional := private.MapToInputCols(required.Optional)
-	columns := make([]physical.OrderingColumnChoice, len(required.Columns))
+	columns := make([]props.OrderingColumnChoice, len(required.Columns))
 	for i := range required.Columns {
 		colChoice := &required.Columns[i]
-		columns[i] = physical.OrderingColumnChoice{
+		columns[i] = props.OrderingColumnChoice{
 			Group:      private.MapToInputCols(colChoice.Group),
 			Descending: colChoice.Descending,
 		}
 	}
-	return physical.OrderingChoice{Optional: optional, Columns: columns}
+	return props.OrderingChoice{Optional: optional, Columns: columns}
 }
 
-func mutationBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func mutationBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	private := expr.Private().(*memo.MutationPrivate)
 	input := expr.Child(0).(memo.RelExpr)
 	provided := input.ProvidedPhysical().Ordering

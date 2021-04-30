@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -213,8 +213,8 @@ func (c *CustomFuncs) MakeUnorderedSubquery() *memo.SubqueryPrivate {
 }
 
 // SubqueryOrdering returns the ordering property on a SubqueryPrivate.
-func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) physical.OrderingChoice {
-	var oc physical.OrderingChoice
+func (c *CustomFuncs) SubqueryOrdering(sub *memo.SubqueryPrivate) props.OrderingChoice {
+	var oc props.OrderingChoice
 	oc.FromOrdering(sub.Ordering)
 	return oc
 }

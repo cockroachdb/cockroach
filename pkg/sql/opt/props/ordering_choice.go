@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package physical
+package props
 
 import (
 	"bytes"
@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/errors"
 )
 
@@ -492,7 +491,7 @@ func (oc *OrderingChoice) Copy() OrderingChoice {
 // This is used to quickly check whether Simplify needs to be called without
 // requiring allocations in the common case. This logic should be changed in
 // concert with the Simplify logic.
-func (oc *OrderingChoice) CanSimplify(fdset *props.FuncDepSet) bool {
+func (oc *OrderingChoice) CanSimplify(fdset *FuncDepSet) bool {
 	if oc.Any() {
 		// Any ordering allowed, so can't simplify further.
 		return false
@@ -554,7 +553,7 @@ func (oc *OrderingChoice) CanSimplify(fdset *props.FuncDepSet) bool {
 //        https://cs.uwaterloo.ca/~gweddell/cs798/p57-simmen.pdf
 //
 // This logic should be changed in concert with the CanSimplify logic.
-func (oc *OrderingChoice) Simplify(fdset *props.FuncDepSet) {
+func (oc *OrderingChoice) Simplify(fdset *FuncDepSet) {
 	oc.Optional = fdset.ComputeClosure(oc.Optional)
 
 	closure := oc.Optional
