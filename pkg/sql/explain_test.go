@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStatementReuses(t *testing.T) {
@@ -316,4 +318,66 @@ func TestExplainStatsCollected(t *testing.T) {
 			t.Errorf("expected '%s', got '%s'", tc.expected, strings.TrimSpace(statsRow))
 		}
 	}
+}
+
+// TestExplainMVCCSteps makes sure that the MVCC stats are properly collected
+// during explain analyze. This can't be a normal logic test because the MVCC
+// stats are marked as nondeterministic (they change depending on number of
+// nodes in the query).
+func TestExplainMVCCSteps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
+
+	expectedSteps, expectedSeeks := 1000, 2
+	foundSteps, foundSeeks := getMVCCStats(t, r)
+
+	assert.Equal(t, expectedSteps, foundSteps)
+	assert.Equal(t, expectedSeeks, foundSeeks)
+
+	// Update all rows.
+	r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
+
+	expectedSteps, expectedSeeks = 2000, 2
+	foundSteps, foundSeeks = getMVCCStats(t, r)
+
+	assert.Equal(t, expectedSteps, foundSteps)
+	assert.Equal(t, expectedSeeks, foundSeeks)
+}
+
+func getMVCCStats(t *testing.T, r *sqlutils.SQLRunner) (foundSteps, foundSeeks int) {
+	rows := r.Query(t, "EXPLAIN ANALYZE SELECT COUNT(*) FROM ab")
+	var output strings.Builder
+	var str string
+	var err error
+	for rows.Next() {
+		if err := rows.Scan(&str); err != nil {
+			t.Fatal(err)
+		}
+		output.WriteString(str)
+		output.WriteByte('\n')
+		str = strings.TrimSpace(str)
+		// Numbers are printed with commas to indicate 1000s places, remove them.
+		str = strings.ReplaceAll(str, ",", "")
+		stepStr := strings.TrimPrefix(str, "MVCC step count: ")
+		if len(stepStr) != len(str) {
+			foundSteps, err = strconv.Atoi(stepStr)
+			assert.NoError(t, err)
+		}
+		seekStr := strings.TrimPrefix(str, "MVCC seek count: ")
+		if len(seekStr) != len(str) {
+			foundSeeks, err = strconv.Atoi(seekStr)
+			assert.NoError(t, err)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(output.String())
+	return foundSteps, foundSeeks
 }

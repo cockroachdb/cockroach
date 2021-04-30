@@ -162,6 +162,10 @@ type joinReader struct {
 	// detailed comment in the spec). This can never be true for index joins,
 	// and requires that the spec has MaintainOrdering set to true.
 	outputGroupContinuationForLeftRow bool
+
+	// scanStats is collected from the trace after we finish doing work for this
+	// join.
+	scanStats execinfra.ScanStats
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -810,6 +814,11 @@ func (jr *joinReader) ConsumerClosed() {
 }
 
 func (jr *joinReader) close() {
+	// Make sure to clone any tracing span so that stats can pick it up later.
+	// Stats are only collected after we finish closing the processor.
+	if !jr.Closed {
+		jr.scanStats = execinfra.GetScanStats(jr.Ctx)
+	}
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
 			jr.fetcher.Close(jr.Ctx)
@@ -836,7 +845,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
@@ -846,6 +855,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: jr.OutputHelper.Stats(),
 	}
+	execinfra.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
+	return ret
 }
 
 func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
