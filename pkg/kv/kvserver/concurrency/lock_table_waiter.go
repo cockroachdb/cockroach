@@ -474,8 +474,12 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// with the responsibility to abort the intents (for example if we find the
 	// transaction aborted). To do better here, we need per-intent information
 	// on whether we need to poison.
+	//
+	// We set SendImmediately to true because we are resolving a single intent
+	// on behalf of a foreground operation and want this resolution to complete
+	// as soon as possible, so we are willing to trade throughput for latency.
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
-	opts := intentresolver.ResolveOptions{Poison: true}
+	opts := intentresolver.ResolveOptions{Poison: true, SendImmediately: true}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
@@ -633,8 +637,15 @@ func (w *lockTableWaiterImpl) resolveDeferredIntents(
 	if len(deferredResolution) == 0 {
 		return nil
 	}
-	// See pushLockTxn for an explanation of these options.
-	opts := intentresolver.ResolveOptions{Poison: true}
+	// See pushLockTxn for an explanation of these options. We only set the
+	// SendImmediately flag to true if we are resolving fewer than or exactly
+	// IntentResolverBatchSize intents. Otherwise, this a bulk intent resolution
+	// task which can tolerate a small latency hit in exchange for batching and
+	// chunking.
+	opts := intentresolver.ResolveOptions{
+		Poison:          true,
+		SendImmediately: len(deferredResolution) <= intentresolver.IntentResolverBatchSize,
+	}
 	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
 }
 

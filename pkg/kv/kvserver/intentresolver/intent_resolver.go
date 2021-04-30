@@ -55,12 +55,12 @@ const (
 	// many batches by the DistSender.
 	gcBatchSize = 1024
 
-	// intentResolverBatchSize is the maximum number of single-intent resolution
+	// IntentResolverBatchSize is the maximum number of single-intent resolution
 	// requests that will be sent in a single batch. Batches that span many
 	// ranges (which is possible for the commit of a transaction that spans many
 	// ranges) will be split into many batches by the DistSender.
 	// TODO(ajwerner): justify this value
-	intentResolverBatchSize = 100
+	IntentResolverBatchSize = 100
 
 	// intentResolverRangeBatchSize is the maximum number of ranged intent
 	// resolutions requests that will be sent in a single batch.  It is set
@@ -214,7 +214,7 @@ func New(c Config) *IntentResolver {
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
 	})
-	intentResolutionBatchSize := intentResolverBatchSize
+	intentResolutionBatchSize := IntentResolverBatchSize
 	intentResolutionRangeBatchSize := intentResolverRangeBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
@@ -787,6 +787,18 @@ type ResolveOptions struct {
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
 	MinTimestamp hlc.Timestamp
+	// If set, instructs the IntentResolver to send the intent resolution requests
+	// immediately, instead of adding them to a batch and waiting for that batch
+	// to fill up with other intent resolution requests. This can be used to avoid
+	// any batching-induced latency, and should be used only by foreground traffic
+	// that is willing to trade off some throughput for lower latency.
+	//
+	// In addition to disabling batching, the option will also disable pagination.
+	// All requests will be sent in the same batch (subject to splitting on range
+	// boundaries) and no MaxSpanRequestKeys limit will be assigned to limit the
+	// number of intents resolved by ranged intent resolution. Users of the flag
+	// should be conscious of this.
+	SendImmediately bool
 }
 
 // lookupRangeID maps a key to a RangeID for best effort batching of intent
@@ -828,53 +840,80 @@ func (ir *IntentResolver) ResolveIntents(
 	if err := ctx.Err(); err != nil {
 		return roachpb.NewError(err)
 	}
-	log.Eventf(ctx, "resolving intents")
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	log.Eventf(ctx, "resolving %d intents", len(intents))
+	reqs := resolveIntentReqs(intents, opts)
+	if opts.SendImmediately {
+		b := &kv.Batch{}
+		b.AddRawRequest(reqs...)
+		if err := ir.db.Run(ctx, b); err != nil {
+			return b.MustPErr()
+		}
+	} else {
+		respChan := make(chan requestbatcher.Response, len(reqs))
+		for _, req := range reqs {
+			var batcher *requestbatcher.RequestBatcher
+			switch req.Method() {
+			case roachpb.ResolveIntent:
+				batcher = ir.irBatcher
+			case roachpb.ResolveIntentRange:
+				batcher = ir.irRangeBatcher
+			default:
+				panic("unexpected")
+			}
+			rangeID := ir.lookupRangeID(ctx, req.Header().Key)
+			if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
+				return roachpb.NewError(err)
+			}
+		}
+		for seen := 0; seen < len(intents); seen++ {
+			select {
+			case resp := <-respChan:
+				if resp.Err != nil {
+					return roachpb.NewError(resp.Err)
+				}
+				_ = resp.Resp // ignore the response
+			case <-ctx.Done():
+				return roachpb.NewError(ctx.Err())
+			case <-ir.stopper.ShouldQuiesce():
+				return roachpb.NewErrorf("stopping")
+			}
+		}
+	}
+	return nil
+}
 
-	respChan := make(chan requestbatcher.Response, len(intents))
-	for _, intent := range intents {
-		rangeID := ir.lookupRangeID(ctx, intent.Key)
-		var req roachpb.Request
-		var batcher *requestbatcher.RequestBatcher
+func resolveIntentReqs(intents []roachpb.LockUpdate, opts ResolveOptions) []roachpb.Request {
+	var pointReqs []roachpb.ResolveIntentRequest
+	var rangeReqs []roachpb.ResolveIntentRangeRequest
+	for i := range intents {
+		intent := &intents[i]
 		if len(intent.EndKey) == 0 {
-			req = &roachpb.ResolveIntentRequest{
+			pointReqs = append(pointReqs, roachpb.ResolveIntentRequest{
 				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
 				IntentTxn:      intent.Txn,
 				Status:         intent.Status,
 				Poison:         opts.Poison,
 				IgnoredSeqNums: intent.IgnoredSeqNums,
-			}
-			batcher = ir.irBatcher
+			})
 		} else {
-			req = &roachpb.ResolveIntentRangeRequest{
+			rangeReqs = append(rangeReqs, roachpb.ResolveIntentRangeRequest{
 				RequestHeader:  roachpb.RequestHeaderFromSpan(intent.Span),
 				IntentTxn:      intent.Txn,
 				Status:         intent.Status,
 				Poison:         opts.Poison,
 				MinTimestamp:   opts.MinTimestamp,
 				IgnoredSeqNums: intent.IgnoredSeqNums,
-			}
-			batcher = ir.irRangeBatcher
-		}
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
-			return roachpb.NewError(err)
+			})
 		}
 	}
-	for seen := 0; seen < len(intents); seen++ {
-		select {
-		case resp := <-respChan:
-			if resp.Err != nil {
-				return roachpb.NewError(resp.Err)
-			}
-			_ = resp.Resp // ignore the response
-		case <-ctx.Done():
-			return roachpb.NewError(ctx.Err())
-		case <-ir.stopper.ShouldQuiesce():
-			return roachpb.NewErrorf("stopping")
-		}
+	reqs := make([]roachpb.Request, len(intents))
+	for i := range pointReqs {
+		reqs[i] = &pointReqs[i]
 	}
-	return nil
+	for i := range rangeReqs {
+		reqs[i+len(pointReqs)] = &rangeReqs[i]
+	}
+	return reqs
 }
 
 // intentsByTxn implements sort.Interface to sort intents based on txnID.

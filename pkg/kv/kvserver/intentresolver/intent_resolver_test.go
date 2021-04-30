@@ -717,25 +717,25 @@ func TestCleanupIntents(t *testing.T) {
 			expectedErr: true,
 		},
 		{
-			intents: append(makeTxnIntents(t, clock, 3*intentResolverBatchSize),
+			intents: append(makeTxnIntents(t, clock, 3*IntentResolverBatchSize),
 				// Three intents with the same transaction will only attempt to push the
 				// txn 1 time. Hence 3 full batches plus 1 extra.
 				testIntents[0], testIntents[0], testIntents[0]),
 			sendFuncs: func() *sendFuncs {
 				sf := newSendFuncs(t)
 				sf.pushFrontLocked( // don't need to lock
-					pushTxnSendFuncs(sf, intentResolverBatchSize),
+					pushTxnSendFuncs(sf, IntentResolverBatchSize),
 					resolveIntentsSendFuncs(sf, 102 /* numIntents */, 2 /* minNumReqs */),
-					pushTxnSendFuncs(sf, intentResolverBatchSize),
+					pushTxnSendFuncs(sf, IntentResolverBatchSize),
 					resolveIntentsSendFuncs(sf, 100 /* numIntents */, 1 /* minNumReqs */),
-					pushTxnSendFuncs(sf, intentResolverBatchSize),
+					pushTxnSendFuncs(sf, IntentResolverBatchSize),
 					resolveIntentsSendFuncs(sf, 100 /* numIntents */, 1 /* minNumReqs */),
 					pushTxnSendFuncs(sf, 1),
 					resolveIntentsSendFuncs(sf, 1 /* numIntents */, 1 /* minNumReqs */),
 				)
 				return sf
 			}(),
-			expectedNum: 3*intentResolverBatchSize + 3,
+			expectedNum: 3*IntentResolverBatchSize + 3,
 			cfg: Config{
 				MaxIntentResolutionBatchWait: -1, // disabled
 				MaxIntentResolutionBatchIdle: 1 * time.Microsecond,

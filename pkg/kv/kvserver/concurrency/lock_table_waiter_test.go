@@ -35,8 +35,8 @@ import (
 
 type mockIntentResolver struct {
 	pushTxn        func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (*roachpb.Transaction, *Error)
-	resolveIntent  func(context.Context, roachpb.LockUpdate) *Error
-	resolveIntents func(context.Context, []roachpb.LockUpdate) *Error
+	resolveIntent  func(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+	resolveIntents func(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
 }
 
 // mockIntentResolver implements the IntentResolver interface.
@@ -47,15 +47,15 @@ func (m *mockIntentResolver) PushTransaction(
 }
 
 func (m *mockIntentResolver) ResolveIntent(
-	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
+	ctx context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions,
 ) *Error {
-	return m.resolveIntent(ctx, intent)
+	return m.resolveIntent(ctx, intent, opts)
 }
 
 func (m *mockIntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
 ) *Error {
-	return m.resolveIntents(ctx, intents)
+	return m.resolveIntents(ctx, intents, opts)
 }
 
 type mockLockTableGuard struct {
@@ -343,10 +343,13 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 						require.Equal(t, pusheeTxn.ID, txn.ID)
 						require.Equal(t, roachpb.ABORTED, txn.Status)
 					}
-					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
+						require.Equal(t, true, opts.Poison)
+						require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
+						require.Equal(t, true, opts.SendImmediately)
 						g.state = waitingState{kind: doneWaiting}
 						g.notify()
 						return nil
@@ -497,10 +500,13 @@ func testErrorWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPush
 				require.Equal(t, pusheeTxn.ID, txn.ID)
 				require.Equal(t, roachpb.ABORTED, txn.Status)
 			}
-			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 				require.Equal(t, keyA, intent.Key)
 				require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 				require.Equal(t, roachpb.ABORTED, intent.Status)
+				require.Equal(t, true, opts.Poison)
+				require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
+				require.Equal(t, true, opts.SendImmediately)
 				g.state = waitingState{kind: doneWaiting}
 				g.notify()
 				return nil
@@ -564,7 +570,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			) (*roachpb.Transaction, *Error) {
 				return &pusheeTxn, nil
 			}
-			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions) *Error {
 				return err2
 			}
 			err = w.WaitOn(ctx, req, g)
@@ -604,11 +610,14 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 
 	// Errors are propagated when observed while resolving batches of intents.
 	err1 := roachpb.NewErrorf("error1")
-	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate) *Error {
+	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 		require.Len(t, intents, 1)
 		require.Equal(t, keyA, intents[0].Key)
 		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
 		require.Equal(t, roachpb.ABORTED, intents[0].Status)
+		require.Equal(t, true, opts.Poison)
+		require.Equal(t, hlc.Timestamp{}, opts.MinTimestamp)
+		require.Equal(t, true, opts.SendImmediately)
 		return err1
 	}
 	err := w.WaitOn(ctx, req, g)
