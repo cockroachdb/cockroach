@@ -321,14 +321,14 @@ func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
 func BenchmarkClearMVCCRange_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	ctx := context.Background()
-	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end mvcc.MVCCKey) error {
+	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end mvcc.Key) error {
 		return batch.ClearMVCCRange(start, end)
 	})
 }
 
 func BenchmarkClearIterRange_Pebble(b *testing.B) {
 	ctx := context.Background()
-	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end mvcc.MVCCKey) error {
+	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end mvcc.Key) error {
 		iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return batch.ClearIterRange(iter, start.Key, end.Key)
@@ -378,7 +378,7 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: int64(j)}
-			batch.Put(mvcc.MVCCKey{key, ts}, value)
+			batch.Put(mvcc.Key{key, ts}, value)
 		}
 		batch.Finish()
 	}

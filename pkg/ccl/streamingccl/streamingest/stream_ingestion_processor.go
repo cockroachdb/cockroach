@@ -57,7 +57,7 @@ var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
 
-type mvccKeyValues []mvcc.MVCCKeyValue
+type mvccKeyValues []mvcc.KeyValue
 
 func (s mvccKeyValues) Len() int           { return len(s) }
 func (s mvccKeyValues) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
@@ -146,7 +146,7 @@ func newStreamIngestionDataProcessor(
 		flowCtx:             flowCtx,
 		spec:                spec,
 		output:              output,
-		curBatch:            make([]mvcc.MVCCKeyValue, 0),
+		curBatch:            make([]mvcc.KeyValue, 0),
 		client:              streamClient,
 		bufferedCheckpoints: make(map[streamingccl.PartitionAddress]hlc.Timestamp),
 		maxFlushRateTimer:   timeutil.NewTimer(),
@@ -458,11 +458,11 @@ func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
 	if kv == nil {
 		return errors.New("kv event expected to have kv")
 	}
-	mvccKey := mvcc.MVCCKey{
+	mvccKey := mvcc.Key{
 		Key:       kv.Key,
 		Timestamp: kv.Value.Timestamp,
 	}
-	sip.curBatch = append(sip.curBatch, mvcc.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
+	sip.curBatch = append(sip.curBatch, mvcc.KeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
 	return nil
 }
 

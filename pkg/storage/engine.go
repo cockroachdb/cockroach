@@ -55,9 +55,9 @@ type EngineIterator interface {
 	// NextEngineKey advances the iterator to the next key/value in the
 	// iteration. After this call, valid will be true if the iterator was not
 	// originally positioned at the last key. Note that unlike
-	// MVCCIterator.NextKey, this method does not skip other versions with the
+	// Iterator.NextKey, this method does not skip other versions with the
 	// same EngineKey.Key.
-	// TODO(sumeer): change MVCCIterator.Next() to match the
+	// TODO(sumeer): change Iterator.Next() to match the
 	// return values, change all its callers, and rename this
 	// to Next().
 	NextEngineKey() (valid bool, err error)
@@ -127,7 +127,7 @@ type IterOptions struct {
 	// outside of the time bounds, perform your own filtering.
 	//
 	// These fields are only relevant for MVCCIterators. Additionally, an
-	// MVCCIterator with timestamp hints will not see separated intents, and may
+	// Iterator with timestamp hints will not see separated intents, and may
 	// not see some interleaved intents. Currently, the only way to correctly
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
@@ -226,15 +226,15 @@ type Reader interface {
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use storage.MVCCGet instead.
-	MVCCGet(key mvcc.MVCCKey) ([]byte, error)
+	MVCCGet(key mvcc.Key) ([]byte, error)
 	// MVCCGetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value. Semantically, it behaves as if an iterator with
 	// MVCCKeyAndIntentsIterKind was used.
 	//
-	// Deprecated: use MVCCIterator.ValueProto instead.
-	MVCCGetProto(key mvcc.MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
+	// Deprecated: use Iterator.ValueProto instead.
+	MVCCGetProto(key mvcc.Key, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
@@ -242,11 +242,11 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.MVCCKeyValue) error) error
-	// NewMVCCIterator returns a new instance of an MVCCIterator over this
-	// engine. The caller must invoke MVCCIterator.Close() when finished
+	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.KeyValue) error) error
+	// NewMVCCIterator returns a new instance of an Iterator over this
+	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
-	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) mvcc.MVCCIterator
+	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) mvcc.Iterator
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
@@ -299,14 +299,14 @@ type Writer interface {
 	// returns.
 	ApplyBatchRepr(repr []byte, sync bool) error
 
-	// ClearMVCC removes the item from the db with the given MVCCKey. It
+	// ClearMVCC removes the item from the db with the given Key. It
 	// requires that the timestamp is non-empty (see
 	// {ClearUnversioned,ClearIntent} if the timestamp is empty). Note that
 	// clear actually removes entries from the storage engine, rather than
 	// inserting MVCC tombstones.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCC(key mvcc.MVCCKey) error
+	ClearMVCC(key mvcc.Key) error
 	// ClearUnversioned removes an unversioned item from the db. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys).
@@ -372,19 +372,19 @@ type Writer interface {
 	// of the ClearMVCCRange.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRange(start, end mvcc.MVCCKey) error
+	ClearMVCCRange(start, end mvcc.Key) error
 
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear and ClearRange, this method actually
 	// removes entries from the storage engine. Unlike ClearRange, the entries
 	// to remove are determined by iterating over iter and per-key storage
-	// tombstones (not MVCC tombstones) are generated. If the MVCCIterator was
+	// tombstones (not MVCC tombstones) are generated. If the Iterator was
 	// constructed using MVCCKeyAndIntentsIterKind, any separated intents/locks
 	// will also be cleared.
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
-	ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error
+	ClearIterRange(iter mvcc.Iterator, start, end roachpb.Key) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
@@ -401,14 +401,14 @@ type Writer interface {
 	//
 	//
 	// It is safe to modify the contents of the arguments after Merge returns.
-	Merge(key mvcc.MVCCKey, value []byte) error
+	Merge(key mvcc.Key, value []byte) error
 
 	// PutMVCC sets the given key to the value provided. It requires that the
 	// timestamp is non-empty (see {PutUnversioned,PutIntent} if the timestamp
 	// is empty).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	PutMVCC(key mvcc.MVCCKey, value []byte) error
+	PutMVCC(key mvcc.Key, value []byte) error
 	// PutUnversioned sets the given key to the value provided. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys).
@@ -700,7 +700,7 @@ func PutProto(
 		return 0, 0, err
 	}
 
-	return int64(mvcc.MVCCKey{Key: key}.EncodedSize()), int64(len(bytes)), nil
+	return int64(mvcc.Key{Key: key}.EncodedSize()), int64(len(bytes)), nil
 }
 
 // Scan returns up to max key/value objects starting from start (inclusive)
@@ -708,9 +708,9 @@ func PutProto(
 // this code may use an intentInterleavingIter, the caller should not attempt
 // a single scan to span local and global keys. See the comment in the
 // declaration of intentInterleavingIter for details.
-func Scan(reader Reader, start, end roachpb.Key, max int64) ([]mvcc.MVCCKeyValue, error) {
-	var kvs []mvcc.MVCCKeyValue
-	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
+func Scan(reader Reader, start, end roachpb.Key, max int64) ([]mvcc.KeyValue, error) {
+	var kvs []mvcc.KeyValue
+	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv mvcc.KeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
 			return iterutil.StopIteration()
 		}
@@ -901,7 +901,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 
 // Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(
-	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.MVCCKeyValue) error,
+	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.KeyValue) error,
 ) error {
 	if reader.Closed() {
 		return errors.New("cannot call MVCCIterate on a closed batch")
@@ -921,7 +921,7 @@ func iterateOnReader(
 		} else if !ok {
 			break
 		}
-		if err := f(mvcc.MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+		if err := f(mvcc.KeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
 			if iterutil.Done(err) {
 				return nil
 			}

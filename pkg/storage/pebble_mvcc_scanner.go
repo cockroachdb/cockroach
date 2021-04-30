@@ -101,7 +101,7 @@ func (p *pebbleResults) finish() [][]byte {
 // Go port of mvccScanner in libroach/mvcc.h. Stores all variables relating to
 // one MVCCGet / MVCCScan call.
 type pebbleMVCCScanner struct {
-	parent  mvcc.MVCCIterator
+	parent  mvcc.Iterator
 	reverse bool
 	peeked  bool
 	// Iteration bounds. Does not contain MVCC timestamp.
@@ -136,7 +136,7 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curUnsafeKey mvcc.MVCCKey
+	curUnsafeKey mvcc.Key
 	curRawKey    []byte
 	curValue     []byte
 	results      pebbleResults
@@ -183,7 +183,7 @@ func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit
 // get iterates exactly once and adds one KV to the result set.
 func (p *pebbleMVCCScanner) get() {
 	p.isGet = true
-	p.parent.SeekGE(mvcc.MVCCKey{Key: p.start})
+	p.parent.SeekGE(mvcc.Key{Key: p.start})
 	if !p.updateCurrent() {
 		return
 	}
@@ -196,11 +196,11 @@ func (p *pebbleMVCCScanner) get() {
 func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 	p.isGet = false
 	if p.reverse {
-		if !p.iterSeekReverse(mvcc.MVCCKey{Key: p.end}) {
+		if !p.iterSeekReverse(mvcc.Key{Key: p.end}) {
 			return nil, p.err
 		}
 	} else {
-		if !p.iterSeek(mvcc.MVCCKey{Key: p.start}) {
+		if !p.iterSeek(mvcc.Key{Key: p.start}) {
 			return nil, p.err
 		}
 	}
@@ -493,7 +493,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			//
 			// Note: this assumes that it is safe to corrupt curKey here because we're
 			// about to advance. If this proves to be a problem later, we can extend
-			// addAndAdvance to take an MVCCKey explicitly.
+			// addAndAdvance to take an Key explicitly.
 			p.curUnsafeKey.Timestamp = metaTS
 			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
 			return p.addAndAdvance(p.keyBuf, value)
@@ -543,10 +543,10 @@ func (p *pebbleMVCCScanner) nextKey() bool {
 	// seeking to the next key. We append a NUL to account for the "next-key".
 	// Note that we cannot rely on curUnsafeKey.Key being unchanged even though
 	// we are at a different version of the same key -- the underlying
-	// MVCCIterator is free to mutate the backing for p.curUnsafeKey.Key
+	// Iterator is free to mutate the backing for p.curUnsafeKey.Key
 	// arbitrarily. Therefore we use p.keyBuf here which we have handy.
 	p.keyBuf = append(p.keyBuf, 0)
-	return p.iterSeek(mvcc.MVCCKey{Key: p.keyBuf})
+	return p.iterSeek(mvcc.Key{Key: p.keyBuf})
 }
 
 // backwardLatestVersion backs up the iterator to the latest version for the
@@ -575,10 +575,10 @@ func (p *pebbleMVCCScanner) backwardLatestVersion(key []byte, i int) bool {
 	// We're still not pointed to the latest version of the key. Fall back to
 	// seeking to the latest version. Note that we cannot rely on key being
 	// unchanged even though we are at a different version of the same key --
-	// the underlying MVCCIterator is free to mutate the backing for key
+	// the underlying Iterator is free to mutate the backing for key
 	// arbitrarily. Therefore we use p.keyBuf here which we have handy.
 	p.decrementItersBeforeSeek()
-	return p.iterSeek(mvcc.MVCCKey{Key: p.keyBuf})
+	return p.iterSeek(mvcc.Key{Key: p.keyBuf})
 }
 
 // prevKey advances to the newest version of the user key preceding the
@@ -601,7 +601,7 @@ func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 	}
 
 	p.decrementItersBeforeSeek()
-	return p.iterSeekReverse(mvcc.MVCCKey{Key: p.keyBuf})
+	return p.iterSeekReverse(mvcc.Key{Key: p.keyBuf})
 }
 
 // advanceKey advances to the next key in the iterator's direction.
@@ -622,7 +622,7 @@ func (p *pebbleMVCCScanner) advanceKeyAtEnd() bool {
 		// Iterating to the next key might have caused the iterator to reach the
 		// end of the key space. If that happens, back up to the very last key.
 		p.peeked = false
-		p.parent.SeekLT(mvcc.MVCCKey{Key: p.end})
+		p.parent.SeekLT(mvcc.Key{Key: p.end})
 		if !p.updateCurrent() {
 			return false
 		}
@@ -671,11 +671,11 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 // equal to the specified timestamp, adds it to the result set, then moves onto
 // the next user key.
 func (p *pebbleMVCCScanner) seekVersion(seekTS hlc.Timestamp, uncertaintyCheck bool) bool {
-	seekKey := mvcc.MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
+	seekKey := mvcc.Key{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], seekKey)
 	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
 	// We will need seekKey below, if the next's don't suffice. Even though the
-	// MVCCIterator will be at a different version of the same key, it is free
+	// Iterator will be at a different version of the same key, it is free
 	// to mutate the backing for p.curUnsafeKey.Key in an arbitrary manner. So
 	// assign to this copy, to make it stable.
 	seekKey.Key = origKey
@@ -760,14 +760,14 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 }
 
 // iterSeek seeks to the latest revision of the specified key (or a greater key).
-func (p *pebbleMVCCScanner) iterSeek(key mvcc.MVCCKey) bool {
+func (p *pebbleMVCCScanner) iterSeek(key mvcc.Key) bool {
 	p.clearPeeked()
 	p.parent.SeekGE(key)
 	return p.updateCurrent()
 }
 
 // iterSeekReverse seeks to the latest revision of the key before the specified key.
-func (p *pebbleMVCCScanner) iterSeekReverse(key mvcc.MVCCKey) bool {
+func (p *pebbleMVCCScanner) iterSeekReverse(key mvcc.Key) bool {
 	p.clearPeeked()
 	p.parent.SeekLT(key)
 	if !p.updateCurrent() {
@@ -793,7 +793,7 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 		if !p.iterValid() {
 			// We were peeked off the beginning of iteration. Seek to the first
 			// entry, and then advance one step.
-			p.parent.SeekGE(mvcc.MVCCKey{Key: p.start})
+			p.parent.SeekGE(mvcc.Key{Key: p.start})
 			if !p.iterValid() {
 				return false
 			}

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +47,7 @@ import (
 )
 
 func ensureRangeEqual(
-	t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []mvcc.MVCCKeyValue,
+	t *testing.T, sortedKeys []string, keyMap map[string][]byte, keyvals []MVCCKeyValue,
 ) {
 	t.Helper()
 	if len(keyvals) != len(sortedKeys) {
@@ -147,7 +146,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 				batch := eng.NewBatch()
 				defer batch.Close()
 				iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
-				key := mvcc.MVCCKey{Key: roachpb.Key("b")}
+				key := MVCCKey{Key: roachpb.Key("b")}
 
 				if err := batch.PutUnversioned(key.Key, []byte("foo")); err != nil {
 					t.Fatal(err)
@@ -159,7 +158,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// MVCCIterator should not reuse its cached result.
+				// Iterator should not reuse its cached result.
 				iter.SeekGE(key)
 
 				if ok, err := iter.Valid(); err != nil {
@@ -224,7 +223,7 @@ func TestEngineBatch(t *testing.T) {
 			key := mvccKey("a")
 			// Those are randomized below.
 			type data struct {
-				key   mvcc.MVCCKey
+				key   MVCCKey
 				value []byte
 				merge bool
 			}
@@ -263,7 +262,7 @@ func TestEngineBatch(t *testing.T) {
 				return rw.PutUnversioned(d.key.Key, d.value)
 			}
 
-			get := func(rw ReadWriter, key mvcc.MVCCKey) []byte {
+			get := func(rw ReadWriter, key MVCCKey) []byte {
 				b, err := rw.MVCCGet(key)
 				if err != nil {
 					t.Fatal(err)
@@ -386,7 +385,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 
 			// Test for allowed keys, which should go through.
 			testCases := []struct {
-				key   mvcc.MVCCKey
+				key   MVCCKey
 				value []byte
 			}{
 				{mvccKey("dog"), []byte("woof")},
@@ -494,7 +493,7 @@ func TestEngineMerge(t *testing.T) {
 			defer engine.Close()
 
 			testcases := []struct {
-				testKey  mvcc.MVCCKey
+				testKey  MVCCKey
 				merges   [][]byte
 				expected []byte
 			}{
@@ -618,7 +617,7 @@ func TestEngineTimeBound(t *testing.T) {
 
 			for i, time := range times {
 				s := fmt.Sprintf("%02d", i)
-				key := mvcc.MVCCKey{Key: roachpb.Key(s), Timestamp: time}
+				key := MVCCKey{Key: roachpb.Key(s), Timestamp: time}
 				if err := engine.PutMVCC(key, []byte(s)); err != nil {
 					t.Fatal(err)
 				}
@@ -630,7 +629,7 @@ func TestEngineTimeBound(t *testing.T) {
 			batch := engine.NewBatch()
 			defer batch.Close()
 
-			check := func(t *testing.T, tbi mvcc.MVCCIterator, keys, ssts int) {
+			check := func(t *testing.T, tbi MVCCIterator, keys, ssts int) {
 				defer tbi.Close()
 				tbi.SeekGE(NilKey)
 
@@ -657,7 +656,7 @@ func TestEngineTimeBound(t *testing.T) {
 			}
 
 			testCases := []struct {
-				iter       mvcc.MVCCIterator
+				iter       MVCCIterator
 				keys, ssts int
 			}{
 				// Completely to the right, not touching.
@@ -739,7 +738,7 @@ func TestEngineTimeBound(t *testing.T) {
 			// time bounded iterator instead.
 			iter := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.SeekGE(mvcc.MVCCKey{Key: keys.LocalMax})
+			iter.SeekGE(MVCCKey{Key: keys.LocalMax})
 
 			var count int
 			for ; ; iter.Next() {
@@ -812,7 +811,7 @@ func TestEngineScan1(t *testing.T) {
 			defer engine.Close()
 
 			testCases := []struct {
-				key   mvcc.MVCCKey
+				key   MVCCKey
 				value []byte
 			}{
 				{mvccKey("dog"), []byte("woof")},
@@ -868,9 +867,7 @@ func TestEngineScan1(t *testing.T) {
 	}
 }
 
-func verifyScan(
-	start, end roachpb.Key, max int64, expKeys []mvcc.MVCCKey, engine Engine, t *testing.T,
-) {
+func verifyScan(start, end roachpb.Key, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
 	kvs, err := Scan(engine, start, end, max)
 	if err != nil {
 		t.Errorf("scan %q-%q: expected no error, but got %s", start, end, err)
@@ -897,7 +894,7 @@ func TestEngineScan2(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			keys := []mvcc.MVCCKey{
+			keys := []MVCCKey{
 				mvccKey("a"),
 				mvccKey("aa"),
 				mvccKey("aaa"),
@@ -926,15 +923,13 @@ func TestEngineScan2(t *testing.T) {
 	}
 }
 
-func testEngineDeleteRange(
-	t *testing.T, clearRange func(engine Engine, start, end mvcc.MVCCKey) error,
-) {
+func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, end MVCCKey) error) {
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			keys := []mvcc.MVCCKey{
+			keys := []MVCCKey{
 				mvccKey("a"),
 				mvccKey("aa"),
 				mvccKey("aaa"),
@@ -954,7 +949,7 @@ func testEngineDeleteRange(
 			}
 			// Verify what's left
 			verifyScan(localMax, roachpb.KeyMax, 10,
-				[]mvcc.MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
+				[]MVCCKey{mvccKey("a"), mvccKey("abc")}, engine, t)
 		})
 	}
 }
@@ -962,7 +957,7 @@ func testEngineDeleteRange(
 func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testEngineDeleteRange(t, func(engine Engine, start, end mvcc.MVCCKey) error {
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		return engine.ClearMVCCRange(start, end)
 	})
 }
@@ -970,7 +965,7 @@ func TestEngineDeleteRange(t *testing.T) {
 func TestEngineDeleteRangeBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testEngineDeleteRange(t, func(engine Engine, start, end mvcc.MVCCKey) error {
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		batch := engine.NewUnindexedBatch(true /* writeOnly */)
 		defer batch.Close()
 		if err := batch.ClearMVCCRange(start, end); err != nil {
@@ -988,7 +983,7 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testEngineDeleteRange(t, func(engine Engine, start, end mvcc.MVCCKey) error {
+	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return engine.ClearIterRange(iter, start.Key, end.Key)
@@ -1064,7 +1059,7 @@ func TestSnapshotMethods(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			keys := []mvcc.MVCCKey{mvccKey("a"), mvccKey("b")}
+			keys := []MVCCKey{mvccKey("a"), mvccKey("b")}
 			vals := [][]byte{[]byte("1"), []byte("2")}
 			for i := range keys {
 				if err := engine.PutUnversioned(keys[i].Key, vals[i]); err != nil {
@@ -1104,7 +1099,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify MVCCIterate.
 			index := 0
-			if err := snap.MVCCIterate(localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
+			if err := snap.MVCCIterate(localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
 				if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
 					t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
 						index, keys[index], vals[index], kv.Key, kv.Value)
@@ -1135,11 +1130,11 @@ func TestSnapshotMethods(t *testing.T) {
 	}
 }
 
-func insertKeys(keys []mvcc.MVCCKey, engine Engine, t *testing.T) {
+func insertKeys(keys []MVCCKey, engine Engine, t *testing.T) {
 	insertKeysAndValues(keys, nil, engine, t)
 }
 
-func insertKeysAndValues(keys []mvcc.MVCCKey, values [][]byte, engine Engine, t *testing.T) {
+func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *testing.T) {
 	// Add keys to store in random order (make sure they sort!).
 	order := rand.Perm(len(keys))
 	for _, idx := range order {

@@ -116,7 +116,7 @@ func acquireUnreplicatedLocksOnKeys(
 	switch scanFmt {
 	case roachpb.BATCH_RESPONSE:
 		var i int
-		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key mvcc.MVCCKey, _ []byte) error {
+		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key mvcc.Key, _ []byte) error {
 			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, key.Key, lock.Unreplicated)
 			i++
 			return nil

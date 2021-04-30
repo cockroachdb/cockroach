@@ -17,15 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// SimpleMVCCIterator is an interface for iterating over key/value pairs in an
-// engine. SimpleMVCCIterator implementations are thread safe unless otherwise
-// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
-type SimpleMVCCIterator interface {
+// SimplerIterator is an interface for iterating over key/value pairs in an
+// engine. SimplerIterator implementations are thread safe unless otherwise
+// noted. SimplerIterator is a subset of the functionality offered by Iterator.
+type SimplerIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
 	// SeekGE advances the iterator to the first key in the engine which
 	// is >= the provided key.
-	SeekGE(key MVCCKey)
+	SeekGE(key Key)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
 	// a valid key (it is undefined to call Key(), Value(), or similar
@@ -46,37 +46,37 @@ type SimpleMVCCIterator interface {
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
-	UnsafeKey() MVCCKey
+	UnsafeKey() Key
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
 }
 
-// IteratorStats is returned from (MVCCIterator).Stats.
+// IteratorStats is returned from (Iterator).Stats.
 type IteratorStats struct {
 	InternalDeleteSkippedCount int
 	TimeBoundNumSSTs           int
 }
 
-// MVCCIterator is an interface for iterating over key/value pairs in an
+// Iterator is an interface for iterating over key/value pairs in an
 // engine. It is used for iterating over the key space that can have multiple
 // versions, and if often also used (due to historical reasons) for iterating
 // over the key space that never has multiple versions (i.e.,
-// MVCCKey.Timestamp.IsEmpty()).
+// Key.Timestamp.IsEmpty()).
 //
-// MVCCIterator implementations are thread safe unless otherwise noted.
-type MVCCIterator interface {
-	SimpleMVCCIterator
+// Iterator implementations are thread safe unless otherwise noted.
+type Iterator interface {
+	SimplerIterator
 
 	// SeekLT advances the iterator to the first key in the engine which
 	// is < the provided key.
-	SeekLT(key MVCCKey)
+	SeekLT(key Key)
 	// Prev moves the iterator backward to the previous key/value
 	// in the iteration. After this call, Valid() will be true if the
 	// iterator was not positioned at the first key.
 	Prev()
 
-	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
+	// SeekIntentGE is a specialized version of SeekGE(Key{Key: key}), when
 	// the caller expects to find an intent, and additionally has the txnUUID
 	// for the intent it is looking for. When running with separated intents,
 	// this can optimize the behavior of the underlying Engine for write heavy
@@ -84,9 +84,9 @@ type MVCCIterator interface {
 	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
 
 	// Key returns the current key.
-	Key() MVCCKey
+	Key() Key
 	// UnsafeRawKey returns the current raw key which could be an encoded
-	// MVCCKey, or the more general EngineKey (for a lock table key).
+	// Key, or the more general EngineKey (for a lock table key).
 	// This is a low-level and dangerous method since it will expose the
 	// raw key of the lock table, i.e., the intentInterleavingIter will not
 	// hide the difference between interleaved and separated intents.
@@ -94,11 +94,11 @@ type MVCCIterator interface {
 	// only used by callers who are iterating and deleting all data in a
 	// range.
 	UnsafeRawKey() []byte
-	// UnsafeRawMVCCKey returns a serialized MVCCKey. The memory is invalidated
+	// UnsafeRawMVCCKey returns a serialized Key. The memory is invalidated
 	// on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}. If the
 	// iterator is currently positioned at a separated intent (when
 	// intentInterleavingIter is used), it makes that intent look like an
-	// interleaved intent key, i.e., an MVCCKey with an empty timestamp. This is
+	// interleaved intent key, i.e., an Key with an empty timestamp. This is
 	// currently used by callers who pass around key information as a []byte --
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
@@ -107,9 +107,9 @@ type MVCCIterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
-	// When Key() is positioned on an intent, returns true iff this intent
-	// (represented by MVCCMetadata) is a separated lock/intent. This is a
-	// low-level method that should not be called from outside the storage
+	// IsCurIntentSeparated returns true when Key() is positioned on an intent
+	// and iff this intent (represented by MVCCMetadata) is a separated lock/intent.
+	// This is a low-level method that should not be called from outside the storage
 	// package. It is part of the exported interface because there are structs
 	// outside the package that wrap and implement Iterator.
 	IsCurIntentSeparated() bool
@@ -126,10 +126,10 @@ type MVCCIterator interface {
 	// chosen from the key ranges listed in keys.NoSplitSpans and will always
 	// sort equal to or after minSplitKey.
 	//
-	// DO NOT CALL directly (except in wrapper MVCCIterator implementations). Use the
+	// DO NOT CALL directly (except in wrapper Iterator implementations). Use the
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
 	// must set the upper bound on the iterator before calling this method.
-	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
+	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (Key, error)
 	// CheckForKeyCollisions checks whether any keys collide between the iterator
 	// and the encoded SST data specified, within the provided key range. Returns
 	// stats on skipped KVs, or an error if a collision is found.
@@ -156,7 +156,7 @@ type MVCCIterator interface {
 	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
-	// SupportsPrev returns true if MVCCIterator implementation supports reverse
+	// SupportsPrev returns true if Iterator implementation supports reverse
 	// iteration with Prev() or SeekLT().
 	SupportsPrev() bool
 }

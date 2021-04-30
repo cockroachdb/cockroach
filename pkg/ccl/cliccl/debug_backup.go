@@ -411,8 +411,8 @@ func showData(
 
 func makeIters(
 	ctx context.Context, files backupccl.EntryFiles,
-) ([]mvcc.SimpleMVCCIterator, func() error, error) {
-	iters := make([]mvcc.SimpleMVCCIterator, len(files))
+) ([]mvcc.SimplerIterator, func() error, error) {
+	iters := make([]mvcc.SimplerIterator, len(files))
 	dirStorage := make([]cloud.ExternalStorage, len(files))
 	for i, file := range files {
 		var err error
@@ -501,7 +501,7 @@ func processEntryFiles(
 	iter := storage.MakeMultiIterator(iters)
 	defer iter.Close()
 
-	startKeyMVCC, endKeyMVCC := mvcc.MVCCKey{Key: span.Key}, mvcc.MVCCKey{Key: span.EndKey}
+	startKeyMVCC, endKeyMVCC := mvcc.Key{Key: span.Key}, mvcc.Key{Key: span.EndKey}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
 
 	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {

@@ -40,7 +40,7 @@ func EvalAddSSTable(
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	mvccStartKey, mvccEndKey := mvcc.MVCCKey{Key: args.Key}, mvcc.MVCCKey{Key: args.EndKey}
+	mvccStartKey, mvccEndKey := mvcc.Key{Key: args.Key}, mvcc.Key{Key: args.EndKey}
 
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
 	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
@@ -67,7 +67,7 @@ func EvalAddSSTable(
 	defer dataIter.Close()
 
 	// Check that the first key is in the expected range.
-	dataIter.SeekGE(mvcc.MVCCKey{Key: keys.MinKey})
+	dataIter.SeekGE(mvcc.Key{Key: keys.MinKey})
 	ok, err := dataIter.Valid()
 	if err != nil {
 		return result.Result{}, err
@@ -182,7 +182,7 @@ func EvalAddSSTable(
 
 	if args.IngestAsWrites {
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
-		dataIter.SeekGE(mvcc.MVCCKey{Key: keys.MinKey})
+		dataIter.SeekGE(mvcc.Key{Key: keys.MinKey})
 		for {
 			ok, err := dataIter.Valid()
 			if err != nil {
@@ -221,8 +221,8 @@ func EvalAddSSTable(
 func checkForKeyCollisions(
 	_ context.Context,
 	readWriter storage.ReadWriter,
-	mvccStartKey mvcc.MVCCKey,
-	mvccEndKey mvcc.MVCCKey,
+	mvccStartKey mvcc.Key,
+	mvccEndKey mvcc.Key,
 	data []byte,
 ) (enginepb.MVCCStats, error) {
 	// We could get a spansetBatch so fetch the underlying db engine as

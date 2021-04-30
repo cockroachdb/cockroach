@@ -22,14 +22,14 @@ import (
 func TestVerifyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyA := mvcc.MVCCKey{Key: []byte("a")}
-	keyB := mvcc.MVCCKey{Key: []byte("b")}
-	keyC := mvcc.MVCCKey{Key: []byte("c")}
-	keyD := mvcc.MVCCKey{Key: []byte("d")}
-	keyE := mvcc.MVCCKey{Key: []byte("e")}
+	keyA := mvcc.Key{Key: []byte("a")}
+	keyB := mvcc.Key{Key: []byte("b")}
+	keyC := mvcc.Key{Key: []byte("c")}
+	keyD := mvcc.Key{Key: []byte("d")}
+	keyE := mvcc.Key{Key: []byte("e")}
 
 	var batch storage.RocksDBBatchBuilder
-	key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 	batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
 	data := batch.Finish()
 
@@ -53,7 +53,7 @@ func TestVerifyBatchRepr(t *testing.T) {
 	// Invalid key/value entry checksum.
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 		batch.Put(key, value.RawBytes)

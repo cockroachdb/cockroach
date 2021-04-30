@@ -55,8 +55,8 @@ func evalWriteBatch(
 		return result.Result{}, errors.New("data spans multiple ranges")
 	}
 
-	mvccStartKey := mvcc.MVCCKey{Key: args.Key}
-	mvccEndKey := mvcc.MVCCKey{Key: args.EndKey}
+	mvccStartKey := mvcc.Key{Key: args.Key}
+	mvccEndKey := mvcc.Key{Key: args.EndKey}
 
 	// Verify that the keys in the batch are within the range specified by the
 	// request header.
@@ -85,7 +85,7 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(_ mvcc.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(_ mvcc.KeyValue) error {
 			isEmpty = false
 			return iterutil.StopIteration() // stop right away
 		}); err != nil {
@@ -113,7 +113,7 @@ func clearExistingData(
 	}
 
 	log.Eventf(ctx, "target key range not empty, will clear existing data: %+v", existingStats)
-	// If this is a MVCCIterator, we have to unwrap it because
+	// If this is a Iterator, we have to unwrap it because
 	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
 	if ssi, ok := iter.(*spanset.MVCCIterator); ok {

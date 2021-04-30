@@ -53,7 +53,7 @@ func GetAllRevisions(
 			return nil, err
 		}
 		defer iter.Close()
-		iter.SeekGE(mvcc.MVCCKey{Key: startKey})
+		iter.SeekGE(mvcc.Key{Key: startKey})
 
 		for ; ; iter.Next() {
 			if valid, err := iter.Valid(); !valid || err != nil {

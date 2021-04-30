@@ -134,7 +134,7 @@ func runSyncer(
 		return encoding.EncodeUvarintAscending(buf[:0:0], uint64(seq))
 	}
 
-	check := func(kv mvcc.MVCCKeyValue) error {
+	check := func(kv mvcc.KeyValue) error {
 		expKey := key()
 		if !bytes.Equal(kv.Key.Key, expKey) {
 			return errors.Errorf(

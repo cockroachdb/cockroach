@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-func runTestSSTIterator(t *testing.T, iter mvcc.SimpleMVCCIterator, allKVs []mvcc.MVCCKeyValue) {
+func runTestSSTIterator(t *testing.T, iter mvcc.SimplerIterator, allKVs []mvcc.KeyValue) {
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 
 	// Run the test multiple times to check re-Seeking.
 	for i := 0; i < 3; i++ {
-		var kvs []mvcc.MVCCKeyValue
+		var kvs []mvcc.KeyValue
 		for iter.SeekGE(expected[0].Key); ; iter.Next() {
 			ok, err := iter.Valid()
 			if err != nil {
@@ -39,8 +39,8 @@ func runTestSSTIterator(t *testing.T, iter mvcc.SimpleMVCCIterator, allKVs []mvc
 			if !ok {
 				break
 			}
-			kv := mvcc.MVCCKeyValue{
-				Key: mvcc.MVCCKey{
+			kv := mvcc.KeyValue{
+				Key: mvcc.Key{
 					Key:       append([]byte(nil), iter.UnsafeKey().Key...),
 					Timestamp: iter.UnsafeKey().Timestamp,
 				},
@@ -55,7 +55,7 @@ func runTestSSTIterator(t *testing.T, iter mvcc.SimpleMVCCIterator, allKVs []mvc
 		}
 
 		lastElemKey := expected[len(expected)-1].Key
-		seekTo := mvcc.MVCCKey{Key: lastElemKey.Key.Next()}
+		seekTo := mvcc.Key{Key: lastElemKey.Key.Next()}
 
 		iter.SeekGE(seekTo)
 		if ok, err := iter.Valid(); err != nil {
@@ -79,10 +79,10 @@ func TestSSTIterator(t *testing.T) {
 	sstFile := &MemFile{}
 	sst := MakeIngestionSSTWriter(sstFile)
 	defer sst.Close()
-	var allKVs []mvcc.MVCCKeyValue
+	var allKVs []mvcc.KeyValue
 	for i := 0; i < 10; i++ {
-		kv := mvcc.MVCCKeyValue{
-			Key: mvcc.MVCCKey{
+		kv := mvcc.KeyValue{
+			Key: mvcc.Key{
 				Key:       []byte{'A' + byte(i)},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
@@ -132,18 +132,18 @@ func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	keyAMetadata := mvcc.MVCCKey{
+	keyAMetadata := mvcc.Key{
 		Key: []byte("a"),
 	}
-	keyA2 := mvcc.MVCCKey{
+	keyA2 := mvcc.Key{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	}
-	keyA1 := mvcc.MVCCKey{
+	keyA1 := mvcc.Key{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 1},
 	}
-	keyB2 := mvcc.MVCCKey{
+	keyB2 := mvcc.Key{
 		Key:       []byte("b"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	}

@@ -69,7 +69,7 @@ func uuidFromString(input string) uuid.UUID {
 // TODO(sumeer): add lock table and corrsponding MVCC keys.
 func createRangeData(
 	t *testing.T, eng storage.Engine, desc roachpb.RangeDescriptor,
-) ([]mvcc.MVCCKey, []mvcc.MVCCKey) {
+) ([]mvcc.Key, []mvcc.Key) {
 	testTxnID := uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	testTxnID2 := uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 
@@ -107,15 +107,15 @@ func createRangeData(
 		{fakePrevKey(desc.EndKey), ts},
 	}
 
-	allKeys := []mvcc.MVCCKey{}
+	allKeys := []mvcc.Key{}
 	for _, keyTS := range keyTSs {
 		if err := storage.MVCCPut(context.Background(), eng, nil, keyTS.key, keyTS.ts, roachpb.MakeValueFromString("value"), nil); err != nil {
 			t.Fatal(err)
 		}
-		allKeys = append(allKeys, mvcc.MVCCKey{Key: keyTS.key, Timestamp: keyTS.ts})
+		allKeys = append(allKeys, mvcc.Key{Key: keyTS.key, Timestamp: keyTS.ts})
 	}
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(desc.RangeID)
-	var replicatedKeys []mvcc.MVCCKey
+	var replicatedKeys []mvcc.Key
 	for i := range allKeys {
 		if bytes.HasPrefix(allKeys[i].Key, unreplicatedPrefix) {
 			continue
@@ -127,7 +127,7 @@ func createRangeData(
 }
 
 func verifyRDReplicatedOnlyMVCCIter(
-	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []mvcc.MVCCKey,
+	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []mvcc.Key,
 ) {
 	t.Helper()
 	verify := func(t *testing.T, useSpanSet, reverse bool) {
@@ -192,7 +192,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 }
 
 func verifyRDEngineIter(
-	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []mvcc.MVCCKey,
+	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []mvcc.Key,
 ) {
 	readWriter := eng.NewReadOnly()
 	defer readWriter.Close()
@@ -243,8 +243,8 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 		EndKey:   roachpb.RKey("z"),
 	}
 
-	verifyRDReplicatedOnlyMVCCIter(t, desc, eng, []mvcc.MVCCKey{})
-	verifyRDEngineIter(t, desc, eng, []mvcc.MVCCKey{})
+	verifyRDReplicatedOnlyMVCCIter(t, desc, eng, []mvcc.Key{})
+	verifyRDEngineIter(t, desc, eng, []mvcc.Key{})
 }
 
 // TestReplicaDataIterator creates three ranges {"a"-"b" (pre), "b"-"c"
@@ -293,7 +293,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		desc *roachpb.RangeDescriptor
-		keys []mvcc.MVCCKey
+		keys []mvcc.Key
 	}{
 		{"pre-replicated", &descPre, preReplicatedKeys},
 		{"post-replicated", &descPost, postReplicatedKeys},
@@ -306,7 +306,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		desc *roachpb.RangeDescriptor
-		keys []mvcc.MVCCKey
+		keys []mvcc.Key
 	}{
 		{"pre", &descPre, preKeys},
 		{"post", &descPost, postKeys},

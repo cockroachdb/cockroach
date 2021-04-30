@@ -28,24 +28,24 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
+// PrintKeyValue attempts to pretty-print the specified KeyValue to
 // os.Stdout, falling back to '%q' formatting.
-func PrintKeyValue(kv mvcc.MVCCKeyValue) {
+func PrintKeyValue(kv mvcc.KeyValue) {
 	fmt.Println(SprintKeyValue(kv, true /* printKey */))
 }
 
-// SprintKey pretty-prints the specified MVCCKey.
-func SprintKey(key mvcc.MVCCKey) string {
+// SprintKey pretty-prints the specified Key.
+func SprintKey(key mvcc.Key) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
 }
 
 // DebugSprintKeyValueDecoders allows injecting alternative debug decoders.
-var DebugSprintKeyValueDecoders []func(kv mvcc.MVCCKeyValue) (string, error)
+var DebugSprintKeyValueDecoders []func(kv mvcc.KeyValue) (string, error)
 
 // SprintKeyValue is like PrintKeyValue, but returns a string. If
 // printKey is true, prints the key and the value together; otherwise,
 // prints just the value.
-func SprintKeyValue(kv mvcc.MVCCKeyValue, printKey bool) string {
+func SprintKeyValue(kv mvcc.KeyValue, printKey bool) string {
 	var sb strings.Builder
 	if printKey {
 		sb.WriteString(SprintKey(kv.Key))
@@ -59,7 +59,7 @@ func SprintKeyValue(kv mvcc.MVCCKeyValue, printKey bool) string {
 		tryRangeIDKey,
 		tryTimeSeries,
 		tryIntent,
-		func(kv mvcc.MVCCKeyValue) (string, error) {
+		func(kv mvcc.KeyValue) (string, error) {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
 			return fmt.Sprintf("%q", kv.Value), nil
 		},
@@ -78,13 +78,13 @@ func SprintKeyValue(kv mvcc.MVCCKeyValue, printKey bool) string {
 
 // SprintIntent pretty-prints the specified intent value.
 func SprintIntent(value []byte) string {
-	if out, err := tryIntent(mvcc.MVCCKeyValue{Value: value}); err == nil {
+	if out, err := tryIntent(mvcc.KeyValue{Value: value}); err == nil {
 		return out
 	}
 	return fmt.Sprintf("%x", value)
 }
 
-func tryRangeDescriptor(kv mvcc.MVCCKeyValue) (string, error) {
+func tryRangeDescriptor(kv mvcc.KeyValue) (string, error) {
 	if err := IsRangeDescriptorKey(kv.Key); err != nil {
 		return "", err
 	}
@@ -96,7 +96,7 @@ func tryRangeDescriptor(kv mvcc.MVCCKeyValue) (string, error) {
 }
 
 // tryIntent does not look at the key.
-func tryIntent(kv mvcc.MVCCKeyValue) (string, error) {
+func tryIntent(kv mvcc.KeyValue) (string, error) {
 	if len(kv.Value) == 0 {
 		return "", errors.New("empty")
 	}
@@ -137,7 +137,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(mvcc.MVCCKeyValue{
+			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(mvcc.KeyValue{
 				Key:   mvccKey,
 				Value: r.Value(),
 			}, true /* printKey */)))
@@ -146,7 +146,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(mvcc.MVCCKeyValue{
+			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(mvcc.KeyValue{
 				Key:   mvccKey,
 				Value: r.Value(),
 			}, true /* printKey */)))
@@ -175,7 +175,7 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 	return sb.String(), r.Error()
 }
 
-func tryRaftLogEntry(kv mvcc.MVCCKeyValue) (string, error) {
+func tryRaftLogEntry(kv mvcc.KeyValue) (string, error) {
 	var ent raftpb.Entry
 	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
 		return "", err
@@ -235,7 +235,7 @@ func tryRaftLogEntry(kv mvcc.MVCCKeyValue) (string, error) {
 	return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s", &ent, leaseStr, &cmd, wbStr), nil
 }
 
-func tryTxn(kv mvcc.MVCCKeyValue) (string, error) {
+func tryTxn(kv mvcc.KeyValue) (string, error) {
 	var txn roachpb.Transaction
 	if err := maybeUnmarshalInline(kv.Value, &txn); err != nil {
 		return "", err
@@ -243,7 +243,7 @@ func tryTxn(kv mvcc.MVCCKeyValue) (string, error) {
 	return txn.String() + "\n", nil
 }
 
-func tryRangeIDKey(kv mvcc.MVCCKeyValue) (string, error) {
+func tryRangeIDKey(kv mvcc.KeyValue) (string, error) {
 	if !kv.Key.Timestamp.IsEmpty() {
 		return "", fmt.Errorf("range ID keys shouldn't have timestamps: %s", kv.Key)
 	}
@@ -312,7 +312,7 @@ func tryRangeIDKey(kv mvcc.MVCCKeyValue) (string, error) {
 	return msg.String(), nil
 }
 
-func tryMeta(kv mvcc.MVCCKeyValue) (string, error) {
+func tryMeta(kv mvcc.KeyValue) (string, error) {
 	if !bytes.HasPrefix(kv.Key.Key, keys.Meta1Prefix) && !bytes.HasPrefix(kv.Key.Key, keys.Meta2Prefix) {
 		return "", errors.New("not a meta key")
 	}
@@ -327,7 +327,7 @@ func tryMeta(kv mvcc.MVCCKeyValue) (string, error) {
 	return descStr(desc), nil
 }
 
-func tryTimeSeries(kv mvcc.MVCCKeyValue) (string, error) {
+func tryTimeSeries(kv mvcc.KeyValue) (string, error) {
 	if len(kv.Value) == 0 || !bytes.HasPrefix(kv.Key.Key, keys.TimeseriesPrefix) {
 		return "", errors.New("empty or not TS")
 	}
@@ -344,7 +344,7 @@ func tryTimeSeries(kv mvcc.MVCCKeyValue) (string, error) {
 }
 
 // IsRangeDescriptorKey returns nil if the key decodes as a RangeDescriptor.
-func IsRangeDescriptorKey(key mvcc.MVCCKey) error {
+func IsRangeDescriptorKey(key mvcc.Key) error {
 	_, suffix, _, err := keys.DecodeRangeKey(key.Key)
 	if err != nil {
 		return err
@@ -392,13 +392,13 @@ func (s *stringifyWriteBatch) String() string {
 func PrintEngineKeyValue(k storage.EngineKey, v []byte) {
 	if k.IsMVCCKey() {
 		if key, err := k.ToMVCCKey(); err == nil {
-			PrintKeyValue(mvcc.MVCCKeyValue{Key: key, Value: v})
+			PrintKeyValue(mvcc.KeyValue{Key: key, Value: v})
 			return
 		}
 	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
-	if out, err := tryIntent(mvcc.MVCCKeyValue{Value: v}); err == nil {
+	if out, err := tryIntent(mvcc.KeyValue{Value: v}); err == nil {
 		sb.WriteString(out)
 	} else {
 		fmt.Fprintf(&sb, "%x", v)

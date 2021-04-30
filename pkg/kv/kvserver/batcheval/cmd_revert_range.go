@@ -53,7 +53,7 @@ func isEmptyKeyTimeRange(
 		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
 	})
 	defer iter.Close()
-	iter.SeekGE(mvcc.MVCCKey{Key: from})
+	iter.SeekGE(mvcc.Key{Key: from})
 	ok, err := iter.Valid()
 	return !ok, err
 }

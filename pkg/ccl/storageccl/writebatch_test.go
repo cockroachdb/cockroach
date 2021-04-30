@@ -43,7 +43,7 @@ func TestDBWriteBatch(t *testing.T) {
 
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
 		data := batch.Finish()
 
@@ -73,7 +73,7 @@ func TestDBWriteBatch(t *testing.T) {
 	// Key range in request span is not empty.
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := mvcc.MVCCKey{Key: []byte("bb2"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb2"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		batch.Put(key, roachpb.MakeValueFromString("2").RawBytes)
 		data := batch.Finish()
 		if err := db.WriteBatch(ctx, "b", "c", data); err != nil {
@@ -96,7 +96,7 @@ func TestDBWriteBatch(t *testing.T) {
 	// Invalid key/value entry checksum.
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 		batch.Put(key, value.RawBytes)
@@ -117,7 +117,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 
 	var batch storage.RocksDBBatchBuilder
 	{
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
 	}
 	data := batch.Finish()

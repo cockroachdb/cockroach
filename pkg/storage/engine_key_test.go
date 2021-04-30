@@ -83,12 +83,12 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		key mvcc.MVCCKey
+		key mvcc.Key
 	}{
-		{key: mvcc.MVCCKey{Key: roachpb.Key("a")}},
-		{key: mvcc.MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
-		{key: mvcc.MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
-		{key: mvcc.MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
+		{key: mvcc.Key{Key: roachpb.Key("a")}},
+		{key: mvcc.Key{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
+		{key: mvcc.Key{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
+		{key: mvcc.Key{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {

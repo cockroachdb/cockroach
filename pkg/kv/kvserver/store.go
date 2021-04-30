@@ -1319,7 +1319,7 @@ func IterateRangeDescriptors(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
-	// MVCCIterator over all range-local key-based data.
+	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
@@ -1608,7 +1608,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		keys.StoreSuggestedCompactionKeyPrefix(),
 		keys.StoreSuggestedCompactionKeyPrefix().PrefixEnd(),
 		storage.MVCCKeyIterKind,
-		func(res mvcc.MVCCKeyValue) error {
+		func(res mvcc.KeyValue) error {
 			return s.engine.ClearUnversioned(res.Key.Key)
 		})
 	if err != nil {
@@ -2211,18 +2211,18 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		}
 		return err
 	}
-	getMVCCKey := func() (mvcc.MVCCKey, error) {
+	getMVCCKey := func() (mvcc.Key, error) {
 		var k storage.EngineKey
 		k, err = iter.EngineKey()
 		if err != nil {
-			return mvcc.MVCCKey{}, err
+			return mvcc.Key{}, err
 		}
 		if !k.IsMVCCKey() {
-			return mvcc.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
+			return mvcc.Key{}, errors.Errorf("found non-mvcc key: %s", k)
 		}
 		return k.ToMVCCKey()
 	}
-	var k mvcc.MVCCKey
+	var k mvcc.Key
 	if k, err = getMVCCKey(); err != nil {
 		return err
 	}

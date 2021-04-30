@@ -229,16 +229,16 @@ func (idw intentDemuxWriter) safeToWriteSeparatedIntents(ctx context.Context) (b
 // struct that the caller keeps on behalf of the wrapped reader. But can only
 // do such an optimization when know that the wrappableReader will be used
 // with external synchronization that prevents preallocated buffers from being
-// modified concurrently. pebbleBatch.{MVCCGet,MVCCGetProto} have MVCCKey
+// modified concurrently. pebbleBatch.{MVCCGet,MVCCGetProto} have Key
 // serialization allocation optimizations which we can't do below. But those
 // are probably not performance sensitive, since the performance sensitive
-// code probably uses an MVCCIterator.
+// code probably uses an Iterator.
 type wrappableReader interface {
 	Reader
 	rawGet(key []byte) (value []byte, err error)
 }
 
-// wrapReader wraps the provided reader, to return an implementation of MVCCIterator
+// wrapReader wraps the provided reader, to return an implementation of Iterator
 // that supports MVCCKeyAndIntentsIterKind.
 func wrapReader(r wrappableReader) *intentInterleavingReader {
 	iiReader := intentInterleavingReaderPool.Get().(*intentInterleavingReader)
@@ -259,7 +259,7 @@ var intentInterleavingReaderPool = sync.Pool{
 }
 
 // Get implements the Reader interface.
-func (imr *intentInterleavingReader) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
+func (imr *intentInterleavingReader) MVCCGet(key mvcc.Key) ([]byte, error) {
 	val, err := imr.wrappableReader.rawGet(EncodeKey(key))
 	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
 		return val, err
@@ -280,7 +280,7 @@ func (imr *intentInterleavingReader) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
 
 // MVCCGetProto implements the Reader interface.
 func (imr *intentInterleavingReader) MVCCGetProto(
-	key mvcc.MVCCKey, msg protoutil.Message,
+	key mvcc.Key, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return pebbleGetProto(imr, key, msg)
 }
@@ -289,7 +289,7 @@ func (imr *intentInterleavingReader) MVCCGetProto(
 // intentInterleavingReader can be freed once this method returns.
 func (imr *intentInterleavingReader) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
-) mvcc.MVCCIterator {
+) mvcc.Iterator {
 	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")

@@ -162,7 +162,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
-	var iters []mvcc.SimpleMVCCIterator
+	var iters []mvcc.SimplerIterator
 	for _, file := range args.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Key)
 
@@ -224,7 +224,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer batcher.Close()
 
-	startKeyMVCC, endKeyMVCC := mvcc.MVCCKey{Key: args.DataSpan.Key}, mvcc.MVCCKey{Key: args.DataSpan.EndKey}
+	startKeyMVCC, endKeyMVCC := mvcc.Key{Key: args.DataSpan.Key}, mvcc.Key{Key: args.DataSpan.EndKey}
 	iter := storage.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
@@ -258,7 +258,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 
 		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := mvcc.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		key := mvcc.Key{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 
@@ -301,7 +301,7 @@ func ExternalSSTReader(
 	e cloud.ExternalStorage,
 	basename string,
 	encryption *roachpb.FileEncryptionOptions,
-) (mvcc.SimpleMVCCIterator, error) {
+) (mvcc.SimplerIterator, error) {
 	// Do an initial read of the file, from the beginning, to get the file size as
 	// this is used e.g. to read the trailer.
 	var f io.ReadCloser

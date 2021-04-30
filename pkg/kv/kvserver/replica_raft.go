@@ -1903,7 +1903,7 @@ func (r *Replica) printRaftTail(
 		if err != nil {
 			return sb.String(), err
 		}
-		kv := mvcc.MVCCKeyValue{
+		kv := mvcc.KeyValue{
 			Key:   mvccKey,
 			Value: it.Value(),
 		}

@@ -22,11 +22,11 @@ import (
 // TODO(sumeer): change these to roachpb.Key since the timestamp is
 // always empty and the code below assumes that fact.
 type KeyRange struct {
-	Start, End mvcc.MVCCKey
+	Start, End mvcc.Key
 }
 
 // ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
-// (which can be made to look like an MVCCKey) key / value
+// (which can be made to look like an Key) key / value
 // rows in a range, including system-local metadata and user data.
 // The ranges keyRange slice specifies the key ranges which comprise
 // the range's data. This cannot be used to iterate over keys that are not
@@ -34,17 +34,17 @@ type KeyRange struct {
 // intents, which can be made to look like interleaved MVCCKeys. Most callers
 // want the real keys, and should use ReplicaEngineDataIterator.
 //
-// A ReplicaMVCCDataIterator provides a subset of the engine.MVCCIterator interface.
+// A ReplicaMVCCDataIterator provides a subset of the engine.Iterator interface.
 //
 // TODO(sumeer): merge with ReplicaEngineDataIterator. We can use an EngineIterator
-// for MVCC key ranges and convert from EngineKey to MVCCKey.
+// for MVCC key ranges and convert from EngineKey to Key.
 type ReplicaMVCCDataIterator struct {
 	reader   storage.Reader
 	curIndex int
 	ranges   []KeyRange
 	// When it is non-nil, it represents the iterator for curIndex.
 	// A non-nil it is valid, else it is either done, or err != nil.
-	it      mvcc.MVCCIterator
+	it      mvcc.Iterator
 	err     error
 	reverse bool
 }
@@ -213,7 +213,7 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 //
 // The iterator requires the reader.ConsistentIterators is true, since it
 // creates a different iterator for each replicated key range. This is because
-// MVCCIterator only allows changing the upper-bound of an existing iterator,
+// Iterator only allows changing the upper-bound of an existing iterator,
 // and not both upper and lower bound.
 func NewReplicaMVCCDataIterator(
 	d *roachpb.RangeDescriptor, reader storage.Reader, seekEnd bool,
@@ -321,7 +321,7 @@ func (ri *ReplicaMVCCDataIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key. Only called in tests.
-func (ri *ReplicaMVCCDataIterator) Key() mvcc.MVCCKey {
+func (ri *ReplicaMVCCDataIterator) Key() mvcc.Key {
 	return ri.it.Key()
 }
 
@@ -332,7 +332,7 @@ func (ri *ReplicaMVCCDataIterator) Value() []byte {
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
-func (ri *ReplicaMVCCDataIterator) UnsafeKey() mvcc.MVCCKey {
+func (ri *ReplicaMVCCDataIterator) UnsafeKey() mvcc.Key {
 	return ri.it.UnsafeKey()
 }
 

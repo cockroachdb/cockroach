@@ -132,7 +132,7 @@ func MakeStreamSSTBatcher(
 	return b, err
 }
 
-func (b *SSTBatcher) updateMVCCStats(key mvcc.MVCCKey, value []byte) {
+func (b *SSTBatcher) updateMVCCStats(key mvcc.Key, value []byte) {
 	metaKeySize := int64(len(key.Key)) + 1
 	metaValSize := int64(0)
 	b.ms.LiveBytes += metaKeySize
@@ -141,9 +141,9 @@ func (b *SSTBatcher) updateMVCCStats(key mvcc.MVCCKey, value []byte) {
 	b.ms.ValBytes += metaValSize
 	b.ms.KeyCount++
 
-	totalBytes := int64(len(value)) + mvcc.MVCCVersionTimestampSize
+	totalBytes := int64(len(value)) + mvcc.VersionTimestampSize
 	b.ms.LiveBytes += totalBytes
-	b.ms.KeyBytes += mvcc.MVCCVersionTimestampSize
+	b.ms.KeyBytes += mvcc.VersionTimestampSize
 	b.ms.ValBytes += int64(len(value))
 	b.ms.ValCount++
 }
@@ -152,7 +152,7 @@ func (b *SSTBatcher) updateMVCCStats(key mvcc.MVCCKey, value []byte) {
 // This is only for callers that want to control the timestamp on individual
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
-func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key mvcc.MVCCKey, value []byte) error {
+func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key mvcc.Key, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
 		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
@@ -498,7 +498,7 @@ func createSplitSSTable(
 	db SSTSender,
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
-	iter mvcc.SimpleMVCCIterator,
+	iter mvcc.SimplerIterator,
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemFile{}
@@ -509,7 +509,7 @@ func createSplitSSTable(
 	var first, last roachpb.Key
 	var left, right *sstSpan
 
-	iter.SeekGE(mvcc.MVCCKey{Key: start})
+	iter.SeekGE(mvcc.Key{Key: start})
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, nil, err

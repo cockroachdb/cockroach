@@ -61,7 +61,7 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 					return err.Error()
 				}
 				ikey := pebble.InternalKey{
-					UserKey: EncodeKey(mvcc.MVCCKey{
+					UserKey: EncodeKey(mvcc.Key{
 						Key:       key,
 						Timestamp: hlc.Timestamp{WallTime: int64(timestamp)},
 					}),
@@ -124,7 +124,7 @@ func TestPebbleIterReuse(t *testing.T) {
 
 	batch := eng.NewBatch()
 	for i := 0; i < 100; i++ {
-		key := mvcc.MVCCKey{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
+		key := mvcc.Key{[]byte{byte(i)}, hlc.Timestamp{WallTime: 100}}
 		if err := batch.PutMVCC(key, []byte("foo")); err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +133,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	iter1 := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: []byte{40}, UpperBound: []byte{50}})
 	valuesCount := 0
 	// Seek to a value before the lower bound. Identical to seeking to the lower bound.
-	iter1.SeekGE(mvcc.MVCCKey{Key: []byte{30}})
+	iter1.SeekGE(mvcc.Key{Key: []byte{30}})
 	for ; ; iter1.Next() {
 		ok, err := iter1.Valid()
 		if err != nil {
@@ -165,7 +165,7 @@ func TestPebbleIterReuse(t *testing.T) {
 	// affect the behavior of MVCCIterators. This test is writing []byte{0}
 	// which precedes the localPrefix. Ignore the local and preceding keys in
 	// this seek.
-	iter2.SeekGE(mvcc.MVCCKey{Key: []byte{2}})
+	iter2.SeekGE(mvcc.Key{Key: []byte{2}})
 	for ; ; iter2.Next() {
 		ok, err := iter2.Valid()
 		if err != nil {
@@ -321,8 +321,8 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 	}
 }
 
-func makeMVCCKey(a string) mvcc.MVCCKey {
-	return mvcc.MVCCKey{Key: []byte(a)}
+func makeMVCCKey(a string) mvcc.Key {
+	return mvcc.Key{Key: []byte(a)}
 }
 
 func TestPebbleSeparatorSuccessor(t *testing.T) {
@@ -330,7 +330,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	sepCases := []struct {
-		a, b, want mvcc.MVCCKey
+		a, b, want mvcc.Key
 	}{
 		// Many cases here are adapted from a Pebble unit test.
 
@@ -350,14 +350,14 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		{makeMVCCKey("1\xff\xff"), makeMVCCKey("2"), makeMVCCKey("1\xff\xff")},
 		{makeMVCCKey("1\xff\xff"), makeMVCCKey("9"), makeMVCCKey("2")},
 		{makeMVCCKey("1\xfd\xff"), makeMVCCKey("1\xff"), makeMVCCKey("1\xfe")},
-		{mvcc.MVCCKey{
+		{mvcc.Key{
 			Key:       []byte("1\xff\xff"),
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
 		}, makeMVCCKey("9"), makeMVCCKey("2")},
-		{mvcc.MVCCKey{
+		{mvcc.Key{
 			Key:       []byte("1\xff\xff"),
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
-		}, makeMVCCKey("19"), mvcc.MVCCKey{
+		}, makeMVCCKey("19"), mvcc.Key{
 			Key:       []byte("1\xff\xff"),
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
 		},
@@ -382,7 +382,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 	}
 
 	succCases := []struct {
-		a, want mvcc.MVCCKey
+		a, want mvcc.Key
 	}{
 		// Many cases adapted from Pebble test.
 		{makeMVCCKey("black"), makeMVCCKey("c")},
@@ -391,7 +391,7 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		{makeMVCCKey("13"), makeMVCCKey("2")},
 		{makeMVCCKey("135"), makeMVCCKey("2")},
 		{makeMVCCKey("13\xff"), makeMVCCKey("2")},
-		{mvcc.MVCCKey{
+		{mvcc.Key{
 			Key:       []byte("1\xff\xff"),
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
 		}, makeMVCCKey("2")},
@@ -399,10 +399,10 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 		{makeMVCCKey("\xff\xff"), makeMVCCKey("\xff\xff")},
 		{makeMVCCKey("\xff\xff\xff"), makeMVCCKey("\xff\xff\xff")},
 		{makeMVCCKey("\xfe\xff\xff"), makeMVCCKey("\xff")},
-		{mvcc.MVCCKey{
+		{mvcc.Key{
 			Key:       []byte("\xff\xff"),
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
-		}, mvcc.MVCCKey{
+		}, mvcc.Key{
 			Key:       []byte("\xff\xff"),
 			Timestamp: hlc.Timestamp{WallTime: 20, Logical: 3},
 		}},
@@ -451,7 +451,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 	defer eng.Close()
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	k1 := mvcc.MVCCKey{[]byte("a"), ts1}
+	k1 := mvcc.Key{[]byte("a"), ts1}
 	require.NoError(t, eng.PutMVCC(k1, []byte("a1")))
 
 	roEngine := eng.NewReadOnly()
@@ -469,10 +469,10 @@ func TestPebbleIterConsistency(t *testing.T) {
 	eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("a")}).Close()
 
 	// Write a newer version of "a"
-	require.NoError(t, eng.PutMVCC(mvcc.MVCCKey{[]byte("a"), ts2}, []byte("a2")))
+	require.NoError(t, eng.PutMVCC(mvcc.Key{[]byte("a"), ts2}, []byte("a2")))
 
-	checkMVCCIter := func(iter mvcc.MVCCIterator) {
-		iter.SeekGE(mvcc.MVCCKey{Key: []byte("a")})
+	checkMVCCIter := func(iter mvcc.Iterator) {
+		iter.SeekGE(mvcc.Key{Key: []byte("a")})
 		valid, err := iter.Valid()
 		require.Equal(t, true, valid)
 		require.NoError(t, err)
@@ -514,7 +514,7 @@ func TestPebbleIterConsistency(t *testing.T) {
 	// The eng iterator will see both values.
 	iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: []byte("b")})
 	defer iter.Close()
-	iter.SeekGE(mvcc.MVCCKey{Key: []byte("a")})
+	iter.SeekGE(mvcc.Key{Key: []byte("a")})
 	count := 0
 	for ; ; iter.Next() {
 		valid, err := iter.Valid()
@@ -531,7 +531,7 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	keys := make([][]byte, 1000)
 	for i := range keys {
-		k := mvcc.MVCCKey{
+		k := mvcc.Key{
 			Key: randutil.RandBytes(rng, 8),
 			Timestamp: hlc.Timestamp{
 				WallTime: int64(rng.Intn(5)),

@@ -169,14 +169,14 @@ func (m *dumpMode) Set(s string) error {
 	return nil
 }
 
-type mvccKey mvcc.MVCCKey
+type mvccKey mvcc.Key
 
 // Type implements the pflag.Value interface.
-func (k *mvccKey) Type() string { return "engine.MVCCKey" }
+func (k *mvccKey) Type() string { return "engine.Key" }
 
 // String implements the pflag.Value interface.
 func (k *mvccKey) String() string {
-	return mvcc.MVCCKey(*k).String()
+	return mvcc.Key(*k).String()
 }
 
 // Set implements the pflag.Value interface.
@@ -205,7 +205,7 @@ func (k *mvccKey) Set(value string) error {
 		if err != nil {
 			encoded := gohex.EncodeToString(storage.EncodeKey(mvcc.MakeMVCCMetadataKey(roachpb.Key(b))))
 			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
-				"encoded MVCCKey (i.e. with a timestamp component); here's one with a zero timestamp: %s",
+				"encoded Key (i.e. with a timestamp component); here's one with a zero timestamp: %s",
 				encoded)
 		}
 		*k = mvccKey(newK)

@@ -69,7 +69,7 @@ import (
 // NOTE: This is not used by CockroachDB and has been preserved to serve as an
 // oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
-	iter mvcc.MVCCIterator
+	iter mvcc.Iterator
 
 	// A time-bound iterator cannot be used by itself due to a bug in the time-
 	// bound iterator (#28358). This was historically augmented with an iterator
@@ -77,7 +77,7 @@ type MVCCIncrementalIterator struct {
 	// issues remained (#43799), so now the iterator above is the main iterator
 	// the timeBoundIter is used to check if any keys can be skipped by the main
 	// iterator.
-	timeBoundIter mvcc.MVCCIterator
+	timeBoundIter mvcc.Iterator
 
 	startTime hlc.Timestamp
 	endTime   hlc.Timestamp
@@ -89,7 +89,7 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
-var _ mvcc.SimpleMVCCIterator = &MVCCIncrementalIterator{}
+var _ mvcc.SimplerIterator = &MVCCIncrementalIterator{}
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
@@ -112,8 +112,8 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	var iter mvcc.MVCCIterator
-	var timeBoundIter mvcc.MVCCIterator
+	var iter mvcc.Iterator
+	var timeBoundIter mvcc.Iterator
 	if opts.EnableTimeBoundIteratorOptimization {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
@@ -146,7 +146,7 @@ func NewMVCCIncrementalIterator(
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key. startKey should be a metadata key to ensure that the iterator
 // has a chance to observe any intents on the key if they are there.
-func (i *MVCCIncrementalIterator) SeekGE(startKey mvcc.MVCCKey) {
+func (i *MVCCIncrementalIterator) SeekGE(startKey mvcc.Key) {
 	if i.timeBoundIter != nil {
 		// Check which is the first key seen by the TBI.
 		i.timeBoundIter.SeekGE(startKey)
@@ -387,7 +387,7 @@ func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() mvcc.MVCCKey {
+func (i *MVCCIncrementalIterator) Key() mvcc.Key {
 	return i.iter.Key()
 }
 
@@ -398,7 +398,7 @@ func (i *MVCCIncrementalIterator) Value() []byte {
 
 // UnsafeKey returns the same key as Key, but the memory is invalidated on the
 // next call to {Next,Reset,Close}.
-func (i *MVCCIncrementalIterator) UnsafeKey() mvcc.MVCCKey {
+func (i *MVCCIncrementalIterator) UnsafeKey() mvcc.Key {
 	return i.iter.UnsafeKey()
 }
 

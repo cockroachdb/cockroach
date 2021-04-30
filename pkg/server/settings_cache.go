@@ -45,7 +45,7 @@ func loadCachedSettingsKVs(_ context.Context, eng storage.Engine) ([]roachpb.Key
 		keys.LocalStoreCachedSettingsKeyMin,
 		keys.LocalStoreCachedSettingsKeyMax,
 		storage.MVCCKeyAndIntentsIterKind,
-		func(kv mvcc.MVCCKeyValue) error {
+		func(kv mvcc.KeyValue) error {
 			settingKey, err := keys.DecodeStoreCachedSettingsKey(kv.Key.Key)
 			if err != nil {
 				return err

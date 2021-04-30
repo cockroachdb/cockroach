@@ -26,7 +26,7 @@ func BenchmarkScanDecodeKeyValue(b *testing.B) {
 	ts := hlc.Timestamp{WallTime: int64(1000000)}
 	value := []byte("foo foo foo")
 	rep := make([]byte, 8)
-	keyBytes := storage.EncodeKey(mvcc.MVCCKey{Key: key, Timestamp: ts})
+	keyBytes := storage.EncodeKey(mvcc.Key{Key: key, Timestamp: ts})
 	binary.LittleEndian.PutUint64(rep, uint64(len(keyBytes)<<32)|uint64(len(value)))
 	rep = append(rep, keyBytes...)
 	rep = append(rep, value...)

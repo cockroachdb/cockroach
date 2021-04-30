@@ -112,7 +112,7 @@ var _ = (*RocksDBBatchBuilder).Len
 // Put sets the given key to the value provided.
 //
 // It is safe to modify the contents of the arguments after Put returns.
-func (b *RocksDBBatchBuilder) Put(key mvcc.MVCCKey, value []byte) {
+func (b *RocksDBBatchBuilder) Put(key mvcc.Key, value []byte) {
 	keyLen := key.Len()
 	deferredOp := b.batch.SetDeferred(keyLen, len(value))
 	encodeKeyToBuf(deferredOp.Key, key, keyLen)
@@ -122,7 +122,7 @@ func (b *RocksDBBatchBuilder) Put(key mvcc.MVCCKey, value []byte) {
 }
 
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKey(key mvcc.MVCCKey) []byte {
+func EncodeKey(key mvcc.Key) []byte {
 	keyLen := key.Len()
 	buf := make([]byte, keyLen)
 	encodeKeyToBuf(buf, key, keyLen)
@@ -130,7 +130,7 @@ func EncodeKey(key mvcc.MVCCKey) []byte {
 }
 
 // EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKeyToBuf(buf []byte, key mvcc.MVCCKey) []byte {
+func EncodeKeyToBuf(buf []byte, key mvcc.Key) []byte {
 	keyLen := key.Len()
 	if cap(buf) < keyLen {
 		buf = make([]byte, keyLen)
@@ -141,7 +141,7 @@ func EncodeKeyToBuf(buf []byte, key mvcc.MVCCKey) []byte {
 	return buf
 }
 
-func encodeKeyToBuf(buf []byte, key mvcc.MVCCKey, keyLen int) {
+func encodeKeyToBuf(buf []byte, key mvcc.Key, keyLen int) {
 	const (
 		timestampSentinelLen = 1
 		walltimeEncodedLen   = 8
@@ -171,14 +171,14 @@ func encodeKeyToBuf(buf []byte, key mvcc.MVCCKey, keyLen int) {
 }
 
 func encodeTimestamp(ts hlc.Timestamp) []byte {
-	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(mvcc.MVCCKey{Timestamp: ts}))
+	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(mvcc.Key{Timestamp: ts}))
 	return encodedTS
 }
 
-// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation.
-func DecodeMVCCKey(encodedKey []byte) (mvcc.MVCCKey, error) {
+// DecodeMVCCKey decodes an engine.Key from its serialized representation.
+func DecodeMVCCKey(encodedKey []byte) (mvcc.Key, error) {
 	k, ts, err := enginepb.DecodeKey(encodedKey)
-	return mvcc.MVCCKey{k, ts}, err
+	return mvcc.Key{k, ts}, err
 }
 
 // Decode the header of RocksDB batch repr, returning both the count of the
@@ -267,13 +267,13 @@ func (r *RocksDBBatchReader) Key() []byte {
 	return r.key
 }
 
-func decodeMVCCKey(k []byte) (mvcc.MVCCKey, error) {
+func decodeMVCCKey(k []byte) (mvcc.Key, error) {
 	k, ts, err := enginepb.DecodeKey(k)
-	return mvcc.MVCCKey{k, ts}, err
+	return mvcc.Key{k, ts}, err
 }
 
 // MVCCKey returns the MVCC key of the current batch entry.
-func (r *RocksDBBatchReader) MVCCKey() (mvcc.MVCCKey, error) {
+func (r *RocksDBBatchReader) MVCCKey() (mvcc.Key, error) {
 	return decodeMVCCKey(r.Key())
 }
 
@@ -296,7 +296,7 @@ func (r *RocksDBBatchReader) Value() []byte {
 }
 
 // MVCCEndKey returns the MVCC end key of the current batch entry.
-func (r *RocksDBBatchReader) MVCCEndKey() (mvcc.MVCCKey, error) {
+func (r *RocksDBBatchReader) MVCCEndKey() (mvcc.Key, error) {
 	if r.typ != BatchTypeRangeDeletion {
 		panic("cannot only call Value on a range deletion entry")
 	}

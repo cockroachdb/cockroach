@@ -134,7 +134,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	rtsIter mvcc.SimpleMVCCIterator, txnPusher TxnPusher,
+	rtsIter mvcc.SimplerIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
@@ -158,14 +158,14 @@ func newTestProcessorWithTxnPusher(
 	return p, stopper
 }
 
-func makeIteratorConstructor(rtsIter mvcc.SimpleMVCCIterator) IteratorConstructor {
+func makeIteratorConstructor(rtsIter mvcc.SimplerIterator) IteratorConstructor {
 	if rtsIter == nil {
 		return nil
 	}
-	return func() mvcc.SimpleMVCCIterator { return rtsIter }
+	return func() mvcc.SimplerIterator { return rtsIter }
 }
 
-func newTestProcessor(rtsIter mvcc.SimpleMVCCIterator) (*Processor, *stop.Stopper) {
+func newTestProcessor(rtsIter mvcc.SimplerIterator) (*Processor, *stop.Stopper) {
 	return newTestProcessorWithTxnPusher(rtsIter, nil /* pusher */)
 }
 
@@ -539,7 +539,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	rtsIter := newTestIterator([]mvcc.MVCCKeyValue{
+	rtsIter := newTestIterator([]mvcc.KeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),

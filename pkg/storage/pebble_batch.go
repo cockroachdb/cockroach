@@ -33,8 +33,8 @@ type pebbleBatch struct {
 	// The iterator reuse optimization in pebbleBatch is for servicing a
 	// BatchRequest, such that the iterators get reused across different
 	// requests in the batch.
-	// Reuse iterators for {normal,prefix} x {MVCCKey,EngineKey} iteration. We
-	// need separate iterators for EngineKey and MVCCKey iteration since
+	// Reuse iterators for {normal,prefix} x {Key,EngineKey} iteration. We
+	// need separate iterators for EngineKey and Key iteration since
 	// iterators that make separated locks/intents look as interleaved need to
 	// use both simultaneously.
 	// When the first iterator is initialized, the underlying *pebble.Iterator
@@ -139,7 +139,7 @@ func (p *pebbleBatch) ExportMVCCToSst(
 }
 
 // Get implements the Batch interface.
-func (p *pebbleBatch) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
+func (p *pebbleBatch) MVCCGet(key mvcc.Key) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -174,14 +174,14 @@ func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
 
 // MVCCGetProto implements the Batch interface.
 func (p *pebbleBatch) MVCCGetProto(
-	key mvcc.MVCCKey, msg protoutil.Message,
+	key mvcc.Key, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return pebbleGetProto(p, key, msg)
 }
 
 // MVCCIterate implements the Batch interface.
 func (p *pebbleBatch) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.MVCCKeyValue) error,
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.KeyValue) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
@@ -194,7 +194,7 @@ func (p *pebbleBatch) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Batch interface.
-func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) mvcc.MVCCIterator {
+func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) mvcc.Iterator {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
@@ -216,7 +216,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) m
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := mvcc.MVCCIterator(newPebbleIterator(p.batch, nil, opts))
+		iter := mvcc.Iterator(newPebbleIterator(p.batch, nil, opts))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -248,7 +248,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) m
 	}
 
 	iter.inuse = true
-	var rv mvcc.MVCCIterator = iter
+	var rv mvcc.Iterator = iter
 	if util.RaceEnabled {
 		rv = wrapInUnsafeIter(rv)
 	}
@@ -309,7 +309,7 @@ func (p *pebbleBatch) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 // ClearMVCC implements the Batch interface.
-func (p *pebbleBatch) ClearMVCC(key mvcc.MVCCKey) error {
+func (p *pebbleBatch) ClearMVCC(key mvcc.Key) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
@@ -318,7 +318,7 @@ func (p *pebbleBatch) ClearMVCC(key mvcc.MVCCKey) error {
 
 // ClearUnversioned implements the Batch interface.
 func (p *pebbleBatch) ClearUnversioned(key roachpb.Key) error {
-	return p.clear(mvcc.MVCCKey{Key: key})
+	return p.clear(mvcc.Key{Key: key})
 }
 
 // ClearIntent implements the Batch interface.
@@ -341,7 +341,7 @@ func (p *pebbleBatch) ClearEngineKey(key EngineKey) error {
 	return p.batch.Delete(p.buf, nil)
 }
 
-func (p *pebbleBatch) clear(key mvcc.MVCCKey) error {
+func (p *pebbleBatch) clear(key mvcc.Key) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -362,7 +362,7 @@ func (p *pebbleBatch) SingleClearEngineKey(key EngineKey) error {
 
 // ClearRawRange implements the Batch interface.
 func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key) error {
-	return p.clearRange(mvcc.MVCCKey{Key: start}, mvcc.MVCCKey{Key: end})
+	return p.clearRange(mvcc.Key{Key: start}, mvcc.Key{Key: end})
 }
 
 // ClearMVCCRangeAndIntents implements the Batch interface.
@@ -373,18 +373,18 @@ func (p *pebbleBatch) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 }
 
 // ClearMVCCRange implements the Batch interface.
-func (p *pebbleBatch) ClearMVCCRange(start, end mvcc.MVCCKey) error {
+func (p *pebbleBatch) ClearMVCCRange(start, end mvcc.Key) error {
 	return p.clearRange(start, end)
 }
 
-func (p *pebbleBatch) clearRange(start, end mvcc.MVCCKey) error {
+func (p *pebbleBatch) clearRange(start, end mvcc.Key) error {
 	p.buf = EncodeKeyToBuf(p.buf[:0], start)
 	buf2 := EncodeKey(end)
 	return p.batch.DeleteRange(p.buf, buf2, nil)
 }
 
 // Clear implements the Batch interface.
-func (p *pebbleBatch) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error {
+func (p *pebbleBatch) ClearIterRange(iter mvcc.Iterator, start, end roachpb.Key) error {
 	// Note that this method has the side effect of modifying iter's bounds.
 	// Since all calls to `ClearIterRange` are on new throwaway iterators with no
 	// lower bounds, calling SetUpperBound should be sufficient and safe.
@@ -401,7 +401,7 @@ func (p *pebbleBatch) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.
 			break
 		}
 		// NB: UnsafeRawKey could be a serialized lock table key, and not just an
-		// MVCCKey.
+		// Key.
 		err = p.batch.Delete(iter.UnsafeRawKey(), nil)
 		if err != nil {
 			return err
@@ -411,7 +411,7 @@ func (p *pebbleBatch) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.
 }
 
 // Merge implements the Batch interface.
-func (p *pebbleBatch) Merge(key mvcc.MVCCKey, value []byte) error {
+func (p *pebbleBatch) Merge(key mvcc.Key, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -421,7 +421,7 @@ func (p *pebbleBatch) Merge(key mvcc.MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Batch interface.
-func (p *pebbleBatch) PutMVCC(key mvcc.MVCCKey, value []byte) error {
+func (p *pebbleBatch) PutMVCC(key mvcc.Key, value []byte) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
@@ -430,7 +430,7 @@ func (p *pebbleBatch) PutMVCC(key mvcc.MVCCKey, value []byte) error {
 
 // PutUnversioned implements the Batch interface.
 func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
-	return p.put(mvcc.MVCCKey{Key: key}, value)
+	return p.put(mvcc.Key{Key: key}, value)
 }
 
 // PutIntent implements the Batch interface.
@@ -464,7 +464,7 @@ func (p *pebbleBatch) SafeToWriteSeparatedIntents(ctx context.Context) (bool, er
 	return p.wrappedIntentWriter.safeToWriteSeparatedIntents(ctx)
 }
 
-func (p *pebbleBatch) put(key mvcc.MVCCKey, value []byte) error {
+func (p *pebbleBatch) put(key mvcc.Key, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}

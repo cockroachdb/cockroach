@@ -91,7 +91,7 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			break
 		}
 		if key.IsMVCCKey() {
-			var k mvcc.MVCCKey
+			var k mvcc.Key
 			if k, err = key.ToMVCCKey(); err != nil {
 				fmt.Fprintf(b, "error: %s\n", err.Error())
 				break

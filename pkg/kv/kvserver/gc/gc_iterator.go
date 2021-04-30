@@ -34,10 +34,10 @@ func makeGCIterator(desc *roachpb.RangeDescriptor, snap storage.Reader) gcIterat
 }
 
 type gcIteratorState struct {
-	cur, next, afterNext *mvcc.MVCCKeyValue
+	cur, next, afterNext *mvcc.KeyValue
 }
 
-// curIsNewest returns true if the current MVCCKeyValue in the gcIteratorState
+// curIsNewest returns true if the current KeyValue in the gcIteratorState
 // is the newest committed version of the key.
 //
 // It returns true if next is nil or if next is an intent.
@@ -46,13 +46,13 @@ func (s *gcIteratorState) curIsNewest() bool {
 		(s.next == nil || (s.afterNext != nil && !s.afterNext.Key.IsValue()))
 }
 
-// curIsNotValue returns true if the current MVCCKeyValue in the gcIteratorState
+// curIsNotValue returns true if the current KeyValue in the gcIteratorState
 // is not a value, i.e. does not have a timestamp.
 func (s *gcIteratorState) curIsNotValue() bool {
 	return !s.cur.Key.IsValue()
 }
 
-// curIsIntent returns true if the current MVCCKeyValue in the gcIteratorState
+// curIsIntent returns true if the current KeyValue in the gcIteratorState
 // is an intent.
 func (s *gcIteratorState) curIsIntent() bool {
 	return s.next != nil && !s.next.Key.IsValue()
@@ -98,7 +98,7 @@ func (it *gcIterator) step() {
 	it.buf.removeFront()
 }
 
-func (it *gcIterator) peekAt(i int) (*mvcc.MVCCKeyValue, bool) {
+func (it *gcIterator) peekAt(i int) (*mvcc.KeyValue, bool) {
 	if it.buf.len <= i {
 		if !it.fillTo(i + 1) {
 			return nil, false
@@ -130,12 +130,12 @@ const gcIteratorRingBufSize = 3
 
 type gcIteratorRingBuf struct {
 	allocs [gcIteratorRingBufSize]bufalloc.ByteAllocator
-	buf    [gcIteratorRingBufSize]mvcc.MVCCKeyValue
+	buf    [gcIteratorRingBufSize]mvcc.KeyValue
 	len    int
 	head   int
 }
 
-func (b *gcIteratorRingBuf) at(i int) *mvcc.MVCCKeyValue {
+func (b *gcIteratorRingBuf) at(i int) *mvcc.KeyValue {
 	if i >= b.len {
 		panic("index out of range")
 	}
@@ -146,13 +146,13 @@ func (b *gcIteratorRingBuf) removeFront() {
 	if b.len == 0 {
 		panic("cannot remove from empty gcIteratorRingBuf")
 	}
-	b.buf[b.head] = mvcc.MVCCKeyValue{}
+	b.buf[b.head] = mvcc.KeyValue{}
 	b.head = (b.head + 1) % gcIteratorRingBufSize
 	b.len--
 }
 
 type iterator interface {
-	UnsafeKey() mvcc.MVCCKey
+	UnsafeKey() mvcc.Key
 	UnsafeValue() []byte
 }
 
@@ -166,7 +166,7 @@ func (b *gcIteratorRingBuf) pushBack(it iterator) {
 	v := it.UnsafeValue()
 	b.allocs[i], k.Key = b.allocs[i].Copy(k.Key, len(v))
 	b.allocs[i], v = b.allocs[i].Copy(v, 0)
-	b.buf[i] = mvcc.MVCCKeyValue{
+	b.buf[i] = mvcc.KeyValue{
 		Key:   k,
 		Value: v,
 	}

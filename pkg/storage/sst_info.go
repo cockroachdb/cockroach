@@ -22,8 +22,8 @@ import (
 type SSTableInfo struct {
 	Level int
 	Size  int64
-	Start mvcc.MVCCKey
-	End   mvcc.MVCCKey
+	Start mvcc.Key
+	End   mvcc.Key
 }
 
 // SSTableInfos is a slice of SSTableInfo structures.

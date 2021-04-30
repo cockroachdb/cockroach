@@ -191,7 +191,7 @@ CREATE TABLE data2.foo (a int);
 			UpperBound: endKey,
 		})
 		defer it.Close()
-		it.SeekGE(mvcc.MVCCKey{Key: startKey})
+		it.SeekGE(mvcc.Key{Key: startKey})
 		hasKey, err := it.Valid()
 		require.NoError(t, err)
 		require.False(t, hasKey)

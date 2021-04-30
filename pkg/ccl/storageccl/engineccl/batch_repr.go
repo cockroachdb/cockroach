@@ -20,12 +20,10 @@ import (
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.
-func VerifyBatchRepr(
-	repr []byte, start, end mvcc.MVCCKey, nowNanos int64,
-) (enginepb.MVCCStats, error) {
+func VerifyBatchRepr(repr []byte, start, end mvcc.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 	// We store a 4 byte checksum of each key/value entry in the value. Make
 	// sure all the ones in this BatchRepr validate.
-	var kvs []mvcc.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 
 	r, err := storage.NewRocksDBBatchReader(repr)
 	if err != nil {
@@ -42,7 +40,7 @@ func VerifyBatchRepr(
 			if err := v.Verify(mvccKey.Key); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
-			kvs = append(kvs, mvcc.MVCCKeyValue{
+			kvs = append(kvs, mvcc.KeyValue{
 				Key:   mvccKey,
 				Value: v.RawBytes,
 			})

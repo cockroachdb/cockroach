@@ -578,7 +578,7 @@ func (r *Replica) sha512(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
-	visitor := func(unsafeKey mvcc.MVCCKey, unsafeValue []byte) error {
+	visitor := func(unsafeKey mvcc.Key, unsafeValue []byte) error {
 		// Rate Limit the scan through the range
 		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err
