@@ -15,16 +15,21 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -148,13 +153,31 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 		return err
 	}
 
+	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenID))
 	// Initialize the tenant's keyspace.
 	schema := bootstrap.MakeMetadataSchema(
-		keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)),
+		codec,
 		nil, /* defaultZoneConfig */
 		nil, /* defaultZoneConfig */
 	)
 	kvs, splits := schema.GetInitialValues()
+
+	{
+		// Populate the version setting for the tenant. This will allow the tenant
+		// to know what migrations need to be run in the future. The choice to use
+		// the active cluster version here is intentional; it allows tenants
+		// created during the mixed-version state in the host cluster to avoid
+		// using code which may be too new. The expectation is that the tenant
+		// clusters will be updated to a version only after the system tenant has
+		// been upgraded.
+		v := p.EvalContext().Settings.Version.ActiveVersion(ctx)
+		tenantSettingKV, err := generateTenantClusterSettingKV(codec, v)
+		if err != nil {
+			return err
+		}
+		kvs = append(kvs, tenantSettingKV)
+	}
+
 	b := p.Txn().NewBatch()
 	for _, kv := range kvs {
 		b.CPut(kv.Key, &kv.Value, nil)
@@ -186,9 +209,45 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 		}
 	}
 
-	// Tenant creation complete! Note that sqlmigrations have not been run yet.
-	// They will be run when a sqlServer bound to this tenant is first launched.
 	return nil
+}
+
+// generateTenantClusterSettingKV generates the kv to be written to the store
+// to populate the system.settings table of the tenant implied by codec. This
+// bootstraps the cluster version for the new tenant.
+func generateTenantClusterSettingKV(
+	codec keys.SQLCodec, v clusterversion.ClusterVersion,
+) (roachpb.KeyValue, error) {
+	encoded, err := protoutil.Marshal(&v)
+	if err != nil {
+		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to encode current cluster version %v", &v)
+	}
+	kvs, err := rowenc.EncodePrimaryIndex(
+		codec,
+		systemschema.SettingsTable,
+		systemschema.SettingsTable.GetPrimaryIndex(),
+		catalog.ColumnIDToOrdinalMap(systemschema.SettingsTable.PublicColumns()),
+		[]tree.Datum{
+			tree.NewDString(clusterversion.KeyVersionSetting),      // name
+			tree.NewDString(string(encoded)),                       // value
+			tree.NewDTimeTZFromTime(timeutil.Now()),                // lastUpdated
+			tree.NewDString((*settings.VersionSetting)(nil).Typ()), // type
+		},
+		false, /* includeEmpty */
+	)
+	if err != nil {
+		return roachpb.KeyValue{}, errors.NewAssertionErrorWithWrappedErrf(err,
+			"failed to encode cluster setting")
+	}
+	if len(kvs) != 1 {
+		return roachpb.KeyValue{}, errors.AssertionFailedf(
+			"failed to encode cluster setting: expected 1 key-value, got %d", len(kvs))
+	}
+	return roachpb.KeyValue{
+		Key:   kvs[0].Key,
+		Value: kvs[0].Value,
+	}, nil
 }
 
 // ActivateTenant marks a tenant active.
