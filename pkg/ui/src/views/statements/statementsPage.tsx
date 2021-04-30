@@ -201,7 +201,7 @@ export const selectLastReset = createSelector(
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
   (state: AdminUIState) => state.localSettings,
-  "default",
+  null,
 );
 
 export default withRouter(
@@ -213,7 +213,7 @@ export default withRouter(
       databases: selectDatabases(state),
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
-      columns: statementColumnsLocalSetting.selector(state),
+      columns: statementColumnsLocalSetting.selectorToArray(state),
     }),
     {
       refreshStatements,
@@ -229,8 +229,14 @@ export default withRouter(
       onSortingChange: trackTableSortAction,
       onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
         trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
-      onColumnsChange: (value: string) =>
-        statementColumnsLocalSetting.set(value),
+      // We use `null` when the value was never set and it will show all columns.
+      // If the user modifies the selection and no columns are selected,
+      // the function will save the value as a blank space, otherwise
+      // it gets saved as `null`.
+      onColumnsChange: (value: string[]) =>
+        statementColumnsLocalSetting.set(
+          value.length === 0 ? " " : value.join(","),
+        ),
     },
   )(StatementsPage),
 );
