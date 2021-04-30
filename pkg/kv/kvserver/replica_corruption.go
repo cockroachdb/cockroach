@@ -48,6 +48,8 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 func (r *Replica) setCorruptRaftMuLocked(
 	ctx context.Context, cErr *roachpb.ReplicaCorruptionError,
 ) *roachpb.Error {
+	r.readOnlyCmdMu.Lock()
+	defer r.readOnlyCmdMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
