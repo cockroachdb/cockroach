@@ -14,13 +14,14 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 )
 
 const invalidIdxSentinel = -1
 
 // multiIterator multiplexes iteration over a number of SimpleMVCCIterators.
 type multiIterator struct {
-	iters []SimpleMVCCIterator
+	iters []mvcc.SimplerIterator
 	// The index into `iters` of the iterator currently being pointed at.
 	currentIdx int
 	// The indexes of every iterator with the same key as the one in currentIdx.
@@ -35,7 +36,7 @@ type multiIterator struct {
 	err error
 }
 
-var _ SimpleMVCCIterator = &multiIterator{}
+var _ mvcc.SimplerIterator = &multiIterator{}
 
 // MakeMultiIterator creates an iterator that multiplexes
 // SimpleMVCCIterators. The caller is responsible for closing the passed
@@ -44,7 +45,7 @@ var _ SimpleMVCCIterator = &multiIterator{}
 // If two iterators have an entry with exactly the same key and timestamp, the
 // one with a higher index in this constructor arg is preferred. The other is
 // skipped.
-func MakeMultiIterator(iters []SimpleMVCCIterator) SimpleMVCCIterator {
+func MakeMultiIterator(iters []mvcc.SimplerIterator) mvcc.SimplerIterator {
 	return &multiIterator{
 		iters:                        iters,
 		currentIdx:                   invalidIdxSentinel,
@@ -59,7 +60,7 @@ func (f *multiIterator) Close() {
 
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key.
-func (f *multiIterator) SeekGE(key MVCCKey) {
+func (f *multiIterator) SeekGE(key mvcc.Key) {
 	for _, iter := range f.iters {
 		iter.SeekGE(key)
 	}
@@ -82,7 +83,7 @@ func (f *multiIterator) Valid() (bool, error) {
 
 // UnsafeKey returns the current key, but the memory is invalidated on the next
 // call to {NextKey,Seek}.
-func (f *multiIterator) UnsafeKey() MVCCKey {
+func (f *multiIterator) UnsafeKey() mvcc.Key {
 	return f.iters[f.currentIdx].UnsafeKey()
 }
 
@@ -136,7 +137,7 @@ func (f *multiIterator) advance() {
 		// Fill proposedMVCCKey with the mvcc key of the current best for the
 		// next value for currentIdx (or a sentinel that sorts after everything
 		// if this is the first non-exhausted iterator).
-		proposedMVCCKey := MVCCKey{Key: keys.MaxKey}
+		proposedMVCCKey := mvcc.Key{Key: keys.MaxKey}
 		if proposedNextIdx != invalidIdxSentinel {
 			proposedMVCCKey = f.iters[proposedNextIdx].UnsafeKey()
 		}

@@ -18,13 +18,14 @@ import (
 
 func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin",
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow",
-		}, nil,
+		},
+		nil, // forbiddenPrefixes
 	)
 }

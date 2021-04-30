@@ -21,6 +21,12 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/roachpb", true, []string{"c-deps"}, nil,
+		"github.com/cockroachdb/cockroach/pkg/roachpb",
+		[]string{
+			buildutil.CDeps,
+			"github.com/cockroachdb/cockroach/pkg/geo",
+			"github.com/cockroachdb/pebble",
+		},
+		nil, // forbiddenPrefixes
 	)
 }

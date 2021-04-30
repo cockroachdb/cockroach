@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -40,150 +41,6 @@ func init() {
 	_ = DefaultStorageEngine.Set(envutil.EnvOrDefaultString("COCKROACH_STORAGE_ENGINE", "pebble"))
 }
 
-// SimpleMVCCIterator is an interface for iterating over key/value pairs in an
-// engine. SimpleMVCCIterator implementations are thread safe unless otherwise
-// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
-type SimpleMVCCIterator interface {
-	// Close frees up resources held by the iterator.
-	Close()
-	// SeekGE advances the iterator to the first key in the engine which
-	// is >= the provided key.
-	SeekGE(key MVCCKey)
-	// Valid must be called after any call to Seek(), Next(), Prev(), or
-	// similar methods. It returns (true, nil) if the iterator points to
-	// a valid key (it is undefined to call Key(), Value(), or similar
-	// methods unless Valid() has returned (true, nil)). It returns
-	// (false, nil) if the iterator has moved past the end of the valid
-	// range, or (false, err) if an error has occurred. Valid() will
-	// never return true with a non-nil error.
-	Valid() (bool, error)
-	// Next advances the iterator to the next key/value in the
-	// iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the last key.
-	Next()
-	// NextKey advances the iterator to the next MVCC key. This operation is
-	// distinct from Next which advances to the next version of the current key
-	// or the next key if the iterator is currently located at the last version
-	// for a key. NextKey must not be used to switch iteration direction from
-	// reverse iteration to forward iteration.
-	NextKey()
-	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
-	UnsafeKey() MVCCKey
-	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
-	UnsafeValue() []byte
-}
-
-// IteratorStats is returned from (MVCCIterator).Stats.
-type IteratorStats struct {
-	InternalDeleteSkippedCount int
-	TimeBoundNumSSTs           int
-}
-
-// MVCCIterator is an interface for iterating over key/value pairs in an
-// engine. It is used for iterating over the key space that can have multiple
-// versions, and if often also used (due to historical reasons) for iterating
-// over the key space that never has multiple versions (i.e.,
-// MVCCKey.Timestamp.IsEmpty()).
-//
-// MVCCIterator implementations are thread safe unless otherwise noted.
-type MVCCIterator interface {
-	SimpleMVCCIterator
-
-	// SeekLT advances the iterator to the first key in the engine which
-	// is < the provided key.
-	SeekLT(key MVCCKey)
-	// Prev moves the iterator backward to the previous key/value
-	// in the iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the first key.
-	Prev()
-
-	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
-	// the caller expects to find an intent, and additionally has the txnUUID
-	// for the intent it is looking for. When running with separated intents,
-	// this can optimize the behavior of the underlying Engine for write heavy
-	// keys by avoiding the need to iterate over many deleted intents.
-	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
-
-	// Key returns the current key.
-	Key() MVCCKey
-	// UnsafeRawKey returns the current raw key which could be an encoded
-	// MVCCKey, or the more general EngineKey (for a lock table key).
-	// This is a low-level and dangerous method since it will expose the
-	// raw key of the lock table, i.e., the intentInterleavingIter will not
-	// hide the difference between interleaved and separated intents.
-	// Callers should be very careful when using this. This is currently
-	// only used by callers who are iterating and deleting all data in a
-	// range.
-	UnsafeRawKey() []byte
-	// UnsafeRawMVCCKey returns a serialized MVCCKey. The memory is invalidated
-	// on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}. If the
-	// iterator is currently positioned at a separated intent (when
-	// intentInterleavingIter is used), it makes that intent look like an
-	// interleaved intent key, i.e., an MVCCKey with an empty timestamp. This is
-	// currently used by callers who pass around key information as a []byte --
-	// this seems avoidable, and we should consider cleaning up the callers.
-	UnsafeRawMVCCKey() []byte
-	// Value returns the current value as a byte slice.
-	Value() []byte
-	// ValueProto unmarshals the value the iterator is currently
-	// pointing to using a protobuf decoder.
-	ValueProto(msg protoutil.Message) error
-	// When Key() is positioned on an intent, returns true iff this intent
-	// (represented by MVCCMetadata) is a separated lock/intent. This is a
-	// low-level method that should not be called from outside the storage
-	// package. It is part of the exported interface because there are structs
-	// outside the package that wrap and implement Iterator.
-	IsCurIntentSeparated() bool
-	// ComputeStats scans the underlying engine from start to end keys and
-	// computes stats counters based on the values. This method is used after a
-	// range is split to recompute stats for each subrange. The start key is
-	// always adjusted to avoid counting local keys in the event stats are being
-	// recomputed for the first range (i.e. the one with start key == KeyMin).
-	// The nowNanos arg specifies the wall time in nanoseconds since the
-	// epoch and is used to compute the total age of all intents.
-	ComputeStats(start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error)
-	// FindSplitKey finds a key from the given span such that the left side of
-	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans and will always
-	// sort equal to or after minSplitKey.
-	//
-	// DO NOT CALL directly (except in wrapper MVCCIterator implementations). Use the
-	// package-level MVCCFindSplitKey instead. For correct operation, the caller
-	// must set the upper bound on the iterator before calling this method.
-	FindSplitKey(start, end, minSplitKey roachpb.Key, targetSize int64) (MVCCKey, error)
-	// CheckForKeyCollisions checks whether any keys collide between the iterator
-	// and the encoded SST data specified, within the provided key range. Returns
-	// stats on skipped KVs, or an error if a collision is found.
-	CheckForKeyCollisions(sstData []byte, start, end roachpb.Key) (enginepb.MVCCStats, error)
-	// SetUpperBound installs a new upper bound for this iterator. The caller
-	// can modify the parameter after this function returns. This must not be a
-	// nil key. When Reader.ConsistentIterators is true, prefer creating a new
-	// iterator.
-	//
-	// Due to the rare use, we are limiting this method to not switch an
-	// iterator from a global key upper-bound to a local key upper-bound (it
-	// simplifies some code in intentInterleavingIter) or vice versa. Iterator
-	// reuse already happens under-the-covers for most Reader implementations
-	// when constructing a new iterator, and that is a much cleaner solution.
-	//
-	// TODO(sumeer): this method is rarely used and is a source of complexity
-	// since intentInterleavingIter needs to fiddle with the bounds of its
-	// underlying iterators when this is called. Currently only used by
-	// pebbleBatch.ClearIterRange to modify the upper bound of the iterator it
-	// is given: this use is unprincipled and there is a comment in that code
-	// about it. The caller is already usually setting the bounds accurately,
-	// and in some cases the callee is tightening the upper bound. Remove that
-	// use case and remove this from the interface.
-	SetUpperBound(roachpb.Key)
-	// Stats returns statistics about the iterator.
-	Stats() IteratorStats
-	// SupportsPrev returns true if MVCCIterator implementation supports reverse
-	// iteration with Prev() or SeekLT().
-	SupportsPrev() bool
-}
-
 // EngineIterator is an iterator over key-value pairs where the key is
 // an EngineKey.
 type EngineIterator interface {
@@ -198,9 +55,9 @@ type EngineIterator interface {
 	// NextEngineKey advances the iterator to the next key/value in the
 	// iteration. After this call, valid will be true if the iterator was not
 	// originally positioned at the last key. Note that unlike
-	// MVCCIterator.NextKey, this method does not skip other versions with the
+	// Iterator.NextKey, this method does not skip other versions with the
 	// same EngineKey.Key.
-	// TODO(sumeer): change MVCCIterator.Next() to match the
+	// TODO(sumeer): change Iterator.Next() to match the
 	// return values, change all its callers, and rename this
 	// to Next().
 	NextEngineKey() (valid bool, err error)
@@ -270,7 +127,7 @@ type IterOptions struct {
 	// outside of the time bounds, perform your own filtering.
 	//
 	// These fields are only relevant for MVCCIterators. Additionally, an
-	// MVCCIterator with timestamp hints will not see separated intents, and may
+	// Iterator with timestamp hints will not see separated intents, and may
 	// not see some interleaved intents. Currently, the only way to correctly
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
@@ -369,15 +226,15 @@ type Reader interface {
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
 	// Deprecated: use storage.MVCCGet instead.
-	MVCCGet(key MVCCKey) ([]byte, error)
+	MVCCGet(key mvcc.Key) ([]byte, error)
 	// MVCCGetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value. Semantically, it behaves as if an iterator with
 	// MVCCKeyAndIntentsIterKind was used.
 	//
-	// Deprecated: use MVCCIterator.ValueProto instead.
-	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
+	// Deprecated: use Iterator.ValueProto instead.
+	MVCCGetProto(key mvcc.Key, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// MVCCIterate scans from the start key to the end key (exclusive), invoking the
 	// function f on each key value pair. If f returns an error or if the scan
 	// itself encounters an error, the iteration will stop and return the error.
@@ -385,11 +242,11 @@ type Reader interface {
 	// error. Note that this method is not expected take into account the
 	// timestamp of the end key; all MVCCKeys at end.Key are considered excluded
 	// in the iteration.
-	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error) error
-	// NewMVCCIterator returns a new instance of an MVCCIterator over this
-	// engine. The caller must invoke MVCCIterator.Close() when finished
+	MVCCIterate(start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.KeyValue) error) error
+	// NewMVCCIterator returns a new instance of an Iterator over this
+	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
-	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
+	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) mvcc.Iterator
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
@@ -442,14 +299,14 @@ type Writer interface {
 	// returns.
 	ApplyBatchRepr(repr []byte, sync bool) error
 
-	// ClearMVCC removes the item from the db with the given MVCCKey. It
+	// ClearMVCC removes the item from the db with the given Key. It
 	// requires that the timestamp is non-empty (see
 	// {ClearUnversioned,ClearIntent} if the timestamp is empty). Note that
 	// clear actually removes entries from the storage engine, rather than
 	// inserting MVCC tombstones.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCC(key MVCCKey) error
+	ClearMVCC(key mvcc.Key) error
 	// ClearUnversioned removes an unversioned item from the db. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys).
@@ -515,19 +372,19 @@ type Writer interface {
 	// of the ClearMVCCRange.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
-	ClearMVCCRange(start, end MVCCKey) error
+	ClearMVCCRange(start, end mvcc.Key) error
 
 	// ClearIterRange removes a set of entries, from start (inclusive) to end
 	// (exclusive). Similar to Clear and ClearRange, this method actually
 	// removes entries from the storage engine. Unlike ClearRange, the entries
 	// to remove are determined by iterating over iter and per-key storage
-	// tombstones (not MVCC tombstones) are generated. If the MVCCIterator was
+	// tombstones (not MVCC tombstones) are generated. If the Iterator was
 	// constructed using MVCCKeyAndIntentsIterKind, any separated intents/locks
 	// will also be cleared.
 	//
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
-	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+	ClearIterRange(iter mvcc.Iterator, start, end roachpb.Key) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
@@ -544,14 +401,14 @@ type Writer interface {
 	//
 	//
 	// It is safe to modify the contents of the arguments after Merge returns.
-	Merge(key MVCCKey, value []byte) error
+	Merge(key mvcc.Key, value []byte) error
 
 	// PutMVCC sets the given key to the value provided. It requires that the
 	// timestamp is non-empty (see {PutUnversioned,PutIntent} if the timestamp
 	// is empty).
 	//
 	// It is safe to modify the contents of the arguments after Put returns.
-	PutMVCC(key MVCCKey, value []byte) error
+	PutMVCC(key mvcc.Key, value []byte) error
 	// PutUnversioned sets the given key to the value provided. It is for use
 	// with inline metadata (not intents) and other unversioned keys (like
 	// Range-ID local keys).
@@ -843,7 +700,7 @@ func PutProto(
 		return 0, 0, err
 	}
 
-	return int64(MVCCKey{Key: key}.EncodedSize()), int64(len(bytes)), nil
+	return int64(mvcc.Key{Key: key}.EncodedSize()), int64(len(bytes)), nil
 }
 
 // Scan returns up to max key/value objects starting from start (inclusive)
@@ -851,9 +708,9 @@ func PutProto(
 // this code may use an intentInterleavingIter, the caller should not attempt
 // a single scan to span local and global keys. See the comment in the
 // declaration of intentInterleavingIter for details.
-func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
-	var kvs []MVCCKeyValue
-	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
+func Scan(reader Reader, start, end roachpb.Key, max int64) ([]mvcc.KeyValue, error) {
+	var kvs []mvcc.KeyValue
+	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv mvcc.KeyValue) error {
 		if max != 0 && int64(len(kvs)) >= max {
 			return iterutil.StopIteration()
 		}
@@ -1044,7 +901,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *Metrics) time.
 
 // Helper function to implement Reader.MVCCIterate().
 func iterateOnReader(
-	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	reader Reader, start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.KeyValue) error,
 ) error {
 	if reader.Closed() {
 		return errors.New("cannot call MVCCIterate on a closed batch")
@@ -1056,7 +913,7 @@ func iterateOnReader(
 	it := reader.NewMVCCIterator(iterKind, IterOptions{UpperBound: end})
 	defer it.Close()
 
-	it.SeekGE(MakeMVCCMetadataKey(start))
+	it.SeekGE(mvcc.MakeMVCCMetadataKey(start))
 	for ; ; it.Next() {
 		ok, err := it.Valid()
 		if err != nil {
@@ -1064,7 +921,7 @@ func iterateOnReader(
 		} else if !ok {
 			break
 		}
-		if err := f(MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+		if err := f(mvcc.KeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
 			if iterutil.Done(err) {
 				return nil
 			}

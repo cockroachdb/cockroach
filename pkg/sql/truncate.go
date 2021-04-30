@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -581,7 +581,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	if step < 1 {
 		step = 1
 	}
-	expirationTime := kvserver.SplitByLoadMergeDelay.Get(p.execCfg.SV()).Nanoseconds()
+	expirationTime := kvserverbase.SplitByLoadMergeDelay.Get(p.execCfg.SV()).Nanoseconds()
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
 		// returned.

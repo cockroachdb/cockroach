@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mvcc",
+    srcs = [
+        "doc.go",
+        "iterator.go",
+        "mvcc_kv.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/mvcc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//pkg/util/uuid",
+    ],
+)

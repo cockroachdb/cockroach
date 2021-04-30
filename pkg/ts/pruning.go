@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -46,16 +47,16 @@ func (tsdb *DB) findTimeSeries(
 
 	// Set start boundary for the search, which is the lesser of the range start
 	// key and the beginning of time series data.
-	start := storage.MakeMVCCMetadataKey(startKey.AsRawKey())
-	next := storage.MakeMVCCMetadataKey(keys.TimeseriesPrefix)
+	start := mvcc.MakeMVCCMetadataKey(startKey.AsRawKey())
+	next := mvcc.MakeMVCCMetadataKey(keys.TimeseriesPrefix)
 	if next.Less(start) {
 		next = start
 	}
 
 	// Set end boundary for the search, which is the lesser of the range end key
 	// and the end of time series data.
-	end := storage.MakeMVCCMetadataKey(endKey.AsRawKey())
-	lastTS := storage.MakeMVCCMetadataKey(keys.TimeseriesPrefix.PrefixEnd())
+	end := mvcc.MakeMVCCMetadataKey(endKey.AsRawKey())
+	lastTS := mvcc.MakeMVCCMetadataKey(keys.TimeseriesPrefix.PrefixEnd())
 	if lastTS.Less(end) {
 		end = lastTS
 	}
@@ -91,7 +92,7 @@ func (tsdb *DB) findTimeSeries(
 
 		// Set 'next' is initialized to the next possible time series key
 		// which could belong to a previously undiscovered time series.
-		next = storage.MakeMVCCMetadataKey(makeDataKeySeriesPrefix(name, res).PrefixEnd())
+		next = mvcc.MakeMVCCMetadataKey(makeDataKeySeriesPrefix(name, res).PrefixEnd())
 	}
 
 	return results, nil

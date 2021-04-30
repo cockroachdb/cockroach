@@ -18,11 +18,12 @@ import (
 
 func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils", true, nil,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils",
+		nil, // forbiddenPackages
 		[]string{
 			// We prohibit importing any subpackages that live within colexec
 			// folder.
-			"github.com/cockroachdb/cockroach/pkg/sql/colexec/*",
+			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 		},
 	)
 }

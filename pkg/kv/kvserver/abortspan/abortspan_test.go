@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -59,7 +60,7 @@ func getExpAbortSpanBytes(entry *roachpb.AbortSpanEntry, rangeID roachpb.RangeID
 		return 0, err
 	}
 	meta := enginepb.MVCCMetadata{RawBytes: value.RawBytes}
-	metaKeySize := int64(storage.MakeMVCCMetadataKey(key).EncodedSize())
+	metaKeySize := int64(mvcc.MakeMVCCMetadataKey(key).EncodedSize())
 	metaValSize := int64(meta.Size())
 	expBytes := metaKeySize + metaValSize
 

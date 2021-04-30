@@ -55,7 +55,7 @@ func TestNoLinkForbidden(t *testing.T) {
 
 	// Verify that the cockroach binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach", true,
+		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach",
 		[]string{
 			"testing",  // defines flags
 			"go/build", // probably not something we want in the main binary

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
@@ -168,14 +169,14 @@ func (m *dumpMode) Set(s string) error {
 	return nil
 }
 
-type mvccKey storage.MVCCKey
+type mvccKey mvcc.Key
 
 // Type implements the pflag.Value interface.
-func (k *mvccKey) Type() string { return "engine.MVCCKey" }
+func (k *mvccKey) Type() string { return "engine.Key" }
 
 // String implements the pflag.Value interface.
 func (k *mvccKey) String() string {
-	return storage.MVCCKey(*k).String()
+	return mvcc.Key(*k).String()
 }
 
 // Set implements the pflag.Value interface.
@@ -202,9 +203,9 @@ func (k *mvccKey) Set(value string) error {
 		}
 		newK, err := storage.DecodeMVCCKey(b)
 		if err != nil {
-			encoded := gohex.EncodeToString(storage.EncodeKey(storage.MakeMVCCMetadataKey(roachpb.Key(b))))
+			encoded := gohex.EncodeToString(storage.EncodeKey(mvcc.MakeMVCCMetadataKey(roachpb.Key(b))))
 			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
-				"encoded MVCCKey (i.e. with a timestamp component); here's one with a zero timestamp: %s",
+				"encoded Key (i.e. with a timestamp component); here's one with a zero timestamp: %s",
 				encoded)
 		}
 		*k = mvccKey(newK)
@@ -213,20 +214,20 @@ func (k *mvccKey) Set(value string) error {
 		if err != nil {
 			return err
 		}
-		*k = mvccKey(storage.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
+		*k = mvccKey(mvcc.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
 	case human:
 		scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
 		key, err := scanner.Scan(keyStr)
 		if err != nil {
 			return err
 		}
-		*k = mvccKey(storage.MakeMVCCMetadataKey(key))
+		*k = mvccKey(mvcc.MakeMVCCMetadataKey(key))
 	case rangeID:
 		fromID, err := parseRangeID(keyStr)
 		if err != nil {
 			return err
 		}
-		*k = mvccKey(storage.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
+		*k = mvccKey(mvcc.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
 	default:
 		return fmt.Errorf("unknown key type %s", typ)
 	}

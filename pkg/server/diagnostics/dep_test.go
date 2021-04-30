@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package diagnosticspb
+package diagnostics
 
 import (
 	"testing"
@@ -21,6 +21,8 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/server/diagnostics", true, []string{"c-deps"}, nil,
+		"github.com/cockroachdb/cockroach/pkg/server/diagnostics",
+		[]string{buildutil.CDeps},
+		nil, // forbiddenPrefixes
 	)
 }

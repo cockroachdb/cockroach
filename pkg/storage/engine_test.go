@@ -158,7 +158,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// MVCCIterator should not reuse its cached result.
+				// Iterator should not reuse its cached result.
 				iter.SeekGE(key)
 
 				if ok, err := iter.Valid(); err != nil {

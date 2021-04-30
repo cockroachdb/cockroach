@@ -23,18 +23,20 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/colflow",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/rowflow",
-		}, nil,
+		},
+		nil, // forbiddenPrefixes
 	)
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen/cmd/execgen", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen/cmd/execgen",
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/catalog",
 			"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb",
-		}, nil,
+		},
+		nil, // forbiddenPrefixes
 	)
 }

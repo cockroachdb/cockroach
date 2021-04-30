@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -37,8 +37,8 @@ type runnable interface {
 // The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
 //
-// MVCCIterator Contract:
-//   The provided MVCCIterator must observe all intents in the Processor's keyspan.
+// Iterator Contract:
+//   The provided Iterator must observe all intents in the Processor's keyspan.
 //   An important implication of this is that if the iterator is a
 //   TimeBoundIterator, its MinTimestamp cannot be above the keyspan's largest
 //   known resolved timestamp, if one has ever been recorded. If one has never
@@ -46,10 +46,10 @@ type runnable interface {
 //
 type initResolvedTSScan struct {
 	p  *Processor
-	it storage.SimpleMVCCIterator
+	it mvcc.SimplerIterator
 }
 
-func newInitResolvedTSScan(p *Processor, it storage.SimpleMVCCIterator) runnable {
+func newInitResolvedTSScan(p *Processor, it mvcc.SimplerIterator) runnable {
 	return &initResolvedTSScan{p: p, it: it}
 }
 
@@ -66,8 +66,8 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := storage.MakeMVCCMetadataKey(s.p.Span.Key.AsRawKey())
-	endKey := storage.MakeMVCCMetadataKey(s.p.Span.EndKey.AsRawKey())
+	startKey := mvcc.MakeMVCCMetadataKey(s.p.Span.Key.AsRawKey())
+	endKey := mvcc.MakeMVCCMetadataKey(s.p.Span.EndKey.AsRawKey())
 
 	// Iterate through all keys using NextKey. This will look at the first MVCC
 	// version for each key. We're only looking for MVCCMetadata versions, which

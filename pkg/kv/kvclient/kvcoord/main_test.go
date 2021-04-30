@@ -35,7 +35,7 @@ func TestForbiddenDeps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Verify kv does not depend on storage (or any of its subpackages).
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/kv", true,
+		"github.com/cockroachdb/cockroach/pkg/kv",
 		// TODO(tschottdorf): should really disallow ./storage/... but at the
 		// time of writing there's a (legit) dependency on `enginepb`.
 		[]string{

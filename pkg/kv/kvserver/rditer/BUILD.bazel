@@ -13,6 +13,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvcc",
     ],
 )
 
@@ -26,6 +27,7 @@ go_test(
         "//pkg/kv/kvserver/spanset",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/storage/mvcc",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

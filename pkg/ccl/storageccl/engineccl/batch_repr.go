@@ -14,17 +14,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/errors"
 )
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.
-func VerifyBatchRepr(
-	repr []byte, start, end storage.MVCCKey, nowNanos int64,
-) (enginepb.MVCCStats, error) {
+func VerifyBatchRepr(repr []byte, start, end mvcc.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 	// We store a 4 byte checksum of each key/value entry in the value. Make
 	// sure all the ones in this BatchRepr validate.
-	var kvs []storage.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 
 	r, err := storage.NewRocksDBBatchReader(repr)
 	if err != nil {
@@ -41,7 +40,7 @@ func VerifyBatchRepr(
 			if err := v.Verify(mvccKey.Key); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
-			kvs = append(kvs, storage.MVCCKeyValue{
+			kvs = append(kvs, mvcc.KeyValue{
 				Key:   mvccKey,
 				Value: v.RawBytes,
 			})

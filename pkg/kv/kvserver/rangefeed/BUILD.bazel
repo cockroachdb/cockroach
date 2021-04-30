@@ -14,8 +14,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvcc",
         "//pkg/util/bufalloc",
         "//pkg/util/hlc",
         "//pkg/util/interval",
@@ -45,8 +45,8 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvcc",
         "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

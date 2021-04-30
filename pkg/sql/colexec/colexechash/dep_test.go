@@ -18,7 +18,7 @@ import (
 
 func TestNoLinkForbidden(t *testing.T) {
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash", true,
+		"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash",
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg",
@@ -26,6 +26,7 @@ func TestNoLinkForbidden(t *testing.T) {
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecsel",
 			"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow",
-		}, nil,
+		},
+		nil, // forbiddenPrefixes
 	)
 }

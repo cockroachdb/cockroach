@@ -28,6 +28,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvcc",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
