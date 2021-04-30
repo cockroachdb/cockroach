@@ -168,18 +168,18 @@ func (f *SpanKVFetcher) nextBatch(
 
 func (f *SpanKVFetcher) close(context.Context) {}
 
-// BackupSSTKVFetcher is a kvBatchFetcher that wraps storage.SimpleMVCCIterator
+// BackupSSTKVFetcher is a kvBatchFetcher that wraps storage.SimplerIterator
 // and returns a single kv from backupSST.
 type BackupSSTKVFetcher struct {
-	iter       mvcc.SimpleMVCCIterator
-	endKeyMVCC mvcc.MVCCKey
+	iter       mvcc.SimplerIterator
+	endKeyMVCC mvcc.Key
 	endTime    hlc.Timestamp
 }
 
 // MakeBackupSSTKVFetcher creates a BackupSSTKVFetcher and
 // advances the iter to the first key >= startKeyMVCC
 func MakeBackupSSTKVFetcher(
-	startKeyMVCC, endKeyMVCC mvcc.MVCCKey, iter mvcc.SimpleMVCCIterator, endTime hlc.Timestamp,
+	startKeyMVCC, endKeyMVCC mvcc.Key, iter mvcc.SimplerIterator, endTime hlc.Timestamp,
 ) BackupSSTKVFetcher {
 	res := BackupSSTKVFetcher{
 		iter,

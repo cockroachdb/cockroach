@@ -55,7 +55,7 @@ func (e *Engine) Close() {
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	iter := e.kvs.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(mvcc.MVCCKey{Key: key, Timestamp: ts}))
+	iter.SeekGE(storage.EncodeKey(mvcc.Key{Key: key, Timestamp: ts}))
 	if !iter.Valid() {
 		return roachpb.Value{}
 	}
@@ -75,7 +75,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 
 // Put inserts a key/value/timestamp tuple. If an exact key/timestamp pair is
 // Put again, it overwrites the previous value.
-func (e *Engine) Put(key mvcc.MVCCKey, value []byte) {
+func (e *Engine) Put(key mvcc.Key, value []byte) {
 	if err := e.kvs.Set(storage.EncodeKey(key), value, nil); err != nil {
 		panic(err)
 	}
@@ -83,12 +83,12 @@ func (e *Engine) Put(key mvcc.MVCCKey, value []byte) {
 
 // Iterate calls the given closure with every KV in the Engine, in ascending
 // order.
-func (e *Engine) Iterate(fn func(key mvcc.MVCCKey, value []byte, err error)) {
+func (e *Engine) Iterate(fn func(key mvcc.Key, value []byte, err error)) {
 	iter := e.kvs.NewIter(nil)
 	defer func() { _ = iter.Close() }()
 	for iter.First(); iter.Valid(); iter.Next() {
 		if err := iter.Error(); err != nil {
-			fn(mvcc.MVCCKey{}, nil, err)
+			fn(mvcc.Key{}, nil, err)
 			continue
 		}
 		var keyCopy, valCopy []byte
@@ -96,7 +96,7 @@ func (e *Engine) Iterate(fn func(key mvcc.MVCCKey, value []byte, err error)) {
 		valCopy, e.b = e.b.Copy(iter.Value(), 0 /* extraCap */)
 		key, err := storage.DecodeMVCCKey(keyCopy)
 		if err != nil {
-			fn(mvcc.MVCCKey{}, nil, err)
+			fn(mvcc.Key{}, nil, err)
 			continue
 		}
 		fn(key, valCopy, nil)
@@ -107,7 +107,7 @@ func (e *Engine) Iterate(fn func(key mvcc.MVCCKey, value []byte, err error)) {
 // debugging.
 func (e *Engine) DebugPrint(indent string) string {
 	var buf strings.Builder
-	e.Iterate(func(key mvcc.MVCCKey, value []byte, err error) {
+	e.Iterate(func(key mvcc.Key, value []byte, err error) {
 		if buf.Len() > 0 {
 			buf.WriteString("\n")
 		}

@@ -96,7 +96,7 @@ type testRegistration struct {
 }
 
 func newTestRegistration(
-	span roachpb.Span, ts hlc.Timestamp, catchup mvcc.SimpleMVCCIterator, withDiff bool,
+	span roachpb.Span, ts hlc.Timestamp, catchup mvcc.SimplerIterator, withDiff bool,
 ) *testRegistration {
 	s := newTestStream()
 	errC := make(chan *roachpb.Error, 1)
@@ -149,7 +149,7 @@ func TestRegistrationBasic(t *testing.T) {
 	<-noCatchupReg.errC
 
 	// Registration with catchup scan.
-	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1}, newTestIterator([]mvcc.MVCCKeyValue{
+	catchupReg := newTestRegistration(spBC, hlc.Timestamp{WallTime: 1}, newTestIterator([]mvcc.KeyValue{
 		makeKV("b", "val1", 10),
 		makeInline("ba", "val2"),
 		makeKV("bc", "val3", 11),
@@ -212,7 +212,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	// Run a catch-up scan for a registration over a test
 	// iterator with the following keys.
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	iter := newTestIterator([]mvcc.MVCCKeyValue{
+	iter := newTestIterator([]mvcc.KeyValue{
 		makeKV("a", "valA1", 10),
 		makeInline("b", "valB1"),
 		makeIntent("c", txn1, "txnKeyC", 15),

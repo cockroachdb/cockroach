@@ -547,7 +547,7 @@ func TestGCQueueProcess(t *testing.T) {
 	}
 
 	// The total size of the GC'able versions of the keys and values in Info.
-	// Key size: len("a") + MVCCVersionTimestampSize (13 bytes) = 14 bytes.
+	// Key size: len("a") + VersionTimestampSize (13 bytes) = 14 bytes.
 	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
 	// key1 at ts1  (14 bytes) => "value" (10 bytes)
 	// key2 at ts1  (14 bytes) => "value" (10 bytes)
@@ -978,7 +978,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.Engine().MVCCIterate(keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
+		return tc.store.Engine().MVCCIterate(keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.KeyValue) error {
 			if !kv.Key.IsValue() {
 				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
 					return err
@@ -1078,8 +1078,8 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	if gc.KeyVersionChunkBytes%keyCount != 0 {
 		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
 	}
-	// Reduce the key size by MVCCVersionTimestampSize (13 bytes) to prevent batch overflow.
-	// This is due to MVCCKey.EncodedSize(), which returns the full size of the encoded key.
+	// Reduce the key size by VersionTimestampSize (13 bytes) to prevent batch overflow.
+	// This is due to Key.EncodedSize(), which returns the full size of the encoded key.
 	const keySize = (gc.KeyVersionChunkBytes / keyCount) - 13
 	// Create a format string for creating version keys of exactly
 	// length keySize.

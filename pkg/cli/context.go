@@ -396,7 +396,7 @@ func setAuthContextDefaults() {
 // debugCtx captures the command-line parameters of the `debug` command.
 // See below for defaults.
 var debugCtx struct {
-	startKey, endKey  mvcc.MVCCKey
+	startKey, endKey  mvcc.Key
 	values            bool
 	sizes             bool
 	replicated        bool

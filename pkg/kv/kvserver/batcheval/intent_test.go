@@ -35,7 +35,7 @@ type instrumentedEngine struct {
 
 func (ie *instrumentedEngine) NewMVCCIterator(
 	iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) mvcc.MVCCIterator {
+) mvcc.Iterator {
 	if ie.onNewIterator != nil {
 		ie.onNewIterator(opts)
 	}

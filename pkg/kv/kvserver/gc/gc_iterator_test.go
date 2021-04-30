@@ -30,16 +30,16 @@ import (
 // data.
 func TestGCIterator(t *testing.T) {
 	// dataItem represents a version in the storage engine and optionally a
-	// corresponding transaction which will make the MVCCKeyValue an intent.
+	// corresponding transaction which will make the KeyValue an intent.
 	type dataItem struct {
-		mvcc.MVCCKeyValue
+		mvcc.KeyValue
 		txn *roachpb.Transaction
 	}
 	// makeDataItem is a shorthand to construct dataItems.
 	makeDataItem := func(k roachpb.Key, val []byte, ts int64, txn *roachpb.Transaction) dataItem {
 		return dataItem{
-			MVCCKeyValue: mvcc.MVCCKeyValue{
-				Key: mvcc.MVCCKey{
+			KeyValue: mvcc.KeyValue{
+				Key: mvcc.Key{
 					Key:       k,
 					Timestamp: hlc.Timestamp{WallTime: ts * time.Nanosecond.Nanoseconds()},
 				},
@@ -51,13 +51,13 @@ func TestGCIterator(t *testing.T) {
 	// makeLiteralDistribution adapts dataItems for use with the data distribution
 	// infrastructure.
 	makeLiteralDataDistribution := func(items ...dataItem) dataDistribution {
-		return func() (mvcc.MVCCKeyValue, *roachpb.Transaction, bool) {
+		return func() (mvcc.KeyValue, *roachpb.Transaction, bool) {
 			if len(items) == 0 {
-				return mvcc.MVCCKeyValue{}, nil, false
+				return mvcc.KeyValue{}, nil, false
 			}
 			item := items[0]
 			defer func() { items = items[1:] }()
-			return item.MVCCKeyValue, item.txn, true
+			return item.KeyValue, item.txn, true
 		}
 	}
 	// stateExpectations are expectations about the state of the iterator.
@@ -105,10 +105,10 @@ func TestGCIterator(t *testing.T) {
 	checkExpectations := func(
 		t *testing.T, data []dataItem, ex stateExpectations, s gcIteratorState,
 	) {
-		check := func(ex int, kv *mvcc.MVCCKeyValue) {
+		check := func(ex int, kv *mvcc.KeyValue) {
 			switch {
 			case ex >= 0:
-				require.EqualValues(t, &data[ex].MVCCKeyValue, kv)
+				require.EqualValues(t, &data[ex].KeyValue, kv)
 			case ex == isNil:
 				require.Nil(t, kv)
 			case ex == isMD:

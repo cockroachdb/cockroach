@@ -74,7 +74,7 @@ func assertExportedKVs(
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
-	expected []mvcc.MVCCKeyValue,
+	expected []mvcc.KeyValue,
 	useTBI bool,
 ) {
 	const big = 1 << 30
@@ -90,7 +90,7 @@ func assertExportedKVs(
 	require.NoError(t, err)
 	defer sst.Close()
 
-	sst.SeekGE(mvcc.MVCCKey{})
+	sst.SeekGE(mvcc.Key{})
 	for i := range expected {
 		ok, err := sst.Valid()
 		require.NoError(t, err)
@@ -144,7 +144,7 @@ func assertNextIgnoreTimeIteratedKVs(
 	e Engine,
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
-	expected []mvcc.MVCCKeyValue,
+	expected []mvcc.KeyValue,
 ) {
 	// The semantics of the methods NextIgnoringTime() should not change whether
 	// or not we enable the TBI optimization.
@@ -157,14 +157,14 @@ func assertNextIgnoreTimeIteratedKVs(
 				EndTime:                             endTime,
 			})
 			defer iter.Close()
-			var kvs []mvcc.MVCCKeyValue
+			var kvs []mvcc.KeyValue
 			for iter.SeekGE(mvcc.MakeMVCCMetadataKey(startKey)); ; iter.NextIgnoringTime() {
 				if ok, err := iter.Valid(); err != nil {
 					t.Fatalf("unexpected error: %+v", err)
 				} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 					break
 				}
-				kvs = append(kvs, mvcc.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+				kvs = append(kvs, mvcc.KeyValue{Key: iter.Key(), Value: iter.Value()})
 			}
 
 			if len(kvs) != len(expected) {
@@ -188,7 +188,7 @@ func assertIteratedKVs(
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
-	expected []mvcc.MVCCKeyValue,
+	expected []mvcc.KeyValue,
 	useTBI bool,
 ) {
 	iter := NewMVCCIncrementalIterator(e, MVCCIncrementalIterOptions{
@@ -204,14 +204,14 @@ func assertIteratedKVs(
 	} else {
 		iterFn = iter.NextKey
 	}
-	var kvs []mvcc.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 	for iter.SeekGE(mvcc.MakeMVCCMetadataKey(startKey)); ; iterFn() {
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatalf("unexpected error: %+v", err)
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
-		kvs = append(kvs, mvcc.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		kvs = append(kvs, mvcc.KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
 
 	if len(kvs) != len(expected) {
@@ -232,7 +232,7 @@ func assertEqualKVs(
 	startKey, endKey roachpb.Key,
 	startTime, endTime hlc.Timestamp,
 	revisions bool,
-	expected []mvcc.MVCCKeyValue,
+	expected []mvcc.KeyValue,
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
@@ -285,8 +285,8 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) mvcc.MVCCKeyValue {
-		return mvcc.MVCCKeyValue{Key: mvcc.MVCCKey{Key: key, Timestamp: ts}, Value: value}
+	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) mvcc.KeyValue {
+		return mvcc.KeyValue{Key: mvcc.Key{Key: key, Timestamp: ts}, Value: value}
 	}
 
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
@@ -294,7 +294,7 @@ func TestMVCCIncrementalIteratorNextIgnoringTime(t *testing.T) {
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv2_4_4 := makeKVT(testKey2, testValue4, ts4)
 	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...mvcc.MVCCKeyValue) []mvcc.MVCCKeyValue { return kvs }
+	kvs := func(kvs ...mvcc.KeyValue) []mvcc.KeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -425,8 +425,8 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 		tsMax = hlc.Timestamp{WallTime: math.MaxInt64, Logical: 0}
 	)
 
-	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) mvcc.MVCCKeyValue {
-		return mvcc.MVCCKeyValue{Key: mvcc.MVCCKey{Key: key, Timestamp: ts}, Value: value}
+	makeKVT := func(key roachpb.Key, value []byte, ts hlc.Timestamp) mvcc.KeyValue {
+		return mvcc.KeyValue{Key: mvcc.Key{Key: key, Timestamp: ts}, Value: value}
 	}
 
 	kv1_1_1 := makeKVT(testKey1, testValue1, ts1)
@@ -434,7 +434,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 	kv1_2_2 := makeKVT(testKey1, testValue2, ts2)
 	kv2_2_2 := makeKVT(testKey2, testValue3, ts2)
 	kv1_3Deleted := makeKVT(testKey1, nil, ts3)
-	kvs := func(kvs ...mvcc.MVCCKeyValue) []mvcc.MVCCKeyValue { return kvs }
+	kvs := func(kvs ...mvcc.KeyValue) []mvcc.KeyValue { return kvs }
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -615,7 +615,7 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 func slurpKVsInTimeRange(
 	reader Reader, prefix roachpb.Key, startTime, endTime hlc.Timestamp,
-) ([]mvcc.MVCCKeyValue, error) {
+) ([]mvcc.KeyValue, error) {
 	endKey := prefix.PrefixEnd()
 	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
 		EndKey:    endKey,
@@ -623,14 +623,14 @@ func slurpKVsInTimeRange(
 		EndTime:   endTime,
 	})
 	defer iter.Close()
-	var kvs []mvcc.MVCCKeyValue
+	var kvs []mvcc.KeyValue
 	for iter.SeekGE(mvcc.MakeMVCCMetadataKey(prefix)); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
 		} else if !ok || iter.UnsafeKey().Key.Compare(endKey) >= 0 {
 			break
 		}
-		kvs = append(kvs, mvcc.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		kvs = append(kvs, mvcc.KeyValue{Key: iter.Key(), Value: iter.Value()})
 	}
 	return kvs, nil
 }
@@ -790,15 +790,15 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	// the timestamp (ts3) is too new so it should be ignored.
 	kvs, err := slurpKVsInTimeRange(db, kA, ts0, ts1)
 	require.NoError(t, err)
-	require.Equal(t, []mvcc.MVCCKeyValue{
-		{Key: mvcc.MVCCKey{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
+	require.Equal(t, []mvcc.KeyValue{
+		{Key: mvcc.Key{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
 	}, kvs)
 	// kA has a value at ts2. Again the intent is too new (ts3), so ignore.
 	kvs, err = slurpKVsInTimeRange(db, kA, ts0, ts2)
 	require.NoError(t, err)
-	require.Equal(t, []mvcc.MVCCKeyValue{
-		{Key: mvcc.MVCCKey{Key: kA, Timestamp: ts2}, Value: vA2.RawBytes},
-		{Key: mvcc.MVCCKey{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
+	require.Equal(t, []mvcc.KeyValue{
+		{Key: mvcc.Key{Key: kA, Timestamp: ts2}, Value: vA2.RawBytes},
+		{Key: mvcc.Key{Key: kA, Timestamp: ts1}, Value: vA1.RawBytes},
 	}, kvs)
 	// At ts3, we should see the new intent
 	_, err = slurpKVsInTimeRange(db, kA, ts0, ts3)
@@ -809,8 +809,8 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	// only the value at ts1.
 	kvs, err = slurpKVsInTimeRange(db, kB, ts0, ts1)
 	require.NoError(t, err)
-	require.Equal(t, []mvcc.MVCCKeyValue{
-		{Key: mvcc.MVCCKey{Key: kB, Timestamp: ts1}, Value: vB1.RawBytes},
+	require.Equal(t, []mvcc.KeyValue{
+		{Key: mvcc.Key{Key: kB, Timestamp: ts1}, Value: vB1.RawBytes},
 	}, kvs)
 
 	// Sanity check that we see the still unresolved intent for kC ts1.
@@ -869,7 +869,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// intent to an interleaved intent. This is ok for now since both kinds of
 	// intents are supported.
 	// TODO(sumeer): change this test before interleaved intents are disallowed.
-	ingest := func(it mvcc.MVCCIterator, count int) {
+	ingest := func(it mvcc.Iterator, count int) {
 		memFile := &MemFile{}
 		sst := MakeIngestionSSTWriter(memFile)
 		defer sst.Close()
@@ -905,7 +905,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			UpperBound: keys.MaxKey,
 		})
 		defer it.Close()
-		it.SeekGE(mvcc.MVCCKey{Key: keys.LocalMax})
+		it.SeekGE(mvcc.Key{Key: keys.LocalMax})
 		ingest(it, 2)
 		ingest(it, 1)
 	}
@@ -921,7 +921,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 			EndTime:   hlc.Timestamp{WallTime: 2},
 		})
 		defer it.Close()
-		for it.SeekGE(mvcc.MVCCKey{Key: keys.LocalMax}); ; it.Next() {
+		for it.SeekGE(mvcc.Key{Key: keys.LocalMax}); ; it.Next() {
 			ok, err := it.Valid()
 			if err != nil {
 				if errors.HasType(err, (*roachpb.WriteIntentError)(nil)) {
@@ -983,10 +983,10 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		t.Run(fmt.Sprintf("%s-%s", testCase.start, testCase.end), func(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
-			var expectedKVs []mvcc.MVCCKeyValue
+			var expectedKVs []mvcc.KeyValue
 			iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
-			iter.SeekGE(mvcc.MVCCKey{Key: localMax})
+			iter.SeekGE(mvcc.Key{Key: localMax})
 			for {
 				ok, err := iter.Valid()
 				if err != nil {
@@ -996,7 +996,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 				}
 				ts := iter.Key().Timestamp
 				if (ts.Less(testCase.end) || testCase.end == ts) && testCase.start.Less(ts) {
-					expectedKVs = append(expectedKVs, mvcc.MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+					expectedKVs = append(expectedKVs, mvcc.KeyValue{Key: iter.Key(), Value: iter.Value()})
 				}
 				iter.Next()
 			}

@@ -199,15 +199,15 @@ type validator struct {
 	// NB: The Generator carefully ensures that each value written is unique
 	// globally over a run, so there's a 1:1 relationship between a value that was
 	// written and the operation that wrote it.
-	kvByValue map[string]mvcc.MVCCKeyValue
+	kvByValue map[string]mvcc.KeyValue
 
 	failures []error
 }
 
 func makeValidator(kvs *Engine) (*validator, error) {
-	kvByValue := make(map[string]mvcc.MVCCKeyValue)
+	kvByValue := make(map[string]mvcc.KeyValue)
 	var err error
-	kvs.Iterate(func(key mvcc.MVCCKey, value []byte, iterErr error) {
+	kvs.Iterate(func(key mvcc.Key, value []byte, iterErr error) {
 		if iterErr != nil {
 			err = errors.CombineErrors(err, iterErr)
 			return
@@ -225,7 +225,7 @@ func makeValidator(kvs *Engine) (*validator, error) {
 			// NB: The Generator carefully ensures that each value written is unique
 			// globally over a run, so there's a 1:1 relationship between a value that
 			// was written and the operation that wrote it.
-			kvByValue[valueStr] = mvcc.MVCCKeyValue{Key: key, Value: value}
+			kvByValue[valueStr] = mvcc.KeyValue{Key: key, Value: value}
 		}
 	})
 	if err != nil {
@@ -475,7 +475,7 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 			if _, ok := lastWriteIdxByKey[string(o.Key)]; !ok {
 				lastWriteIdxByKey[string(o.Key)] = idx
 			}
-			mvccKey := mvcc.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+			mvccKey := mvcc.Key{Key: o.Key, Timestamp: o.Timestamp}
 			if err := batch.Delete(storage.EncodeKey(mvccKey), nil); err != nil {
 				panic(err)
 			}
@@ -492,11 +492,11 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 		}
 		switch o := observation.(type) {
 		case *observedWrite:
-			var mvccKey mvcc.MVCCKey
+			var mvccKey mvcc.Key
 			if lastWriteIdx := lastWriteIdxByKey[string(o.Key)]; idx == lastWriteIdx {
 				// The last write of a given key in the txn wins and should have made it
 				// to kv.
-				mvccKey = mvcc.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+				mvccKey = mvcc.Key{Key: o.Key, Timestamp: o.Timestamp}
 			} else {
 				if o.Materialized {
 					failure = `committed txn overwritten key had write`
@@ -505,7 +505,7 @@ func (v *validator) checkCommittedTxn(atomicType string, txnObservations []obser
 				// overwritten later in the txn. But reads in the txn could have seen
 				// it, so we put in the batch being maintained for validReadTime using
 				// the timestamp of the write for this key that eventually "won".
-				mvccKey = mvcc.MVCCKey{
+				mvccKey = mvcc.Key{
 					Key:       o.Key,
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
@@ -686,7 +686,7 @@ func validReadTime(b *pebble.Batch, key roachpb.Key, value []byte) timeSpan {
 
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(mvcc.MVCCKey{Key: key}))
+	iter.SeekGE(storage.EncodeKey(mvcc.Key{Key: key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
@@ -739,7 +739,7 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(mvcc.MVCCKey{Key: span.Key}))
+	iter.SeekGE(storage.EncodeKey(mvcc.Key{Key: span.Key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {

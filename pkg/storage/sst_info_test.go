@@ -74,7 +74,7 @@ func TestReadAmplification(t *testing.T) {
 	}
 }
 
-func stringToKey(s string) mvcc.MVCCKey {
+func stringToKey(s string) mvcc.Key {
 	return mvcc.MakeMVCCMetadataKey([]byte(s))
 }
 

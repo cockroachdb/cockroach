@@ -167,7 +167,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
-	var iters []mvcc.SimpleMVCCIterator
+	var iters []mvcc.SimplerIterator
 
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, newSpanKey)
@@ -196,8 +196,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 	defer batcher.Close()
 
-	startKeyMVCC, endKeyMVCC := mvcc.MVCCKey{Key: entry.Span.Key},
-		mvcc.MVCCKey{Key: entry.Span.EndKey}
+	startKeyMVCC, endKeyMVCC := mvcc.Key{Key: entry.Span.Key},
+		mvcc.Key{Key: entry.Span.EndKey}
 	iter := storage.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
@@ -231,7 +231,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := mvcc.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		key := mvcc.Key{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 

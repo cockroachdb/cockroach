@@ -83,7 +83,7 @@ func (fw *SSTWriter) Finish() error {
 
 // ClearRawRange implements the Writer interface.
 func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key) error {
-	return fw.clearRange(mvcc.MVCCKey{Key: start}, mvcc.MVCCKey{Key: end})
+	return fw.clearRange(mvcc.Key{Key: start}, mvcc.Key{Key: end})
 }
 
 // ClearMVCCRangeAndIntents implements the Writer interface.
@@ -92,11 +92,11 @@ func (fw *SSTWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 }
 
 // ClearMVCCRange implements the Writer interface.
-func (fw *SSTWriter) ClearMVCCRange(start, end mvcc.MVCCKey) error {
+func (fw *SSTWriter) ClearMVCCRange(start, end mvcc.Key) error {
 	return fw.clearRange(start, end)
 }
 
-func (fw *SSTWriter) clearRange(start, end mvcc.MVCCKey) error {
+func (fw *SSTWriter) clearRange(start, end mvcc.Key) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
@@ -111,7 +111,7 @@ func (fw *SSTWriter) clearRange(start, end mvcc.MVCCKey) error {
 //
 // TODO(sumeer): Put has been removed from the Writer interface, but there
 // are many callers of this SSTWriter method. Fix those callers and remove.
-func (fw *SSTWriter) Put(key mvcc.MVCCKey, value []byte) error {
+func (fw *SSTWriter) Put(key mvcc.Key, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Put on a closed writer")
 	}
@@ -124,7 +124,7 @@ func (fw *SSTWriter) Put(key mvcc.MVCCKey, value []byte) error {
 // An error is returned if it is not greater than any previously added entry
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
-func (fw *SSTWriter) PutMVCC(key mvcc.MVCCKey, value []byte) error {
+func (fw *SSTWriter) PutMVCC(key mvcc.Key, value []byte) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
@@ -136,7 +136,7 @@ func (fw *SSTWriter) PutMVCC(key mvcc.MVCCKey, value []byte) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) PutUnversioned(key roachpb.Key, value []byte) error {
-	return fw.put(mvcc.MVCCKey{Key: key}, value)
+	return fw.put(mvcc.Key{Key: key}, value)
 }
 
 // PutIntent implements the Writer interface.
@@ -151,7 +151,7 @@ func (fw *SSTWriter) PutIntent(
 	txnDidNotUpdateMeta bool,
 	txnUUID uuid.UUID,
 ) (int, error) {
-	return 0, fw.put(mvcc.MVCCKey{Key: key}, value)
+	return 0, fw.put(mvcc.Key{Key: key}, value)
 }
 
 // PutEngineKey implements the Writer interface.
@@ -175,7 +175,7 @@ func (fw *SSTWriter) SafeToWriteSeparatedIntents(context.Context) (bool, error) 
 // put puts a kv entry into the sstable being built. An error is returned if it
 // is not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Close` cannot have been called.
-func (fw *SSTWriter) put(key mvcc.MVCCKey, value []byte) error {
+func (fw *SSTWriter) put(key mvcc.Key, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Put on a closed writer")
 	}
@@ -193,7 +193,7 @@ func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 // not greater than any previous point key passed to this Writer (according to
 // the comparator configured during writer creation). `Close` cannot have been
 // called.
-func (fw *SSTWriter) ClearMVCC(key mvcc.MVCCKey) error {
+func (fw *SSTWriter) ClearMVCC(key mvcc.Key) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
@@ -205,7 +205,7 @@ func (fw *SSTWriter) ClearMVCC(key mvcc.MVCCKey) error {
 // (according to the comparator configured during writer creation). `Close`
 // cannot have been called.
 func (fw *SSTWriter) ClearUnversioned(key roachpb.Key) error {
-	return fw.clear(mvcc.MVCCKey{Key: key})
+	return fw.clear(mvcc.Key{Key: key})
 }
 
 // ClearIntent implements the Writer interface. An error is returned if it is
@@ -234,7 +234,7 @@ func (fw *SSTWriter) ClearEngineKey(key EngineKey) error {
 // An error is returned if it is not greater than any previous point key
 // passed to this Writer (according to the comparator configured during writer
 // creation). `Close` cannot have been called.
-func (fw *SSTWriter) clear(key mvcc.MVCCKey) error {
+func (fw *SSTWriter) clear(key mvcc.Key) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
@@ -249,12 +249,12 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 }
 
 // ClearIterRange implements the Writer interface.
-func (fw *SSTWriter) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error {
+func (fw *SSTWriter) ClearIterRange(iter mvcc.Iterator, start, end roachpb.Key) error {
 	panic("ClearIterRange is unsupported")
 }
 
 // Merge implements the Writer interface.
-func (fw *SSTWriter) Merge(key mvcc.MVCCKey, value []byte) error {
+func (fw *SSTWriter) Merge(key mvcc.Key, value []byte) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Merge on a closed writer")
 	}

@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func mvccKey(k interface{}) mvcc.MVCCKey {
+func mvccKey(k interface{}) mvcc.Key {
 	switch k := k.(type) {
 	case string:
 		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
@@ -106,7 +106,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 
 			// Check all keys are in initial state (nothing from batch has gone
 			// through to engine until commit).
-			expValues := []mvcc.MVCCKeyValue{
+			expValues := []mvcc.KeyValue{
 				{Key: mvccKey("b"), Value: []byte("value")},
 				{Key: mvccKey("c"), Value: appender("foo")},
 				{Key: mvccKey("d"), Value: []byte("before")},
@@ -120,7 +120,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			}
 
 			// Now, merged values should be:
-			expValues = []mvcc.MVCCKeyValue{
+			expValues = []mvcc.KeyValue{
 				{Key: mvccKey("a"), Value: []byte("value")},
 				{Key: mvccKey("c"), Value: appender("foobar")},
 				{Key: mvccKey("e"), Value: []byte{}},
@@ -203,7 +203,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				func() { _, _ = ro.MVCCGet(a) },
 				func() { _, _, _, _ = ro.MVCCGetProto(a, getVal) },
 				func() {
-					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, func(mvcc.MVCCKeyValue) error { return iterutil.StopIteration() })
+					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, func(mvcc.KeyValue) error { return iterutil.StopIteration() })
 				},
 				func() { ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
@@ -269,7 +269,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			}
 
 			// Now, merged values should be:
-			expValues := []mvcc.MVCCKeyValue{
+			expValues := []mvcc.KeyValue{
 				{Key: mvccKey("a"), Value: []byte("value")},
 				{Key: mvccKey("c"), Value: appender("foobar")},
 			}
@@ -461,7 +461,7 @@ func TestBatchGet(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			expValues := []mvcc.MVCCKeyValue{
+			expValues := []mvcc.KeyValue{
 				{Key: mvccKey("a"), Value: []byte("value")},
 				{Key: mvccKey("b"), Value: nil},
 				{Key: mvccKey("c"), Value: appender("foobar")},
@@ -619,7 +619,7 @@ func TestBatchScan(t *testing.T) {
 			b := e.NewBatch()
 			defer b.Close()
 
-			existingVals := []mvcc.MVCCKeyValue{
+			existingVals := []mvcc.KeyValue{
 				{Key: mvccKey("a"), Value: []byte("1")},
 				{Key: mvccKey("b"), Value: []byte("2")},
 				{Key: mvccKey("c"), Value: []byte("3")},
@@ -640,7 +640,7 @@ func TestBatchScan(t *testing.T) {
 				}
 			}
 
-			batchVals := []mvcc.MVCCKeyValue{
+			batchVals := []mvcc.KeyValue{
 				{Key: mvccKey("a"), Value: []byte("b1")},
 				{Key: mvccKey("bb"), Value: []byte("b2")},
 				{Key: mvccKey("c"), Value: []byte("b3")},
@@ -677,7 +677,7 @@ func TestBatchScan(t *testing.T) {
 			}
 
 			// Scan each case using the batch and store the results.
-			results := map[int][]mvcc.MVCCKeyValue{}
+			results := map[int][]mvcc.KeyValue{}
 			for i, scan := range scans {
 				kvs, err := Scan(b, scan.start, scan.end, scan.max)
 				if err != nil {
@@ -1110,7 +1110,7 @@ func TestDecodeKey(t *testing.T) {
 	)
 	defer e.Close()
 
-	tests := []mvcc.MVCCKey{
+	tests := []mvcc.Key{
 		{Key: []byte("foo")},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1}},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}},

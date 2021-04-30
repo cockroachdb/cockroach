@@ -27,8 +27,8 @@ func TestEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	k := func(s string, ts hlc.Timestamp) mvcc.MVCCKey {
-		return mvcc.MVCCKey{Key: []byte(s), Timestamp: ts}
+	k := func(s string, ts hlc.Timestamp) mvcc.Key {
+		return mvcc.Key{Key: []byte(s), Timestamp: ts}
 	}
 	var missing roachpb.Value
 	v := func(s string, ts hlc.Timestamp) roachpb.Value {

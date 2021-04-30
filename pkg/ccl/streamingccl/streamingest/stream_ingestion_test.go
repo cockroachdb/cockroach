@@ -233,7 +233,7 @@ func assertExactlyEqualKVs(
 	var err error
 	var maxKVTimestampSeen hlc.Timestamp
 	var matchingKVs int
-	for it.SeekGE(mvcc.MVCCKey{}); ; it.Next() {
+	for it.SeekGE(mvcc.Key{}); ; it.Next() {
 		if ok, err := it.Valid(); !ok {
 			if err != nil {
 				t.Fatal(err)

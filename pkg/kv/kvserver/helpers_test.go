@@ -392,7 +392,7 @@ func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	return r.mu.largestPreviousMaxRangeSizeBytes
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, mvcc.MVCCKeyValue) {
+func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, mvcc.KeyValue) {
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeIngestionSSTWriter(sstFile)
 	defer sst.Close()
@@ -400,8 +400,8 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, mvcc.MVCCKeyValue
 	v := roachpb.MakeValueFromBytes([]byte(value))
 	v.InitChecksum([]byte(key))
 
-	kv := mvcc.MVCCKeyValue{
-		Key: mvcc.MVCCKey{
+	kv := mvcc.KeyValue{
+		Key: mvcc.Key{
 			Key:       []byte(key),
 			Timestamp: ts,
 		},

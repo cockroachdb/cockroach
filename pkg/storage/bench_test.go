@@ -218,7 +218,7 @@ func BenchmarkIntentScan(b *testing.B) {
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
 							})
-							iter.SeekGE(mvcc.MVCCKey{Key: lower})
+							iter.SeekGE(mvcc.Key{Key: lower})
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
 								valid, err := iter.Valid()
@@ -226,7 +226,7 @@ func BenchmarkIntentScan(b *testing.B) {
 									b.Fatal(err)
 								}
 								if !valid {
-									iter.SeekGE(mvcc.MVCCKey{Key: lower})
+									iter.SeekGE(mvcc.Key{Key: lower})
 								} else {
 									// Read intent.
 									k := iter.UnsafeKey()
@@ -281,7 +281,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
 							})
-							iter.SeekGE(mvcc.MVCCKey{Key: lower})
+							iter.SeekGE(mvcc.Key{Key: lower})
 							var buf []byte
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
@@ -290,7 +290,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 									b.Fatal(err)
 								}
 								if !valid {
-									iter.SeekGE(mvcc.MVCCKey{Key: lower})
+									iter.SeekGE(mvcc.Key{Key: lower})
 								} else {
 									// Read latest version.
 									k := iter.UnsafeKey()
@@ -300,7 +300,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 									// Skip to next key.
 									buf = append(buf[:0], k.Key...)
 									buf = roachpb.BytesNext(buf)
-									iter.SeekGE(mvcc.MVCCKey{Key: buf})
+									iter.SeekGE(mvcc.Key{Key: buf})
 								}
 							}
 						})
@@ -1091,7 +1091,7 @@ func runClearRange(
 	ctx context.Context,
 	b *testing.B,
 	emk engineMaker,
-	clearRange func(e Engine, b Batch, start, end mvcc.MVCCKey) error,
+	clearRange func(e Engine, b Batch, start, end mvcc.Key) error,
 ) {
 	const rangeBytes = 64 << 20
 	const valueBytes = 92
@@ -1114,7 +1114,7 @@ func runClearRange(
 	// aforementioned issue is probably resolved. Clean this up.
 	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
-	iter.SeekGE(mvcc.MVCCKey{Key: keys.LocalMax})
+	iter.SeekGE(mvcc.Key{Key: keys.LocalMax})
 	if ok, err := iter.Valid(); !ok {
 		b.Fatalf("unable to find first key (err: %v)", err)
 	}
@@ -1335,7 +1335,7 @@ func runExportToSst(
 		key = encoding.EncodeUint32Ascending(key, uint32(i))
 
 		for j := 0; j < numRevisions; j++ {
-			err := batch.PutMVCC(mvcc.MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
+			err := batch.PutMVCC(mvcc.Key{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(j + 1), Logical: 0}}, []byte("foobar"))
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -67,14 +67,14 @@ func TestExportCmd(t *testing.T) {
 
 	exportAndSlurpOne := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
-	) ([]string, []mvcc.MVCCKeyValue, roachpb.ResponseHeader) {
+	) ([]string, []mvcc.KeyValue, roachpb.ResponseHeader) {
 		res, pErr := export(t, start, mvccFilter, maxResponseSSTBytes)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
 
 		var paths []string
-		var kvs []mvcc.MVCCKeyValue
+		var kvs []mvcc.KeyValue
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
@@ -91,7 +91,7 @@ func TestExportCmd(t *testing.T) {
 			if !bytes.Equal(fileContents, file.SST) {
 				t.Fatal("Returned SST and exported SST don't match!")
 			}
-			sst.SeekGE(mvcc.MVCCKey{Key: keys.MinKey})
+			sst.SeekGE(mvcc.Key{Key: keys.MinKey})
 			for {
 				if valid, err := sst.Valid(); !valid || err != nil {
 					if err != nil {
@@ -99,7 +99,7 @@ func TestExportCmd(t *testing.T) {
 					}
 					break
 				}
-				newKv := mvcc.MVCCKeyValue{}
+				newKv := mvcc.KeyValue{}
 				newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 				newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
 				newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
@@ -113,9 +113,9 @@ func TestExportCmd(t *testing.T) {
 	type ExportAndSlurpResult struct {
 		end                      hlc.Timestamp
 		mvccLatestFiles          []string
-		mvccLatestKVs            []mvcc.MVCCKeyValue
+		mvccLatestKVs            []mvcc.KeyValue
 		mvccAllFiles             []string
-		mvccAllKVs               []mvcc.MVCCKeyValue
+		mvccAllKVs               []mvcc.KeyValue
 		mvccLatestResponseHeader roachpb.ResponseHeader
 		mvccAllResponseHeader    roachpb.ResponseHeader
 	}
@@ -508,7 +508,7 @@ func exportUsingGoIterator(
 	return memFile.Data(), nil
 }
 
-func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []mvcc.MVCCKeyValue {
+func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []mvcc.KeyValue {
 	t.Helper()
 	if len(data) == 0 {
 		return nil
@@ -520,8 +520,8 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []mvcc.MVCCKeyVa
 	}
 	defer sst.Close()
 
-	var kvs []mvcc.MVCCKeyValue
-	sst.SeekGE(mvcc.MVCCKey{Key: start})
+	var kvs []mvcc.KeyValue
+	sst.SeekGE(mvcc.Key{Key: start})
 	for {
 		if valid, err := sst.Valid(); !valid || err != nil {
 			if err != nil {
@@ -529,10 +529,10 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []mvcc.MVCCKeyVa
 			}
 			break
 		}
-		if !sst.UnsafeKey().Less(mvcc.MVCCKey{Key: end}) {
+		if !sst.UnsafeKey().Less(mvcc.Key{Key: end}) {
 			break
 		}
-		newKv := mvcc.MVCCKeyValue{}
+		newKv := mvcc.KeyValue{}
 		newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 		newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
 		newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
@@ -571,7 +571,7 @@ func assertEqualKVs(
 		}
 
 		// Run the actual code path used when exporting MVCCs to SSTs.
-		var kvs []mvcc.MVCCKeyValue
+		var kvs []mvcc.KeyValue
 		for start := startKey; start != nil; {
 			var sst []byte
 			var summary roachpb.BulkOpSummary

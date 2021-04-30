@@ -83,7 +83,7 @@ func ToSSTable(t workload.Table, tableID descpb.ID, ts time.Time) ([]byte, error
 		defer sw.Close()
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				mvccKey := mvcc.MVCCKey{Timestamp: sstTS, Key: kv.Key}
+				mvccKey := mvcc.Key{Timestamp: sstTS, Key: kv.Key}
 				if err := sw.PutMVCC(mvccKey, kv.Value.RawBytes); err != nil {
 					return err
 				}

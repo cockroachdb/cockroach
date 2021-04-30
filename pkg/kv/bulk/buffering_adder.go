@@ -223,7 +223,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 	beforeSort := timeutil.Now()
 
 	sort.Sort(&b.curBuf)
-	mvccKey := mvcc.MVCCKey{Timestamp: b.timestamp}
+	mvccKey := mvcc.Key{Timestamp: b.timestamp}
 
 	beforeFlush := timeutil.Now()
 	b.flushCounts.totalSort += beforeFlush.Sub(beforeSort)

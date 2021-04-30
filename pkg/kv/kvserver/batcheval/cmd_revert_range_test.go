@@ -32,7 +32,7 @@ import (
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	if err := reader.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
+	if err := reader.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.KeyValue) error {
 		h.Write(kv.Key.Key)
 		h.Write(kv.Value)
 		return nil

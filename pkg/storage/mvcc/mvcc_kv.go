@@ -17,38 +17,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// MVCCVersionTimestampSize is the size of the timestamp portion of MVCC
+// VersionTimestampSize is the size of the timestamp portion of MVCC
 // version keys (used to update stats).
-const MVCCVersionTimestampSize int64 = 12
+const VersionTimestampSize int64 = 12
 
-// MVCCKey is a versioned key, distinguished from roachpb.Key with the addition
+// Key is a versioned key, distinguished from roachpb.Key with the addition
 // of a timestamp.
-type MVCCKey struct {
+type Key struct {
 	Key       roachpb.Key
 	Timestamp hlc.Timestamp
 }
 
-// MakeMVCCMetadataKey creates an MVCCKey from a roachpb.Key.
-func MakeMVCCMetadataKey(key roachpb.Key) MVCCKey {
-	return MVCCKey{Key: key}
+// MakeMVCCMetadataKey creates an Key from a roachpb.Key.
+func MakeMVCCMetadataKey(key roachpb.Key) Key {
+	return Key{Key: key}
 }
 
 // Next returns the next key.
-func (k MVCCKey) Next() MVCCKey {
+func (k Key) Next() Key {
 	ts := k.Timestamp.Prev()
 	if ts.IsEmpty() {
-		return MVCCKey{
+		return Key{
 			Key: k.Key.Next(),
 		}
 	}
-	return MVCCKey{
+	return Key{
 		Key:       k.Key,
 		Timestamp: ts,
 	}
 }
 
 // Less compares two keys.
-func (k MVCCKey) Less(l MVCCKey) bool {
+func (k Key) Less(l Key) bool {
 	if c := k.Key.Compare(l.Key); c != 0 {
 		return c < 0
 	}
@@ -61,29 +61,29 @@ func (k MVCCKey) Less(l MVCCKey) bool {
 }
 
 // Equal returns whether two keys are identical.
-func (k MVCCKey) Equal(l MVCCKey) bool {
+func (k Key) Equal(l Key) bool {
 	return k.Key.Compare(l.Key) == 0 && k.Timestamp.EqOrdering(l.Timestamp)
 }
 
 // IsValue returns true iff the timestamp is non-zero.
-func (k MVCCKey) IsValue() bool {
+func (k Key) IsValue() bool {
 	return !k.Timestamp.IsEmpty()
 }
 
-// EncodedSize returns the size of the MVCCKey when encoded.
-func (k MVCCKey) EncodedSize() int {
+// EncodedSize returns the size of the Key when encoded.
+func (k Key) EncodedSize() int {
 	n := len(k.Key) + 1
 	if k.IsValue() {
 		// Note that this isn't quite accurate: timestamps consume between 8-13
 		// bytes. Fixing this only adjusts the accounting for timestamps, not the
 		// actual on disk storage.
-		n += int(MVCCVersionTimestampSize)
+		n += int(VersionTimestampSize)
 	}
 	return n
 }
 
 // String returns a string-formatted version of the key.
-func (k MVCCKey) String() string {
+func (k Key) String() string {
 	if !k.IsValue() {
 		return k.Key.String()
 	}
@@ -91,16 +91,16 @@ func (k MVCCKey) String() string {
 }
 
 // Format implements the fmt.Formatter interface.
-func (k MVCCKey) Format(f fmt.State, c rune) {
+func (k Key) Format(f fmt.State, c rune) {
 	fmt.Fprintf(f, "%s/%s", k.Key, k.Timestamp)
 }
 
-// Len returns the size of the MVCCKey when encoded. Implements the
+// Len returns the size of the Key when encoded. Implements the
 // pebble.Encodeable interface.
 //
 // TODO(itsbilal): Reconcile this with EncodedSize. Would require updating MVCC
 // stats tests to reflect the more accurate lengths provided by this function.
-func (k MVCCKey) Len() int {
+func (k Key) Len() int {
 	const (
 		timestampSentinelLen      = 1
 		walltimeEncodedLen        = 8
@@ -122,8 +122,8 @@ func (k MVCCKey) Len() int {
 	return n
 }
 
-// MVCCKeyValue contains the raw bytes of the value for a key.
-type MVCCKeyValue struct {
-	Key   MVCCKey
+// KeyValue contains the raw bytes of the value for a key.
+type KeyValue struct {
+	Key   Key
 	Value []byte
 }

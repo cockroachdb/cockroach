@@ -163,7 +163,7 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				// but it means that we'll won't catch it if we violate those semantics.
 				// Consider first doing a Get and somehow failing if this exact key+ts
 				// has previously been put with a different value.
-				w.mu.kvs.Put(mvcc.MVCCKey{Key: e.Key, Timestamp: e.Value.Timestamp}, e.Value.RawBytes)
+				w.mu.kvs.Put(mvcc.Key{Key: e.Key, Timestamp: e.Value.Timestamp}, e.Value.RawBytes)
 				prevTs := e.Value.Timestamp.Prev()
 				prevValue := w.mu.kvs.Get(e.Key, prevTs)
 

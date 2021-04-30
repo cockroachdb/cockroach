@@ -125,7 +125,7 @@ func TestMVCCHistories(t *testing.T) {
 
 		reportDataEntries := func(buf *bytes.Buffer) error {
 			hasData := false
-			err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r mvcc.MVCCKeyValue) error {
+			err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r mvcc.KeyValue) error {
 				hasData = true
 				if r.Key.Timestamp.IsEmpty() {
 					// Meta is at timestamp zero.

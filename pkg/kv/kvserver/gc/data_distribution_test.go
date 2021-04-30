@@ -34,7 +34,7 @@ import (
 // MVCCKeyValues. The stream may indicate that a value is an intent by returning
 // a non-nil transaction. If an intent is returned it must have a higher
 // timestamp than any other version written for the key.
-type dataDistribution func() (mvcc.MVCCKeyValue, *roachpb.Transaction, bool)
+type dataDistribution func() (mvcc.KeyValue, *roachpb.Transaction, bool)
 
 // setupTest writes the data from this distribution into eng. All data should
 // be a part of the range represented by desc.
@@ -101,9 +101,9 @@ func newDataDistribution(
 		timestamps []hlc.Timestamp
 		haveIntent bool
 	)
-	return func() (mvcc.MVCCKeyValue, *roachpb.Transaction, bool) {
+	return func() (mvcc.KeyValue, *roachpb.Transaction, bool) {
 		if remaining == 0 {
-			return mvcc.MVCCKeyValue{}, nil, false
+			return mvcc.KeyValue{}, nil, false
 		}
 		defer func() { remaining-- }()
 		for len(timestamps) == 0 {
@@ -145,8 +145,8 @@ func newDataDistribution(
 			txn.WriteTimestamp = ts
 			txn.Key = keyDist()
 		}
-		return mvcc.MVCCKeyValue{
-			Key:   mvcc.MVCCKey{Key: key, Timestamp: ts},
+		return mvcc.KeyValue{
+			Key:   mvcc.Key{Key: key, Timestamp: ts},
 			Value: valueDist(),
 		}, txn, true
 	}

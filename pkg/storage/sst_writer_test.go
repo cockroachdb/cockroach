@@ -23,9 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []mvcc.MVCCKeyValue {
+func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []mvcc.KeyValue {
 	prefix := encoding.EncodeUvarintAscending(keys.SystemSQLCodec.TablePrefix(uint32(100)), uint64(1))
-	kvs := make([]mvcc.MVCCKeyValue, numKeys)
+	kvs := make([]mvcc.KeyValue, numKeys)
 	r, _ := randutil.NewPseudoRand()
 
 	var k int
@@ -49,7 +49,7 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []mvcc.MVCCKeyValue {
 	return kvs
 }
 
-func makePebbleSST(t testing.TB, kvs []mvcc.MVCCKeyValue, ingestion bool) []byte {
+func makePebbleSST(t testing.TB, kvs []mvcc.KeyValue, ingestion bool) []byte {
 	f := &storage.MemFile{}
 	var w storage.SSTWriter
 	if ingestion {

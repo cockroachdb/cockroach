@@ -57,16 +57,16 @@ func TestValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kv := func(key string, ts int, value string) mvcc.MVCCKeyValue {
-		return mvcc.MVCCKeyValue{
-			Key: mvcc.MVCCKey{
+	kv := func(key string, ts int, value string) mvcc.KeyValue {
+		return mvcc.KeyValue{
+			Key: mvcc.Key{
 				Key:       []byte(key),
 				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
 			},
 			Value: roachpb.MakeValueFromString(value).RawBytes,
 		}
 	}
-	kvs := func(kvs ...mvcc.MVCCKeyValue) []mvcc.MVCCKeyValue {
+	kvs := func(kvs ...mvcc.KeyValue) []mvcc.KeyValue {
 		return kvs
 	}
 	scanKV := func(key, value string) KeyValue {
@@ -79,7 +79,7 @@ func TestValidate(t *testing.T) {
 	tests := []struct {
 		name     string
 		steps    []Step
-		kvs      []mvcc.MVCCKeyValue
+		kvs      []mvcc.KeyValue
 		expected []string
 	}{
 		{

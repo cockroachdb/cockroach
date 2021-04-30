@@ -26,9 +26,9 @@ import (
 // of a roachpb.Key followed by an optional "version". The term "version" is
 // a loose one: often the version is a real version represented as an hlc.Timestamp,
 // but it can also be the suffix of a lock table key containing the lock strength
-// and txn UUID. These special cases have their own types, MVCCKey and LockTableKey.
+// and txn UUID. These special cases have their own types, Key and LockTableKey.
 // For key kinds that will never have a version, the code has historically used
-// MVCCKey, though future code may be better served by using EngineKey (and we
+// Key, though future code may be better served by using EngineKey (and we
 // should consider changing all the legacy code).
 //
 // The version can have the following lengths in addition to 0 length.
@@ -125,7 +125,7 @@ func (k EngineKey) encodeToSizedBuf(buf []byte) {
 	buf[len(buf)-1] = byte(suffixLen)
 }
 
-// IsMVCCKey returns true if the key can be decoded as an MVCCKey.
+// IsMVCCKey returns true if the key can be decoded as an Key.
 // This includes the case of an empty timestamp.
 func (k EngineKey) IsMVCCKey() bool {
 	l := len(k.Version)
@@ -140,9 +140,9 @@ func (k EngineKey) IsLockTableKey() bool {
 	return len(k.Version) == engineKeyVersionLockTableLen
 }
 
-// ToMVCCKey constructs a MVCCKey from the EngineKey.
-func (k EngineKey) ToMVCCKey() (mvcc.MVCCKey, error) {
-	key := mvcc.MVCCKey{Key: k.Key}
+// ToMVCCKey constructs a Key from the EngineKey.
+func (k EngineKey) ToMVCCKey() (mvcc.Key, error) {
+	key := mvcc.Key{Key: k.Key}
 	switch len(k.Version) {
 	case engineKeyNoVersion:
 		// No-op.
@@ -156,7 +156,7 @@ func (k EngineKey) ToMVCCKey() (mvcc.MVCCKey, error) {
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
 		key.Timestamp.Synthetic = k.Version[12] != 0
 	default:
-		return mvcc.MVCCKey{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
+		return mvcc.Key{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
 	}
 	return key, nil
 }

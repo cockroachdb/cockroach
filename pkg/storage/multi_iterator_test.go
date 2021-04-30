@@ -86,7 +86,7 @@ func TestMultiIterator(t *testing.T) {
 	for _, test := range tests {
 		name := fmt.Sprintf("%q", test.inputs)
 		t.Run(name, func(t *testing.T) {
-			var iters []mvcc.SimpleMVCCIterator
+			var iters []mvcc.SimplerIterator
 			for _, input := range test.inputs {
 				batch := pebble.NewBatch()
 				defer batch.Close()
@@ -112,7 +112,7 @@ func TestMultiIterator(t *testing.T) {
 							t.Fatalf("%+v", err)
 						}
 					} else {
-						if err := batch.PutMVCC(mvcc.MVCCKey{Key: k, Timestamp: ts}, v); err != nil {
+						if err := batch.PutMVCC(mvcc.Key{Key: k, Timestamp: ts}, v); err != nil {
 							t.Fatalf("%+v", err)
 						}
 					}
@@ -125,16 +125,16 @@ func TestMultiIterator(t *testing.T) {
 			subtests := []struct {
 				name     string
 				expected string
-				fn       func(mvcc.SimpleMVCCIterator)
+				fn       func(mvcc.SimplerIterator)
 			}{
-				{"NextKey", test.expectedNextKey, (mvcc.SimpleMVCCIterator).NextKey},
-				{"Next", test.expectedNext, (mvcc.SimpleMVCCIterator).Next},
+				{"NextKey", test.expectedNextKey, (mvcc.SimplerIterator).NextKey},
+				{"Next", test.expectedNext, (mvcc.SimplerIterator).Next},
 			}
 			for _, subtest := range subtests {
 				t.Run(subtest.name, func(t *testing.T) {
 					var output bytes.Buffer
 					it := MakeMultiIterator(iters)
-					for it.SeekGE(mvcc.MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
+					for it.SeekGE(mvcc.Key{Key: keys.LocalMax}); ; subtest.fn(it) {
 						ok, err := it.Valid()
 						if err != nil {
 							t.Fatalf("unexpected error: %+v", err)

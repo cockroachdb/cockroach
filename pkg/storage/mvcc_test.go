@@ -115,11 +115,11 @@ func makeTxn(baseTxn roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction
 	return txn
 }
 
-func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) mvcc.MVCCKey {
-	return mvcc.MVCCKey{Key: key, Timestamp: ts}
+func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) mvcc.Key {
+	return mvcc.Key{Key: key, Timestamp: ts}
 }
 
-type mvccKeys []mvcc.MVCCKey
+type mvccKeys []mvcc.Key
 
 func (n mvccKeys) Len() int           { return len(n) }
 func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
@@ -901,7 +901,7 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 			}
 
 			{
-				// Write a malformed value (not an encoded MVCCKeyValue) and a
+				// Write a malformed value (not an encoded KeyValue) and a
 				// write intent to key 3; the parse error is returned instead of the
 				// write intent.
 				if err := MVCCPut(ctx, engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
@@ -1006,23 +1006,23 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			err := engine.PutMVCC(mvcc.MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err := engine.PutMVCC(mvcc.Key{testKey1, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(mvcc.MVCCKey{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(mvcc.Key{testKey2, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(mvcc.MVCCKey{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
+			err = engine.PutMVCC(mvcc.Key{testKey2, hlc.Timestamp{WallTime: 3}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(mvcc.MVCCKey{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(mvcc.Key{testKey3, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = engine.PutMVCC(mvcc.MVCCKey{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
+			err = engine.PutMVCC(mvcc.Key{testKey4, hlc.Timestamp{WallTime: 5}}, []byte("foobar"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1043,7 +1043,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 				UpperBound: testKey5,
 			})
 			defer iter.Close()
-			iter.SeekGE(mvcc.MVCCKey{testKey1, hlc.Timestamp{WallTime: 5}})
+			iter.SeekGE(mvcc.Key{testKey1, hlc.Timestamp{WallTime: 5}})
 			iter.Next() // key2/5
 
 			// Lay down an intent on key3, which will go at key3/0 and sort before key3/5.
@@ -1051,7 +1051,7 @@ func TestMVCCPutAfterBatchIterCreate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			iter.SeekGE(mvcc.MVCCKey{Key: testKey3})
+			iter.SeekGE(mvcc.Key{Key: testKey3})
 			if ok, err := iter.Valid(); !ok || err != nil {
 				t.Fatalf("expected valid iter: ok %t, err %s", ok, err.Error())
 			}
@@ -2435,7 +2435,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 			sort.Ints(reverts)
 			const byteLimit = 1000
 			const keyLimit = 100
-			keyLen := int64(len(roachpb.Key(fmt.Sprintf("%05d", 1)))) + mvcc.MVCCVersionTimestampSize
+			keyLen := int64(len(roachpb.Key(fmt.Sprintf("%05d", 1)))) + mvcc.VersionTimestampSize
 			maxAttempts := (numKVs * keyLen) / byteLimit
 			var attempts int64
 			for i := len(reverts) - 1; i >= 0; i-- {
@@ -4636,7 +4636,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			expEncKeys := []mvcc.MVCCKey{
+			expEncKeys := []mvcc.Key{
 				mvccVersionKey(roachpb.Key("a"), ts2),
 				mvccVersionKey(roachpb.Key("b"), ts3),
 				mvccVersionKey(roachpb.Key("b"), ts2),
@@ -4796,8 +4796,8 @@ type readWriterReturningSeekLTTrackingIterator struct {
 // NewMVCCIterator injects a seekLTTrackingIterator over the engine's real iterator.
 func (rw *readWriterReturningSeekLTTrackingIterator) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
-) mvcc.MVCCIterator {
-	rw.it.MVCCIterator = rw.ReadWriter.NewMVCCIterator(iterKind, opts)
+) mvcc.Iterator {
+	rw.it.Iterator = rw.ReadWriter.NewMVCCIterator(iterKind, opts)
 	return &rw.it
 }
 
@@ -4805,12 +4805,12 @@ func (rw *readWriterReturningSeekLTTrackingIterator) NewMVCCIterator(
 // called.
 type seekLTTrackingIterator struct {
 	seekLTCalled int
-	mvcc.MVCCIterator
+	mvcc.Iterator
 }
 
-func (it *seekLTTrackingIterator) SeekLT(k mvcc.MVCCKey) {
+func (it *seekLTTrackingIterator) SeekLT(k mvcc.Key) {
 	it.seekLTCalled++
-	it.MVCCIterator.SeekLT(k)
+	it.Iterator.SeekLT(k)
 }
 
 // TestMVCCGarbageCollectUsesSeekLTAppropriately ensures that the garbage

@@ -139,7 +139,7 @@ func generateMVCCScan(
 }
 
 // Prints the key where an iterator is positioned, or valid = false if invalid.
-func printIterState(iter mvcc.MVCCIterator) string {
+func printIterState(iter mvcc.Iterator) string {
 	if ok, err := iter.Valid(); !ok || err != nil {
 		if err != nil {
 			return fmt.Sprintf("valid = %v, err = %s", ok, err.Error())
@@ -505,7 +505,7 @@ func (i iterCloseOp) run(ctx context.Context) string {
 type iterSeekOp struct {
 	m      *metaTestRunner
 	iter   iteratorID
-	key    mvcc.MVCCKey
+	key    mvcc.Key
 	seekLT bool
 }
 
@@ -614,7 +614,7 @@ func (c compactOp) run(ctx context.Context) string {
 
 type ingestOp struct {
 	m    *metaTestRunner
-	keys []mvcc.MVCCKey
+	keys []mvcc.Key
 }
 
 func (i ingestOp) run(ctx context.Context) string {
@@ -1204,7 +1204,7 @@ var opGenerators = []opGenerator{
 	{
 		name: "ingest",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
-			var keys []mvcc.MVCCKey
+			var keys []mvcc.Key
 			for _, arg := range args {
 				key := m.keyGenerator.parse(arg)
 				// Don't put anything at the 0 timestamp; the MVCC code expects

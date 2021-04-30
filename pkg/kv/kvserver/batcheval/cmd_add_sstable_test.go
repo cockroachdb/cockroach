@@ -50,7 +50,7 @@ var engineImpls = []struct {
 	{"pebble", createTestPebbleEngine},
 }
 
-func singleKVSSTable(key mvcc.MVCCKey, value []byte) ([]byte, error) {
+func singleKVSSTable(key mvcc.Key, value []byte) ([]byte, error) {
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeBackupSSTWriter(sstFile)
 	defer sst.Close()
@@ -107,7 +107,7 @@ func runTestDBAddSSTable(
 ) {
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	{
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -166,7 +166,7 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("2").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -193,7 +193,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		key := mvcc.MVCCKey{Key: []byte("bc"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bc"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("3").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -248,7 +248,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		key := mvcc.MVCCKey{Key: []byte("bd"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bd"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("3").RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)
@@ -296,7 +296,7 @@ func runTestDBAddSSTable(
 
 	// Invalid key/value entry checksum.
 	{
-		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.Key{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 		data, err := singleKVSSTable(key, value.RawBytes)
@@ -318,8 +318,8 @@ type strKv struct {
 	v  string
 }
 
-func mvccKVsFromStrs(in []strKv) []mvcc.MVCCKeyValue {
-	kvs := make([]mvcc.MVCCKeyValue, len(in))
+func mvccKVsFromStrs(in []strKv) []mvcc.KeyValue {
+	kvs := make([]mvcc.KeyValue, len(in))
 	for i := range kvs {
 		kvs[i].Key.Key = []byte(in[i].k)
 		kvs[i].Key.Timestamp.WallTime = in[i].ts
@@ -411,7 +411,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				return beforeStats
 			}()
 
-			mkSST := func(kvs []mvcc.MVCCKeyValue) []byte {
+			mkSST := func(kvs []mvcc.KeyValue) []byte {
 				sstFile := &storage.MemFile{}
 				sst := storage.MakeBackupSSTWriter(sstFile)
 				defer sst.Close()
@@ -471,8 +471,8 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				Header: roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 7}},
 				Args: &roachpb.AddSSTableRequest{
 					RequestHeader: roachpb.RequestHeader{Key: keys.MinKey, EndKey: keys.MaxKey},
-					Data: mkSST([]mvcc.MVCCKeyValue{{
-						Key:   mvcc.MVCCKey{Key: roachpb.Key("zzzzzzz"), Timestamp: ts},
+					Data: mkSST([]mvcc.KeyValue{{
+						Key:   mvcc.Key{Key: roachpb.Key("zzzzzzz"), Timestamp: ts},
 						Value: roachpb.MakeValueFromBytes([]byte("zzz")).RawBytes,
 					}}),
 					MVCCStats: &enginepb.MVCCStats{KeyCount: 10},
@@ -516,7 +516,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 			}
 
-			getSSTBytes := func(sstKVs []mvcc.MVCCKeyValue) []byte {
+			getSSTBytes := func(sstKVs []mvcc.KeyValue) []byte {
 				sstFile := &storage.MemFile{}
 				sst := storage.MakeBackupSSTWriter(sstFile)
 				defer sst.Close()
