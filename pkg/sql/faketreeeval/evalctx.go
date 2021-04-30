@@ -179,13 +179,6 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	return errors.WithStack(errEvalPlanner)
 }
 
-// CompactEngineSpan is part of the EvalPlanner interface.
-func (ep *DummyEvalPlanner) CompactEngineSpan(
-	ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
-) error {
-	return errors.WithStack(errEvalPlanner)
-}
-
 // MemberOfWithAdminOption is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	ctx context.Context, member security.SQLUsername,
