@@ -752,7 +752,10 @@ func testRandomSyntax(
 				countsMu.success++
 			} else {
 				if c := (*crasher)(nil); errors.As(err, &c) {
-					t.Errorf("Crash detected: \n%s\n\nStack trace:\n%s", c.sql, c.detail)
+					// NOTE: Changes to this output format must be kept in-sync
+					// with logic in CondensedMessage.RSGCrash in order for
+					// crashes to be correctly reported to Github.
+					t.Errorf("Crash detected: %s\n%s;\n\nStack trace:\n%s", c.Error(), c.sql, c.detail)
 				}
 			}
 			countsMu.Unlock()

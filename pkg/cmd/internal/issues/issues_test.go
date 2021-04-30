@@ -111,6 +111,37 @@ goroutine 13:
 			author:      "bran",
 			reproCmd:    "",
 		},
+		{
+			name:        "rsg-crash",
+			packageName: "github.com/cockroachdb/cockroach/pkg/sql/tests",
+			testName:    "TestRandomSyntaxSQLSmith",
+			message: `logging something
+    rsg_test.go:755: Crash detected: server panic: pq: internal error: something bad
+		SELECT
+			foo
+		FROM
+			bar
+		LIMIT
+			33:::INT8;
+        
+        Stack trace:
+    rsg_test.go:764: 266003 executions, 235459 successful
+    rsg_test.go:575: To reproduce, use schema:
+    rsg_test.go:577: 
+        	CREATE TABLE table1 (col1_0 BOOL);
+        ;
+    rsg_test.go:577: 
+        
+        CREATE TYPE greeting AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
+        ;
+    rsg_test.go:579: 
+    rsg_test.go:580: -- test log scope end --
+test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTestRandomSyntaxSQLSmith460792454
+--- FAIL: TestRandomSyntaxSQLSmith (300.69s)
+`,
+			author:   "bran",
+			reproCmd: "make test TESTS=TestRandomSyntaxSQLSmith PKG=./pkg/sql/tests 2>&1",
+		},
 	}
 
 	const (
