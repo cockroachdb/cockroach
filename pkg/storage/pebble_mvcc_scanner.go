@@ -888,3 +888,7 @@ func (p *pebbleMVCCScanner) intentsRepr() []byte {
 	}
 	return p.intents.Repr()
 }
+
+func (p *pebbleMVCCScanner) stats() IteratorStats {
+	return p.parent.Stats()
+}
