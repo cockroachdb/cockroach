@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -82,12 +83,12 @@ func TestLockTableKeyEncodeDecode(t *testing.T) {
 func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		key MVCCKey
+		key mvcc.MVCCKey
 	}{
-		{key: MVCCKey{Key: roachpb.Key("a")}},
-		{key: MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
-		{key: MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
-		{key: MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
+		{key: mvcc.MVCCKey{Key: roachpb.Key("a")}},
+		{key: mvcc.MVCCKey{Key: roachpb.Key("glue"), Timestamp: hlc.Timestamp{WallTime: 89999}}},
+		{key: mvcc.MVCCKey{Key: roachpb.Key("foo"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}},
+		{key: mvcc.MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}},
 	}
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {

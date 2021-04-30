@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -663,7 +664,7 @@ func (p *Pebble) ExportMVCCToSst(
 }
 
 // MVCCGet implements the Engine interface.
-func (p *Pebble) MVCCGet(key MVCCKey) ([]byte, error) {
+func (p *Pebble) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -698,14 +699,14 @@ func (p *Pebble) GetCompactionStats() string {
 
 // MVCCGetProto implements the Engine interface.
 func (p *Pebble) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
+	key mvcc.MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return pebbleGetProto(p, key, msg)
 }
 
 // MVCCIterate implements the Engine interface.
 func (p *Pebble) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.MVCCKeyValue) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
@@ -718,7 +719,7 @@ func (p *Pebble) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) mvcc.MVCCIterator {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
@@ -729,7 +730,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		}
 		return iter
 	}
-	iter := MVCCIterator(newPebbleIterator(p.db, nil, opts))
+	iter := mvcc.MVCCIterator(newPebbleIterator(p.db, nil, opts))
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
@@ -772,7 +773,7 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 }
 
 // ClearMVCC implements the Engine interface.
-func (p *Pebble) ClearMVCC(key MVCCKey) error {
+func (p *Pebble) ClearMVCC(key mvcc.MVCCKey) error {
 	if key.Timestamp.IsEmpty() {
 		panic("ClearMVCC timestamp is empty")
 	}
@@ -781,7 +782,7 @@ func (p *Pebble) ClearMVCC(key MVCCKey) error {
 
 // ClearUnversioned implements the Engine interface.
 func (p *Pebble) ClearUnversioned(key roachpb.Key) error {
-	return p.clear(MVCCKey{Key: key})
+	return p.clear(mvcc.MVCCKey{Key: key})
 }
 
 // ClearIntent implements the Engine interface.
@@ -801,7 +802,7 @@ func (p *Pebble) ClearEngineKey(key EngineKey) error {
 	return p.db.Delete(key.Encode(), pebble.Sync)
 }
 
-func (p *Pebble) clear(key MVCCKey) error {
+func (p *Pebble) clear(key mvcc.MVCCKey) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -818,7 +819,7 @@ func (p *Pebble) SingleClearEngineKey(key EngineKey) error {
 
 // ClearRawRange implements the Engine interface.
 func (p *Pebble) ClearRawRange(start, end roachpb.Key) error {
-	return p.clearRange(MVCCKey{Key: start}, MVCCKey{Key: end})
+	return p.clearRange(mvcc.MVCCKey{Key: start}, mvcc.MVCCKey{Key: end})
 }
 
 // ClearMVCCRangeAndIntents implements the Engine interface.
@@ -829,18 +830,18 @@ func (p *Pebble) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 }
 
 // ClearMVCCRange implements the Engine interface.
-func (p *Pebble) ClearMVCCRange(start, end MVCCKey) error {
+func (p *Pebble) ClearMVCCRange(start, end mvcc.MVCCKey) error {
 	return p.clearRange(start, end)
 }
 
-func (p *Pebble) clearRange(start, end MVCCKey) error {
+func (p *Pebble) clearRange(start, end mvcc.MVCCKey) error {
 	bufStart := EncodeKey(start)
 	bufEnd := EncodeKey(end)
 	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
 }
 
 // ClearIterRange implements the Engine interface.
-func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
+func (p *Pebble) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error {
 	// Write all the tombstones in one batch.
 	batch := p.NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
@@ -852,7 +853,7 @@ func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
 }
 
 // Merge implements the Engine interface.
-func (p *Pebble) Merge(key MVCCKey, value []byte) error {
+func (p *Pebble) Merge(key mvcc.MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -860,7 +861,7 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 }
 
 // PutMVCC implements the Engine interface.
-func (p *Pebble) PutMVCC(key MVCCKey, value []byte) error {
+func (p *Pebble) PutMVCC(key mvcc.MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
@@ -869,7 +870,7 @@ func (p *Pebble) PutMVCC(key MVCCKey, value []byte) error {
 
 // PutUnversioned implements the Engine interface.
 func (p *Pebble) PutUnversioned(key roachpb.Key, value []byte) error {
-	return p.put(MVCCKey{Key: key}, value)
+	return p.put(mvcc.MVCCKey{Key: key}, value)
 }
 
 // PutIntent implements the Engine interface.
@@ -908,7 +909,7 @@ func (p *Pebble) IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool {
 		clusterversion.ByKey(clusterversion.SeparatedIntents)) && SeparatedIntentsEnabled.Get(&p.settings.SV)
 }
 
-func (p *Pebble) put(key MVCCKey, value []byte) error {
+func (p *Pebble) put(key mvcc.MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
@@ -1122,8 +1123,8 @@ func (p *Pebble) Compact() error {
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) error {
-	bufStart := EncodeKey(MVCCKey{start, hlc.Timestamp{}})
-	bufEnd := EncodeKey(MVCCKey{end, hlc.Timestamp{}})
+	bufStart := EncodeKey(mvcc.MVCCKey{start, hlc.Timestamp{}})
+	bufEnd := EncodeKey(mvcc.MVCCKey{end, hlc.Timestamp{}})
 	return p.db.Compact(bufStart, bufEnd)
 }
 
@@ -1331,7 +1332,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 	return b, summary, k, err
 }
 
-func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
+func (p *pebbleReadOnly) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -1346,7 +1347,7 @@ func (p *pebbleReadOnly) rawGet(key []byte) ([]byte, error) {
 }
 
 func (p *pebbleReadOnly) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
+	key mvcc.MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
@@ -1355,7 +1356,7 @@ func (p *pebbleReadOnly) MVCCGetProto(
 }
 
 func (p *pebbleReadOnly) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.MVCCKeyValue) error,
 ) error {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
@@ -1371,7 +1372,9 @@ func (p *pebbleReadOnly) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *pebbleReadOnly) NewMVCCIterator(
+	iterKind MVCCIterKind, opts IterOptions,
+) mvcc.MVCCIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -1389,7 +1392,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.parent.db, nil, opts))
+		iter := mvcc.MVCCIterator(newPebbleIterator(p.parent.db, nil, opts))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -1418,7 +1421,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	}
 
 	iter.inuse = true
-	var rv MVCCIterator = iter
+	var rv mvcc.MVCCIterator = iter
 	if util.RaceEnabled {
 		rv = wrapInUnsafeIter(rv)
 	}
@@ -1481,7 +1484,7 @@ func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCC(key MVCCKey) error {
+func (p *pebbleReadOnly) ClearMVCC(key mvcc.MVCCKey) error {
 	panic("not implemented")
 }
 
@@ -1511,19 +1514,19 @@ func (p *pebbleReadOnly) ClearMVCCRangeAndIntents(start, end roachpb.Key) error 
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearMVCCRange(start, end MVCCKey) error {
+func (p *pebbleReadOnly) ClearMVCCRange(start, end mvcc.MVCCKey) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
+func (p *pebbleReadOnly) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
+func (p *pebbleReadOnly) Merge(key mvcc.MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
-func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value []byte) error {
+func (p *pebbleReadOnly) PutMVCC(key mvcc.MVCCKey, value []byte) error {
 	panic("not implemented")
 }
 
@@ -1594,7 +1597,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 }
 
 // Get implements the Reader interface.
-func (p *pebbleSnapshot) MVCCGet(key MVCCKey) ([]byte, error) {
+func (p *pebbleSnapshot) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
 	if len(key.Key) == 0 {
 		return nil, emptyKeyError()
 	}
@@ -1621,14 +1624,14 @@ func (p *pebbleSnapshot) rawGet(key []byte) ([]byte, error) {
 
 // MVCCGetProto implements the Reader interface.
 func (p *pebbleSnapshot) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
+	key mvcc.MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return pebbleGetProto(p, key, msg)
 }
 
 // MVCCIterate implements the Reader interface.
 func (p *pebbleSnapshot) MVCCIterate(
-	start, end roachpb.Key, iterKind MVCCIterKind, f func(MVCCKeyValue) error,
+	start, end roachpb.Key, iterKind MVCCIterKind, f func(mvcc.MVCCKeyValue) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
@@ -1641,7 +1644,9 @@ func (p *pebbleSnapshot) MVCCIterate(
 }
 
 // NewMVCCIterator implements the Reader interface.
-func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *pebbleSnapshot) NewMVCCIterator(
+	iterKind MVCCIterKind, opts IterOptions,
+) mvcc.MVCCIterator {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
@@ -1652,7 +1657,7 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		}
 		return iter
 	}
-	iter := MVCCIterator(newPebbleIterator(p.snapshot, nil, opts))
+	iter := mvcc.MVCCIterator(newPebbleIterator(p.snapshot, nil, opts))
 	if util.RaceEnabled {
 		iter = wrapInUnsafeIter(iter)
 	}
@@ -1674,7 +1679,7 @@ func (p pebbleSnapshot) ConsistentIterators() bool {
 // efficiency, since this is used to implement Reader.MVCCGetProto, which is
 // deprecated and only used in tests.
 func pebbleGetProto(
-	reader Reader, key MVCCKey, msg protoutil.Message,
+	reader Reader, key mvcc.MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	val, err := reader.MVCCGet(key)
 	if err != nil || val == nil {
@@ -1713,7 +1718,7 @@ func pebbleExportToSst(
 	var curKey roachpb.Key // only used if exportAllRevisions
 	var resumeKey roachpb.Key
 	paginated := targetSize > 0
-	for iter.SeekGE(MakeMVCCMetadataKey(startKey)); ; {
+	for iter.SeekGE(mvcc.MakeMVCCMetadataKey(startKey)); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will

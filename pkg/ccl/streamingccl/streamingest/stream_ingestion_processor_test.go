@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -214,7 +215,7 @@ func assertEqualKVs(
 	var prevKey roachpb.Key
 	var valueTimestampTuples []roachpb.KeyValue
 	var err error
-	for it.SeekGE(storage.MVCCKey{Key: key}); ; it.Next() {
+	for it.SeekGE(mvcc.MVCCKey{Key: key}); ; it.Next() {
 		if ok, err := it.Valid(); !ok {
 			if err != nil {
 				t.Fatal(err)

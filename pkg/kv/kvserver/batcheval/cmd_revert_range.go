@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -52,7 +53,7 @@ func isEmptyKeyTimeRange(
 		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
 	})
 	defer iter.Close()
-	iter.SeekGE(storage.MVCCKey{Key: from})
+	iter.SeekGE(mvcc.MVCCKey{Key: from})
 	ok, err := iter.Valid()
 	return !ok, err
 }

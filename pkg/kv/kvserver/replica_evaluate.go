@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -103,7 +104,7 @@ func optimizePuts(
 	// we can determine whether any part of the range being written
 	// is "virgin" and set the puts to write blindly.
 	// Find the first non-empty key in the run.
-	iter.SeekGE(storage.MakeMVCCMetadataKey(minKey))
+	iter.SeekGE(mvcc.MakeMVCCMetadataKey(minKey))
 	var iterKey roachpb.Key
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -166,7 +167,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
-	var iters []storage.SimpleMVCCIterator
+	var iters []mvcc.SimpleMVCCIterator
 
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, newSpanKey)
@@ -195,8 +196,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 	defer batcher.Close()
 
-	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
-		storage.MVCCKey{Key: entry.Span.EndKey}
+	startKeyMVCC, endKeyMVCC := mvcc.MVCCKey{Key: entry.Span.Key},
+		mvcc.MVCCKey{Key: entry.Span.EndKey}
 	iter := storage.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
@@ -230,7 +231,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
-		key := storage.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		key := mvcc.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 

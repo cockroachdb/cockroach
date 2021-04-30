@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -25,7 +26,7 @@ import (
 // MVCCIterator wraps an storage.MVCCIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type MVCCIterator struct {
-	i     storage.MVCCIterator
+	i     mvcc.MVCCIterator
 	spans *SpanSet
 
 	// spansOnly controls whether or not timestamps associated with the
@@ -44,18 +45,18 @@ type MVCCIterator struct {
 	invalid bool
 }
 
-var _ storage.MVCCIterator = &MVCCIterator{}
+var _ mvcc.MVCCIterator = &MVCCIterator{}
 
 // NewIterator constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet. Timestamps associated with the spans
 // in the spanset are not considered, only the span boundaries are checked.
-func NewIterator(iter storage.MVCCIterator, spans *SpanSet) *MVCCIterator {
+func NewIterator(iter mvcc.MVCCIterator, spans *SpanSet) *MVCCIterator {
 	return &MVCCIterator{i: iter, spans: spans, spansOnly: true}
 }
 
 // NewIteratorAt constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet at the given timestamp.
-func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) *MVCCIterator {
+func NewIteratorAt(iter mvcc.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) *MVCCIterator {
 	return &MVCCIterator{i: iter, spans: spans, ts: ts}
 }
 
@@ -65,7 +66,7 @@ func (i *MVCCIterator) Close() {
 }
 
 // Iterator returns the underlying storage.MVCCIterator.
-func (i *MVCCIterator) Iterator() storage.MVCCIterator {
+func (i *MVCCIterator) Iterator() mvcc.MVCCIterator {
 	return i.i
 }
 
@@ -82,7 +83,7 @@ func (i *MVCCIterator) Valid() (bool, error) {
 }
 
 // SeekGE is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
+func (i *MVCCIterator) SeekGE(key mvcc.MVCCKey) {
 	i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
 }
@@ -94,7 +95,7 @@ func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
 }
 
 // SeekLT is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
+func (i *MVCCIterator) SeekLT(key mvcc.MVCCKey) {
 	i.i.SeekLT(key)
 	// CheckAllowed{At} supports the span representation of [,key), which
 	// corresponds to the span [key.Prev(),).
@@ -142,7 +143,7 @@ func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 }
 
 // Key is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) Key() storage.MVCCKey {
+func (i *MVCCIterator) Key() mvcc.MVCCKey {
 	return i.i.Key()
 }
 
@@ -157,7 +158,7 @@ func (i *MVCCIterator) ValueProto(msg protoutil.Message) error {
 }
 
 // UnsafeKey is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) UnsafeKey() storage.MVCCKey {
+func (i *MVCCIterator) UnsafeKey() mvcc.MVCCKey {
 	return i.i.UnsafeKey()
 }
 
@@ -200,14 +201,14 @@ func (i *MVCCIterator) ComputeStats(
 // FindSplitKey is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
-) (storage.MVCCKey, error) {
+) (mvcc.MVCCKey, error) {
 	if i.spansOnly {
 		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
-			return storage.MVCCKey{}, err
+			return mvcc.MVCCKey{}, err
 		}
 	} else {
 		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, i.ts); err != nil {
-			return storage.MVCCKey{}, err
+			return mvcc.MVCCKey{}, err
 		}
 	}
 	return i.i.FindSplitKey(start, end, minSplitKey, targetSize)
@@ -226,7 +227,7 @@ func (i *MVCCIterator) SetUpperBound(key roachpb.Key) {
 }
 
 // Stats is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) Stats() storage.IteratorStats {
+func (i *MVCCIterator) Stats() mvcc.IteratorStats {
 	return i.i.Stats()
 }
 
@@ -366,7 +367,7 @@ func (s spanSetReader) ExportMVCCToSst(
 		maxSize, useTBI)
 }
 
-func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
+func (s spanSetReader) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 			return nil, err
@@ -381,7 +382,7 @@ func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
 }
 
 func (s spanSetReader) MVCCGetProto(
-	key storage.MVCCKey, msg protoutil.Message,
+	key mvcc.MVCCKey, msg protoutil.Message,
 ) (bool, int64, int64, error) {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
@@ -397,7 +398,7 @@ func (s spanSetReader) MVCCGetProto(
 }
 
 func (s spanSetReader) MVCCIterate(
-	start, end roachpb.Key, iterKind storage.MVCCIterKind, f func(storage.MVCCKeyValue) error,
+	start, end roachpb.Key, iterKind storage.MVCCIterKind, f func(mvcc.MVCCKeyValue) error,
 ) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
@@ -413,7 +414,7 @@ func (s spanSetReader) MVCCIterate(
 
 func (s spanSetReader) NewMVCCIterator(
 	iterKind storage.MVCCIterKind, opts storage.IterOptions,
-) storage.MVCCIterator {
+) mvcc.MVCCIterator {
 	if s.spansOnly {
 		return NewIterator(s.r.NewMVCCIterator(iterKind, opts), s.spans)
 	}
@@ -484,7 +485,7 @@ func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	return nil
 }
 
-func (s spanSetWriter) ClearMVCC(key storage.MVCCKey) error {
+func (s spanSetWriter) ClearMVCC(key mvcc.MVCCKey) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}
@@ -550,21 +551,21 @@ func (s spanSetWriter) ClearMVCCRangeAndIntents(start, end roachpb.Key) error {
 	return s.w.ClearMVCCRangeAndIntents(start, end)
 }
 
-func (s spanSetWriter) ClearMVCCRange(start, end storage.MVCCKey) error {
+func (s spanSetWriter) ClearMVCCRange(start, end mvcc.MVCCKey) error {
 	if err := s.checkAllowedRange(start.Key, end.Key); err != nil {
 		return err
 	}
 	return s.w.ClearMVCCRange(start, end)
 }
 
-func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (s spanSetWriter) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error {
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
 	}
 	return s.w.ClearIterRange(iter, start, end)
 }
 
-func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
+func (s spanSetWriter) Merge(key mvcc.MVCCKey, value []byte) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 			return err
@@ -577,7 +578,7 @@ func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	return s.w.Merge(key, value)
 }
 
-func (s spanSetWriter) PutMVCC(key storage.MVCCKey, value []byte) error {
+func (s spanSetWriter) PutMVCC(key mvcc.MVCCKey, value []byte) error {
 	if err := s.checkAllowed(key.Key); err != nil {
 		return err
 	}

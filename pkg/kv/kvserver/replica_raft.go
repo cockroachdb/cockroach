@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1902,7 +1903,7 @@ func (r *Replica) printRaftTail(
 		if err != nil {
 			return sb.String(), err
 		}
-		kv := storage.MVCCKeyValue{
+		kv := mvcc.MVCCKeyValue{
 			Key:   mvccKey,
 			Value: it.Value(),
 		}

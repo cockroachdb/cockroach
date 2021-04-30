@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/redact"
 )
@@ -48,11 +49,11 @@ func (rsds ReplicaSnapshotDiffSlice) SafeFormat(buf redact.SafePrinter, _ rune) 
 %s    value:%s
 %s    raw mvcc_key/value: %x %x
 `
-		mvccKey := storage.MVCCKey{Key: d.Key, Timestamp: d.Timestamp}
+		mvccKey := mvcc.MVCCKey{Key: d.Key, Timestamp: d.Timestamp}
 		buf.Printf(format,
 			prefix, d.Timestamp, d.Key,
 			prefix, d.Timestamp.GoTime(),
-			prefix, SprintKeyValue(storage.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
+			prefix, SprintKeyValue(mvcc.MVCCKeyValue{Key: mvccKey, Value: d.Value}, false /* printKey */),
 			prefix, storage.EncodeKey(mvccKey), d.Value)
 	}
 }

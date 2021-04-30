@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -179,7 +179,7 @@ func NewProcessor(cfg Config) *Processor {
 
 // IteratorConstructor is used to construct an iterator. It should be called
 // from underneath a stopper task to ensure that the engine has not been closed.
-type IteratorConstructor func() storage.SimpleMVCCIterator
+type IteratorConstructor func() mvcc.SimpleMVCCIterator
 
 // Start launches a goroutine to process rangefeed events and send them to
 // registrations.

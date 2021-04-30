@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -190,7 +191,7 @@ CREATE TABLE data2.foo (a int);
 			UpperBound: endKey,
 		})
 		defer it.Close()
-		it.SeekGE(storage.MVCCKey{Key: startKey})
+		it.SeekGE(mvcc.MVCCKey{Key: startKey})
 		hasKey, err := it.Valid()
 		require.NoError(t, err)
 		require.False(t, hasKey)

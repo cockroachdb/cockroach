@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -140,8 +141,8 @@ func (k EngineKey) IsLockTableKey() bool {
 }
 
 // ToMVCCKey constructs a MVCCKey from the EngineKey.
-func (k EngineKey) ToMVCCKey() (MVCCKey, error) {
-	key := MVCCKey{Key: k.Key}
+func (k EngineKey) ToMVCCKey() (mvcc.MVCCKey, error) {
+	key := mvcc.MVCCKey{Key: k.Key}
 	switch len(k.Version) {
 	case engineKeyNoVersion:
 		// No-op.
@@ -155,7 +156,7 @@ func (k EngineKey) ToMVCCKey() (MVCCKey, error) {
 		key.Timestamp.Logical = int32(binary.BigEndian.Uint32(k.Version[8:12]))
 		key.Timestamp.Synthetic = k.Version[12] != 0
 	default:
-		return MVCCKey{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
+		return mvcc.MVCCKey{}, errors.Errorf("version is not an encoded timestamp %x", k.Version)
 	}
 	return key, nil
 }

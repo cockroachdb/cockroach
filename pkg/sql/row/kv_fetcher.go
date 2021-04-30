@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -171,15 +171,15 @@ func (f *SpanKVFetcher) close(context.Context) {}
 // BackupSSTKVFetcher is a kvBatchFetcher that wraps storage.SimpleMVCCIterator
 // and returns a single kv from backupSST.
 type BackupSSTKVFetcher struct {
-	iter       storage.SimpleMVCCIterator
-	endKeyMVCC storage.MVCCKey
+	iter       mvcc.SimpleMVCCIterator
+	endKeyMVCC mvcc.MVCCKey
 	endTime    hlc.Timestamp
 }
 
 // MakeBackupSSTKVFetcher creates a BackupSSTKVFetcher and
 // advances the iter to the first key >= startKeyMVCC
 func MakeBackupSSTKVFetcher(
-	startKeyMVCC, endKeyMVCC storage.MVCCKey, iter storage.SimpleMVCCIterator, endTime hlc.Timestamp,
+	startKeyMVCC, endKeyMVCC mvcc.MVCCKey, iter mvcc.SimpleMVCCIterator, endTime hlc.Timestamp,
 ) BackupSSTKVFetcher {
 	res := BackupSSTKVFetcher{
 		iter,

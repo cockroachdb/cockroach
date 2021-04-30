@@ -120,6 +120,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvcc",
         "//pkg/testutils",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/kvclientutils",

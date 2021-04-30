@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,7 +39,7 @@ func getAbortSpanSize(
 		return 0, err
 	}
 	meta := enginepb.MVCCMetadata{RawBytes: val.RawBytes}
-	keySize := int64(storage.MakeMVCCMetadataKey(key).EncodedSize())
+	keySize := int64(mvcc.MakeMVCCMetadataKey(key).EncodedSize())
 	valSize := int64(meta.Size())
 
 	return keySize + valSize, nil

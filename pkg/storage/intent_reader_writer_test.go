@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -90,7 +91,7 @@ func printEngContents(b *strings.Builder, eng Engine) {
 			break
 		}
 		if key.IsMVCCKey() {
-			var k MVCCKey
+			var k mvcc.MVCCKey
 			if k, err = key.ToMVCCKey(); err != nil {
 				fmt.Fprintf(b, "error: %s\n", err.Error())
 				break

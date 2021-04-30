@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -81,7 +82,7 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 }
 
 type keyGenerator struct {
-	liveKeys    []storage.MVCCKey
+	liveKeys    []mvcc.MVCCKey
 	rng         *rand.Rand
 	tsGenerator *tsGenerator
 }
@@ -97,8 +98,8 @@ func (k *keyGenerator) count() int {
 	return len(k.liveKeys) + 1
 }
 
-func (k *keyGenerator) open() storage.MVCCKey {
-	var key storage.MVCCKey
+func (k *keyGenerator) open() mvcc.MVCCKey {
+	var key mvcc.MVCCKey
 	key.Key = generateBytes(k.rng, 8, maxValueSize)
 	key.Timestamp = k.tsGenerator.lastTS
 	k.liveKeys = append(k.liveKeys, key)
@@ -106,7 +107,7 @@ func (k *keyGenerator) open() storage.MVCCKey {
 	return key
 }
 
-func (k *keyGenerator) toString(key storage.MVCCKey) string {
+func (k *keyGenerator) toString(key mvcc.MVCCKey) string {
 	return fmt.Sprintf("%s/%d", key.Key, key.Timestamp.WallTime)
 }
 
@@ -127,8 +128,8 @@ func (k *keyGenerator) closeAll() {
 	// No-op.
 }
 
-func (k *keyGenerator) parse(input string) storage.MVCCKey {
-	var key storage.MVCCKey
+func (k *keyGenerator) parse(input string) mvcc.MVCCKey {
+	var key mvcc.MVCCKey
 	key.Key = make([]byte, 0, maxValueSize)
 	_, err := fmt.Sscanf(input, "%q/%d", &key.Key, &key.Timestamp.WallTime)
 	if err != nil {
@@ -379,7 +380,7 @@ func (w *readWriterGenerator) closeAll() {
 type iteratorID string
 type iteratorInfo struct {
 	id          iteratorID
-	iter        storage.MVCCIterator
+	iter        mvcc.MVCCIterator
 	lowerBound  roachpb.Key
 	isBatchIter bool
 }

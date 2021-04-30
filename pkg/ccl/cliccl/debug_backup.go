@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -410,8 +411,8 @@ func showData(
 
 func makeIters(
 	ctx context.Context, files backupccl.EntryFiles,
-) ([]storage.SimpleMVCCIterator, func() error, error) {
-	iters := make([]storage.SimpleMVCCIterator, len(files))
+) ([]mvcc.SimpleMVCCIterator, func() error, error) {
+	iters := make([]mvcc.SimpleMVCCIterator, len(files))
 	dirStorage := make([]cloud.ExternalStorage, len(files))
 	for i, file := range files {
 		var err error
@@ -500,7 +501,7 @@ func processEntryFiles(
 	iter := storage.MakeMultiIterator(iters)
 	defer iter.Close()
 
-	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: span.Key}, storage.MVCCKey{Key: span.EndKey}
+	startKeyMVCC, endKeyMVCC := mvcc.MVCCKey{Key: span.Key}, mvcc.MVCCKey{Key: span.EndKey}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
 
 	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {

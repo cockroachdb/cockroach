@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -391,7 +392,7 @@ func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	return r.mu.largestPreviousMaxRangeSizeBytes
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
+func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, mvcc.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeIngestionSSTWriter(sstFile)
 	defer sst.Close()
@@ -399,8 +400,8 @@ func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyVa
 	v := roachpb.MakeValueFromBytes([]byte(value))
 	v.InitChecksum([]byte(key))
 
-	kv := storage.MVCCKeyValue{
-		Key: storage.MVCCKey{
+	kv := mvcc.MVCCKeyValue{
+		Key: mvcc.MVCCKey{
 			Key:       []byte(key),
 			Timestamp: ts,
 		},

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -39,7 +40,7 @@ func EvalAddSSTable(
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
-	mvccStartKey, mvccEndKey := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
+	mvccStartKey, mvccEndKey := mvcc.MVCCKey{Key: args.Key}, mvcc.MVCCKey{Key: args.EndKey}
 
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
 	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
@@ -66,7 +67,7 @@ func EvalAddSSTable(
 	defer dataIter.Close()
 
 	// Check that the first key is in the expected range.
-	dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+	dataIter.SeekGE(mvcc.MVCCKey{Key: keys.MinKey})
 	ok, err := dataIter.Valid()
 	if err != nil {
 		return result.Result{}, err
@@ -181,7 +182,7 @@ func EvalAddSSTable(
 
 	if args.IngestAsWrites {
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(args.Data))
-		dataIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+		dataIter.SeekGE(mvcc.MVCCKey{Key: keys.MinKey})
 		for {
 			ok, err := dataIter.Valid()
 			if err != nil {
@@ -220,8 +221,8 @@ func EvalAddSSTable(
 func checkForKeyCollisions(
 	_ context.Context,
 	readWriter storage.ReadWriter,
-	mvccStartKey storage.MVCCKey,
-	mvccEndKey storage.MVCCKey,
+	mvccStartKey mvcc.MVCCKey,
+	mvccEndKey mvcc.MVCCKey,
 	data []byte,
 ) (enginepb.MVCCStats, error) {
 	// We could get a spansetBatch so fetch the underlying db engine as

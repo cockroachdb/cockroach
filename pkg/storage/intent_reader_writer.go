@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -258,7 +259,7 @@ var intentInterleavingReaderPool = sync.Pool{
 }
 
 // Get implements the Reader interface.
-func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
+func (imr *intentInterleavingReader) MVCCGet(key mvcc.MVCCKey) ([]byte, error) {
 	val, err := imr.wrappableReader.rawGet(EncodeKey(key))
 	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
 		return val, err
@@ -279,7 +280,7 @@ func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
 
 // MVCCGetProto implements the Reader interface.
 func (imr *intentInterleavingReader) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
+	key mvcc.MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return pebbleGetProto(imr, key, msg)
 }
@@ -288,7 +289,7 @@ func (imr *intentInterleavingReader) MVCCGetProto(
 // intentInterleavingReader can be freed once this method returns.
 func (imr *intentInterleavingReader) NewMVCCIterator(
 	iterKind MVCCIterKind, opts IterOptions,
-) MVCCIterator {
+) mvcc.MVCCIterator {
 	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")

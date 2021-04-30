@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,7 +34,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	}
 
 	builder := storage.RocksDBBatchBuilder{}
-	builder.Put(storage.MVCCKey{
+	builder.Put(mvcc.MVCCKey{
 		Key:       roachpb.Key("/db1"),
 		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
 	}, []byte("test value"))

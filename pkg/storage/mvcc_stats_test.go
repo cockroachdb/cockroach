@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -108,7 +109,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 			}
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			vKeySize := MVCCVersionTimestampSize          // 12
+			vKeySize := mvcc.MVCCVersionTimestampSize     // 12
 			vValSize := int64(len(value.RawBytes))        // 10
 
 			expMS := enginepb.MVCCStats{
@@ -204,8 +205,8 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 					separatedIntentCount = 1
 				}
 			}
-			vKeySize := MVCCVersionTimestampSize   // 12
-			vValSize := int64(len(value.RawBytes)) // 10
+			vKeySize := mvcc.MVCCVersionTimestampSize // 12
+			vValSize := int64(len(value.RawBytes))    // 10
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos:      1e9,
@@ -293,8 +294,8 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 					separatedIntentCount = 1
 				}
 			}
-			vKeySize := MVCCVersionTimestampSize   // 12
-			vValSize := int64(len(value.RawBytes)) // 10
+			vKeySize := mvcc.MVCCVersionTimestampSize // 12
+			vValSize := int64(len(value.RawBytes))    // 10
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos:      1e9,
@@ -409,7 +410,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 				m1ValSize += 2
 			}
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vValSize := int64(len(value.RawBytes))
@@ -526,7 +527,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 				}
 			}
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vValSize := int64(len(value.RawBytes))
@@ -625,7 +626,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 
 			mKeySize := int64(mvccKey(key).EncodedSize())
 			require.EqualValues(t, mKeySize, 2)
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			expMS := enginepb.MVCCStats{
@@ -776,7 +777,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			mKeySize := int64(mvccKey(key).EncodedSize())
 			require.EqualValues(t, mKeySize, 2)
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vValSize := int64(len(value.RawBytes))
@@ -954,7 +955,7 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			}
 
 			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			vKeySize := MVCCVersionTimestampSize          // 12
+			vKeySize := mvcc.MVCCVersionTimestampSize     // 12
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos: 2e9,
@@ -1044,8 +1045,8 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 					separatedIntentCount = 1
 				}
 			}
-			vKeySize := MVCCVersionTimestampSize   // 12
-			vValSize := int64(len(value.RawBytes)) // 10
+			vKeySize := mvcc.MVCCVersionTimestampSize // 12
+			vValSize := int64(len(value.RawBytes))    // 10
 
 			expMS := enginepb.MVCCStats{
 				LastUpdateNanos:      2e9 + 1,
@@ -1134,7 +1135,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 			mKeySize := int64(mvccKey(key).EncodedSize())
 			require.EqualValues(t, mKeySize, 2)
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vValSize := int64(len(val1.RawBytes))
@@ -1238,7 +1239,7 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 				mValSize += 2
 			}
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vVal1Size := int64(len(val1.RawBytes))
@@ -1331,7 +1332,7 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 				mValSize += 2
 			}
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vVal1Size := int64(len(val1.RawBytes))
@@ -1393,7 +1394,7 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 			mKeySize := int64(mvccKey(key).EncodedSize())
 			require.EqualValues(t, mKeySize, 11)
 
-			vKeySize := MVCCVersionTimestampSize
+			vKeySize := mvcc.MVCCVersionTimestampSize
 			require.EqualValues(t, vKeySize, 12)
 
 			vVal1Size := int64(len(val1.RawBytes))
@@ -1429,17 +1430,17 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 
 var mvccStatsTests = []struct {
 	name string
-	fn   func(MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
+	fn   func(mvcc.MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
 }{
 	{
 		name: "ComputeStats",
-		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter mvcc.MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return iter.ComputeStats(start, end, nowNanos)
 		},
 	},
 	{
 		name: "ComputeStatsForRange",
-		fn: func(iter MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
+		fn: func(iter mvcc.MVCCIterator, start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error) {
 			return ComputeStatsForRange(iter, start, end, nowNanos)
 		},
 	},

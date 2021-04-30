@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,13 +36,13 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 
 	var ss spanset.SpanSet
 	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")})
-	outsideKey := storage.MakeMVCCMetadataKey(roachpb.Key("a"))
-	outsideKey2 := storage.MakeMVCCMetadataKey(roachpb.Key("b"))
-	outsideKey3 := storage.MakeMVCCMetadataKey(roachpb.Key("g"))
-	outsideKey4 := storage.MakeMVCCMetadataKey(roachpb.Key("m"))
-	insideKey := storage.MakeMVCCMetadataKey(roachpb.Key("c"))
-	insideKey2 := storage.MakeMVCCMetadataKey(roachpb.Key("d"))
-	insideKey3 := storage.MakeMVCCMetadataKey(roachpb.Key("f"))
+	outsideKey := mvcc.MakeMVCCMetadataKey(roachpb.Key("a"))
+	outsideKey2 := mvcc.MakeMVCCMetadataKey(roachpb.Key("b"))
+	outsideKey3 := mvcc.MakeMVCCMetadataKey(roachpb.Key("g"))
+	outsideKey4 := mvcc.MakeMVCCMetadataKey(roachpb.Key("m"))
+	insideKey := mvcc.MakeMVCCMetadataKey(roachpb.Key("c"))
+	insideKey2 := mvcc.MakeMVCCMetadataKey(roachpb.Key("d"))
+	insideKey3 := mvcc.MakeMVCCMetadataKey(roachpb.Key("f"))
 
 	// Write values outside the range that we can try to read later.
 	if err := eng.PutUnversioned(outsideKey.Key, []byte("value")); err != nil {
@@ -127,7 +128,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, _, _, err := batch.MVCCGetProto(insideKey, nil); err != nil {
 			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
-		if err := batch.MVCCIterate(insideKey.Key, insideKey2.Key, storage.MVCCKeyAndIntentsIterKind, func(v storage.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(insideKey.Key, insideKey2.Key, storage.MVCCKeyAndIntentsIterKind, func(v mvcc.MVCCKeyValue) error {
 			return nil
 		}); err != nil {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
@@ -148,7 +149,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, _, _, err := batch.MVCCGetProto(outsideKey, nil); !isReadSpanErr(err) {
 			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
-		if err := batch.MVCCIterate(outsideKey.Key, insideKey2.Key, storage.MVCCKeyAndIntentsIterKind, func(v storage.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(outsideKey.Key, insideKey2.Key, storage.MVCCKeyAndIntentsIterKind, func(v mvcc.MVCCKeyValue) error {
 			return errors.Errorf("unexpected callback: %v", v)
 		}); !isReadSpanErr(err) {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
@@ -164,7 +165,7 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, _, _, err := batch.MVCCGetProto(outsideKey3, nil); !isReadSpanErr(err) {
 			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
-		if err := batch.MVCCIterate(insideKey2.Key, outsideKey4.Key, storage.MVCCKeyAndIntentsIterKind, func(v storage.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(insideKey2.Key, outsideKey4.Key, storage.MVCCKeyAndIntentsIterKind, func(v mvcc.MVCCKeyValue) error {
 			return errors.Errorf("unexpected callback: %v", v)
 		}); !isReadSpanErr(err) {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
@@ -278,8 +279,8 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 	ss.AddMVCC(spanset.SpanReadWrite,
 		roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")}, hlc.Timestamp{WallTime: 2})
 
-	rkey := storage.MakeMVCCMetadataKey(roachpb.Key("b"))
-	wkey := storage.MakeMVCCMetadataKey(roachpb.Key("e"))
+	rkey := mvcc.MakeMVCCMetadataKey(roachpb.Key("b"))
+	wkey := mvcc.MakeMVCCMetadataKey(roachpb.Key("e"))
 
 	value := []byte("value")
 
@@ -364,7 +365,7 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 		if _, _, _, err := batch.MVCCGetProto(rkey, nil); !isReadSpanErr(err) {
 			t.Errorf("MVCCGetProto: unexpected error %v", err)
 		}
-		if err := batch.MVCCIterate(rkey.Key, rkey.Key, storage.MVCCKeyAndIntentsIterKind, func(v storage.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(rkey.Key, rkey.Key, storage.MVCCKeyAndIntentsIterKind, func(v mvcc.MVCCKeyValue) error {
 			return errors.Errorf("unexpected callback: %v", v)
 		}); !isReadSpanErr(err) {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
@@ -384,8 +385,8 @@ func TestSpanSetIteratorTimestamps(t *testing.T) {
 	ss.AddMVCC(spanset.SpanReadOnly, roachpb.Span{
 		Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}, hlc.Timestamp{WallTime: 2})
 
-	k1, v1 := storage.MakeMVCCMetadataKey(roachpb.Key("b")), []byte("b-value")
-	k2, v2 := storage.MakeMVCCMetadataKey(roachpb.Key("d")), []byte("d-value")
+	k1, v1 := mvcc.MakeMVCCMetadataKey(roachpb.Key("b")), []byte("b-value")
+	k2, v2 := mvcc.MakeMVCCMetadataKey(roachpb.Key("d")), []byte("d-value")
 
 	// Write values that we can try to read later.
 	if err := eng.PutUnversioned(k1.Key, v1); err != nil {
@@ -476,8 +477,8 @@ func TestSpanSetNonMVCCBatch(t *testing.T) {
 	ss.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")})
 	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")})
 
-	rkey := storage.MakeMVCCMetadataKey(roachpb.Key("b"))
-	wkey := storage.MakeMVCCMetadataKey(roachpb.Key("e"))
+	rkey := mvcc.MakeMVCCMetadataKey(roachpb.Key("b"))
+	wkey := mvcc.MakeMVCCMetadataKey(roachpb.Key("e"))
 
 	value := []byte("value")
 

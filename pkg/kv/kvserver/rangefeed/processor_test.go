@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -134,7 +134,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
+	rtsIter mvcc.SimpleMVCCIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
 	stopper := stop.NewStopper()
 
@@ -158,14 +158,14 @@ func newTestProcessorWithTxnPusher(
 	return p, stopper
 }
 
-func makeIteratorConstructor(rtsIter storage.SimpleMVCCIterator) IteratorConstructor {
+func makeIteratorConstructor(rtsIter mvcc.SimpleMVCCIterator) IteratorConstructor {
 	if rtsIter == nil {
 		return nil
 	}
-	return func() storage.SimpleMVCCIterator { return rtsIter }
+	return func() mvcc.SimpleMVCCIterator { return rtsIter }
 }
 
-func newTestProcessor(rtsIter storage.SimpleMVCCIterator) (*Processor, *stop.Stopper) {
+func newTestProcessor(rtsIter mvcc.SimpleMVCCIterator) (*Processor, *stop.Stopper) {
 	return newTestProcessorWithTxnPusher(rtsIter, nil /* pusher */)
 }
 
@@ -539,7 +539,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	rtsIter := newTestIterator([]storage.MVCCKeyValue{
+	rtsIter := newTestIterator([]mvcc.MVCCKeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),

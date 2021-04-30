@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -577,7 +578,7 @@ func (r *Replica) sha512(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
-	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
+	visitor := func(unsafeKey mvcc.MVCCKey, unsafeValue []byte) error {
 		// Rate Limit the scan through the range
 		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err

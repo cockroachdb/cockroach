@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -54,8 +55,8 @@ func evalWriteBatch(
 		return result.Result{}, errors.New("data spans multiple ranges")
 	}
 
-	mvccStartKey := storage.MVCCKey{Key: args.Key}
-	mvccEndKey := storage.MVCCKey{Key: args.EndKey}
+	mvccStartKey := mvcc.MVCCKey{Key: args.Key}
+	mvccEndKey := mvcc.MVCCKey{Key: args.EndKey}
 
 	// Verify that the keys in the batch are within the range specified by the
 	// request header.
@@ -84,7 +85,7 @@ func clearExistingData(
 ) (enginepb.MVCCStats, error) {
 	{
 		isEmpty := true
-		if err := batch.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(_ storage.MVCCKeyValue) error {
+		if err := batch.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(_ mvcc.MVCCKeyValue) error {
 			isEmpty = false
 			return iterutil.StopIteration() // stop right away
 		}); err != nil {
@@ -99,10 +100,10 @@ func clearExistingData(
 	iter := batch.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end})
 	defer iter.Close()
 
-	iter.SeekGE(storage.MakeMVCCMetadataKey(start))
+	iter.SeekGE(mvcc.MakeMVCCMetadataKey(start))
 	if ok, err := iter.Valid(); err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if ok && !iter.UnsafeKey().Less(storage.MakeMVCCMetadataKey(end)) {
+	} else if ok && !iter.UnsafeKey().Less(mvcc.MakeMVCCMetadataKey(end)) {
 		return enginepb.MVCCStats{}, nil
 	}
 

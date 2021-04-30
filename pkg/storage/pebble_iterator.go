@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -64,7 +65,7 @@ type pebbleIterator struct {
 	timeBoundNumSSTables int
 }
 
-var _ MVCCIterator = &pebbleIterator{}
+var _ mvcc.MVCCIterator = &pebbleIterator{}
 var _ EngineIterator = &pebbleIterator{}
 
 var pebbleIterPool = sync.Pool{
@@ -254,7 +255,7 @@ func (p *pebbleIterator) Close() {
 }
 
 // SeekGE implements the MVCCIterator interface.
-func (p *pebbleIterator) SeekGE(key MVCCKey) {
+func (p *pebbleIterator) SeekGE(key mvcc.MVCCKey) {
 	p.mvccDirIsReverse = false
 	p.mvccDone = false
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
@@ -267,7 +268,7 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 
 // SeekIntentGE implements the MVCCIterator interface.
 func (p *pebbleIterator) SeekIntentGE(key roachpb.Key, _ uuid.UUID) {
-	p.SeekGE(MVCCKey{Key: key})
+	p.SeekGE(mvcc.MVCCKey{Key: key})
 }
 
 // SeekEngineKeyGE implements the EngineIterator interface.
@@ -371,14 +372,14 @@ func (p *pebbleIterator) NextKey() {
 }
 
 // UnsafeKey implements the MVCCIterator interface.
-func (p *pebbleIterator) UnsafeKey() MVCCKey {
+func (p *pebbleIterator) UnsafeKey() mvcc.MVCCKey {
 	if valid, err := p.Valid(); err != nil || !valid {
-		return MVCCKey{}
+		return mvcc.MVCCKey{}
 	}
 
 	mvccKey, err := DecodeMVCCKey(p.iter.Key())
 	if err != nil {
-		return MVCCKey{}
+		return mvcc.MVCCKey{}
 	}
 
 	return mvccKey
@@ -417,7 +418,7 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 }
 
 // SeekLT implements the MVCCIterator interface.
-func (p *pebbleIterator) SeekLT(key MVCCKey) {
+func (p *pebbleIterator) SeekLT(key mvcc.MVCCKey) {
 	p.mvccDirIsReverse = true
 	p.mvccDone = false
 	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
@@ -461,7 +462,7 @@ func (p *pebbleIterator) PrevEngineKey() (valid bool, err error) {
 }
 
 // Key implements the MVCCIterator interface.
-func (p *pebbleIterator) Key() MVCCKey {
+func (p *pebbleIterator) Key() mvcc.MVCCKey {
 	key := p.UnsafeKey()
 	keyCopy := make([]byte, len(key.Key))
 	copy(keyCopy, key.Key)
@@ -536,23 +537,23 @@ func IsValidSplitKey(key roachpb.Key) bool {
 // FindSplitKey implements the MVCCIterator interface.
 func (p *pebbleIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
-) (MVCCKey, error) {
+) (mvcc.MVCCKey, error) {
 	return findSplitKeyUsingIterator(p, start, end, minSplitKey, targetSize)
 }
 
 func findSplitKeyUsingIterator(
-	iter MVCCIterator, start, end, minSplitKey roachpb.Key, targetSize int64,
-) (MVCCKey, error) {
+	iter mvcc.MVCCIterator, start, end, minSplitKey roachpb.Key, targetSize int64,
+) (mvcc.MVCCKey, error) {
 	const timestampLen = 12
 
 	sizeSoFar := int64(0)
 	bestDiff := int64(math.MaxInt64)
-	bestSplitKey := MVCCKey{}
+	bestSplitKey := mvcc.MVCCKey{}
 	// found indicates that we have found a valid split key that is the best
 	// known so far. If bestSplitKey is empty => that split key
 	// is in prevKey, else it is in bestSplitKey.
 	found := false
-	prevKey := MVCCKey{}
+	prevKey := mvcc.MVCCKey{}
 
 	// We only have to consider no-split spans if our minimum split key possibly
 	// lies before them. Note that the no-split spans are ordered by end-key.
@@ -567,12 +568,12 @@ func findSplitKeyUsingIterator(
 	// Note that it is unnecessary to compare against "end" to decide to
 	// terminate iteration because the iterator's upper bound has already been
 	// set to end.
-	mvccMinSplitKey := MakeMVCCMetadataKey(minSplitKey)
-	iter.SeekGE(MakeMVCCMetadataKey(start))
+	mvccMinSplitKey := mvcc.MakeMVCCMetadataKey(minSplitKey)
+	iter.SeekGE(mvcc.MakeMVCCMetadataKey(start))
 	for ; ; iter.Next() {
 		valid, err := iter.Valid()
 		if err != nil {
-			return MVCCKey{}, err
+			return mvcc.MVCCKey{}, err
 		}
 		if !valid {
 			break
@@ -690,8 +691,8 @@ func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
 }
 
 // Stats implements the MVCCIterator interface.
-func (p *pebbleIterator) Stats() IteratorStats {
-	return IteratorStats{
+func (p *pebbleIterator) Stats() mvcc.IteratorStats {
+	return mvcc.IteratorStats{
 		TimeBoundNumSSTs: p.timeBoundNumSSTables,
 	}
 }

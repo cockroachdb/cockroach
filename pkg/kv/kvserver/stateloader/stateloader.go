@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -415,8 +416,8 @@ func inlineValueIntEncodedSize(v int64) int {
 // CalcAppliedIndexSysBytes calculates the size (MVCCStats.SysBytes) of the {raft,lease} applied
 // index keys/values.
 func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex uint64) int64 {
-	return int64(storage.MakeMVCCMetadataKey(rsl.RaftAppliedIndexLegacyKey()).EncodedSize() +
-		storage.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexLegacyKey()).EncodedSize() +
+	return int64(mvcc.MakeMVCCMetadataKey(rsl.RaftAppliedIndexLegacyKey()).EncodedSize() +
+		mvcc.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexLegacyKey()).EncodedSize() +
 		inlineValueIntEncodedSize(int64(appliedIndex)) +
 		inlineValueIntEncodedSize(int64(leaseAppliedIndex)))
 }
@@ -578,7 +579,7 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader)
 	defer iter.Close()
 
 	var lastIndex uint64
-	iter.SeekLT(storage.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
+	iter.SeekLT(mvcc.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
 	if ok, _ := iter.Valid(); ok {
 		key := iter.Key()
 		var err error

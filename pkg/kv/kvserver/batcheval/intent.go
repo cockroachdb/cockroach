@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -115,7 +116,7 @@ func acquireUnreplicatedLocksOnKeys(
 	switch scanFmt {
 	case roachpb.BATCH_RESPONSE:
 		var i int
-		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
+		return storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key mvcc.MVCCKey, _ []byte) error {
 			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, key.Key, lock.Unreplicated)
 			i++
 			return nil

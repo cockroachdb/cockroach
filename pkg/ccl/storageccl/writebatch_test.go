@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,7 +43,7 @@ func TestDBWriteBatch(t *testing.T) {
 
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
 		data := batch.Finish()
 
@@ -72,7 +73,7 @@ func TestDBWriteBatch(t *testing.T) {
 	// Key range in request span is not empty.
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := storage.MVCCKey{Key: []byte("bb2"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.MVCCKey{Key: []byte("bb2"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		batch.Put(key, roachpb.MakeValueFromString("2").RawBytes)
 		data := batch.Finish()
 		if err := db.WriteBatch(ctx, "b", "c", data); err != nil {
@@ -95,7 +96,7 @@ func TestDBWriteBatch(t *testing.T) {
 	// Invalid key/value entry checksum.
 	{
 		var batch storage.RocksDBBatchBuilder
-		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 		batch.Put(key, value.RawBytes)
@@ -116,7 +117,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 
 	var batch storage.RocksDBBatchBuilder
 	{
-		key := storage.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		key := mvcc.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		batch.Put(key, roachpb.MakeValueFromString("1").RawBytes)
 	}
 	data := batch.Finish()
