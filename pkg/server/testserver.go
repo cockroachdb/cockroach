@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -60,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -351,6 +353,26 @@ func (ts *TestServer) NodeLiveness() interface{} {
 		return ts.nodeLiveness
 	}
 	return nil
+}
+
+// HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
+func (ts *TestServer) HeartbeatNodeLiveness() error {
+	if ts == nil {
+		return errors.New("no node liveness instance")
+	}
+	nl := ts.nodeLiveness
+	l, err := nl.Self()
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
+		if err = nl.Heartbeat(ctx, l); !errors.Is(err, kvserver.ErrEpochIncremented) {
+			break
+		}
+	}
+	return err
 }
 
 // RPCContext returns the rpc context used by the TestServer.
@@ -1270,9 +1292,6 @@ func (ts *TestServer) ForceTableGC(
 
 // ScratchRangeEx splits off a range suitable to be used as KV scratch space.
 // (it doesn't overlap system spans or SQL tables).
-//
-// Calling this multiple times is undefined (but see TestCluster.ScratchRange()
-// which is idempotent).
 func (ts *TestServer) ScratchRangeEx() (roachpb.RangeDescriptor, error) {
 	scratchKey := keys.TableDataMax
 	_, rngDesc, err := ts.SplitRange(scratchKey)
@@ -1290,6 +1309,18 @@ func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
 		return nil, err
 	}
 	return desc.StartKey.AsRawKey(), nil
+}
+
+// ScratchRangeWithExpirationLease is like ScratchRange but creates a range with
+// an expiration based lease.
+func (ts *TestServer) ScratchRangeWithExpirationLease() (roachpb.Key, error) {
+	scratchKey := roachpb.Key(bytes.Join([][]byte{keys.SystemPrefix,
+		roachpb.RKey("\x00aaa-testing")}, nil))
+	_, _, err := ts.SplitRange(scratchKey)
+	if err != nil {
+		return nil, err
+	}
+	return scratchKey, nil
 }
 
 // MetricsRecorder is part of TestServerInterface.
