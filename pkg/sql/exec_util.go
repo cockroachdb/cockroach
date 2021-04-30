@@ -873,6 +873,10 @@ type ExecutorConfig struct {
 	// use this for normal purposes. It is to be used to establish any new
 	// root-level memory accounts that are not related to a user sessions.
 	RootMemoryMonitor *mon.BytesMonitor
+
+	// CompactEngineSpanFunc is used to inform a storage engine of the need to
+	// perform compaction over a key span.
+	CompactEngineSpanFunc tree.CompactEngineSpanFunc
 }
 
 // Organization returns the value of cluster.organization.
