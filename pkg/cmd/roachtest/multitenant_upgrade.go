@@ -94,9 +94,13 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary str
 		tn.httpPort, tn.sqlPort,
 		"--log-dir="+tn.logDir(),
 	)
-	u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(tn.node))[0])
+	externalUrls, err := c.ExternalPGUrl(ctx, c.Node(tn.node))
 	require.NoError(t, err)
-	u.Host = c.ExternalIP(ctx, c.Node(tn.node))[0] + ":" + strconv.Itoa(tn.sqlPort)
+	u, err := url.Parse(externalUrls[0])
+	require.NoError(t, err)
+	internalUrls, err := c.ExternalIP(ctx, c.Node(tn.node))
+	require.NoError(t, err)
+	u.Host = internalUrls[0] + ":" + strconv.Itoa(tn.sqlPort)
 	tn.pgURL = u.String()
 	c.l.Printf("sql server for tenant %d should be running at %s", tn.tenantID, tn.pgURL)
 
@@ -142,7 +146,8 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 
 	c.Start(ctx, t, kvNodes, startArgs("--binary="+predecessorBinary))
 
-	kvAddrs := c.ExternalAddr(ctx, kvNodes)
+	kvAddrs, err := c.ExternalAddr(ctx, kvNodes)
+	require.NoError(t, err)
 
 	const tenant11HTTPPort, tenant11SQLPort = 8081, 36357
 	const tenant11ID = 11

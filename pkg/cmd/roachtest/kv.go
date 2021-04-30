@@ -405,7 +405,10 @@ func registerKVGracefulDraining(r *testRegistry) {
 				// Before we start shutting down nodes, wait for the performance
 				// of the workload to stabilize at the expected allowed level.
 
-				adminURLs := c.ExternalAdminUIAddr(ctx, c.Node(1))
+				adminURLs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+				if err != nil {
+					return err
+				}
 				url := "http://" + adminURLs[0] + "/ts/query"
 				getQPSTimeSeries := func(start, end time.Time) ([]tspb.TimeSeriesDatapoint, error) {
 					request := tspb.TimeSeriesQueryRequest{
