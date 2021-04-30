@@ -14,11 +14,13 @@ genrule(
     name = "gen-channel",
     srcs = [
         "//pkg/util/log/logpb:log.proto",
-        "//pkg/util/log/gen",
     ],
     outs = ["channel_generated.go"],
     cmd = """
       $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
         channel.go $(location channel_generated.go)
        """,
+    exec_tools = [
+        "//pkg/util/log/gen",
+    ],
 )
