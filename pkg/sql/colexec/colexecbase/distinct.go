@@ -53,6 +53,7 @@ func OrderedDistinctColsToOperators(
 
 type distinctChainOps struct {
 	colexecop.ResettableOperator
+	colexecop.NonExplainable
 }
 
 var _ colexecop.ResettableOperator = &distinctChainOps{}
