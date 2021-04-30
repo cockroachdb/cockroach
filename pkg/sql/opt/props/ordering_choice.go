@@ -805,3 +805,90 @@ func (oc *OrderingColumnChoice) AnyID() opt.ColumnID {
 	}
 	return id
 }
+
+// OrderingSet is a set of orderings, with the restriction that no ordering
+// is a prefix of another ordering in the set.
+type OrderingSet []Ordering
+
+// Copy returns a copy of the set which can be independently modified.
+func (os OrderingSet) Copy() OrderingSet {
+	res := make(OrderingSet, len(os))
+	copy(res, os)
+	return res
+}
+
+// Add an ordering to the list, checking whether it is a prefix of another
+// ordering (or vice-versa).
+func (os *OrderingSet) Add(o Ordering) {
+	if len(o) == 0 {
+		panic(errors.AssertionFailedf("empty ordering"))
+	}
+	for i := range *os {
+		prefix := (*os)[i].CommonPrefix(o)
+		if len(prefix) == len(o) {
+			// o is equal to, or a prefix of os[i]. Do nothing.
+			return
+		}
+		if len(prefix) == len((*os)[i]) {
+			// os[i] is a prefix of o; replace it.
+			(*os)[i] = o
+			return
+		}
+	}
+	*os = append(*os, o)
+}
+
+// RestrictToPrefix keeps only the orderings that have the required ordering as
+// a prefix.
+func (os *OrderingSet) RestrictToPrefix(required Ordering) {
+	res := (*os)[:0]
+	for _, o := range *os {
+		if o.Provides(required) {
+			res = append(res, o)
+		}
+	}
+	*os = res
+}
+
+// RestrictToCols keeps only the orderings (or prefixes of them) that refer to
+// columns in the given set. The equivCols argument allows ordering columns that
+// are not in the given set to be remapped to equivalent columns that are in the
+// given set. A column is only remapped if:
+//
+//   1. It does not exist in cols.
+//   2. And equivCols returns at least one column that:
+//     A. Exists in cols.
+//     B. And does not exist in any preceding columns of the ordering.
+//
+// For example, if cols is (1,3) and equivCols(2) returns (3), the ordering set
+// (+1,-2) (+1,+2) would be remapped to (+1,-3) (+1,+3). However the ordering
+// set (-2,+3) (+2,+3) would be be remapped and restricted to (-3) (+3), instead
+// of the nonsensical ordering set (-3,+3) (+3,+3).
+//
+// Note that a new ordering is allocated if one or more of its columns are
+// remapped in order to prevent mutating ordering sets that os was copied from.
+func (os *OrderingSet) RestrictToCols(cols ColSet, equivCols func(ColumnID) ColSet) {
+	old := *os
+	*os = old[:0]
+	for _, o := range old {
+		newOrd := o.restrictToCols(cols, equivCols)
+		if len(newOrd) > 0 {
+			// This function appends at most one element; it is ok to operate on
+			// the same slice.
+			os.Add(newOrd)
+		}
+	}
+}
+
+func (os OrderingSet) String() string {
+	var buf bytes.Buffer
+	for i, o := range os {
+		if i > 0 {
+			buf.WriteByte(' ')
+		}
+		buf.WriteByte('(')
+		buf.WriteString(o.String())
+		buf.WriteByte(')')
+	}
+	return buf.String()
+}
