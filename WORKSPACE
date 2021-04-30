@@ -135,7 +135,7 @@ gazelle_dependencies()
 #      https://github.com/bazelbuild/bazel-gazelle/issues/591
 git_repository(
     name = "com_google_protobuf",
-    commit = "9b23a34c7275aa0ceb2fc69ed1ae6737b34656a3",
+    commit = "e809d75ecb5770fdc531081eef306b3e672bcdd2",
     remote = "https://github.com/cockroachdb/protobuf",
 )
 
