@@ -1527,3 +1527,14 @@ func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
 func (c *ContentionEvent) String() string {
 	return redact.StringWithoutMarkers(c)
 }
+
+// SafeFormat implements redact.SafeFormatter.
+func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal)",
+		s.StepCount, s.InternalStepCount, s.SeekCount, s.InternalSeekCount)
+}
+
+// String implements fmt.Stringer.
+func (s *ScanStats) String() string {
+	return redact.StringWithoutMarkers(s)
+}

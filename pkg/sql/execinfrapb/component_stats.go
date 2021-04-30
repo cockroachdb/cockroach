@@ -149,6 +149,12 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.KV.BytesRead.HasValue() {
 		fn("KV bytes read", humanize.IBytes(s.KV.BytesRead.Value()))
 	}
+	if s.KV.StepCount.HasValue() {
+		fn("MVCC step count", humanizeutil.Count(s.KV.StepCount.Value()))
+	}
+	if s.KV.SeekCount.HasValue() {
+		fn("MVCC seek count", humanizeutil.Count(s.KV.SeekCount.Value()))
+	}
 
 	// Exec stats.
 	if s.Exec.ExecTime.HasValue() {
@@ -214,6 +220,18 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.KV.ContentionTime.HasValue() {
 		result.KV.ContentionTime = other.KV.ContentionTime
+	}
+	if !result.KV.StepCount.HasValue() {
+		result.KV.StepCount = other.KV.StepCount
+	}
+	if !result.KV.InternalStepCount.HasValue() {
+		result.KV.InternalStepCount = other.KV.InternalStepCount
+	}
+	if !result.KV.SeekCount.HasValue() {
+		result.KV.SeekCount = other.KV.SeekCount
+	}
+	if !result.KV.InternalSeekCount.HasValue() {
+		result.KV.InternalSeekCount = other.KV.InternalSeekCount
 	}
 	if !result.KV.TuplesRead.HasValue() {
 		result.KV.TuplesRead = other.KV.TuplesRead
@@ -304,6 +322,10 @@ func (s *ComponentStats) MakeDeterministic() {
 	// KV.
 	timeVal(&s.KV.KVTime)
 	timeVal(&s.KV.ContentionTime)
+	resetUint(&s.KV.StepCount)
+	resetUint(&s.KV.InternalStepCount)
+	resetUint(&s.KV.SeekCount)
+	resetUint(&s.KV.InternalSeekCount)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())

@@ -57,6 +57,8 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
+        │ MVCC step count: 0
+        │ MVCC seek count: 0
         │ table: geo_table@primary
         │
         └── • inverted filter
@@ -74,11 +76,13 @@ regions: <hidden>
                   KV contention time: 0µs
                   KV rows read: 4
                   KV bytes read: 32 B
+                  MVCC step count: 0
+                  MVCC seek count: 0
                   missing stats
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO40YQx7_3KUbzBVBdZdc2adiqUgqYNm0hyIlaoTpCiz0NFrbX7G5aI5THuhe4JzvZJhwhirnc3YfLh41mxv_1zG9m149o7jMUOAn-DE6mcAdn4fgc5qSurbzJCP7-LQgDMPY6LSxpQ7E1-3uTcHT6s9s_4oOfLseji-m-zxhjHjR_zDvYE-LXYHweTMMrp94rP4BxeBqEcHwFd-hgoRK6kDkZFP8gx5mDpVYxGaN07XpsHhglFQrmYFqUC1u7Zw7GShOKR7SpzQgFTuscQ5IJ6R5DBxOyMs2abZ9LGNYJXKdFQhU6OCllYQT0IjyOourfJIoqzqKoYm8t-MOuGh4hyCIBj4Gyt6QNOvjHX2DTnASw9--e7FgVlgqbqmIjpNX_BjTJRIDfem4eLK1cngvH6OCNtPEtGVALWy6sgJpDI1w5fJwtHWytJ47Gyjmh4Evn01mPiv9IW0rO0sySJt3j68BX8aAqNagChlyAqWmDsVJb0dDzfjyMIuayKGLsrQWBimRXWQ19g_q4xjCs820KbLi2SFvbWJll6_Sponix2ZRcVpBTrvQDyCxTsbSUCGBNI-qYuc_AUl5Ckpo7WBg5p1X4zT65W_vk7tKn31VaPB0Jd9uRKHWaS_3wEY0zdF_RcbvofPYYu5tjzPsNni3Av4Catwu156n21pm1fvH6BmSc8fquc5nb7x-xl7-T_i984PPWGLABH_h-4PM98fJSHLoHW-eyk_zXx-TvgmmitCXd89chDfn339qROdylqpBMqQpDa1Vt25ktZw5SMqf2U2XUQsd0qVXcvKY1x42ucSRkbBvlrTEq2lCd4Esx7xS73WK3U-x1i71Osd8t9jvFh6_Es-V3HwIAAP___4y3QA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVeFu40QQ_s9TjOZPr8Kou7YbcouQQns-CNDLyYkOnXBUbe0hZ8XedXc34KrKY_ECPBmynZSkUVwC_CA_Nppv8u3OfN_s5hHtfYECp9GP0fUMlvA2ntzAgvStk3cFwU_fRXEE1t3mypGxlDr76mwaj9987Q9e8-FX7yfjd7NXIWOMBdB-seD8TIhvo8lNNIs_es1e5TlM4jdRDFcfYYkeKp3RO1mSRfEzcpx7WBmdkrXaNNBj-4NxVqNgHuaqWrkGnnuYakMoHtHlriAUOGtqjElmZC4YepiRk3nRbvvUwqgp4DZXGdXo4bSSygq4SPAqSepfsiSpOUuSmr204BencniCIFUGAQPtPpGx6OEPH8DlJQlgf_y-iVOtHCmXa3WQMvo3C4ZkJiDskLsHR1so8OEKPbz5cH0N1lEFqV4pJ4A9gUTLXfBOuvQTWdArV602WHvEFghxvvawizaKWycXhIKvvb_vylj9SsZR9jYvHBkyF3zfmm0-qisDWsGIC7CNL2CdNE60OgdfXiYJ81mSMPbSgkAqO5XW2HPgz6SRYdTU2zbYOtCJ38XWyaLY94lqSleH9pWyhpJKbR5AFoVOpaNMAGsta3L2vgBHZQVZbpewsnJB2_SLPvlHffJP8el7navN5fGPXZ7K5KU0D39J4438Z-r4fer844H3DweeD04c-CPW_At9g1P0fZr_YF_dDhfPX1XGGW_eT5_5g8Frtvu5HnzDhyHvgiEb8mEYRiE_E7sP7cg_PzrBvR799zKFp8g01caRuQj3RRrxz_9vl-vylK5ispVWlva6OrYzW889pGxB3d-f1SuT0nuj0_aYLpy0vBbIyLouy7tgrLpUU-AumfeS_X6y30sO-slBLznsJ4e95Mtn5Pn6sz8DAAD__-dk0Dg=
 
 statement ok
 DROP TABLE geo_table
@@ -143,6 +147,8 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
+        │ MVCC step count: 0
+        │ MVCC seek count: 0
         │ table: geo_table@primary
         │
         └── • inverted filter
@@ -160,11 +166,13 @@ regions: <hidden>
                   KV contention time: 0µs
                   KV rows read: 2
                   KV bytes read: 16 B
+                  MVCC step count: 0
+                  MVCC seek count: 0
                   missing stats
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO40YQx7_3KUbzBVBdZdc2adiqUgqYNm0hyIlaoTpCiz0NFrbX7G7aIJTHuhe4JzutTTgCwncRd9Llw0bzH__XO7_ZXd-juS1Q4CT6Mzqawg2cxONTmJO6tPKqIPj7tyiOwNjLvLKkDaXW7O5M4tHxz37_gA9-Oh-Pzqa7IWOMBdD8sWBvR4hfo_FpNI0vPDdXuQfj-DiK4fACbtDDSmV0JksyKP5BjjMPa61SMkZpJ903D4yyJQrmYV7VC-vkmYep0oTiHm1uC0KBU7fGmGRGusfQw4yszItm2scShm4Bl3mV0RI9nNSyMgJ6CR4myfLfLEmWLHAD-8SAP2zr4QmCrDIIGCh7Tdqgh3_8BTYvSQB7_-4hTlVlqbK5ql6ktPrfgCaZCfBb5erO0lrifThED6-kTa_JgFrYemEFOA6NcS34OFt52EYPHI2Vc0LBV97nsx5V_5G2lJ3khSVNusc3ga_z0bLWoCoYcgHG0QZjpbaioRf8uJ8kzNFjDlLngEBVtq3NQX9BfewwDN16mwIbri3SNjZWFsUmfVpSunjZlFIuoaRS6TuQRaFSaSkTwJpGuJy5LcBSWUOWmxtYGDmndfoNffK36dPvKq8ejoT_2pGodV5KffcRjTf0t6HzFbbxK8DfQC3Yhtrjrg42mbW6eH4DMs64u-t85vf7B-zp76j_Cx-EvA0GbMAHYRiFfEc8vRSH_t4X3ZdvwBRug2mitCXdCzchDfn339qR2d-mqphMrSpDG1W9NjNbzTykbE7tp8qohU7pXKu0eU0bjhtfI2RkbJvlbTCq2pRb4FMz7zT73Wa_0xx0m4NOc9htDjvN-8_Ms9V3HwIAAP__EHC3Qg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVeFu6zQU_s9THJ0_uxNBtZOs9BohlfXmQoHdTmk1NJFq8pJDFzWxM9uFTlMfixfgyVCSdrSbFqiGBPnh6Hwnn33O99nOI9r7AgVOox-j0QyW8DGeXMCC9I2TtwXBT99FcQTW3eTKkbGUOvvuZBqPP3zt99_zwVeXk_Gn2buQMcYCaF4sOD0R4ttochHN4muvnqs8hUn8IYrh_BqW6KHSGX2SJVkUPyPHuYeV0SlZq00NPTYfjLM1CuZhrqqVq-G5h6k2hOIRXe4KQoGzusaYZEamx9DDjJzMi2bapxaGdQE3ucpojR5OK6msgF6C50my_iVLkjUL6oH9zYBfHMvhCYJUGQQMtLsjY9HDH67A5SUJYH_8vo1TrRwpl2v1ImX0bxYMyUyA3yK3D452EO_DOXp4cTUagXVUQapXyglgTyDRch-8lS69Iwt65arVFmuW2AE-zjcettFWcevkglDwjffPXRmrX8k4yj7mhSNDpscPrdnlo3VlQCsYcgG29gWsk8aJRufgy7MkYbXOrJazc0AglR1Lq-154c-klmFY19s02DjQit_G1smiOPSJ1pSuXtpXyjWUVGrzALIodCodZQJYY1mds_cFOCoryHK7hJWVC9ql3-CTf4xP3-tcbQ-P_9rhqUxeSvPwlzTe0D9Gnf90w79izRv0DY7R92n_B4fqtrh4fqsyznh9f_rM7_ffs_1n1P-GD0LeBgM24IMwjEJ-IvYv2qF_-q_u4DfIFB4j01QbR6YXHoo05J__3w7X2TFdxWQrrSwddPXazGwz95CyBbW_P6tXJqVLo9NmmTacNLwGyMi6NsvbYKzaVF3gPpl3kv1ust9JDrrJQSc57CaHneSzZ-T55rM_AwAA___5NdA6
 
 # Also works when creating an index.
 statement ok
@@ -205,6 +213,8 @@ regions: <hidden>
         │ KV contention time: 0µs
         │ KV rows read: 2
         │ KV bytes read: 16 B
+        │ MVCC step count: 0
+        │ MVCC seek count: 0
         │ table: geo_table@primary
         │
         └── • inverted filter
@@ -222,8 +232,10 @@ regions: <hidden>
                   KV contention time: 0µs
                   KV rows read: 2
                   KV bytes read: 16 B
+                  MVCC step count: 0
+                  MVCC seek count: 0
                   missing stats
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMleFO40YQx7_3KUbzBVBdZdc2adiqUgqYNm0hyIlaoTpCiz0NFrbX7G7aIJTHuhe4JzutTTgCwncRd9Llw0bzH__XO7_ZXd-juS1Q4CT6Mzqawg2cxONTmJO6tPKqIPj7tyiOwNjLvLKkDaXW7O5M4tHxz37_gA9-Oh-Pzqa7IWOMBdD8sWBvR4hfo_FpNI0vPDdXuQfj-DiK4fACbtDDSmV0JksyKP5BjjMPa61SMkZpJ903D4yyJQrmYV7VC-vkmYep0oTiHm1uC0KBU7fGmGRGusfQw4yszItm2scShm4Bl3mV0RI9nNSyMgJ6CR4myfLfLEmWLHAD-8SAP2zr4QmCrDIIGCh7Tdqgh3_8BTYvSQB7_-4hTlVlqbK5ql6ktPrfgCaZCfBb5erO0lrifThED6-kTa_JgFrYemEFOA6NcS34OFt52EYPHI2Vc0LBV97nsx5V_5G2lJ3khSVNusc3ga_z0bLWoCoYcgHG0QZjpbaioRf8uJ8kzNFjDlLngEBVtq3NQX9BfewwDN16mwIbri3SNjZWFsUmfVpSunjZlFIuoaRS6TuQRaFSaSkTwJpGuJy5LcBSWUOWmxtYGDmndfoNffK36dPvKq8ejoT_2pGodV5KffcRjTf0t6HzFbbxK8DfQC3Yhtrjrg42mbW6eH4DMs64u-t85vf7B-zp76j_Cx-EvA0GbMAHYRiFfEc8vRSH_t4X3ZdvwBRug2mitCXdCzchDfn339qR2d-mqphMrSpDG1W9NjNbzTykbE7tp8qohU7pXKu0eU0bjhtfI2RkbJvlbTCq2pRb4FMz7zT73Wa_0xx0m4NOc9htDjvN-8_Ms9V3HwIAAP__EHC3Qg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVeFu6zQU_s9THJ0_uxNBtZOs9BohlfXmQoHdTmk1NJFq8pJDFzWxM9uFTlMfixfgyVCSdrSbFqiGBPnh6Hwnn33O99nOI9r7AgVOox-j0QyW8DGeXMCC9I2TtwXBT99FcQTW3eTKkbGUOvvuZBqPP3zt99_zwVeXk_Gn2buQMcYCaF4sOD0R4ttochHN4muvnqs8hUn8IYrh_BqW6KHSGX2SJVkUPyPHuYeV0SlZq00NPTYfjLM1CuZhrqqVq-G5h6k2hOIRXe4KQoGzusaYZEamx9DDjJzMi2bapxaGdQE3ucpojR5OK6msgF6C50my_iVLkjUL6oH9zYBfHMvhCYJUGQQMtLsjY9HDH67A5SUJYH_8vo1TrRwpl2v1ImX0bxYMyUyA3yK3D452EO_DOXp4cTUagXVUQapXyglgTyDRch-8lS69Iwt65arVFmuW2AE-zjcettFWcevkglDwjffPXRmrX8k4yj7mhSNDpscPrdnlo3VlQCsYcgG29gWsk8aJRufgy7MkYbXOrJazc0AglR1Lq-154c-klmFY19s02DjQit_G1smiOPSJ1pSuXtpXyjWUVGrzALIodCodZQJYY1mds_cFOCoryHK7hJWVC9ql3-CTf4xP3-tcbQ-P_9rhqUxeSvPwlzTe0D9Gnf90w79izRv0DY7R92n_B4fqtrh4fqsyznh9f_rM7_ffs_1n1P-GD0LeBgM24IMwjEJ-IvYv2qF_-q_u4DfIFB4j01QbR6YXHoo05J__3w7X2TFdxWQrrSwddPXazGwz95CyBbW_P6tXJqVLo9NmmTacNLwGyMi6NsvbYKzaVF3gPpl3kv1ust9JDrrJQSc57CaHneSzZ-T55rM_AwAA___5NdA6

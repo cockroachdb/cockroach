@@ -50,6 +50,8 @@ type tableReader struct {
 	fetcher rowFetcher
 	alloc   rowenc.DatumAlloc
 
+	scanStats execinfra.ScanStats
+
 	// rowsRead is the number of rows read and is tracked unconditionally.
 	rowsRead int64
 }
@@ -277,6 +279,9 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 
 func (tr *tableReader) close() {
 	if tr.InternalClose() {
+		// scanStats is collected from the trace after we finish doing work for this
+		// join.
+		tr.scanStats = execinfra.GetScanStats(tr.Ctx)
 		if tr.fetcher != nil {
 			tr.fetcher.Close(tr.Ctx)
 		}
@@ -294,7 +299,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
@@ -303,6 +308,8 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
+	execinfra.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
+	return ret
 }
 
 func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {

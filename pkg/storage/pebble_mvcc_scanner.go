@@ -146,6 +146,7 @@ type pebbleMVCCScanner struct {
 	curValue     []byte
 	results      pebbleResults
 	intents      pebble.Batch
+
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -887,4 +888,8 @@ func (p *pebbleMVCCScanner) intentsRepr() []byte {
 		return nil
 	}
 	return p.intents.Repr()
+}
+
+func (p *pebbleMVCCScanner) stats() IteratorStats {
+	return p.parent.Stats()
 }
