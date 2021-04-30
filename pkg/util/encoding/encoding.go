@@ -25,7 +25,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -1093,7 +1092,7 @@ func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
 }
 
 // EncodeBox2DAscending encodes a bounding box in ascending order.
-func EncodeBox2DAscending(b []byte, box geo.CartesianBoundingBox) ([]byte, error) {
+func EncodeBox2DAscending(b []byte, box geopb.BoundingBox) ([]byte, error) {
 	b = append(b, box2DMarker)
 	b = EncodeFloatAscending(b, box.LoX)
 	b = EncodeFloatAscending(b, box.HiX)
@@ -1103,7 +1102,7 @@ func EncodeBox2DAscending(b []byte, box geo.CartesianBoundingBox) ([]byte, error
 }
 
 // EncodeBox2DDescending encodes a bounding box in descending order.
-func EncodeBox2DDescending(b []byte, box geo.CartesianBoundingBox) ([]byte, error) {
+func EncodeBox2DDescending(b []byte, box geopb.BoundingBox) ([]byte, error) {
 	b = append(b, box2DMarker)
 	b = EncodeFloatDescending(b, box.LoX)
 	b = EncodeFloatDescending(b, box.HiX)
@@ -1113,8 +1112,8 @@ func EncodeBox2DDescending(b []byte, box geo.CartesianBoundingBox) ([]byte, erro
 }
 
 // DecodeBox2DAscending decodes a box2D object in ascending order.
-func DecodeBox2DAscending(b []byte) ([]byte, geo.CartesianBoundingBox, error) {
-	box := geo.CartesianBoundingBox{}
+func DecodeBox2DAscending(b []byte) ([]byte, geopb.BoundingBox, error) {
+	box := geopb.BoundingBox{}
 	if PeekType(b) != Box2D {
 		return nil, box, errors.Errorf("did not find Box2D marker")
 	}
@@ -1141,8 +1140,8 @@ func DecodeBox2DAscending(b []byte) ([]byte, geo.CartesianBoundingBox, error) {
 }
 
 // DecodeBox2DDescending decodes a box2D object in descending order.
-func DecodeBox2DDescending(b []byte) ([]byte, geo.CartesianBoundingBox, error) {
-	box := geo.CartesianBoundingBox{}
+func DecodeBox2DDescending(b []byte) ([]byte, geopb.BoundingBox, error) {
+	box := geopb.BoundingBox{}
 	if PeekType(b) != Box2D {
 		return nil, box, errors.Errorf("did not find Box2D marker")
 	}
@@ -2368,16 +2367,16 @@ func EncodeUntaggedTimeTZValue(appendTo []byte, t timetz.TimeTZ) []byte {
 	return EncodeNonsortingStdlibVarint(appendTo, int64(t.OffsetSecs))
 }
 
-// EncodeBox2DValue encodes a geo.CartesianBoundingBox with its value tag, appends it to
+// EncodeBox2DValue encodes a geopb.BoundingBox with its value tag, appends it to
 // the supplied buffer and returns the final buffer.
-func EncodeBox2DValue(appendTo []byte, colID uint32, b geo.CartesianBoundingBox) ([]byte, error) {
+func EncodeBox2DValue(appendTo []byte, colID uint32, b geopb.BoundingBox) ([]byte, error) {
 	appendTo = EncodeValueTag(appendTo, colID, Box2D)
 	return EncodeUntaggedBox2DValue(appendTo, b)
 }
 
-// EncodeUntaggedBox2DValue encodes a geo.CartesianBoundingBox value, appends it to the supplied buffer,
+// EncodeUntaggedBox2DValue encodes a geopb.BoundingBox value, appends it to the supplied buffer,
 // and returns the final buffer.
-func EncodeUntaggedBox2DValue(appendTo []byte, b geo.CartesianBoundingBox) ([]byte, error) {
+func EncodeUntaggedBox2DValue(appendTo []byte, b geopb.BoundingBox) ([]byte, error) {
 	appendTo = EncodeFloatAscending(appendTo, b.LoX)
 	appendTo = EncodeFloatAscending(appendTo, b.HiX)
 	appendTo = EncodeFloatAscending(appendTo, b.LoY)
@@ -2670,10 +2669,8 @@ func DecodeDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err error) {
 }
 
 // DecodeUntaggedBox2DValue decodes a value encoded by EncodeUntaggedBox2DValue.
-func DecodeUntaggedBox2DValue(
-	b []byte,
-) (remaining []byte, box geo.CartesianBoundingBox, err error) {
-	box = geo.CartesianBoundingBox{}
+func DecodeUntaggedBox2DValue(b []byte) (remaining []byte, box geopb.BoundingBox, err error) {
+	box = geopb.BoundingBox{}
 	remaining = b
 
 	remaining, box.LoX, err = DecodeFloatAscending(remaining)
