@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -2966,7 +2967,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 				}
 				iter := tc.engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 				defer iter.Close()
-				mvccKey := storage.MakeMVCCMetadataKey(key)
+				mvccKey := mvcc.MakeMVCCMetadataKey(key)
 				iter.SeekGE(mvccKey)
 				var keyMeta enginepb.MVCCMetadata
 				if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {

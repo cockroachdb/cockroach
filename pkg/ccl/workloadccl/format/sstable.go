@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -82,7 +83,7 @@ func ToSSTable(t workload.Table, tableID descpb.ID, ts time.Time) ([]byte, error
 		defer sw.Close()
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				mvccKey := storage.MVCCKey{Timestamp: sstTS, Key: kv.Key}
+				mvccKey := mvcc.MVCCKey{Timestamp: sstTS, Key: kv.Key}
 				if err := sw.PutMVCC(mvccKey, kv.Value.RawBytes); err != nil {
 					return err
 				}

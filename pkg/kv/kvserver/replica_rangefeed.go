@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -122,7 +123,7 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 }
 
 type iteratorWithCloser struct {
-	storage.SimpleMVCCIterator
+	mvcc.SimpleMVCCIterator
 	close func()
 }
 
@@ -209,7 +210,7 @@ func (r *Replica) RangeFeed(
 	// Register the stream with a catch-up iterator.
 	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
-		catchUpIterFunc = func() storage.SimpleMVCCIterator {
+		catchUpIterFunc = func() mvcc.SimpleMVCCIterator {
 
 			innerIter := r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: args.Span.EndKey,
@@ -356,7 +357,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() storage.SimpleMVCCIterator {
+	rtsIter := func() mvcc.SimpleMVCCIterator {
 		return r.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 			UpperBound: desc.EndKey.AsRawKey(),
 			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed

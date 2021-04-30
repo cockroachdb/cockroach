@@ -14,6 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -23,7 +24,7 @@ type sstIterator struct {
 	sst  *sstable.Reader
 	iter sstable.Iterator
 
-	mvccKey   MVCCKey
+	mvccKey   mvcc.MVCCKey
 	value     []byte
 	iterValid bool
 	err       error
@@ -38,7 +39,7 @@ type sstIterator struct {
 // NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
 // assumes was written by pebble `sstable.Writer`and contains keys which use
 // Cockroach's MVCC format.
-func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
+func NewSSTIterator(file sstable.ReadableFile) (mvcc.SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
 		Comparer: EngineComparer,
 	})
@@ -52,7 +53,7 @@ func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 // It's compatible with sstables written by `RocksDBSstFileWriter` and
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
-func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
+func NewMemSSTIterator(data []byte, verify bool) (mvcc.SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
 		Comparer: EngineComparer,
 	})
@@ -73,7 +74,7 @@ func (r *sstIterator) Close() {
 }
 
 // SeekGE implements the SimpleMVCCIterator interface.
-func (r *sstIterator) SeekGE(key MVCCKey) {
+func (r *sstIterator) SeekGE(key mvcc.MVCCKey) {
 	if r.err != nil {
 		return
 	}
@@ -133,7 +134,7 @@ func (r *sstIterator) NextKey() {
 }
 
 // UnsafeKey implements the SimpleMVCCIterator interface.
-func (r *sstIterator) UnsafeKey() MVCCKey {
+func (r *sstIterator) UnsafeKey() mvcc.MVCCKey {
 	return r.mvccKey
 }
 

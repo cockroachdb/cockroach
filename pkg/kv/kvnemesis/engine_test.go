@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,8 +27,8 @@ func TestEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	k := func(s string, ts hlc.Timestamp) storage.MVCCKey {
-		return storage.MVCCKey{Key: []byte(s), Timestamp: ts}
+	k := func(s string, ts hlc.Timestamp) mvcc.MVCCKey {
+		return mvcc.MVCCKey{Key: []byte(s), Timestamp: ts}
 	}
 	var missing roachpb.Value
 	v := func(s string, ts hlc.Timestamp) roachpb.Value {

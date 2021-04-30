@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -46,10 +46,10 @@ type runnable interface {
 //
 type initResolvedTSScan struct {
 	p  *Processor
-	it storage.SimpleMVCCIterator
+	it mvcc.SimpleMVCCIterator
 }
 
-func newInitResolvedTSScan(p *Processor, it storage.SimpleMVCCIterator) runnable {
+func newInitResolvedTSScan(p *Processor, it mvcc.SimpleMVCCIterator) runnable {
 	return &initResolvedTSScan{p: p, it: it}
 }
 
@@ -66,8 +66,8 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := storage.MakeMVCCMetadataKey(s.p.Span.Key.AsRawKey())
-	endKey := storage.MakeMVCCMetadataKey(s.p.Span.EndKey.AsRawKey())
+	startKey := mvcc.MakeMVCCMetadataKey(s.p.Span.Key.AsRawKey())
+	endKey := mvcc.MakeMVCCMetadataKey(s.p.Span.EndKey.AsRawKey())
 
 	// Iterate through all keys using NextKey. This will look at the first MVCC
 	// version for each key. We're only looking for MVCCMetadata versions, which

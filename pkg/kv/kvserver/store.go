@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1254,7 +1255,7 @@ func IterateIDPrefixKeys(
 
 	for {
 		bumped := false
-		mvccKey := storage.MakeMVCCMetadataKey(keyFn(rangeID))
+		mvccKey := mvcc.MakeMVCCMetadataKey(keyFn(rangeID))
 		iter.SeekGE(mvccKey)
 
 		if ok, err := iter.Valid(); !ok {
@@ -1279,7 +1280,7 @@ func IterateIDPrefixKeys(
 				rangeID = curRangeID
 				bumped = true
 			}
-			mvccKey = storage.MakeMVCCMetadataKey(keyFn(rangeID))
+			mvccKey = mvcc.MakeMVCCMetadataKey(keyFn(rangeID))
 		}
 
 		if !unsafeKey.Key.Equal(mvccKey.Key) {
@@ -1607,7 +1608,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		keys.StoreSuggestedCompactionKeyPrefix(),
 		keys.StoreSuggestedCompactionKeyPrefix().PrefixEnd(),
 		storage.MVCCKeyIterKind,
-		func(res storage.MVCCKeyValue) error {
+		func(res mvcc.MVCCKeyValue) error {
 			return s.engine.ClearUnversioned(res.Key.Key)
 		})
 	if err != nil {
@@ -2210,18 +2211,18 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		}
 		return err
 	}
-	getMVCCKey := func() (storage.MVCCKey, error) {
+	getMVCCKey := func() (mvcc.MVCCKey, error) {
 		var k storage.EngineKey
 		k, err = iter.EngineKey()
 		if err != nil {
-			return storage.MVCCKey{}, err
+			return mvcc.MVCCKey{}, err
 		}
 		if !k.IsMVCCKey() {
-			return storage.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
+			return mvcc.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
 		}
 		return k.ToMVCCKey()
 	}
-	var k storage.MVCCKey
+	var k mvcc.MVCCKey
 	if k, err = getMVCCKey(); err != nil {
 		return err
 	}

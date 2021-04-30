@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -223,7 +223,7 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 	beforeSort := timeutil.Now()
 
 	sort.Sort(&b.curBuf)
-	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
+	mvccKey := mvcc.MVCCKey{Timestamp: b.timestamp}
 
 	beforeFlush := timeutil.Now()
 	b.flushCounts.totalSort += beforeFlush.Sub(beforeSort)

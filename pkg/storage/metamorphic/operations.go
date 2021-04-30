@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -138,7 +139,7 @@ func generateMVCCScan(
 }
 
 // Prints the key where an iterator is positioned, or valid = false if invalid.
-func printIterState(iter storage.MVCCIterator) string {
+func printIterState(iter mvcc.MVCCIterator) string {
 	if ok, err := iter.Valid(); !ok || err != nil {
 		if err != nil {
 			return fmt.Sprintf("valid = %v, err = %s", ok, err.Error())
@@ -483,7 +484,7 @@ func (i iterOpenOp) run(ctx context.Context) string {
 		// pebble's iterator stays invalid while RocksDB's finds the key after
 		// the first key. This is a known difference. For now seek the iterator
 		// to standardize behavior for this test.
-		iter.SeekGE(storage.MakeMVCCMetadataKey(i.key))
+		iter.SeekGE(mvcc.MakeMVCCMetadataKey(i.key))
 	}
 
 	return string(i.id)
@@ -504,7 +505,7 @@ func (i iterCloseOp) run(ctx context.Context) string {
 type iterSeekOp struct {
 	m      *metaTestRunner
 	iter   iteratorID
-	key    storage.MVCCKey
+	key    mvcc.MVCCKey
 	seekLT bool
 }
 
@@ -613,7 +614,7 @@ func (c compactOp) run(ctx context.Context) string {
 
 type ingestOp struct {
 	m    *metaTestRunner
-	keys []storage.MVCCKey
+	keys []mvcc.MVCCKey
 }
 
 func (i ingestOp) run(ctx context.Context) string {
@@ -1203,7 +1204,7 @@ var opGenerators = []opGenerator{
 	{
 		name: "ingest",
 		generate: func(ctx context.Context, m *metaTestRunner, args ...string) mvccOp {
-			var keys []storage.MVCCKey
+			var keys []mvcc.MVCCKey
 			for _, arg := range args {
 				key := m.keyGenerator.parse(arg)
 				// Don't put anything at the 0 timestamp; the MVCC code expects

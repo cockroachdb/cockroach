@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -39,7 +40,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	// Many versions of each key.
 	for i := 1; i < 10; i++ {
 		for _, k := range keys {
-			require.NoError(t, eng.PutMVCC(MVCCKey{Key: k, Timestamp: hlc.Timestamp{WallTime: int64(i)}},
+			require.NoError(t, eng.PutMVCC(mvcc.MVCCKey{Key: k, Timestamp: hlc.Timestamp{WallTime: int64(i)}},
 				[]byte(fmt.Sprintf("%d", i))))
 		}
 	}
@@ -97,12 +98,12 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	numKeys := mvccScanner.results.count
 	require.Equal(t, 3, int(numKeys))
 	type kv struct {
-		k MVCCKey
+		k mvcc.MVCCKey
 		v []byte
 	}
 	kvs := make([]kv, numKeys)
 	var i int
-	require.NoError(t, MVCCScanDecodeKeyValues(kvData, func(k MVCCKey, v []byte) error {
+	require.NoError(t, MVCCScanDecodeKeyValues(kvData, func(k mvcc.MVCCKey, v []byte) error {
 		kvs[i].k = k
 		kvs[i].v = v
 		i++
@@ -110,7 +111,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	}))
 	expectedKVs := make([]kv, len(keys))
 	for i := range expectedKVs {
-		expectedKVs[i].k = MVCCKey{Key: keys[i], Timestamp: hlc.Timestamp{WallTime: 2}}
+		expectedKVs[i].k = mvcc.MVCCKey{Key: keys[i], Timestamp: hlc.Timestamp{WallTime: 2}}
 		expectedKVs[i].v = []byte("2")
 	}
 	require.Equal(t, expectedKVs, kvs)
@@ -125,13 +126,13 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
 	largeValue := bytes.Repeat([]byte("l"), 150<<20)
 	// Alternate small and large values.
-	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[0], Timestamp: hlc.Timestamp{WallTime: 1}},
+	require.NoError(t, eng.PutMVCC(mvcc.MVCCKey{Key: keys[0], Timestamp: hlc.Timestamp{WallTime: 1}},
 		[]byte("a")))
-	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[1], Timestamp: hlc.Timestamp{WallTime: 1}},
+	require.NoError(t, eng.PutMVCC(mvcc.MVCCKey{Key: keys[1], Timestamp: hlc.Timestamp{WallTime: 1}},
 		largeValue))
-	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[2], Timestamp: hlc.Timestamp{WallTime: 1}},
+	require.NoError(t, eng.PutMVCC(mvcc.MVCCKey{Key: keys[2], Timestamp: hlc.Timestamp{WallTime: 1}},
 		[]byte("c")))
-	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[3], Timestamp: hlc.Timestamp{WallTime: 1}},
+	require.NoError(t, eng.PutMVCC(mvcc.MVCCKey{Key: keys[3], Timestamp: hlc.Timestamp{WallTime: 1}},
 		largeValue))
 
 	reader := eng.NewReadOnly()

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
@@ -33,7 +34,7 @@ func makeGCIterator(desc *roachpb.RangeDescriptor, snap storage.Reader) gcIterat
 }
 
 type gcIteratorState struct {
-	cur, next, afterNext *storage.MVCCKeyValue
+	cur, next, afterNext *mvcc.MVCCKeyValue
 }
 
 // curIsNewest returns true if the current MVCCKeyValue in the gcIteratorState
@@ -97,7 +98,7 @@ func (it *gcIterator) step() {
 	it.buf.removeFront()
 }
 
-func (it *gcIterator) peekAt(i int) (*storage.MVCCKeyValue, bool) {
+func (it *gcIterator) peekAt(i int) (*mvcc.MVCCKeyValue, bool) {
 	if it.buf.len <= i {
 		if !it.fillTo(i + 1) {
 			return nil, false
@@ -129,12 +130,12 @@ const gcIteratorRingBufSize = 3
 
 type gcIteratorRingBuf struct {
 	allocs [gcIteratorRingBufSize]bufalloc.ByteAllocator
-	buf    [gcIteratorRingBufSize]storage.MVCCKeyValue
+	buf    [gcIteratorRingBufSize]mvcc.MVCCKeyValue
 	len    int
 	head   int
 }
 
-func (b *gcIteratorRingBuf) at(i int) *storage.MVCCKeyValue {
+func (b *gcIteratorRingBuf) at(i int) *mvcc.MVCCKeyValue {
 	if i >= b.len {
 		panic("index out of range")
 	}
@@ -145,13 +146,13 @@ func (b *gcIteratorRingBuf) removeFront() {
 	if b.len == 0 {
 		panic("cannot remove from empty gcIteratorRingBuf")
 	}
-	b.buf[b.head] = storage.MVCCKeyValue{}
+	b.buf[b.head] = mvcc.MVCCKeyValue{}
 	b.head = (b.head + 1) % gcIteratorRingBufSize
 	b.len--
 }
 
 type iterator interface {
-	UnsafeKey() storage.MVCCKey
+	UnsafeKey() mvcc.MVCCKey
 	UnsafeValue() []byte
 }
 
@@ -165,7 +166,7 @@ func (b *gcIteratorRingBuf) pushBack(it iterator) {
 	v := it.UnsafeValue()
 	b.allocs[i], k.Key = b.allocs[i].Copy(k.Key, len(v))
 	b.allocs[i], v = b.allocs[i].Copy(v, 0)
-	b.buf[i] = storage.MVCCKeyValue{
+	b.buf[i] = mvcc.MVCCKeyValue{
 		Key:   k,
 		Value: v,
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,7 +72,7 @@ func runGCOld(
 	var batchGCKeys []roachpb.GCRequest_GCKey
 	var batchGCKeysBytes int64
 	var expBaseKey roachpb.Key
-	var keys []storage.MVCCKey
+	var keys []mvcc.MVCCKey
 	var vals [][]byte
 	var keyBytes int64
 	var valBytes int64
@@ -190,12 +191,12 @@ func runGCOld(
 			processKeysAndValues()
 			expBaseKey = iterKey.Key
 			if !iterKey.IsValue() {
-				keys = []storage.MVCCKey{iter.Key()}
+				keys = []mvcc.MVCCKey{iter.Key()}
 				vals = [][]byte{iter.Value()}
 				continue
 			}
 			// An implicit metadata.
-			keys = []storage.MVCCKey{storage.MakeMVCCMetadataKey(iterKey.Key)}
+			keys = []mvcc.MVCCKey{mvcc.MakeMVCCMetadataKey(iterKey.Key)}
 			// A nil value for the encoded MVCCMetadata. This will unmarshal to an
 			// empty MVCCMetadata which is sufficient for processKeysAndValues to
 			// determine that there is no intent.
@@ -275,7 +276,7 @@ func MakeGarbageCollector(now hlc.Timestamp, policy zonepb.GCPolicy) GarbageColl
 // deleted value is the most recent before expiration, it can be deleted. This
 // would still allow for the tombstone bugs in #6227, so in the future we will
 // add checks that disallow writes before the last GC expiration time.
-func (gc GarbageCollector) Filter(keys []storage.MVCCKey, values [][]byte) (int, hlc.Timestamp) {
+func (gc GarbageCollector) Filter(keys []mvcc.MVCCKey, values [][]byte) (int, hlc.Timestamp) {
 	if gc.policy.TTLSeconds <= 0 {
 		return -1, hlc.Timestamp{}
 	}
@@ -307,19 +308,19 @@ func (gc GarbageCollector) Filter(keys []storage.MVCCKey, values [][]byte) (int,
 	return -1, hlc.Timestamp{}
 }
 
-func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) storage.MVCCKey {
-	return storage.MVCCKey{Key: key, Timestamp: ts}
+func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) mvcc.MVCCKey {
+	return mvcc.MVCCKey{Key: key, Timestamp: ts}
 }
 
 var (
 	aKey  = roachpb.Key("a")
 	bKey  = roachpb.Key("b")
-	aKeys = []storage.MVCCKey{
+	aKeys = []mvcc.MVCCKey{
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 2e9, Logical: 0}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1e9, Logical: 1}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1e9, Logical: 0}),
 	}
-	bKeys = []storage.MVCCKey{
+	bKeys = []mvcc.MVCCKey{
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 2e9, Logical: 0}),
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 1e9, Logical: 0}),
 	}
@@ -336,7 +337,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	testData := []struct {
 		gc       GarbageCollector
 		time     hlc.Timestamp
-		keys     []storage.MVCCKey
+		keys     []mvcc.MVCCKey
 		values   [][]byte
 		expIdx   int
 		expDelTS hlc.Timestamp

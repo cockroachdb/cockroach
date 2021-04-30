@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -85,13 +86,13 @@ type intentInterleavingIter struct {
 	constraint intentInterleavingIterConstraint
 
 	// iter is for iterating over MVCC keys and interleaved intents.
-	iter MVCCIterator
+	iter mvcc.MVCCIterator
 	// The valid value from iter.Valid() after the last positioning call.
 	iterValid bool
 	// When iterValid = true, this contains the result of iter.UnsafeKey(). We
 	// store it here to avoid repeatedly calling UnsafeKey() since it repeats
 	// key parsing.
-	iterKey MVCCKey
+	iterKey mvcc.MVCCKey
 
 	// intentIter is for iterating over separated intents, so that
 	// intentInterleavingIter can make them look as if they were interleaved.
@@ -129,7 +130,7 @@ type intentInterleavingIter struct {
 	intentLimitKeyBuf []byte
 }
 
-var _ MVCCIterator = &intentInterleavingIter{}
+var _ mvcc.MVCCIterator = &intentInterleavingIter{}
 
 var intentInterleavingIterPool = sync.Pool{
 	New: func() interface{} {
@@ -141,7 +142,7 @@ func isLocal(k roachpb.Key) bool {
 	return len(k) == 0 || keys.IsLocal(k)
 }
 
-func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator {
+func newIntentInterleavingIterator(reader Reader, opts IterOptions) mvcc.MVCCIterator {
 	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
 		panic("intentInterleavingIter must not be used with timestamp hints")
 	}
@@ -222,7 +223,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	// may make them inconsistent with each other. So we clone here, to ensure
 	// consistency (certain Reader implementations already ensure consistency,
 	// and we use that when possible to save allocations).
-	var iter MVCCIterator
+	var iter mvcc.MVCCIterator
 	if reader.ConsistentIterators() {
 		iter = reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	} else {
@@ -241,7 +242,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	return iiIter
 }
 
-func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
+func (i *intentInterleavingIter) SeekGE(key mvcc.MVCCKey) {
 	i.dir = +1
 	i.valid = true
 	i.err = nil
@@ -299,7 +300,7 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	if err := i.tryDecodeLockKey(valid); err != nil {
 		return
 	}
-	i.iter.SeekGE(MVCCKey{Key: key})
+	i.iter.SeekGE(mvcc.MVCCKey{Key: key})
 	i.computePos()
 }
 
@@ -585,11 +586,11 @@ func (i *intentInterleavingIter) isCurAtIntentIter() bool {
 	return (i.dir > 0 && i.intentCmp <= 0) || (i.dir < 0 && i.intentCmp > 0)
 }
 
-func (i *intentInterleavingIter) UnsafeKey() MVCCKey {
+func (i *intentInterleavingIter) UnsafeKey() mvcc.MVCCKey {
 	// If there is a separated intent there cannot also be an interleaved intent
 	// for the same key.
 	if i.isCurAtIntentIter() {
-		return MVCCKey{Key: i.intentKey}
+		return mvcc.MVCCKey{Key: i.intentKey}
 	}
 	return i.iterKey
 }
@@ -601,7 +602,7 @@ func (i *intentInterleavingIter) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
 
-func (i *intentInterleavingIter) Key() MVCCKey {
+func (i *intentInterleavingIter) Key() mvcc.MVCCKey {
 	key := i.UnsafeKey()
 	keyCopy := make([]byte, len(key.Key))
 	copy(keyCopy, key.Key)
@@ -627,7 +628,7 @@ func (i *intentInterleavingIter) Close() {
 	intentInterleavingIterPool.Put(i)
 }
 
-func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
+func (i *intentInterleavingIter) SeekLT(key mvcc.MVCCKey) {
 	i.dir = -1
 	i.valid = true
 	i.err = nil
@@ -838,7 +839,7 @@ func (i *intentInterleavingIter) ComputeStats(
 
 func (i *intentInterleavingIter) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
-) (MVCCKey, error) {
+) (mvcc.MVCCKey, error) {
 	return findSplitKeyUsingIterator(i, start, end, minSplitKey, targetSize)
 }
 
@@ -859,7 +860,7 @@ func (i *intentInterleavingIter) SetUpperBound(key roachpb.Key) {
 	i.intentIter.SetUpperBound(intentUpperBound)
 }
 
-func (i *intentInterleavingIter) Stats() IteratorStats {
+func (i *intentInterleavingIter) Stats() mvcc.IteratorStats {
 	// Only used in tests.
 	return i.iter.Stats()
 }
@@ -871,7 +872,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 // newMVCCIteratorByCloningEngineIter assumes MVCCKeyIterKind and no timestamp
 // hints. It uses pebble.Iterator.Clone to ensure that the two iterators see
 // the identical engine state.
-func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
+func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) mvcc.MVCCIterator {
 	pIter := iter.GetRawIter()
 	it := newPebbleIterator(nil, pIter, opts)
 	if iter == nil {
@@ -883,19 +884,19 @@ func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) M
 // unsageMVCCIterator is used in RaceEnabled test builds to randomly inject
 // changes to unsafe keys retrieved from MVCCIterators.
 type unsafeMVCCIterator struct {
-	MVCCIterator
+	mvcc.MVCCIterator
 	keyBuf        []byte
 	rawKeyBuf     []byte
 	rawMVCCKeyBuf []byte
 }
 
-func wrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
+func wrapInUnsafeIter(iter mvcc.MVCCIterator) mvcc.MVCCIterator {
 	return &unsafeMVCCIterator{MVCCIterator: iter}
 }
 
-var _ MVCCIterator = &unsafeMVCCIterator{}
+var _ mvcc.MVCCIterator = &unsafeMVCCIterator{}
 
-func (i *unsafeMVCCIterator) SeekGE(key MVCCKey) {
+func (i *unsafeMVCCIterator) SeekGE(key mvcc.MVCCKey) {
 	i.mangleBufs()
 	i.MVCCIterator.SeekGE(key)
 }
@@ -910,7 +911,7 @@ func (i *unsafeMVCCIterator) NextKey() {
 	i.MVCCIterator.NextKey()
 }
 
-func (i *unsafeMVCCIterator) SeekLT(key MVCCKey) {
+func (i *unsafeMVCCIterator) SeekLT(key mvcc.MVCCKey) {
 	i.mangleBufs()
 	i.MVCCIterator.SeekLT(key)
 }
@@ -920,7 +921,7 @@ func (i *unsafeMVCCIterator) Prev() {
 	i.MVCCIterator.Prev()
 }
 
-func (i *unsafeMVCCIterator) UnsafeKey() MVCCKey {
+func (i *unsafeMVCCIterator) UnsafeKey() mvcc.MVCCKey {
 	rv := i.MVCCIterator.UnsafeKey()
 	i.keyBuf = append(i.keyBuf[:0], rv.Key...)
 	rv.Key = i.keyBuf

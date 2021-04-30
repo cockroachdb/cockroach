@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 )
 
 // SSTableInfo contains metadata about a single sstable. Note this mirrors
@@ -21,8 +22,8 @@ import (
 type SSTableInfo struct {
 	Level int
 	Size  int64
-	Start MVCCKey
-	End   MVCCKey
+	Start mvcc.MVCCKey
+	End   mvcc.MVCCKey
 }
 
 // SSTableInfos is a slice of SSTableInfo structures.

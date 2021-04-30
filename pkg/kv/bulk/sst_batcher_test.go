@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -40,9 +41,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValue {
+func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []mvcc.MVCCKeyValue {
 	prefix := keys.SystemSQLCodec.IndexPrefix(100, 1)
-	kvs := make([]storage.MVCCKeyValue, numKeys)
+	kvs := make([]mvcc.MVCCKeyValue, numKeys)
 	r, _ := randutil.NewPseudoRand()
 
 	var k int
@@ -66,7 +67,7 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValu
 	return kvs
 }
 
-func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue) []byte {
+func makePebbleSST(t testing.TB, kvs []mvcc.MVCCKeyValue) []byte {
 	memFile := &storage.MemFile{}
 	w := storage.MakeIngestionSSTWriter(memFile)
 	defer w.Close()

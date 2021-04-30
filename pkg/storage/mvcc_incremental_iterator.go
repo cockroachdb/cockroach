@@ -13,6 +13,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -68,7 +69,7 @@ import (
 // NOTE: This is not used by CockroachDB and has been preserved to serve as an
 // oracle to prove the correctness of the new export logic.
 type MVCCIncrementalIterator struct {
-	iter MVCCIterator
+	iter mvcc.MVCCIterator
 
 	// A time-bound iterator cannot be used by itself due to a bug in the time-
 	// bound iterator (#28358). This was historically augmented with an iterator
@@ -76,7 +77,7 @@ type MVCCIncrementalIterator struct {
 	// issues remained (#43799), so now the iterator above is the main iterator
 	// the timeBoundIter is used to check if any keys can be skipped by the main
 	// iterator.
-	timeBoundIter MVCCIterator
+	timeBoundIter mvcc.MVCCIterator
 
 	startTime hlc.Timestamp
 	endTime   hlc.Timestamp
@@ -88,7 +89,7 @@ type MVCCIncrementalIterator struct {
 	meta enginepb.MVCCMetadata
 }
 
-var _ SimpleMVCCIterator = &MVCCIncrementalIterator{}
+var _ mvcc.SimpleMVCCIterator = &MVCCIncrementalIterator{}
 
 // MVCCIncrementalIterOptions bundles options for NewMVCCIncrementalIterator.
 type MVCCIncrementalIterOptions struct {
@@ -111,8 +112,8 @@ type MVCCIncrementalIterOptions struct {
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
-	var iter MVCCIterator
-	var timeBoundIter MVCCIterator
+	var iter mvcc.MVCCIterator
+	var timeBoundIter mvcc.MVCCIterator
 	if opts.EnableTimeBoundIteratorOptimization {
 		// An iterator without the timestamp hints is created to ensure that the
 		// iterator visits every required version of every key that has changed.
@@ -145,7 +146,7 @@ func NewMVCCIncrementalIterator(
 // SeekGE advances the iterator to the first key in the engine which is >= the
 // provided key. startKey should be a metadata key to ensure that the iterator
 // has a chance to observe any intents on the key if they are there.
-func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
+func (i *MVCCIncrementalIterator) SeekGE(startKey mvcc.MVCCKey) {
 	if i.timeBoundIter != nil {
 		// Check which is the first key seen by the TBI.
 		i.timeBoundIter.SeekGE(startKey)
@@ -158,7 +159,7 @@ func (i *MVCCIncrementalIterator) SeekGE(startKey MVCCKey) {
 		if tbiKey.Compare(startKey.Key) > 0 {
 			// If the first key that the TBI sees is ahead of the given startKey, we
 			// can seek directly to the first version of the key.
-			startKey = MakeMVCCMetadataKey(tbiKey)
+			startKey = mvcc.MakeMVCCMetadataKey(tbiKey)
 		}
 	}
 	i.iter.SeekGE(startKey)
@@ -246,7 +247,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// phantom MVCCKey.Keys. These keys may not be seen by the main iterator
 			// due to aborted transactions and keys which have been subsumed due to
 			// range tombstones. In this case we can SeekGE() the TBI to the main iterator.
-			seekKey := MakeMVCCMetadataKey(iterKey)
+			seekKey := mvcc.MakeMVCCMetadataKey(iterKey)
 			i.timeBoundIter.SeekGE(seekKey)
 			if ok, err := i.timeBoundIter.Valid(); !ok {
 				i.err = err
@@ -263,7 +264,7 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// of keys. The main iterator is seeked to the TBI in hopes that many
 			// keys were skipped. Note that a Seek is an order of magnitude more
 			// expensive than a Next call.
-			seekKey := MakeMVCCMetadataKey(tbiKey)
+			seekKey := mvcc.MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
 			if ok, err := i.iter.Valid(); !ok {
 				i.err = err
@@ -386,7 +387,7 @@ func (i *MVCCIncrementalIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key.
-func (i *MVCCIncrementalIterator) Key() MVCCKey {
+func (i *MVCCIncrementalIterator) Key() mvcc.MVCCKey {
 	return i.iter.Key()
 }
 
@@ -397,7 +398,7 @@ func (i *MVCCIncrementalIterator) Value() []byte {
 
 // UnsafeKey returns the same key as Key, but the memory is invalidated on the
 // next call to {Next,Reset,Close}.
-func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
+func (i *MVCCIncrementalIterator) UnsafeKey() mvcc.MVCCKey {
 	return i.iter.UnsafeKey()
 }
 

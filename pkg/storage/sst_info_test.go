@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -73,8 +74,8 @@ func TestReadAmplification(t *testing.T) {
 	}
 }
 
-func stringToKey(s string) MVCCKey {
-	return MakeMVCCMetadataKey([]byte(s))
+func stringToKey(s string) mvcc.MVCCKey {
+	return mvcc.MakeMVCCMetadataKey([]byte(s))
 }
 
 func createTestSSTableInfos() SSTableInfos {

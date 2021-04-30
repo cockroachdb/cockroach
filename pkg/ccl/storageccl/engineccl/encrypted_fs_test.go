@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/pebble"
@@ -244,7 +245,7 @@ func TestPebbleEncryption(t *testing.T) {
 	require.NoError(t, batch.PutUnversioned(roachpb.Key("a"), []byte("a")))
 	require.NoError(t, batch.Commit(true))
 	require.NoError(t, db.Flush())
-	val, err := db.MVCCGet(storage.MVCCKey{Key: roachpb.Key("a")})
+	val, err := db.MVCCGet(mvcc.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
 	db.Close()
@@ -266,7 +267,7 @@ func TestPebbleEncryption(t *testing.T) {
 			Opts: opts2,
 		})
 	require.NoError(t, err)
-	val, err = db.MVCCGet(storage.MVCCKey{Key: roachpb.Key("a")})
+	val, err = db.MVCCGet(mvcc.MVCCKey{Key: roachpb.Key("a")})
 	require.NoError(t, err)
 	require.Equal(t, "a", string(val))
 

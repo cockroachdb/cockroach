@@ -17,14 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
-func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValue {
+func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []mvcc.MVCCKeyValue {
 	prefix := encoding.EncodeUvarintAscending(keys.SystemSQLCodec.TablePrefix(uint32(100)), uint64(1))
-	kvs := make([]storage.MVCCKeyValue, numKeys)
+	kvs := make([]mvcc.MVCCKeyValue, numKeys)
 	r, _ := randutil.NewPseudoRand()
 
 	var k int
@@ -48,7 +49,7 @@ func makeIntTableKVs(numKeys, valueSize, maxRevisions int) []storage.MVCCKeyValu
 	return kvs
 }
 
-func makePebbleSST(t testing.TB, kvs []storage.MVCCKeyValue, ingestion bool) []byte {
+func makePebbleSST(t testing.TB, kvs []mvcc.MVCCKeyValue, ingestion bool) []byte {
 	f := &storage.MemFile{}
 	var w storage.SSTWriter
 	if ingestion {

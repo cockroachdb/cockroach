@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -66,14 +67,14 @@ func TestExportCmd(t *testing.T) {
 
 	exportAndSlurpOne := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
-	) ([]string, []storage.MVCCKeyValue, roachpb.ResponseHeader) {
+	) ([]string, []mvcc.MVCCKeyValue, roachpb.ResponseHeader) {
 		res, pErr := export(t, start, mvccFilter, maxResponseSSTBytes)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
 
 		var paths []string
-		var kvs []storage.MVCCKeyValue
+		var kvs []mvcc.MVCCKeyValue
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
@@ -90,7 +91,7 @@ func TestExportCmd(t *testing.T) {
 			if !bytes.Equal(fileContents, file.SST) {
 				t.Fatal("Returned SST and exported SST don't match!")
 			}
-			sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+			sst.SeekGE(mvcc.MVCCKey{Key: keys.MinKey})
 			for {
 				if valid, err := sst.Valid(); !valid || err != nil {
 					if err != nil {
@@ -98,7 +99,7 @@ func TestExportCmd(t *testing.T) {
 					}
 					break
 				}
-				newKv := storage.MVCCKeyValue{}
+				newKv := mvcc.MVCCKeyValue{}
 				newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 				newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
 				newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
@@ -112,9 +113,9 @@ func TestExportCmd(t *testing.T) {
 	type ExportAndSlurpResult struct {
 		end                      hlc.Timestamp
 		mvccLatestFiles          []string
-		mvccLatestKVs            []storage.MVCCKeyValue
+		mvccLatestKVs            []mvcc.MVCCKeyValue
 		mvccAllFiles             []string
-		mvccAllKVs               []storage.MVCCKeyValue
+		mvccAllKVs               []mvcc.MVCCKeyValue
 		mvccLatestResponseHeader roachpb.ResponseHeader
 		mvccAllResponseHeader    roachpb.ResponseHeader
 	}
@@ -474,7 +475,7 @@ func exportUsingGoIterator(
 		EndTime:                             endTime,
 	})
 	defer iter.Close()
-	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
+	for iter.SeekGE(mvcc.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
@@ -507,7 +508,7 @@ func exportUsingGoIterator(
 	return memFile.Data(), nil
 }
 
-func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKeyValue {
+func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []mvcc.MVCCKeyValue {
 	t.Helper()
 	if len(data) == 0 {
 		return nil
@@ -519,8 +520,8 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 	}
 	defer sst.Close()
 
-	var kvs []storage.MVCCKeyValue
-	sst.SeekGE(storage.MVCCKey{Key: start})
+	var kvs []mvcc.MVCCKeyValue
+	sst.SeekGE(mvcc.MVCCKey{Key: start})
 	for {
 		if valid, err := sst.Valid(); !valid || err != nil {
 			if err != nil {
@@ -528,10 +529,10 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 			}
 			break
 		}
-		if !sst.UnsafeKey().Less(storage.MVCCKey{Key: end}) {
+		if !sst.UnsafeKey().Less(mvcc.MVCCKey{Key: end}) {
 			break
 		}
-		newKv := storage.MVCCKeyValue{}
+		newKv := mvcc.MVCCKeyValue{}
 		newKv.Key.Key = append(newKv.Key.Key, sst.UnsafeKey().Key...)
 		newKv.Key.Timestamp = sst.UnsafeKey().Timestamp
 		newKv.Value = append(newKv.Value, sst.UnsafeValue()...)
@@ -570,7 +571,7 @@ func assertEqualKVs(
 		}
 
 		// Run the actual code path used when exporting MVCCs to SSTs.
-		var kvs []storage.MVCCKeyValue
+		var kvs []mvcc.MVCCKeyValue
 		for start := startKey; start != nil; {
 			var sst []byte
 			var summary roachpb.BulkOpSummary

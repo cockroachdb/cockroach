@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -131,7 +132,7 @@ func MakeStreamSSTBatcher(
 	return b, err
 }
 
-func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
+func (b *SSTBatcher) updateMVCCStats(key mvcc.MVCCKey, value []byte) {
 	metaKeySize := int64(len(key.Key)) + 1
 	metaValSize := int64(0)
 	b.ms.LiveBytes += metaKeySize
@@ -140,9 +141,9 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 	b.ms.ValBytes += metaValSize
 	b.ms.KeyCount++
 
-	totalBytes := int64(len(value)) + storage.MVCCVersionTimestampSize
+	totalBytes := int64(len(value)) + mvcc.MVCCVersionTimestampSize
 	b.ms.LiveBytes += totalBytes
-	b.ms.KeyBytes += storage.MVCCVersionTimestampSize
+	b.ms.KeyBytes += mvcc.MVCCVersionTimestampSize
 	b.ms.ValBytes += int64(len(value))
 	b.ms.ValCount++
 }
@@ -151,7 +152,7 @@ func (b *SSTBatcher) updateMVCCStats(key storage.MVCCKey, value []byte) {
 // This is only for callers that want to control the timestamp on individual
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
-func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
+func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key mvcc.MVCCKey, value []byte) error {
 	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) && !b.ingestAll {
 		if b.skipDuplicates && bytes.Equal(b.batchEndValue, value) {
 			return nil
@@ -497,7 +498,7 @@ func createSplitSSTable(
 	db SSTSender,
 	start, splitKey roachpb.Key,
 	disallowShadowing bool,
-	iter storage.SimpleMVCCIterator,
+	iter mvcc.SimpleMVCCIterator,
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemFile{}
@@ -508,7 +509,7 @@ func createSplitSSTable(
 	var first, last roachpb.Key
 	var left, right *sstSpan
 
-	iter.SeekGE(storage.MVCCKey{Key: start})
+	iter.SeekGE(mvcc.MVCCKey{Key: start})
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, nil, err

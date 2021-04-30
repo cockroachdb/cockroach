@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -57,7 +57,7 @@ var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
 
-type mvccKeyValues []storage.MVCCKeyValue
+type mvccKeyValues []mvcc.MVCCKeyValue
 
 func (s mvccKeyValues) Len() int           { return len(s) }
 func (s mvccKeyValues) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
@@ -146,7 +146,7 @@ func newStreamIngestionDataProcessor(
 		flowCtx:             flowCtx,
 		spec:                spec,
 		output:              output,
-		curBatch:            make([]storage.MVCCKeyValue, 0),
+		curBatch:            make([]mvcc.MVCCKeyValue, 0),
 		client:              streamClient,
 		bufferedCheckpoints: make(map[streamingccl.PartitionAddress]hlc.Timestamp),
 		maxFlushRateTimer:   timeutil.NewTimer(),
@@ -458,11 +458,11 @@ func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
 	if kv == nil {
 		return errors.New("kv event expected to have kv")
 	}
-	mvccKey := storage.MVCCKey{
+	mvccKey := mvcc.MVCCKey{
 		Key:       kv.Key,
 		Timestamp: kv.Value.Timestamp,
 	}
-	sip.curBatch = append(sip.curBatch, storage.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
+	sip.curBatch = append(sip.curBatch, mvcc.MVCCKeyValue{Key: mvccKey, Value: kv.Value.RawBytes})
 	return nil
 }
 

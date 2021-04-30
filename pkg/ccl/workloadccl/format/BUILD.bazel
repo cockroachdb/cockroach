@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/storage",
+        "//pkg/storage/mvcc",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/workload",

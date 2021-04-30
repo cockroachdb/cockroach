@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 )
 
 // KeyRange is a helper struct for the ReplicaMVCCDataIterator and
@@ -21,7 +22,7 @@ import (
 // TODO(sumeer): change these to roachpb.Key since the timestamp is
 // always empty and the code below assumes that fact.
 type KeyRange struct {
-	Start, End storage.MVCCKey
+	Start, End mvcc.MVCCKey
 }
 
 // ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
@@ -43,7 +44,7 @@ type ReplicaMVCCDataIterator struct {
 	ranges   []KeyRange
 	// When it is non-nil, it represents the iterator for curIndex.
 	// A non-nil it is valid, else it is either done, or err != nil.
-	it      storage.MVCCIterator
+	it      mvcc.MVCCIterator
 	err     error
 	reverse bool
 }
@@ -143,8 +144,8 @@ func MakeRangeIDLocalKeyRange(rangeID roachpb.RangeID, replicatedOnly bool) KeyR
 	}
 	sysRangeIDKey := prefixFn(rangeID)
 	return KeyRange{
-		Start: storage.MakeMVCCMetadataKey(sysRangeIDKey),
-		End:   storage.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
+		Start: mvcc.MakeMVCCMetadataKey(sysRangeIDKey),
+		End:   mvcc.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
 	}
 }
 
@@ -154,8 +155,8 @@ func MakeRangeIDLocalKeyRange(rangeID roachpb.RangeID, replicatedOnly bool) KeyR
 // /System), but it actually belongs to [/Table/1, /Table/2).
 func makeRangeLocalKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 	return KeyRange{
-		Start: storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-		End:   storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+		Start: mvcc.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+		End:   mvcc.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
 	}
 }
 
@@ -177,12 +178,12 @@ func makeRangeLockTableKeyRanges(d *roachpb.RangeDescriptor) [2]KeyRange {
 	endGlobal, _ := keys.LockTableSingleKey(roachpb.Key(d.EndKey), nil)
 	return [2]KeyRange{
 		{
-			Start: storage.MakeMVCCMetadataKey(startRangeLocal),
-			End:   storage.MakeMVCCMetadataKey(endRangeLocal),
+			Start: mvcc.MakeMVCCMetadataKey(startRangeLocal),
+			End:   mvcc.MakeMVCCMetadataKey(endRangeLocal),
 		},
 		{
-			Start: storage.MakeMVCCMetadataKey(startGlobal),
-			End:   storage.MakeMVCCMetadataKey(endGlobal),
+			Start: mvcc.MakeMVCCMetadataKey(startGlobal),
+			End:   mvcc.MakeMVCCMetadataKey(endGlobal),
 		},
 	}
 }
@@ -197,8 +198,8 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 		dataStartKey = keys.LocalMax
 	}
 	return KeyRange{
-		Start: storage.MakeMVCCMetadataKey(dataStartKey),
-		End:   storage.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
+		Start: mvcc.MakeMVCCMetadataKey(dataStartKey),
+		End:   mvcc.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
 	}
 }
 
@@ -320,7 +321,7 @@ func (ri *ReplicaMVCCDataIterator) Valid() (bool, error) {
 }
 
 // Key returns the current key. Only called in tests.
-func (ri *ReplicaMVCCDataIterator) Key() storage.MVCCKey {
+func (ri *ReplicaMVCCDataIterator) Key() mvcc.MVCCKey {
 	return ri.it.Key()
 }
 
@@ -331,7 +332,7 @@ func (ri *ReplicaMVCCDataIterator) Value() []byte {
 
 // UnsafeKey returns the same value as Key, but the memory is invalidated on
 // the next call to {Next,Prev,Close}.
-func (ri *ReplicaMVCCDataIterator) UnsafeKey() storage.MVCCKey {
+func (ri *ReplicaMVCCDataIterator) UnsafeKey() mvcc.MVCCKey {
 	return ri.it.UnsafeKey()
 }
 

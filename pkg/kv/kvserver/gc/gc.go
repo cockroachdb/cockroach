@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -255,7 +256,7 @@ func processReplicatedKeyRange(
 	var alloc bufalloc.ByteAllocator
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
-	handleIntent := func(md *storage.MVCCKeyValue) {
+	handleIntent := func(md *mvcc.MVCCKeyValue) {
 		meta := &enginepb.MVCCMetadata{}
 		if err := protoutil.Unmarshal(md.Value, meta); err != nil {
 			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", md.Key, err)
@@ -387,7 +388,7 @@ func processReplicatedKeyRange(
 // guaranteed as described above. However if this were the only rule, then if
 // the most recent write was a delete, it would never be removed. Thus, when a
 // deleted value is the most recent before expiration, it can be deleted.
-func isGarbage(threshold hlc.Timestamp, cur, next *storage.MVCCKeyValue, isNewest bool) bool {
+func isGarbage(threshold hlc.Timestamp, cur, next *mvcc.MVCCKeyValue, isNewest bool) bool {
 	// If the value is not at or below the threshold then it's not garbage.
 	if belowThreshold := cur.Key.Timestamp.LessEq(threshold); !belowThreshold {
 		return false

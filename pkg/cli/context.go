@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/mattn/go-isatty"
@@ -395,7 +396,7 @@ func setAuthContextDefaults() {
 // debugCtx captures the command-line parameters of the `debug` command.
 // See below for defaults.
 var debugCtx struct {
-	startKey, endKey  storage.MVCCKey
+	startKey, endKey  mvcc.MVCCKey
 	values            bool
 	sizes             bool
 	replicated        bool

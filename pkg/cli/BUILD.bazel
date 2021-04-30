@@ -141,6 +141,7 @@ go_library(
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",
         "//pkg/storage/enginepb",
+        "//pkg/storage/mvcc",
         "//pkg/testutils/serverutils",
         "//pkg/ts/tspb",
         "//pkg/util",

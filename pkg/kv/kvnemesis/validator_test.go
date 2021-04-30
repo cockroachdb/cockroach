@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,16 +57,16 @@ func TestValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kv := func(key string, ts int, value string) storage.MVCCKeyValue {
-		return storage.MVCCKeyValue{
-			Key: storage.MVCCKey{
+	kv := func(key string, ts int, value string) mvcc.MVCCKeyValue {
+		return mvcc.MVCCKeyValue{
+			Key: mvcc.MVCCKey{
 				Key:       []byte(key),
 				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
 			},
 			Value: roachpb.MakeValueFromString(value).RawBytes,
 		}
 	}
-	kvs := func(kvs ...storage.MVCCKeyValue) []storage.MVCCKeyValue {
+	kvs := func(kvs ...mvcc.MVCCKeyValue) []mvcc.MVCCKeyValue {
 		return kvs
 	}
 	scanKV := func(key, value string) KeyValue {
@@ -79,7 +79,7 @@ func TestValidate(t *testing.T) {
 	tests := []struct {
 		name     string
 		steps    []Step
-		kvs      []storage.MVCCKeyValue
+		kvs      []mvcc.MVCCKeyValue
 		expected []string
 	}{
 		{

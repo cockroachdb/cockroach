@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -31,16 +32,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func mvccKey(k interface{}) MVCCKey {
+func mvccKey(k interface{}) mvcc.MVCCKey {
 	switch k := k.(type) {
 	case string:
-		return MakeMVCCMetadataKey(roachpb.Key(k))
+		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
 	case []byte:
-		return MakeMVCCMetadataKey(roachpb.Key(k))
+		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
 	case roachpb.Key:
-		return MakeMVCCMetadataKey(k)
+		return mvcc.MakeMVCCMetadataKey(k)
 	case roachpb.RKey:
-		return MakeMVCCMetadataKey(roachpb.Key(k))
+		return mvcc.MakeMVCCMetadataKey(roachpb.Key(k))
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", k))
 	}
@@ -105,7 +106,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 
 			// Check all keys are in initial state (nothing from batch has gone
 			// through to engine until commit).
-			expValues := []MVCCKeyValue{
+			expValues := []mvcc.MVCCKeyValue{
 				{Key: mvccKey("b"), Value: []byte("value")},
 				{Key: mvccKey("c"), Value: appender("foo")},
 				{Key: mvccKey("d"), Value: []byte("before")},
@@ -119,7 +120,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 			}
 
 			// Now, merged values should be:
-			expValues = []MVCCKeyValue{
+			expValues = []mvcc.MVCCKeyValue{
 				{Key: mvccKey("a"), Value: []byte("value")},
 				{Key: mvccKey("c"), Value: appender("foobar")},
 				{Key: mvccKey("e"), Value: []byte{}},
@@ -202,7 +203,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				func() { _, _ = ro.MVCCGet(a) },
 				func() { _, _, _, _ = ro.MVCCGetProto(a, getVal) },
 				func() {
-					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, func(MVCCKeyValue) error { return iterutil.StopIteration() })
+					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, func(mvcc.MVCCKeyValue) error { return iterutil.StopIteration() })
 				},
 				func() { ro.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}).Close() },
 				func() {
@@ -268,7 +269,7 @@ func TestReadOnlyBasics(t *testing.T) {
 			}
 
 			// Now, merged values should be:
-			expValues := []MVCCKeyValue{
+			expValues := []mvcc.MVCCKeyValue{
 				{Key: mvccKey("a"), Value: []byte("value")},
 				{Key: mvccKey("c"), Value: appender("foobar")},
 			}
@@ -460,7 +461,7 @@ func TestBatchGet(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			expValues := []MVCCKeyValue{
+			expValues := []mvcc.MVCCKeyValue{
 				{Key: mvccKey("a"), Value: []byte("value")},
 				{Key: mvccKey("b"), Value: nil},
 				{Key: mvccKey("c"), Value: appender("foobar")},
@@ -618,7 +619,7 @@ func TestBatchScan(t *testing.T) {
 			b := e.NewBatch()
 			defer b.Close()
 
-			existingVals := []MVCCKeyValue{
+			existingVals := []mvcc.MVCCKeyValue{
 				{Key: mvccKey("a"), Value: []byte("1")},
 				{Key: mvccKey("b"), Value: []byte("2")},
 				{Key: mvccKey("c"), Value: []byte("3")},
@@ -639,7 +640,7 @@ func TestBatchScan(t *testing.T) {
 				}
 			}
 
-			batchVals := []MVCCKeyValue{
+			batchVals := []mvcc.MVCCKeyValue{
 				{Key: mvccKey("a"), Value: []byte("b1")},
 				{Key: mvccKey("bb"), Value: []byte("b2")},
 				{Key: mvccKey("c"), Value: []byte("b3")},
@@ -676,7 +677,7 @@ func TestBatchScan(t *testing.T) {
 			}
 
 			// Scan each case using the batch and store the results.
-			results := map[int][]MVCCKeyValue{}
+			results := map[int][]mvcc.MVCCKeyValue{}
 			for i, scan := range scans {
 				kvs, err := Scan(b, scan.start, scan.end, scan.max)
 				if err != nil {
@@ -947,9 +948,9 @@ func TestBatchIteration(t *testing.T) {
 			b := e.NewBatch()
 			defer b.Close()
 
-			k1 := MakeMVCCMetadataKey(roachpb.Key("c"))
-			k2 := MakeMVCCMetadataKey(roachpb.Key("d"))
-			k3 := MakeMVCCMetadataKey(roachpb.Key("e"))
+			k1 := mvcc.MakeMVCCMetadataKey(roachpb.Key("c"))
+			k2 := mvcc.MakeMVCCMetadataKey(roachpb.Key("d"))
+			k3 := mvcc.MakeMVCCMetadataKey(roachpb.Key("e"))
 			v1 := []byte("value1")
 			v2 := []byte("value2")
 
@@ -1109,7 +1110,7 @@ func TestDecodeKey(t *testing.T) {
 	)
 	defer e.Close()
 
-	tests := []MVCCKey{
+	tests := []mvcc.MVCCKey{
 		{Key: []byte("foo")},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1}},
 		{Key: []byte("foo"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}},

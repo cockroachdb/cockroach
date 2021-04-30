@@ -61,6 +61,7 @@ go_test(
         ":enginepb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/storage/mvcc",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_stretchr_testify//assert",

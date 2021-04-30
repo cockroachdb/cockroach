@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -25,9 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeKV(key, val string, ts int64) storage.MVCCKeyValue {
-	return storage.MVCCKeyValue{
-		Key: storage.MVCCKey{
+func makeKV(key, val string, ts int64) mvcc.MVCCKeyValue {
+	return mvcc.MVCCKeyValue{
+		Key: mvcc.MVCCKey{
 			Key:       roachpb.Key(key),
 			Timestamp: hlc.Timestamp{WallTime: ts},
 		},
@@ -35,30 +35,30 @@ func makeKV(key, val string, ts int64) storage.MVCCKeyValue {
 	}
 }
 
-func makeProvisionalKV(key, val string, ts int64) storage.MVCCKeyValue {
+func makeProvisionalKV(key, val string, ts int64) mvcc.MVCCKeyValue {
 	return makeKV(key, val, ts)
 }
 
-func makeMetaKV(key string, meta enginepb.MVCCMetadata) storage.MVCCKeyValue {
+func makeMetaKV(key string, meta enginepb.MVCCMetadata) mvcc.MVCCKeyValue {
 	b, err := protoutil.Marshal(&meta)
 	if err != nil {
 		panic(err)
 	}
-	return storage.MVCCKeyValue{
-		Key: storage.MVCCKey{
+	return mvcc.MVCCKeyValue{
+		Key: mvcc.MVCCKey{
 			Key: roachpb.Key(key),
 		},
 		Value: b,
 	}
 }
 
-func makeInline(key, val string) storage.MVCCKeyValue {
+func makeInline(key, val string) mvcc.MVCCKeyValue {
 	return makeMetaKV(key, enginepb.MVCCMetadata{
 		RawBytes: []byte(val),
 	})
 }
 
-func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) storage.MVCCKeyValue {
+func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) mvcc.MVCCKeyValue {
 	return makeMetaKV(key, enginepb.MVCCMetadata{
 		Txn: &enginepb.TxnMeta{
 			ID:             txnID,
@@ -71,7 +71,7 @@ func makeIntent(key string, txnID uuid.UUID, txnKey string, txnTS int64) storage
 }
 
 type testIterator struct {
-	kvs []storage.MVCCKeyValue
+	kvs []mvcc.MVCCKeyValue
 	cur int
 
 	closed bool
@@ -80,7 +80,7 @@ type testIterator struct {
 	done   chan struct{}
 }
 
-func newTestIterator(kvs []storage.MVCCKeyValue) *testIterator {
+func newTestIterator(kvs []mvcc.MVCCKeyValue) *testIterator {
 	// Ensure that the key-values are sorted.
 	if !sort.SliceIsSorted(kvs, func(i, j int) bool {
 		return kvs[i].Key.Less(kvs[j].Key)
@@ -103,7 +103,7 @@ func newTestIterator(kvs []storage.MVCCKeyValue) *testIterator {
 				if i == len(kvs) {
 					panic(missingErr)
 				}
-				expNextKey := storage.MVCCKey{
+				expNextKey := mvcc.MVCCKey{
 					Key:       kv.Key.Key,
 					Timestamp: meta.Timestamp.ToTimestamp(),
 				}
@@ -126,7 +126,7 @@ func (s *testIterator) Close() {
 	close(s.done)
 }
 
-func (s *testIterator) SeekGE(key storage.MVCCKey) {
+func (s *testIterator) SeekGE(key mvcc.MVCCKey) {
 	if s.closed {
 		panic("testIterator closed")
 	}
@@ -171,7 +171,7 @@ func (s *testIterator) NextKey() {
 	}
 }
 
-func (s *testIterator) UnsafeKey() storage.MVCCKey {
+func (s *testIterator) UnsafeKey() mvcc.MVCCKey {
 	return s.curKV().Key
 }
 
@@ -179,7 +179,7 @@ func (s *testIterator) UnsafeValue() []byte {
 	return s.curKV().Value
 }
 
-func (s *testIterator) curKV() storage.MVCCKeyValue {
+func (s *testIterator) curKV() mvcc.MVCCKeyValue {
 	return s.kvs[s.cur]
 }
 
@@ -199,7 +199,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 
 	// Run an init rts scan over a test iterator with the following keys.
 	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	iter := newTestIterator([]storage.MVCCKeyValue{
+	iter := newTestIterator([]mvcc.MVCCKeyValue{
 		makeKV("a", "val1", 10),
 		makeInline("b", "val2"),
 		makeIntent("c", txn1, "txnKey1", 15),

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -52,7 +53,7 @@ func GetAllRevisions(
 			return nil, err
 		}
 		defer iter.Close()
-		iter.SeekGE(storage.MVCCKey{Key: startKey})
+		iter.SeekGE(mvcc.MVCCKey{Key: startKey})
 
 		for ; ; iter.Next() {
 			if valid, err := iter.Valid(); !valid || err != nil {

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +34,7 @@ type wrappedBatch struct {
 	clearRangeCount int
 }
 
-func (wb *wrappedBatch) ClearIterRange(iter storage.MVCCIterator, start, end roachpb.Key) error {
+func (wb *wrappedBatch) ClearIterRange(iter mvcc.MVCCIterator, start, end roachpb.Key) error {
 	wb.clearIterCount++
 	return wb.Batch.ClearIterRange(iter, start, end)
 }
@@ -142,7 +143,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			if err := batch.Commit(true /* commit */); err != nil {
 				t.Fatal(err)
 			}
-			if err := eng.MVCCIterate(startKey, endKey, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+			if err := eng.MVCCIterate(startKey, endKey, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
 				return errors.New("expected no data in underlying engine")
 			}); err != nil {
 				t.Fatal(err)

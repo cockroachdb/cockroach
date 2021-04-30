@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvcc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -174,7 +175,7 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	return db, nil
 }
 
-func printKey(kv storage.MVCCKeyValue) (bool, error) {
+func printKey(kv mvcc.MVCCKeyValue) (bool, error) {
 	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	if debugCtx.sizes {
 		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
@@ -207,7 +208,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 		table := b.BuildImmutable().(catalog.TableDescriptor)
 
-		fn := func(kv storage.MVCCKeyValue) (string, error) {
+		fn := func(kv mvcc.MVCCKeyValue) (string, error) {
 			var v roachpb.Value
 			v.RawBytes = kv.Value
 			_, names, values, err := row.DecodeRowInfo(context.Background(), table, kv.Key.Key, &v, true)
@@ -224,14 +225,14 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 	printer := printKey
 	if debugCtx.values {
-		printer = func(kv storage.MVCCKeyValue) (bool, error) {
+		printer = func(kv mvcc.MVCCKeyValue) (bool, error) {
 			kvserver.PrintKeyValue(kv)
 			return false, nil
 		}
 	}
 
 	results := 0
-	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -369,7 +370,7 @@ func loadRangeDescriptor(
 	db storage.Engine, rangeID roachpb.RangeID,
 ) (roachpb.RangeDescriptor, error) {
 	var desc roachpb.RangeDescriptor
-	handleKV := func(kv storage.MVCCKeyValue) error {
+	handleKV := func(kv mvcc.MVCCKeyValue) error {
 		if kv.Key.Timestamp.IsEmpty() {
 			// We only want values, not MVCCMetadata.
 			return nil
@@ -421,7 +422,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := keys.LocalRangeMax
 
 	// NB: Range descriptor keys can have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+	return db.MVCCIterate(start, end, storage.MVCCKeyAndIntentsIterKind, func(kv mvcc.MVCCKeyValue) error {
 		if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 			return nil
 		}
@@ -490,13 +491,13 @@ Decode and print a hexadecimal-encoded key-value pair.
 				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
 					"if the result below looks like garbage, then it likely is:\n\n", err)
 			}
-			k = storage.MVCCKey{
+			k = mvcc.MVCCKey{
 				Key:       bs[0],
 				Timestamp: hlc.Timestamp{WallTime: 987654321},
 			}
 		}
 
-		kvserver.PrintKeyValue(storage.MVCCKeyValue{
+		kvserver.PrintKeyValue(mvcc.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
 		})
@@ -554,11 +555,11 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	end := keys.RaftLogPrefix(rangeID).PrefixEnd()
 	fmt.Printf("Printing keys %s -> %s (RocksDB keys: %#x - %#x )\n",
 		start, end,
-		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(start))),
-		string(storage.EncodeKey(storage.MakeMVCCMetadataKey(end))))
+		string(storage.EncodeKey(mvcc.MakeMVCCMetadataKey(start))),
+		string(storage.EncodeKey(mvcc.MakeMVCCMetadataKey(end))))
 
 	// NB: raft log does not have intents.
-	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, func(kv storage.MVCCKeyValue) error {
+	return db.MVCCIterate(start, end, storage.MVCCKeyIterKind, func(kv mvcc.MVCCKeyValue) error {
 		kvserver.PrintKeyValue(kv)
 		return nil
 	})
@@ -1248,7 +1249,7 @@ process that has failed and cannot restart.
 
 // mvccValueFormatter is a fmt.Formatter for MVCC values.
 type mvccValueFormatter struct {
-	kv  storage.MVCCKeyValue
+	kv  mvcc.MVCCKeyValue
 	err error
 }
 
@@ -1286,7 +1287,7 @@ func init() {
 			if err != nil {
 				return mvccValueFormatter{err: err}
 			}
-			return mvccValueFormatter{kv: storage.MVCCKeyValue{Key: mvccKey, Value: value}}
+			return mvccValueFormatter{kv: mvcc.MVCCKeyValue{Key: mvccKey, Value: value}}
 		}
 		return lockValueFormatter{value: value}
 	}
