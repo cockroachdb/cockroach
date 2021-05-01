@@ -227,7 +227,7 @@ func registerActiveRecord(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Name:       "activerecord",
 		Owner:      OwnerAppDev,
 		Cluster:    makeClusterSpec(1),
