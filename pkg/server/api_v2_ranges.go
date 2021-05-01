@@ -53,7 +53,7 @@ type nodeStatus struct {
 type nodesResponse struct {
 	// swagger:allOf
 	Nodes []nodeStatus `json:"nodes"`
-	// Continuation token for the next paginated call, if more values are present.
+	// Continuation offset for the next paginated call, if more values are present.
 	// Specify as the `offset` parameter.
 	Next int `json:"next,omitempty"`
 }
@@ -76,7 +76,7 @@ type nodesResponse struct {
 // - name: offset
 //   type: integer
 //   in: query
-//   description: Continuation token for results after a past limited run.
+//   description: Continuation offset for results after a past limited run.
 //   required: false
 // produces:
 // - application/json
@@ -318,7 +318,7 @@ type nodeRangesResponse struct {
 // - name: offset
 //   type: integer
 //   in: query
-//   description: Continuation token for results after a past limited run.
+//   description: Continuation offset for results after a past limited run.
 //   required: false
 // produces:
 // - application/json
