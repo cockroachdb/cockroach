@@ -26,57 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
-	"github.com/cockroachdb/errors"
 )
-
-type crdbVersion int
-
-const (
-	crdbVersion19_2 crdbVersion = iota
-	crdbVersion20_1
-	crdbVersion20_2
-	crdbVersion21_1
-)
-
-func toCRDBVersion(v string) (crdbVersion, error) {
-	switch {
-	case strings.HasPrefix(v, "v19.2"):
-		return crdbVersion19_2, nil
-	case strings.HasPrefix(v, "v20.1"):
-		return crdbVersion20_1, nil
-	case strings.HasPrefix(v, "v20.2"):
-		return crdbVersion20_2, nil
-	case strings.HasPrefix(v, "v21.1"):
-		return crdbVersion21_1, nil
-	default:
-		return 0, errors.Errorf("unrecognized version: %s", v)
-	}
-}
-
-func vectorizeOptionToSetting(vectorize bool, version crdbVersion) string {
-	if !vectorize {
-		return "off"
-	}
-	switch version {
-	case crdbVersion19_2:
-		return "experimental_on"
-	default:
-		return "on"
-	}
-}
-
-// queriesToSkipByVersion is a map keyed by version that contains query numbers
-// to be skipped for the given version (as well as the reasons for why they are
-// skipped).
-var queriesToSkipByVersion = map[crdbVersion]map[int]string{
-	crdbVersion19_2: {
-		5:  "can cause OOM",
-		7:  "can cause OOM",
-		8:  "can cause OOM",
-		9:  "can cause OOM",
-		19: "can cause OOM",
-	},
-}
 
 const tpchVecPerfSlownessThreshold = 1.5
 
@@ -90,8 +40,8 @@ type tpchVecTestRunConfig struct {
 	// numRunsPerQuery determines how many time a single query runs, set to 1
 	// by default.
 	numRunsPerQuery int
-	// queriesToRun specifies the number of queries to run (in [1,
-	// tpch.NumQueries] range).
+	// queriesToRun specifies which queries to run (in [1, tpch.NumQueries]
+	// range).
 	queriesToRun []int
 	// clusterSetups specifies all cluster setup queries that need to be
 	// executed before running any of the TPCH queries. First dimension
@@ -116,39 +66,34 @@ func performClusterSetup(t *test, conn *gosql.DB, clusterSetup []string) {
 
 type tpchVecTestCase interface {
 	// getRunConfig returns the configuration of tpchvec test run.
-	getRunConfig(version crdbVersion, queriesToSkip map[int]string) tpchVecTestRunConfig
+	getRunConfig() tpchVecTestRunConfig
 	// preTestRunHook is called before any tpch query is run. Can be used to
 	// perform any setup that cannot be expressed as a modification to
 	// cluster-wide settings (those should go into tpchVecTestRunConfig).
-	preTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion, clusterSetup []string)
+	preTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, clusterSetup []string)
 	// postQueryRunHook is called after each tpch query is run with the output and
 	// the index of the setup it was run in.
 	postQueryRunHook(t *test, output []byte, setupIdx int)
 	// postTestRunHook is called after all tpch queries are run. Can be used to
 	// perform teardown or general validation.
-	postTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion)
+	postTestRunHook(ctx context.Context, t *test, c *cluster, conn *gosql.DB)
 }
 
 // tpchVecTestCaseBase is a default tpchVecTestCase implementation that can be
 // embedded and extended.
 type tpchVecTestCaseBase struct{}
 
-func (b tpchVecTestCaseBase) getRunConfig(
-	version crdbVersion, queriesToSkip map[int]string,
-) tpchVecTestRunConfig {
+func (b tpchVecTestCaseBase) getRunConfig() tpchVecTestRunConfig {
 	runConfig := tpchVecTestRunConfig{
 		numRunsPerQuery: 1,
 		clusterSetups: [][]string{{
 			"RESET CLUSTER SETTING sql.distsql.temp_storage.workmem",
-			fmt.Sprintf("SET CLUSTER SETTING sql.defaults.vectorize=%s",
-				vectorizeOptionToSetting(true, version)),
+			"SET CLUSTER SETTING sql.defaults.vectorize=on",
 		}},
 		setupNames: []string{"default"},
 	}
 	for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
-		if _, shouldSkip := queriesToSkip[queryNum]; !shouldSkip {
-			runConfig.queriesToRun = append(runConfig.queriesToRun, queryNum)
-		}
+		runConfig.queriesToRun = append(runConfig.queriesToRun, queryNum)
 	}
 	return runConfig
 }
@@ -164,9 +109,7 @@ func (b tpchVecTestCaseBase) preTestRunHook(
 
 func (b tpchVecTestCaseBase) postQueryRunHook(*test, []byte, int) {}
 
-func (b tpchVecTestCaseBase) postTestRunHook(
-	context.Context, *test, *cluster, *gosql.DB, crdbVersion,
-) {
+func (b tpchVecTestCaseBase) postTestRunHook(context.Context, *test, *cluster, *gosql.DB) {
 }
 
 type tpchVecPerfHelper struct {
@@ -224,16 +167,12 @@ func newTpchVecPerfTest(disableStatsCreation bool) *tpchVecPerfTest {
 	}
 }
 
-func (p tpchVecPerfTest) getRunConfig(version crdbVersion, _ map[int]string) tpchVecTestRunConfig {
-	var queriesToSkip map[int]string
+func (p tpchVecPerfTest) getRunConfig() tpchVecTestRunConfig {
+	runConfig := p.tpchVecTestCaseBase.getRunConfig()
 	if p.disableStatsCreation {
-		queriesToSkip = map[int]string{
-			9: "takes too long without stats",
-		}
-	} else {
-		queriesToSkip = queriesToSkipByVersion[version]
+		// Query 9 takes too long without stats, so we'll skip it.
+		runConfig.queriesToRun = append(runConfig.queriesToRun[:8], runConfig.queriesToRun[9:]...)
 	}
-	runConfig := p.tpchVecTestCaseBase.getRunConfig(version, queriesToSkip)
 	runConfig.numRunsPerQuery = 3
 	// Make a copy of the default configuration setup and add different
 	// vectorize setting updates. Note that it's ok that the default setup
@@ -243,9 +182,9 @@ func (p tpchVecPerfTest) getRunConfig(version crdbVersion, _ map[int]string) tpc
 	runConfig.clusterSetups = append(runConfig.clusterSetups, make([]string, len(defaultSetup)))
 	copy(runConfig.clusterSetups[1], defaultSetup)
 	runConfig.clusterSetups[tpchPerfTestVecOffConfigIdx] = append(runConfig.clusterSetups[tpchPerfTestVecOffConfigIdx],
-		fmt.Sprintf("SET CLUSTER SETTING sql.defaults.vectorize=%s", vectorizeOptionToSetting(false, version)))
+		"SET CLUSTER SETTING sql.defaults.vectorize=off")
 	runConfig.clusterSetups[tpchPerfTestVecOnConfigIdx] = append(runConfig.clusterSetups[tpchPerfTestVecOnConfigIdx],
-		fmt.Sprintf("SET CLUSTER SETTING sql.defaults.vectorize=%s", vectorizeOptionToSetting(true, version)))
+		"SET CLUSTER SETTING sql.defaults.vectorize=on")
 	runConfig.setupNames = make([]string, 2)
 	runConfig.setupNames[tpchPerfTestVecOffConfigIdx] = "off"
 	runConfig.setupNames[tpchPerfTestVecOnConfigIdx] = "on"
@@ -253,12 +192,7 @@ func (p tpchVecPerfTest) getRunConfig(version crdbVersion, _ map[int]string) tpc
 }
 
 func (p tpchVecPerfTest) preTestRunHook(
-	ctx context.Context,
-	t *test,
-	c *cluster,
-	conn *gosql.DB,
-	version crdbVersion,
-	clusterSetup []string,
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	p.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, !p.disableStatsCreation /* createStats */)
 }
@@ -268,9 +202,9 @@ func (p *tpchVecPerfTest) postQueryRunHook(t *test, output []byte, setupIdx int)
 }
 
 func (p *tpchVecPerfTest) postTestRunHook(
-	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB,
 ) {
-	runConfig := p.getRunConfig(version, queriesToSkipByVersion[version])
+	runConfig := p.getRunConfig()
 	t.Status("comparing the runtimes (only median values for each query are compared)")
 	for _, queryNum := range runConfig.queriesToRun {
 		findMedian := func(times []float64) float64 {
@@ -403,8 +337,8 @@ func newTpchVecBenchTest(
 	}
 }
 
-func (b tpchVecBenchTest) getRunConfig(version crdbVersion, _ map[int]string) tpchVecTestRunConfig {
-	runConfig := b.tpchVecTestCaseBase.getRunConfig(version, queriesToSkipByVersion[version])
+func (b tpchVecBenchTest) getRunConfig() tpchVecTestRunConfig {
+	runConfig := b.tpchVecTestCaseBase.getRunConfig()
 	runConfig.numRunsPerQuery = b.numRunsPerQuery
 	if b.queriesToRun != nil {
 		runConfig.queriesToRun = b.queriesToRun
@@ -422,7 +356,7 @@ func (b tpchVecBenchTest) getRunConfig(version crdbVersion, _ map[int]string) tp
 }
 
 func (b tpchVecBenchTest) preTestRunHook(
-	_ context.Context, t *test, _ *cluster, conn *gosql.DB, _ crdbVersion, clusterSetup []string,
+	_ context.Context, t *test, _ *cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	b.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 }
@@ -432,9 +366,9 @@ func (b *tpchVecBenchTest) postQueryRunHook(t *test, output []byte, setupIdx int
 }
 
 func (b *tpchVecBenchTest) postTestRunHook(
-	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion,
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB,
 ) {
-	runConfig := b.getRunConfig(version, queriesToSkipByVersion[version])
+	runConfig := b.getRunConfig()
 	t.Status("comparing the runtimes (average of values (excluding best and worst) for each query are compared)")
 	// A score for a single query is calculated as
 	//   <query time on config> / <best query time among all configs>,
@@ -491,12 +425,7 @@ type tpchVecDiskTest struct {
 }
 
 func (d tpchVecDiskTest) preTestRunHook(
-	ctx context.Context,
-	t *test,
-	c *cluster,
-	conn *gosql.DB,
-	version crdbVersion,
-	clusterSetup []string,
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	d.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	// In order to stress the disk spilling of the vectorized engine, we will
@@ -519,14 +448,12 @@ func (d tpchVecDiskTest) preTestRunHook(
 	}
 }
 
-func baseTestRun(
-	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion, tc tpchVecTestCase,
-) {
+func baseTestRun(ctx context.Context, t *test, c *cluster, conn *gosql.DB, tc tpchVecTestCase) {
 	firstNode := c.Node(1)
-	runConfig := tc.getRunConfig(version, queriesToSkipByVersion[version])
+	runConfig := tc.getRunConfig()
 	for setupIdx, setup := range runConfig.clusterSetups {
 		t.Status(fmt.Sprintf("running setup=%s", runConfig.setupNames[setupIdx]))
-		tc.preTestRunHook(ctx, t, c, conn, version, setup)
+		tc.preTestRunHook(ctx, t, c, conn, setup)
 		for _, queryNum := range runConfig.queriesToRun {
 			// Note that we use --default-vectorize flag which tells tpch
 			// workload to use the current cluster setting
@@ -554,12 +481,7 @@ type tpchVecSmithcmpTest struct {
 const tpchVecSmithcmp = "smithcmp"
 
 func (s tpchVecSmithcmpTest) preTestRunHook(
-	ctx context.Context,
-	t *test,
-	c *cluster,
-	conn *gosql.DB,
-	version crdbVersion,
-	clusterSetup []string,
+	ctx context.Context, t *test, c *cluster, conn *gosql.DB, clusterSetup []string,
 ) {
 	s.tpchVecTestCaseBase.preTestRunHook(t, conn, clusterSetup, true /* createStats */)
 	const smithcmpSHA = "a3f41f5ba9273249c5ecfa6348ea8ee3ac4b77e3"
@@ -584,11 +506,9 @@ func (s tpchVecSmithcmpTest) preTestRunHook(
 	c.Put(ctx, smithcmp, "./"+tpchVecSmithcmp, node)
 }
 
-func smithcmpTestRun(
-	ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion, tc tpchVecTestCase,
-) {
-	runConfig := tc.getRunConfig(version, queriesToSkipByVersion[version])
-	tc.preTestRunHook(ctx, t, c, conn, version, runConfig.clusterSetups[0])
+func smithcmpTestRun(ctx context.Context, t *test, c *cluster, conn *gosql.DB, tc tpchVecTestCase) {
+	runConfig := tc.getRunConfig()
+	tc.preTestRunHook(ctx, t, c, conn, runConfig.clusterSetups[0])
 	const (
 		configFile = `tpchvec_smithcmp.toml`
 		configURL  = `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/cmd/roachtest/` + configFile
@@ -608,7 +528,7 @@ func runTPCHVec(
 	t *test,
 	c *cluster,
 	testCase tpchVecTestCase,
-	testRun func(ctx context.Context, t *test, c *cluster, conn *gosql.DB, version crdbVersion, tc tpchVecTestCase),
+	testRun func(ctx context.Context, t *test, c *cluster, conn *gosql.DB, tc tpchVecTestCase),
 ) {
 	firstNode := c.Node(1)
 	c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -628,17 +548,9 @@ func runTPCHVec(
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
 	waitForFullReplication(t, conn)
-	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0], nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	version, err := toCRDBVersion(versionString)
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	testRun(ctx, t, c, conn, version, testCase)
-	testCase.postTestRunHook(ctx, t, c, conn, version)
+	testRun(ctx, t, c, conn, testCase)
+	testCase.postTestRunHook(ctx, t, c, conn)
 }
 
 const tpchVecNodeCount = 3
