@@ -1357,8 +1357,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 	distSQLKnobs := &execinfra.TestingKnobs{
 		MetadataTestLevel: execinfra.Off,
-		// TODO(yuzefovich): uncomment once #64248 is resolved.
-		//CheckVectorizedFlowIsClosedCorrectly: true,
 	}
 	cfg := t.cfg
 	if cfg.sqlExecUseDisk {

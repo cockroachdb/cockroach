@@ -137,19 +137,39 @@ func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 	s.batchesReturned = 0
 }
 
-// CallbackOperator is a testing utility struct that delegates Next calls to a
-// callback provided by the user.
+// CallbackOperator is a testing utility struct that delegates calls to Init,
+// Next, and Close to the callbacks provided by the user.
 type CallbackOperator struct {
 	ZeroInputNode
-	NextCb func() coldata.Batch
+	InitCb  func(context.Context)
+	NextCb  func() coldata.Batch
+	CloseCb func(context.Context) error
 }
 
+var _ ClosableOperator = &CallbackOperator{}
+
 // Init is part of the Operator interface.
-func (o *CallbackOperator) Init(context.Context) {}
+func (o *CallbackOperator) Init(ctx context.Context) {
+	if o.InitCb == nil {
+		return
+	}
+	o.InitCb(ctx)
+}
 
 // Next is part of the Operator interface.
 func (o *CallbackOperator) Next() coldata.Batch {
+	if o.NextCb == nil {
+		return coldata.ZeroBatch
+	}
 	return o.NextCb()
+}
+
+// Close is part of the ClosableOperator interface.
+func (o *CallbackOperator) Close(ctx context.Context) error {
+	if o.CloseCb == nil {
+		return nil
+	}
+	return o.CloseCb(ctx)
 }
 
 // TestingSemaphore is a semaphore.Semaphore that never blocks and is always
