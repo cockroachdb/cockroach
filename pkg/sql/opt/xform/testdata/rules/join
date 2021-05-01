@@ -4462,6 +4462,45 @@ exec-ddl
 DROP INDEX partial_idx
 ----
 
+# Regression test for #63735. Ensure that the constant filter which maximally
+# constrains the lookup table is chosen when there is more than one option.
+# Here, the CHECK constraint establishes an implicit filter that constrains the
+# t63735.x column to any value in (10, 20, 30). However, the computed column
+# expression does more, establishing an implicit filter that constrains the
+# t63735.x column to exactly the value 30.
+exec-ddl
+CREATE TABLE t63735 (
+  x INT NOT NULL AS (y * 2) STORED CHECK (x IN (10, 20, 30)),
+  y INT NOT NULL,
+  PRIMARY KEY (x, y)
+)
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM small INNER LOOKUP JOIN t63735 ON n = y WHERE m = 5 AND n = 15
+----
+inner-join (lookup t63735)
+ ├── columns: m:1!null n:2!null x:5!null y:6!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [8 2] = [5 6]
+ ├── lookup columns are key
+ ├── fd: ()-->(1,2,5,6), (2)==(6), (6)==(2)
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@5":8!null m:1!null n:2!null
+ │    ├── fd: ()-->(1,2,8)
+ │    ├── select
+ │    │    ├── columns: m:1!null n:2!null
+ │    │    ├── fd: ()-->(1,2)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:1 n:2
+ │    │    └── filters
+ │    │         ├── n:2 = 15 [outer=(2), constraints=(/2: [/15 - /15]; tight), fd=()-->(2)]
+ │    │         └── m:1 = 5 [outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │    └── projections
+ │         └── 30 [as="lookup_join_const_col_@5":8]
+ └── filters
+      └── y:6 = 15 [outer=(6), constraints=(/6: [/15 - /15]; tight), fd=()-->(6)]
+
 # -------------------------------------------------------
 # GenerateInvertedJoins + GenerateInvertedJoinsFromSelect
 # -------------------------------------------------------
@@ -6821,6 +6860,50 @@ project
       └── filters
            ├── b.j @> a.j
            └── i = a.k
+
+# Regression test for #63735. Ensure that the constant filter which maximally
+# constrains the lookup table is chosen when there is more than one option.
+# Here, the CHECK constraint establishes an implicit filter that constrains the
+# t63735_b.x column to any value in (10, 20, 30). However, the computed column
+# expression does more, establishing an implicit filter that constrains the
+# t63735_b.x column to exactly the value 30.
+exec-ddl
+CREATE TABLE t63735_a (
+  k INT PRIMARY KEY,
+  j JSON
+)
+----
+
+exec-ddl
+CREATE TABLE t63735_b (
+  x INT NOT NULL AS (y * 2) STORED CHECK (x IN (10, 20, 30)),
+  y INT NOT NULL,
+  j JSON,
+  PRIMARY KEY (x, y),
+  INVERTED INDEX (x, y, j)
+)
+----
+
+opt expect=GenerateInvertedJoinsFromSelect format=hide-all
+SELECT *
+FROM t63735_a AS a INNER INVERTED JOIN t63735_b AS b
+ON a.k = 15 AND b.j @> a.j AND b.y = a.k
+----
+inner-join (lookup t63735_b [as=b])
+ ├── lookup columns are key
+ ├── inner-join (inverted t63735_b@secondary [as=b])
+ │    ├── flags: force inverted join (into right side)
+ │    ├── inverted-expr
+ │    │    └── b.j @> a.j
+ │    ├── project
+ │    │    ├── scan t63735_a [as=a]
+ │    │    │    └── constraint: /1: [/15 - /15]
+ │    │    └── projections
+ │    │         └── 30
+ │    └── filters
+ │         └── y = 15
+ └── filters
+      └── b.j @> a.j
 
 # -------------------------------------------------------
 # GenerateInvertedJoinsFromSelect + Partial Indexes
