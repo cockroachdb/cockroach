@@ -79,31 +79,29 @@ func TestExternalDistinct(t *testing.T) {
 				// Closer.
 				numExpectedClosers++
 			}
-			colexectestutils.RunTestsWithTyps(
-				t,
-				testAllocator,
-				[]colexectestutils.Tuples{tc.tuples},
-				[][]*types.T{tc.typs},
-				tc.expected,
-				verifier,
-				func(input []colexecop.Operator) (colexecop.Operator, error) {
-					// A sorter should never exceed ExternalSorterMinPartitions, even
-					// during repartitioning. A panic will happen if a sorter requests
-					// more than this number of file descriptors.
-					sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
-					semsToCheck = append(semsToCheck, sem)
-					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-						ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct,
-						outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
-					)
-					require.Equal(t, numExpectedClosers, len(closers))
-					accounts = append(accounts, newAccounts...)
-					monitors = append(monitors, newMonitors...)
-					return distinct, err
-				},
-			)
-			for i, sem := range semsToCheck {
-				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				// A sorter should never exceed ExternalSorterMinPartitions, even
+				// during repartitioning. A panic will happen if a sorter requests
+				// more than this number of file descriptors.
+				sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
+				semsToCheck = append(semsToCheck, sem)
+				distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
+					ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct, tc.errorOnDup,
+					outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
+				)
+				require.Equal(t, numExpectedClosers, len(closers))
+				accounts = append(accounts, newAccounts...)
+				monitors = append(monitors, newMonitors...)
+				return distinct, err
+			})
+			if tc.errorOnDup == "" || tc.noError {
+				// We don't check that all FDs were released if an error is
+				// expected to be returned because our utility closeIfCloser()
+				// doesn't handle multiple closers (which is always the case for
+				// the external distinct).
+				for i, sem := range semsToCheck {
+					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+				}
 			}
 		}
 	}
@@ -205,7 +203,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			semsToCheck = append(semsToCheck, sem)
 			var outputOrdering execinfrapb.Ordering
 			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-				ctx, flowCtx, input, typs, distinctCols, false, /* nullsAreDistinct */
+				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
 				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
 			)
 			require.NoError(t, err)
@@ -322,7 +320,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					}
 					op, accs, mons, _, err := createExternalDistinct(
 						ctx, flowCtx, []colexecop.Operator{input}, typs,
-						distinctCols, false, /* nullsAreDistinct */
+						distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
 						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
 					)
@@ -357,6 +355,7 @@ func createExternalDistinct(
 	typs []*types.T,
 	distinctCols []uint32,
 	nullsAreDistinct bool,
+	errorOnDup string,
 	outputOrdering execinfrapb.Ordering,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
@@ -366,6 +365,7 @@ func createExternalDistinct(
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns:  distinctCols,
 		NullsAreDistinct: nullsAreDistinct,
+		ErrorOnDup:       errorOnDup,
 		OutputOrdering:   outputOrdering,
 	}
 	spec := &execinfrapb.ProcessorSpec{
