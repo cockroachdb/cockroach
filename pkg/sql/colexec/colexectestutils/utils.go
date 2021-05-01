@@ -417,6 +417,26 @@ func RunTestsWithoutAllNullsInjection(
 	verifier VerifierType,
 	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
 ) {
+	RunTestsWithoutAllNullsInjectionWithErrorHandler(
+		t, allocator, tups, typs, expected, verifier, constructor, func(err error) { t.Fatal(err) },
+	)
+}
+
+// RunTestsWithoutAllNullsInjectionWithErrorHandler is the same as
+// RunTestsWithoutAllNullsInjection but takes in an additional argument function
+// that handles any errors encountered during the test run (e.g. if the panic is
+// expected to occur during the execution, it will be caught, and the error
+// handler could verify that the expected error was, in fact, encountered).
+func RunTestsWithoutAllNullsInjectionWithErrorHandler(
+	t *testing.T,
+	allocator *colmem.Allocator,
+	tups []Tuples,
+	typs [][]*types.T,
+	expected Tuples,
+	verifier VerifierType,
+	constructor func(inputs []colexecop.Operator) (colexecop.Operator, error),
+	errorHandler func(error),
+) {
 	ctx := context.Background()
 	verifyFn := (*OpTestOutput).VerifyAnyOrder
 	skipVerifySelAndNullsResets := true
@@ -434,13 +454,13 @@ func RunTestsWithoutAllNullsInjection(
 		}
 		out := NewOpTestOutput(op, expected)
 		if err := verifyFn(out); err != nil {
-			t.Fatal(err)
+			errorHandler(err)
 		}
 		if isOperatorChainResettable(op) {
 			log.Info(ctx, "reusing after reset")
 			out.Reset(ctx)
 			if err := verifyFn(out); err != nil {
-				t.Fatal(err)
+				errorHandler(err)
 			}
 		}
 		closeIfCloser(ctx, t, op)
@@ -455,9 +475,6 @@ func RunTestsWithoutAllNullsInjection(
 		// output on its second Next call (we need the first call to Next to get a
 		// reference to a batch to modify), and a second time to modify the batch
 		// and verify that this does not change the operator output.
-		// NOTE: this test makes sense only if the operator returns two non-zero
-		// length batches (if not, we short-circuit the test since the operator
-		// doesn't have to restore anything on a zero-length batch).
 		var (
 			secondBatchHasSelection, secondBatchHasNulls bool
 			inputTypes                                   []*types.T
@@ -477,44 +494,57 @@ func RunTestsWithoutAllNullsInjection(
 			// We might short-circuit, so defer the closing of the operator.
 			defer closeIfCloser(ctx, t, op)
 			op.Init(ctx)
-			b := op.Next()
-			if b.Length() == 0 {
-				return
-			}
-			if round == 1 {
-				if secondBatchHasSelection {
-					b.SetSelection(false)
-				} else {
-					b.SetSelection(true)
+			// NOTE: this test makes sense only if the operator returns two
+			// non-zero length batches (if not, we short-circuit the test since
+			// the operator doesn't have to restore anything on a zero-length
+			// batch).
+			lessThanTwoBatches := true
+			if err = colexecerror.CatchVectorizedRuntimeError(func() {
+				b := op.Next()
+				if b.Length() == 0 {
+					return
 				}
-				if secondBatchHasNulls {
-					// ResetInternalBatch will throw away the null information.
-					b.ResetInternalBatch()
-				} else {
-					for i := 0; i < b.Width(); i++ {
-						b.ColVec(i).Nulls().SetNulls()
+				if round == 1 {
+					if secondBatchHasSelection {
+						b.SetSelection(false)
+					} else {
+						b.SetSelection(true)
+					}
+					if secondBatchHasNulls {
+						// ResetInternalBatch will throw away the null information.
+						b.ResetInternalBatch()
+					} else {
+						for i := 0; i < b.Width(); i++ {
+							b.ColVec(i).Nulls().SetNulls()
+						}
 					}
 				}
+				b = op.Next()
+				if b.Length() == 0 {
+					return
+				}
+				lessThanTwoBatches = false
+				if round == 0 {
+					secondBatchHasSelection = b.Selection() != nil
+					secondBatchHasNulls = maybeHasNulls(b)
+				}
+				if round == 1 {
+					if secondBatchHasSelection {
+						assert.NotNil(t, b.Selection())
+					} else {
+						assert.Nil(t, b.Selection())
+					}
+					if secondBatchHasNulls {
+						assert.True(t, maybeHasNulls(b))
+					} else {
+						assert.False(t, maybeHasNulls(b))
+					}
+				}
+			}); err != nil {
+				errorHandler(err)
 			}
-			b = op.Next()
-			if b.Length() == 0 {
+			if lessThanTwoBatches {
 				return
-			}
-			if round == 0 {
-				secondBatchHasSelection = b.Selection() != nil
-				secondBatchHasNulls = maybeHasNulls(b)
-			}
-			if round == 1 {
-				if secondBatchHasSelection {
-					assert.NotNil(t, b.Selection())
-				} else {
-					assert.Nil(t, b.Selection())
-				}
-				if secondBatchHasNulls {
-					assert.True(t, maybeHasNulls(b))
-				} else {
-					assert.False(t, maybeHasNulls(b))
-				}
 			}
 		}
 	}
@@ -537,8 +567,12 @@ func RunTestsWithoutAllNullsInjection(
 		if err != nil {
 			t.Fatal(err)
 		}
-		op.Init(ctx)
-		for b := op.Next(); b.Length() > 0; b = op.Next() {
+		if err = colexecerror.CatchVectorizedRuntimeError(func() {
+			op.Init(ctx)
+			for b := op.Next(); b.Length() > 0; b = op.Next() {
+			}
+		}); err != nil {
+			errorHandler(err)
 		}
 		closeIfCloser(ctx, t, op)
 	}
@@ -1173,7 +1207,12 @@ func (r *OpTestOutput) Reset(ctx context.Context) {
 func (r *OpTestOutput) Verify() error {
 	var actual Tuples
 	for {
-		tup := r.next()
+		var tup Tuple
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			tup = r.next()
+		}); err != nil {
+			return err
+		}
 		if tup == nil {
 			break
 		}
@@ -1190,7 +1229,12 @@ func (r *OpTestOutput) Verify() error {
 func (r *OpTestOutput) VerifyAnyOrder() error {
 	var actual Tuples
 	for {
-		tup := r.next()
+		var tup Tuple
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			tup = r.next()
+		}); err != nil {
+			return err
+		}
 		if tup == nil {
 			break
 		}
