@@ -972,6 +972,11 @@ func NewStore(
 	return s
 }
 
+// GetStoreConfig exposes the config used for this store.
+func (s *Store) GetStoreConfig() *StoreConfig {
+	return &s.cfg
+}
+
 // String formats a store for debug output.
 func (s *Store) String() string {
 	return fmt.Sprintf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
