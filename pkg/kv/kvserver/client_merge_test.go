@@ -4082,7 +4082,6 @@ func verifyUnmerged(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKe
 
 func TestMergeQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 64056, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -4225,6 +4224,7 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("non-collocated", func(t *testing.T) {
+		skip.WithIssue(t, 64056, "flaky test")
 		reset(t)
 		rangeID := rhs().RangeID
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
