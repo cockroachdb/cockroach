@@ -72,37 +72,20 @@ func wrapRowSources(
 	var toWrapInputs []execinfra.RowSource
 	var releasables []execinfra.Releasable
 	for i := range inputs {
-		inputInfo := &inputs[i]
 		// Optimization: if the input is a Columnarizer, its input is
 		// necessarily a execinfra.RowSource, so remove the unnecessary
 		// conversion.
-		if c, ok := inputInfo.Root.(*colexec.Columnarizer); ok {
+		if c, ok := inputs[i].Root.(*colexec.Columnarizer); ok {
 			// Since this Columnarizer has been previously added to Closers and
 			// MetadataSources, this call ensures that all future calls are noops.
 			// Modifying the slices at this stage is difficult.
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			inputInfoCopy := *inputInfo
-			// We pass on the ownership over the meta components to the
-			// materializer.
-			// TODO(yuzefovich): possibly set the length to 0 in order to be
-			// able to pool the underlying slices.
-			inputInfo.StatsCollectors = nil
-			inputInfo.MetadataSources = nil
-			inputInfo.ToClose = nil
-			// Note that this materializer is *not* added to the set of
-			// releasables because in some cases it could be released before
-			// being closed. Namely, this would occur if we have a subquery
-			// with LocalPlanNode core and a materializer is added in order to
-			// wrap that core - what will happen is that all releasables are put
-			// back into their pools upon the subquery's flow cleanup, yet the
-			// subquery planNode tree isn't closed yet since its closure is down
-			// when the main planNode tree is being closed.
 			toWrapInput, err := colexec.NewMaterializer(
 				flowCtx,
 				processorID,
-				inputInfoCopy,
+				inputs[i],
 				inputTypes[i],
 				nil, /* output */
 				nil, /* cancelFlow */
@@ -110,6 +93,13 @@ func wrapRowSources(
 			if err != nil {
 				return nil, releasables, err
 			}
+			// We passed the ownership over the meta components to the
+			// materializer.
+			// TODO(yuzefovich): possibly set the length to 0 in order to be
+			// able to pool the underlying slices.
+			inputs[i].StatsCollectors = nil
+			inputs[i].MetadataSources = nil
+			inputs[i].ToClose = nil
 			toWrapInputs = append(toWrapInputs, toWrapInput)
 			if materializerSafeToRelease {
 				releasables = append(releasables, toWrapInput)
