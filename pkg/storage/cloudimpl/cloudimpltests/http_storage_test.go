@@ -247,7 +247,8 @@ func TestHttpGet(t *testing.T) {
 				return nil
 			})
 
-			store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
+			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
+			store, err := cloudimpl.MakeHTTPStorage(ctx, cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -282,7 +283,8 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer s.Close()
 
-	store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
+	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
+	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -397,8 +399,8 @@ func TestExhaustRetries(t *testing.T) {
 	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
 	cloudimpl.HTTPRetryOptions.MaxRetries = 10
 
-	store, err := cloudimpl.MakeHTTPStorage(
-		"http://does.not.matter", testSettings, base.ExternalIODirConfig{})
+	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
+	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
