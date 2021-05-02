@@ -21,6 +21,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -30,6 +31,21 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
+
+func parseGSURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_GoogleCloud
+	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
+		Bucket:         uri.Host,
+		Prefix:         uri.Path,
+		Auth:           uri.Query().Get(AuthParam),
+		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
+		Credentials:    uri.Query().Get(CredentialsParam),
+		/* NB: additions here should also update gcsQueryParams() serializer */
+	}
+	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
+	return conf, nil
+}
 
 func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
 	q := make(url.Values)
@@ -72,11 +88,10 @@ func (g *gcsStorage) Settings() *cluster.Settings {
 }
 
 func makeGCSStorage(
-	ctx context.Context,
-	ioConf base.ExternalIODirConfig,
-	conf *roachpb.ExternalStorage_GCS,
-	settings *cluster.Settings,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.google_cloud")
+	conf := dest.GoogleCloudConfig
 	if conf == nil {
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
 	}
@@ -87,7 +102,7 @@ func makeGCSStorage(
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
-	if ioConf.DisableImplicitCredentials && conf.Auth != AuthParamSpecified {
+	if args.IOConf.DisableImplicitCredentials && conf.Auth != AuthParamSpecified {
 		return nil, errors.New(
 			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
 	}
@@ -95,8 +110,8 @@ func makeGCSStorage(
 	switch conf.Auth {
 	case "", AuthParamDefault:
 		var key string
-		if settings != nil {
-			key = GcsDefault.Get(&settings.SV)
+		if args.Settings != nil {
+			key = GcsDefault.Get(&args.Settings.SV)
 		}
 		// We expect a key to be present if default is specified.
 		if conf.Auth == AuthParamDefault && key == "" {
@@ -145,9 +160,9 @@ func makeGCSStorage(
 		bucket:   bucket,
 		client:   g,
 		conf:     conf,
-		ioConf:   ioConf,
+		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
-		settings: settings,
+		settings: args.Settings,
 	}, nil
 }
 

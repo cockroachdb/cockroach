@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -37,10 +38,10 @@ type workloadStorage struct {
 var _ cloud.ExternalStorage = &workloadStorage{}
 
 func makeWorkloadStorage(
-	conf *roachpb.ExternalStorage_Workload,
-	settings *cluster.Settings,
-	ioConf base.ExternalIODirConfig,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.workload")
+	conf := dest.WorkloadConfig
 	if conf == nil {
 		return nil, errors.Errorf("workload upload requested but info missing")
 	}
@@ -65,9 +66,9 @@ func makeWorkloadStorage(
 	}
 	s := &workloadStorage{
 		conf:     conf,
-		ioConf:   ioConf,
+		ioConf:   args.IOConf,
 		gen:      gen,
-		settings: settings,
+		settings: args.Settings,
 	}
 	for _, t := range gen.Tables() {
 		if t.Name == conf.Table {
@@ -129,17 +130,21 @@ func (s *workloadStorage) Close() error {
 }
 
 // ParseWorkloadConfig parses a workload config URI to a proto config.
-func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error) {
+func ParseWorkloadConfig(
+	_ ExternalStorageURIContext, uri *url.URL,
+) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_Workload
 	c := &roachpb.ExternalStorage_Workload{}
 	pathParts := strings.Split(strings.Trim(uri.Path, `/`), `/`)
 	if len(pathParts) != 3 {
-		return nil, errors.Errorf(
+		return conf, errors.Errorf(
 			`path must be of the form /<format>/<generator>/<table>: %s`, uri.Path)
 	}
 	c.Format, c.Generator, c.Table = pathParts[0], pathParts[1], pathParts[2]
 	q := uri.Query()
 	if _, ok := q[`version`]; !ok {
-		return nil, errors.New(`parameter version is required`)
+		return conf, errors.New(`parameter version is required`)
 	}
 	c.Version = q.Get(`version`)
 	q.Del(`version`)
@@ -147,14 +152,14 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error
 		q.Del(`row-start`)
 		var err error
 		if c.BatchBegin, err = strconv.ParseInt(s, 10, 64); err != nil {
-			return nil, err
+			return conf, err
 		}
 	}
 	if e := q.Get(`row-end`); len(e) > 0 {
 		q.Del(`row-end`)
 		var err error
 		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
-			return nil, err
+			return conf, err
 		}
 	}
 	for k, vs := range q {
@@ -162,5 +167,6 @@ func ParseWorkloadConfig(uri *url.URL) (*roachpb.ExternalStorage_Workload, error
 			c.Flags = append(c.Flags, `--`+k+`=`+v)
 		}
 	}
-	return c, nil
+	conf.WorkloadConfig = c
+	return conf, nil
 }
