@@ -25,6 +25,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -77,19 +78,46 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	return s3URL.String()
 }
 
+func parseS3URL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_S3
+	conf.S3Config = &roachpb.ExternalStorage_S3{
+		Bucket:        uri.Host,
+		Prefix:        uri.Path,
+		AccessKey:     uri.Query().Get(AWSAccessKeyParam),
+		Secret:        uri.Query().Get(AWSSecretParam),
+		TempToken:     uri.Query().Get(AWSTempTokenParam),
+		Endpoint:      uri.Query().Get(AWSEndpointParam),
+		Region:        uri.Query().Get(S3RegionParam),
+		Auth:          uri.Query().Get(AuthParam),
+		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
+		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
+		/* NB: additions here should also update s3QueryParams() serializer */
+	}
+	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
+	// AWS secrets often contain + characters, which must be escaped when
+	// included in a query string; otherwise, they represent a space character.
+	// More than a few users have been bitten by this.
+	//
+	// Luckily, AWS secrets are base64-encoded data and thus will never actually
+	// contain spaces. We can convert any space characters we see to +
+	// characters to recover the original secret.
+	conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
+	return conf, nil
+}
+
 // MakeS3Storage returns an instance of S3 ExternalStorage.
 func MakeS3Storage(
-	ctx context.Context,
-	ioConf base.ExternalIODirConfig,
-	conf *roachpb.ExternalStorage_S3,
-	settings *cluster.Settings,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.s3")
+	conf := dest.S3Config
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
 	config := conf.Keys()
 	if conf.Endpoint != "" {
-		if ioConf.DisableHTTP {
+		if args.IOConf.DisableHTTP {
 			return nil, errors.New(
 				"custom endpoints disallowed for s3 due to --external-io-disable-http flag")
 		}
@@ -97,7 +125,7 @@ func MakeS3Storage(
 		if conf.Region == "" {
 			conf.Region = "default-region"
 		}
-		client, err := makeHTTPClient(settings)
+		client, err := makeHTTPClient(args.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +157,7 @@ func MakeS3Storage(
 		}
 		opts.Config.MergeIn(config)
 	case AuthParamImplicit:
-		if ioConf.DisableImplicitCredentials {
+		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
@@ -169,10 +197,10 @@ func MakeS3Storage(
 	return &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
-		ioConf:   ioConf,
+		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
 		opts:     opts,
-		settings: settings,
+		settings: args.Settings,
 	}, nil
 }
 

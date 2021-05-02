@@ -21,11 +21,32 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
+
+func parseAzureURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_Azure
+	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
+		Container:   uri.Host,
+		Prefix:      uri.Path,
+		AccountName: uri.Query().Get(AzureAccountNameParam),
+		AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+		/* NB: additions here should also update azureQueryParams() serializer */
+	}
+	if conf.AzureConfig.AccountName == "" {
+		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
+	}
+	if conf.AzureConfig.AccountKey == "" {
+		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+	}
+	conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
+	return conf, nil
+}
 
 func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
 	q := make(url.Values)
@@ -49,8 +70,10 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	conf *roachpb.ExternalStorage_Azure, settings *cluster.Settings, ioConf base.ExternalIODirConfig,
+	_ context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.azure")
+	conf := dest.AzureConfig
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
@@ -66,10 +89,10 @@ func makeAzureStorage(
 	serviceURL := azblob.NewServiceURL(*u, p)
 	return &azureStorage{
 		conf:      conf,
-		ioConf:    ioConf,
+		ioConf:    args.IOConf,
 		container: serviceURL.NewContainerURL(conf.Container),
 		prefix:    conf.Prefix,
-		settings:  settings,
+		settings:  args.Settings,
 	}, nil
 }
 

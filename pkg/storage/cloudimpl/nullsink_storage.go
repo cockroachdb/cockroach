@@ -15,12 +15,18 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 )
+
+func parseNullURL(_ ExternalStorageURIContext, _ *url.URL) (roachpb.ExternalStorage, error) {
+	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_NullSink}, nil
+}
 
 // MakeNullSinkStorageURI returns a valid null sink URI.
 func MakeNullSinkStorageURI(path string) string {
@@ -30,7 +36,10 @@ func MakeNullSinkStorageURI(path string) string {
 type nullSinkStorage struct {
 }
 
-func makeNullSinkStorage() (cloud.ExternalStorage, error) {
+func makeNullSinkStorage(
+	_ context.Context, _ ExternalStorageContext, _ roachpb.ExternalStorage,
+) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.nullsink")
 	return &nullSinkStorage{}, nil
 }
 
