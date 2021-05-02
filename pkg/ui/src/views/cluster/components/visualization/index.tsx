@@ -11,7 +11,7 @@
 import React from "react";
 import classNames from "classnames";
 
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { InfoTooltip } from "src/components/infoTooltip";
 
 import "./visualizations.styl";
 import spinner from "assets/spinner.gif";
@@ -48,15 +48,7 @@ export default class extends React.Component<VisualizationProps, {}> {
 
     let tooltipNode: React.ReactNode = "";
     if (tooltip) {
-      tooltipNode = (
-        <div className="visualization__tooltip">
-          <ToolTipWrapper text={tooltip}>
-            <div className="visualization__tooltip-hover-area">
-              <div className="visualization__info-icon">i</div>
-            </div>
-          </ToolTipWrapper>
-        </div>
-      );
+      tooltipNode = <InfoTooltip text={tooltip} />;
     }
 
     return (
