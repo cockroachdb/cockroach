@@ -125,14 +125,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
       <div className="data-distribution">
         <div className="data-distribution__zone-config-sidebar">
           <h2 className="base-heading">
-            Zone Configs{" "}
-            <div className="section-heading__tooltip">
-              <ToolTipWrapper text={ZONE_CONFIG_TEXT}>
-                <div className="section-heading__tooltip-hover-area">
-                  <div className="section-heading__info-icon">i</div>
-                </div>
-              </ToolTipWrapper>
-            </div>
+            Zone Configs <InfoTooltip>{ZONE_CONFIG_TEXT}</InfoTooltip>
           </h2>
           {this.renderZoneConfigs()}
           <p style={{ maxWidth: 300, paddingTop: 10 }}>
