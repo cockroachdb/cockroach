@@ -4224,6 +4224,7 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("non-collocated", func(t *testing.T) {
+		skip.WithIssue(t, 64056, "flaky test")
 		reset(t)
 		verifyUnmerged(t, store, lhsStartKey, rhsStartKey)
 		tc.AddVotersOrFatal(t, rhs().Desc().StartKey.AsRawKey(), tc.Target(1))
