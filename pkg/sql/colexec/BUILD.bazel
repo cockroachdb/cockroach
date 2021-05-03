@@ -34,6 +34,7 @@ go_library(
         "tuple_proj_op.go",
         "unordered_distinct.go",
         "utils.go",
+        "values.go",
         ":gen-exec",  # keep
         ":gen-sort-partitioner",  # keep
     ],
@@ -47,6 +48,7 @@ go_library(
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",  # keep
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/colcontainer",
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexecagg",  # keep
@@ -123,6 +125,7 @@ go_test(
         "sorttopk_test.go",
         "types_integration_test.go",
         "utils_test.go",
+        "values_test.go",
     ],
     embed = [":colexec"],
     deps = [
@@ -155,6 +158,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
