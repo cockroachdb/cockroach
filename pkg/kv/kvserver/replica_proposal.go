@@ -771,8 +771,9 @@ func (r *Replica) evaluateProposal(
 	}
 
 	// Evaluate the commands. If this returns without an error, the batch should
-	// be committed. Note that we don't hold any locks at this point. This is
-	// important since evaluating a proposal is expensive.
+	// be committed. Note that we don't hold any locks at this point, except a
+	// shared RLock on raftMuReadOnlyMu. This is important since evaluating a
+	// proposal is expensive.
 	//
 	// Note that, during evaluation, ba's read and write timestamps might get
 	// bumped (see evaluateWriteBatchWithServersideRefreshes).
@@ -789,7 +790,9 @@ func (r *Replica) evaluateProposal(
 	}
 
 	if pErr != nil {
-		pErr = r.maybeSetCorrupt(ctx, pErr)
+		if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+			return &res, false /* needConsensus */, pErr
+		}
 
 		txn := pErr.GetTxn()
 		if txn != nil && ba.Txn == nil {
