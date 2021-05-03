@@ -1079,7 +1079,7 @@ func (a Allocator) rebalanceTarget(
 			return zero, zero, "", false
 		}
 
-		// Add a fake new replica to our copy of the range descriptor so that we can
+		// Add a fake new replica to our copy of the replica descriptor so that we can
 		// simulate the removal logic. If we decide not to go with this target, note
 		// that this needs to be removed from desc before we try any other target.
 		newReplica := roachpb.ReplicaDescriptor{
