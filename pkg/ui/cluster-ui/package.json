@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "0.2.36",
+  "version": "0.2.37",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
