@@ -56,7 +56,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	mkJobRec := func() jobs.Record {
 		return jobs.Record{
 			Description: "testing",
-			Statement:   "SELECT 1",
+			Statements:  []string{"SELECT 1"},
 			Username:    security.RootUserName(),
 			Details: jobspb.SchemaChangeGCDetails{
 				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{

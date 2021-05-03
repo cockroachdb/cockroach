@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -367,7 +368,6 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	false,
 )
 
-// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_new_schema_changer.enabled",
 	"default value for experimental_use_new_schema_changer session setting;"+
@@ -816,6 +816,7 @@ type ExecutorConfig struct {
 	TestingKnobs                  ExecutorTestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
 	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
+	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
 	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
 	GCJobTestingKnobs             *GCJobTestingKnobs
 	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
