@@ -384,7 +384,7 @@ func finishVectorizedStatsCollectors(
 	}
 }
 
-type runFn func(context.Context, context.CancelFunc)
+type runFn func(_ context.Context, flowCtxCancel context.CancelFunc)
 
 // flowCreatorHelper contains all the logic needed to add the vectorized
 // infrastructure to be run asynchronously as well as to perform some sanity
@@ -586,32 +586,27 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		return nil, err
 	}
 	atomic.AddInt32(&s.numOutboxes, 1)
-	run := func(ctx context.Context, cancelFn context.CancelFunc) {
-		// cancelFn is the cancellation function of the context of the whole
-		// flow, and we want to call it only when the last outbox exits, so we
-		// derive a separate child context for each outbox.
-		var outboxCancelFn context.CancelFunc
-		ctx, outboxCancelFn = context.WithCancel(ctx)
+	run := func(ctx context.Context, flowCtxCancel context.CancelFunc) {
 		outbox.Run(
 			ctx,
 			s.nodeDialer,
 			stream.TargetNodeID,
 			s.flowID,
 			stream.StreamID,
-			outboxCancelFn,
+			flowCtxCancel,
 			flowinfra.SettingFlowStreamTimeout.Get(&flowCtx.Cfg.Settings.SV),
 		)
 		currentOutboxes := atomic.AddInt32(&s.numOutboxes, -1)
 		// When the last Outbox on this node exits, we want to make sure that
-		// everything is shutdown; namely, we need to call cancelFn if:
+		// everything is shutdown; namely, we need to call flowCtxCancel if:
 		// - it is the last Outbox
 		// - there is no root materializer on this node (if it were, it would take
 		// care of the cancellation itself)
-		// - cancelFn is non-nil (it can be nil in tests).
-		// Calling cancelFn will cancel the context that all infrastructure on this
-		// node is listening on, so it will shut everything down.
-		if currentOutboxes == 0 && !s.materializerAdded && cancelFn != nil {
-			cancelFn()
+		// - flowCtxCancel is non-nil (it can be nil in tests).
+		// Calling flowCtxCancel will cancel the context that all infrastructure
+		// on this node is listening on, so it will shut everything down.
+		if currentOutboxes == 0 && !s.materializerAdded && flowCtxCancel != nil {
+			flowCtxCancel()
 		}
 	}
 	s.accumulateAsyncComponent(run)
@@ -1197,12 +1192,12 @@ func (r *vectorizedFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.Strea
 
 func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 	r.f.AddStartable(
-		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, cancelFn context.CancelFunc) {
+		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
 			if wg != nil {
 				wg.Add(1)
 			}
 			go func() {
-				run(ctx, cancelFn)
+				run(ctx, flowCtxCancel)
 				if wg != nil {
 					wg.Done()
 				}

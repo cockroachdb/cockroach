@@ -289,14 +289,14 @@ type RandomDataOpArgs struct {
 	Nulls bool
 	// BatchAccumulator, if set, will be called before returning a coldata.Batch
 	// from Next.
-	BatchAccumulator func(b coldata.Batch, typs []*types.T)
+	BatchAccumulator func(ctx context.Context, b coldata.Batch, typs []*types.T)
 }
 
 // RandomDataOp is an operator that generates random data according to
 // RandomDataOpArgs. Call GetBuffer to get all data that was returned.
 type RandomDataOp struct {
 	allocator        *colmem.Allocator
-	batchAccumulator func(b coldata.Batch, typs []*types.T)
+	batchAccumulator func(ctx context.Context, b coldata.Batch, typs []*types.T)
 	typs             []*types.T
 	rng              *rand.Rand
 	batchSize        int
@@ -351,12 +351,12 @@ func NewRandomDataOp(
 func (o *RandomDataOp) Init() {}
 
 // Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(context.Context) coldata.Batch {
+func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b, o.typs)
+			o.batchAccumulator(ctx, b, o.typs)
 		}
 		return b
 	}
@@ -381,7 +381,7 @@ func (o *RandomDataOp) Next(context.Context) coldata.Batch {
 		}
 		o.numReturned++
 		if o.batchAccumulator != nil {
-			o.batchAccumulator(b, o.typs)
+			o.batchAccumulator(ctx, b, o.typs)
 		}
 		return b
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
 )
@@ -163,7 +164,11 @@ func (i *Inbox) init(ctx context.Context) error {
 		i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
 		return err
 	case <-ctx.Done():
-		i.errCh <- fmt.Errorf("%s: Inbox while waiting for stream", ctx.Err())
+		// Our reader canceled the context meaning that it no longer needs
+		// any more data from the outbox. This is a graceful termination, so
+		// we don't send any error on errCh and only return an error. This
+		// will close the inbox (making the stream handler exit gracefully)
+		// and will stop the current goroutine from proceeding further.
 		return ctx.Err()
 	}
 
@@ -174,8 +179,11 @@ func (i *Inbox) init(ctx context.Context) error {
 	return nil
 }
 
-// close closes the inbox, ensuring that any call to RunWithStream will
-// return immediately. close is idempotent.
+// close closes the inbox, ensuring that any call to RunWithStream will return
+// immediately. close is idempotent.
+// NOTE: it is very important to close the Inbox only when execution terminates
+// in one way or another. DrainMeta will use the stream to read any remaining
+// metadata after Next returns a zero-length batch during normal execution.
 func (i *Inbox) close() {
 	if !i.done {
 		i.done = true
@@ -184,8 +192,8 @@ func (i *Inbox) close() {
 }
 
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
-// canceled, a caller of Next cancels the first context passed into Next, or
-// an EOF is encountered on the stream by the Next goroutine.
+// canceled, a caller of Next cancels the first context passed into Next, or any
+// error is encountered on the stream by the Next goroutine.
 func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
 	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
@@ -196,25 +204,34 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 	var readerCtx context.Context
 	select {
 	case err := <-i.errCh:
+		// nil will be read from errCh when the channel is closed.
 		return err
 	case readerCtx = <-i.contextCh:
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return fmt.Errorf("%s: streamCtx while waiting for reader (remote client canceled)", streamCtx.Err())
 	case <-i.flowCtx.Done():
-		return fmt.Errorf("%s: flowCtx while waiting for reader (local server canceled)", i.flowCtx.Err())
+		// The flow context of the inbox host has been canceled. This can occur
+		// e.g. when the query is canceled, or when another stream encountered
+		// an unrecoverable error forcing it to shutdown the flow.
+		return cancelchecker.QueryCanceledError
 	}
 
 	// Now wait for one of the events described in the method comment. If a
 	// cancellation is encountered, nothing special must be done to cancel the
 	// reader goroutine as returning from the handler will close the stream.
+	//
+	// Note that we don't listen for cancellation on flowCtx.Done() because
+	// readerCtx must be the child of the flow context.
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
 		return err
 	case <-readerCtx.Done():
-		// The reader canceled the stream.
-		return fmt.Errorf("%s: readerCtx in Inbox stream handler (local reader canceled)", readerCtx.Err())
+		// The reader canceled the stream meaning that it no longer needs any
+		// more data from the outbox. This is a graceful termination, so we
+		// return nil.
+		return nil
 	case <-streamCtx.Done():
 		// The client canceled the stream.
 		return fmt.Errorf("%s: streamCtx in Inbox stream handler (remote client canceled)", streamCtx.Err())
