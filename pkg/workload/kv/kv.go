@@ -75,6 +75,8 @@ type kv struct {
 	shards                               int
 	targetCompressionRatio               float64
 	enum                                 bool
+	regions                              []string
+	survival                             string
 }
 
 func init() {
@@ -133,6 +135,13 @@ var kvMeta = workload.Meta{
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.flags.BoolVar(&g.enum, `enum`, false,
 			`Inject an enum column and use it`)
+		g.flags.StringSliceVar(&g.regions, `regions`, nil,
+			`Run as part of a multi-region database with the given list of database regions. `+
+				`The first region in the list will be the primary region and all regions specified must be `+
+				`a part of the cluster this workload is being run on.`)
+		g.flags.StringVar(
+			&g.survival, `survival`, "", `Survival goal of the multi-region database when using the "regions" flag.`,
+		)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -147,6 +156,30 @@ func (w *kv) Flags() workload.Flags { return w.flags }
 // Hooks implements the Hookser interface.
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{
+		PreLoad: func(db *gosql.DB) error {
+			if w.regions == nil {
+				// Do not run inside of a multi-region database.
+				return nil
+			}
+			_, err := db.Exec(fmt.Sprintf(`ALTER DATABASE kv SET PRIMARY REGION "%s";`, w.regions[0]))
+			if err != nil {
+				return err
+			}
+			for _, region := range w.regions[1:] {
+				_, err := db.Exec(fmt.Sprintf(`ALTER DATABASE kv ADD REGION "%s";`, region))
+				if err != nil {
+					return err
+				}
+			}
+			// "zone" survival is the default, so we have nothing to do in that case.
+			if w.survival == "region" {
+				_, err := db.Exec(`ALTER DATABASE kv SURVIVE REGION FAILURE;`)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 		PostLoad: func(db *gosql.DB) error {
 			if !w.enum {
 				return nil
@@ -172,6 +205,18 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 			}
 			if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
 				return errors.New("'target-compression-ratio' must be a number >= 1.0")
+			}
+			if w.regions != nil && w.survival == "" {
+				return errors.New("when 'regions' is set, 'survival' must also be set")
+			}
+			if w.survival != "" && w.survival != "region" && w.survival != "zone" {
+				return errors.New("'survival' only supports two values: 'region' or 'zone'")
+			}
+			if w.survival != "" && w.regions == nil {
+				return errors.New("'survival' can only be used when running with one or more 'regions'")
+			}
+			if w.survival == "region" && len(w.regions) < 3 {
+				return errors.New("'survival' cannot be set to 'region' when running with less than 3 'regions'")
 			}
 			return nil
 		},
