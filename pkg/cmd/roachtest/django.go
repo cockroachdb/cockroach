@@ -209,7 +209,7 @@ func registerDjango(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Name:       "django",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1, cpu(16)),

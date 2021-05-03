@@ -137,7 +137,7 @@ func registerLibPQ(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "lib/pq",
 		Owner:      OwnerSQLExperience,
-		MinVersion: "v20.1.0",
+		MinVersion: "v20.2.0",
 		Cluster:    makeClusterSpec(1),
 		Tags:       []string{`default`, `driver`},
 		Run:        runLibPQ,

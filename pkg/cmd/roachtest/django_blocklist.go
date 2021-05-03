@@ -162,25 +162,23 @@ var enabledDjangoTests = []string{
 }
 
 var djangoBlocklists = blocklistsForVersion{
-	{"v20.1", "djangoBlocklist20_1", djangoBlocklist20_1, "djangoIgnoreList20_1", djangoIgnoreList20_1},
 	{"v20.2", "djangoBlocklist20_2", djangoBlocklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
 	{"v21.1", "djangoBlocklist21_1", djangoBlocklist21_1, "djangoIgnoreList21_1", djangoIgnoreList21_1},
+	{"v21.2", "djangoBlocklist21_2", djangoBlocklist21_2, "djangoIgnoreList21_2", djangoIgnoreList21_2},
 }
 
 // Maintain that this list is alphabetized.
+var djangoBlocklist21_2 = blocklist{}
+
 var djangoBlocklist21_1 = blocklist{}
 
 var djangoBlocklist20_2 = blocklist{}
 
-var djangoBlocklist20_1 = blocklist{
-	"inspectdb.tests.InspectDBTestCase.test_json_field": "unknown",
-}
+var djangoIgnoreList21_2 = djangoIgnoreList21_1
 
 var djangoIgnoreList21_1 = djangoIgnoreList20_2
 
-var djangoIgnoreList20_2 = djangoIgnoreList20_1
-
-var djangoIgnoreList20_1 = blocklist{
+var djangoIgnoreList20_2 = blocklist{
 	"expressions.tests.BasicExpressionsTests.test_boolean_expression_combined":   "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_attribute_name_not_python_keyword":   "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_digits_column_name_introspection":    "unknown",

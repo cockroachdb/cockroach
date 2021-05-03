@@ -11,19 +11,19 @@
 package main
 
 var gormBlocklists = blocklistsForVersion{
-	{"v20.1", "gormBlocklist20_1", gormBlocklist20_1, "gormIgnorelist20_1", gormIgnorelist20_1},
 	{"v20.2", "gormBlocklist20_2", gormBlocklist20_2, "gormIgnorelist20_2", gormIgnorelist20_2},
 	{"v21.1", "gormBlocklist21_1", gormBlocklist21_1, "gormIgnorelist21_1", gormIgnorelist21_1},
+	{"v21.2", "gormBlocklist21_2", gormBlocklist21_2, "gormIgnorelist21_2", gormIgnorelist21_2},
 }
+
+var gormBlocklist21_2 = gormBlocklist21_1
 
 var gormBlocklist21_1 = gormBlocklist20_2
 
-var gormBlocklist20_2 = gormBlocklist20_1
+var gormBlocklist20_2 = blocklist{}
 
-var gormBlocklist20_1 = blocklist{}
+var gormIgnorelist21_2 = gormIgnorelist21_1
 
 var gormIgnorelist21_1 = gormIgnorelist20_2
 
-var gormIgnorelist20_2 = gormIgnorelist20_1
-
-var gormIgnorelist20_1 = blocklist{}
+var gormIgnorelist20_2 = blocklist{}

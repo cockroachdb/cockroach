@@ -127,7 +127,7 @@ func registerPgx(r *testRegistry) {
 		Name:       "pgx",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.2.0",
 		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runPgx(ctx, t, c)
