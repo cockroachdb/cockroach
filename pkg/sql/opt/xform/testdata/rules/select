@@ -1194,18 +1194,21 @@ SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s, k, i
 GenerateConstrainedScans
 ================================================================================
 Source expression:
-  select
+  sort
    ├── columns: s:4!null i:2 f:3  [hidden: k:1!null]
    ├── key: (1)
    ├── fd: ()-->(4), (1)-->(2,3)
    ├── ordering: +1 opt(4) [actual: +1]
-   ├── scan kifs@s_idx
-   │    ├── columns: k:1!null i:2 f:3 s:4
-   │    ├── key: (1)
-   │    ├── fd: (1)-->(2-4)
-   │    └── ordering: +1 opt(4) [actual: +4,+1]
-   └── filters
-        └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+   └── select
+        ├── columns: k:1!null i:2 f:3 s:4!null
+        ├── key: (1)
+        ├── fd: ()-->(4), (1)-->(2,3)
+        ├── scan kifs@s_idx
+        │    ├── columns: k:1!null i:2 f:3 s:4
+        │    ├── key: (1)
+        │    └── fd: (1)-->(2-4)
+        └── filters
+             └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 New expression 1 of 2:
   scan kifs@s_idx
@@ -6406,7 +6409,7 @@ distinct-on
  │    │    │    ├── columns: k:6!null u:7 v:8 w:9
  │    │    │    ├── key: (6)
  │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
- │    │    │    ├── ordering: +6 opt(7,9) [actual: +6]
+ │    │    │    ├── ordering: +6 opt(7) [actual: +6]
  │    │    │    └── scan d@u
  │    │    │         ├── columns: k:6!null u:7!null
  │    │    │         ├── constraint: /7/6: [/1 - /1]
@@ -6424,7 +6427,7 @@ distinct-on
  │         │    ├── columns: k:11!null u:12 v:13 w:14
  │         │    ├── key: (11)
  │         │    ├── fd: ()-->(13), (11)-->(12,14)
- │         │    ├── ordering: +11 opt(13,14) [actual: +11]
+ │         │    ├── ordering: +11 opt(13) [actual: +11]
  │         │    └── scan d@v
  │         │         ├── columns: k:11!null v:13!null
  │         │         ├── constraint: /13/11: [/1 - /1]
@@ -6964,7 +6967,7 @@ project
       │    │    │    ├── columns: k:6!null u:7 v:8 w:9
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
-      │    │    │    ├── ordering: +6 opt(7,9) [actual: +6]
+      │    │    │    ├── ordering: +6 opt(7) [actual: +6]
       │    │    │    └── scan d@u
       │    │    │         ├── columns: k:6!null u:7!null
       │    │    │         ├── constraint: /7/6: [/1 - /1]
@@ -6982,7 +6985,7 @@ project
       │         │    ├── columns: k:11!null u:12 v:13 w:14
       │         │    ├── key: (11)
       │         │    ├── fd: ()-->(13), (11)-->(12,14)
-      │         │    ├── ordering: +11 opt(13,14) [actual: +11]
+      │         │    ├── ordering: +11 opt(13) [actual: +11]
       │         │    └── scan d@v
       │         │         ├── columns: k:11!null v:13!null
       │         │         ├── constraint: /13/11: [/1 - /1]
@@ -7216,7 +7219,7 @@ project
       │    │    │    ├── columns: k:6!null u:7 v:8 w:9
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
-      │    │    │    ├── ordering: +6 opt(7,9) [actual: +6]
+      │    │    │    ├── ordering: +6 opt(7) [actual: +6]
       │    │    │    └── scan d@u
       │    │    │         ├── columns: k:6!null u:7!null
       │    │    │         ├── constraint: /7/6: [/3 - /3]
@@ -7866,7 +7869,7 @@ project
       │    │    │    ├── columns: k:6!null u:7 v:8 w:9
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
-      │    │    │    ├── ordering: +6 opt(7,9) [actual: +6]
+      │    │    │    ├── ordering: +6 opt(7) [actual: +6]
       │    │    │    └── scan d@u
       │    │    │         ├── columns: k:6!null u:7!null
       │    │    │         ├── constraint: /7/6: [/1 - /1]
@@ -7884,7 +7887,7 @@ project
       │         │    ├── columns: k:11!null u:12 v:13 w:14
       │         │    ├── key: (11)
       │         │    ├── fd: ()-->(13), (11)-->(12,14)
-      │         │    ├── ordering: +11 opt(13,14) [actual: +11]
+      │         │    ├── ordering: +11 opt(13) [actual: +11]
       │         │    └── scan d@v
       │         │         ├── columns: k:11!null v:13!null
       │         │         ├── constraint: /13/11: [/1 - /1]
@@ -8473,7 +8476,7 @@ project
            │    │    │    ├── columns: k:6!null u:7 v:8 w:9
            │    │    │    ├── key: (6)
            │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
-           │    │    │    ├── ordering: +6 opt(7,9) [actual: +6]
+           │    │    │    ├── ordering: +6 opt(7) [actual: +6]
            │    │    │    └── scan d@u
            │    │    │         ├── columns: k:6!null u:7!null
            │    │    │         ├── constraint: /7/6: [/1 - /1]
@@ -8491,7 +8494,7 @@ project
            │         │    ├── columns: k:11!null u:12 v:13 w:14
            │         │    ├── key: (11)
            │         │    ├── fd: ()-->(13), (11)-->(12,14)
-           │         │    ├── ordering: +11 opt(13,14) [actual: +11]
+           │         │    ├── ordering: +11 opt(13) [actual: +11]
            │         │    └── scan d@v
            │         │         ├── columns: k:11!null v:13!null
            │         │         ├── constraint: /13/11: [/1 - /1]
@@ -8733,7 +8736,7 @@ project
            │    │    │    ├── columns: k:6!null u:7 v:8 w:9
            │    │    │    ├── key: (6)
            │    │    │    ├── fd: ()-->(7), (6)-->(8,9)
-           │    │    │    ├── ordering: +6 opt(7,9) [actual: +6]
+           │    │    │    ├── ordering: +6 opt(7) [actual: +6]
            │    │    │    └── scan d@u
            │    │    │         ├── columns: k:6!null u:7!null
            │    │    │         ├── constraint: /7/6: [/3 - /3]

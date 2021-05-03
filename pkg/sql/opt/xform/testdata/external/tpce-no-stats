@@ -242,7 +242,7 @@ limit
  │         │    │    │    │    │    │    │    └── ca_tax_st:5 IN (0, 1, 2) [outer=(5), constraints=(/5: [/0 - /0] [/1 - /1] [/2 - /2]; tight)]
  │         │    │    │    │    │    │    ├── key: (1)
  │         │    │    │    │    │    │    ├── fd: (1)-->(3,6)
- │         │    │    │    │    │    │    └── ordering: +1 opt(3) [actual: +1]
+ │         │    │    │    │    │    │    └── ordering: +1
  │         │    │    │    │    │    └── filters
  │         │    │    │    │    │         └── ca_c_id:3 = 0 [outer=(3), constraints=(/3: [/0 - /0]; tight), fd=()-->(3)]
  │         │    │    │    │    └── filters (true)
