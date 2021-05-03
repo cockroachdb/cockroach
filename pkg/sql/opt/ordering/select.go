@@ -27,7 +27,16 @@ func selectBuildChildReqOrdering(
 	if childIdx != 0 {
 		return props.OrderingChoice{}
 	}
-	return trimColumnGroups(required, &parent.(*memo.SelectExpr).Input.Relational().FuncDeps)
+	child := parent.(*memo.SelectExpr).Input
+	orders := DeriveInterestingOrderings(child)
+	for i := range orders {
+		if orders[i].Implies(required) {
+			order := orders[i].CommonPrefix(required)
+			required = &order
+			break
+		}
+	}
+	return trimColumnGroups(required, &child.Relational().FuncDeps)
 }
 
 // trimColumnGroups removes columns from ColumnOrderingChoice groups as

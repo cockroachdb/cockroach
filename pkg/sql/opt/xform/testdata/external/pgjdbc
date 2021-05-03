@@ -220,7 +220,7 @@ sort
       │    │    │    │    │    │    │    │    │    ├── ordering: +43 opt(59) [actual: +43]
       │    │    │    │    │    │    │    │    │    ├── scan pg_attribute@secondary [as=a]
       │    │    │    │    │    │    │    │    │    │    ├── columns: attrelid:43!null attname:44 atttypid:45 attlen:47 attnum:48 atttypmod:51 a.attnotnull:55 attisdropped:59
-      │    │    │    │    │    │    │    │    │    │    └── ordering: +43 opt(59) [actual: +43]
+      │    │    │    │    │    │    │    │    │    │    └── ordering: +43
       │    │    │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │    │    │         ├── attnum:48 > 0 [outer=(48), constraints=(/48: [/1 - ]; tight)]
       │    │    │    │    │    │    │    │    │         └── NOT attisdropped:59 [outer=(59), constraints=(/59: [/false - /false]; tight), fd=()-->(59)]
