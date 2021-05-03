@@ -142,20 +142,7 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 }
 
 func colIsPrimaryKey(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
-	return scanBool(tx, `
-	SELECT EXISTS(
-				SELECT column_name
-				  FROM information_schema.table_constraints AS c
-				  JOIN information_schema.constraint_column_usage
-								AS ccu ON ccu.table_name = c.table_name
-				      AND ccu.table_schema = c.table_schema
-				      AND ccu.constraint_name = c.constraint_name
-				 WHERE c.table_schema = $1
-				   AND c.table_name = $2
-				   AND ccu.column_name = $3
-				   AND c.constraint_type = 'PRIMARY KEY'
-       );
-	`, tableName.Schema(), tableName.Object(), columnName)
+	return columnsStoredInPrimaryIdx(tx, tableName, tree.NameList([]tree.Name{tree.Name(columnName)}))
 }
 
 // valuesViolateUniqueConstraints determines if any unique constraints (including primary constraints)
@@ -333,7 +320,7 @@ func columnsStoredInPrimaryIdx(
 	}
 
 	primaryColumns, err := scanStringArray(tx, `
-	SELECT array_agg(column_name)
+		SELECT array_agg(column_name)
 	  FROM (
 	        SELECT DISTINCT column_name
 	          FROM information_schema.statistics
