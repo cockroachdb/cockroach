@@ -119,6 +119,7 @@ func TestOrderingChoice_Implies(t *testing.T) {
 		{left: "+(1|2)", right: "+(1|2|3)", expected: true},
 		{left: "+(1|2),-4", right: "+(1|2|3),-(4|5)", expected: true},
 		{left: "+(1|2) opt(4)", right: "+(1|2|3) opt(4)", expected: true},
+		{left: "+1,+2,+3", right: "+(1|2),+3", expected: true},
 
 		{left: "", right: "+1", expected: false},
 		{left: "+1", right: "-1", expected: false},
@@ -174,6 +175,7 @@ func TestOrderingChoice_Intersection(t *testing.T) {
 		{left: "+1,+4,+5", right: "+4,+5 opt(1)", expected: "+1,+4,+5"},
 		{left: "+(1|2),+(3|4)", right: "+(2|3),+(4|5)", expected: "+2,+4"},
 		{left: "+(1|2|3),+(4|5)", right: "+(2|3),+(4|5|6)", expected: "+(2|3),+(4|5)"},
+		{left: "+(1|2),+3,+4", right: "+1,+2,+(3|4)", expected: "+1,+2,+3,+4"},
 
 		{left: "+1", right: "+2", expected: "NO"},
 		{left: "+1", right: "+2 opt(2)", expected: "NO"},
@@ -196,7 +198,7 @@ func TestOrderingChoice_Intersection(t *testing.T) {
 		{
 			left:           "+(1|2),+(3|4) opt(6)",
 			right:          "+(2|3),+(5|6) opt(4)",
-			expected:       "+2,+4,+(5|6)",
+			expected:       "+2,+(3|4),+(5|6)",
 			nonCommutative: true,
 		},
 		{
@@ -296,13 +298,13 @@ func TestOrderingChoice_CommonPrefix(t *testing.T) {
 		{
 			left:           "+(1|2),+(3|4) opt(6)",
 			right:          "+(2|3),+(5|6) opt(4)",
-			expected:       "+2,+4,+6",
+			expected:       "+2,+(3|4),+6",
 			nonCommutative: true,
 		},
 		{
 			left:           "+(2|3),+(5|6) opt(4)",
 			right:          "+(1|2),+(3|4) opt(6)",
-			expected:       "+2,+6,+4",
+			expected:       "+2,+6,+(3|4)",
 			nonCommutative: true,
 		},
 		{
@@ -315,6 +317,18 @@ func TestOrderingChoice_CommonPrefix(t *testing.T) {
 			left:           "-7 opt(2,3,5,6)",
 			right:          "+(1|2|3),-(4|5|6) opt(7)",
 			expected:       "-7,+(2|3),-(5|6)",
+			nonCommutative: true,
+		},
+		{
+			left:           "+1 opt(2)",
+			right:          "+1,+2",
+			expected:       "+1,+2",
+			nonCommutative: true,
+		},
+		{
+			left:           "+1,+2",
+			right:          "+1 opt(2)",
+			expected:       "+1",
 			nonCommutative: true,
 		},
 	}

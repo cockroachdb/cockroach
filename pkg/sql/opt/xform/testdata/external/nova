@@ -392,7 +392,7 @@ sort
            │    │    │         │    │    │    │    ├── has-placeholder
            │    │    │         │    │    │    │    ├── key: (1)
            │    │    │         │    │    │    │    ├── fd: ()-->(11), (1)-->(2-12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
-           │    │    │         │    │    │    │    ├── ordering: +1 opt(11) [actual: +1]
+           │    │    │         │    │    │    │    ├── ordering: +1
            │    │    │         │    │    │    │    ├── left-join (merge)
            │    │    │         │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 flavors.created_at:14 flavors.updated_at:15 flavor_projects.flavor_id:18 true:31
            │    │    │         │    │    │    │    │    ├── left ordering: +1
@@ -410,7 +410,7 @@ sort
            │    │    │         │    │    │    │    │    │    │    ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15
            │    │    │         │    │    │    │    │    │    │    ├── key: (1)
            │    │    │         │    │    │    │    │    │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
-           │    │    │         │    │    │    │    │    │    │    └── ordering: +1 opt(11) [actual: +1]
+           │    │    │         │    │    │    │    │    │    │    └── ordering: +1
            │    │    │         │    │    │    │    │    │    └── filters
            │    │    │         │    │    │    │    │    │         └── disabled:11 = false [outer=(11), constraints=(/11: [/false - /false]; tight), fd=()-->(11)]
            │    │    │         │    │    │    │    │    ├── project
@@ -428,7 +428,7 @@ sort
            │    │    │         │    │    │    │    │    │    │    ├── scan flavor_projects@secondary
            │    │    │         │    │    │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:18!null project_id:19!null
            │    │    │         │    │    │    │    │    │    │    │    ├── key: (18,19)
-           │    │    │         │    │    │    │    │    │    │    │    └── ordering: +18 opt(19) [actual: +18]
+           │    │    │         │    │    │    │    │    │    │    │    └── ordering: +18
            │    │    │         │    │    │    │    │    │    │    └── filters
            │    │    │         │    │    │    │    │    │    │         └── project_id:19 = $1 [outer=(19), constraints=(/19: (/NULL - ]), fd=()-->(19)]
            │    │    │         │    │    │    │    │    │    └── projections
@@ -480,7 +480,7 @@ sort
            │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
            │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:25!null project_id:26!null
            │    │    │         │    │    │    │    │    ├── key: (25,26)
-           │    │    │         │    │    │    │    │    └── ordering: +25 opt(26) [actual: +25]
+           │    │    │         │    │    │    │    │    └── ordering: +25
            │    │    │         │    │    │    │    └── filters
            │    │    │         │    │    │    │         └── project_id:26 = $2 [outer=(26), constraints=(/26: (/NULL - ]), fd=()-->(26)]
            │    │    │         │    │    │    └── projections
@@ -658,7 +658,7 @@ sort
            │    │    │         │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13 instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
            │    │    │         │    │    │    │    ├── key: (1)
            │    │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
-           │    │    │         │    │    │    │    └── ordering: +1 opt(13) [actual: +1]
+           │    │    │         │    │    │    │    └── ordering: +1
            │    │    │         │    │    │    └── filters
            │    │    │         │    │    │         └── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
            │    │    │         │    │    ├── project
@@ -676,7 +676,7 @@ sort
            │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:19!null project_id:20 instance_type_projects.deleted:21
            │    │    │         │    │    │    │    │    ├── lax-key: (19-21)
-           │    │    │         │    │    │    │    │    └── ordering: +19 opt(20,21) [actual: +19]
+           │    │    │         │    │    │    │    │    └── ordering: +19
            │    │    │         │    │    │    │    └── filters
            │    │    │         │    │    │    │         ├── instance_type_projects.deleted:21 = $2 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
            │    │    │         │    │    │    │         ├── instance_type_projects.deleted:21 = $3 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
@@ -819,7 +819,7 @@ sort
            │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13 instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
            │    │    │    │    │    ├── key: (1)
            │    │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
-           │    │    │    │    │    └── ordering: +1 opt(13) [actual: +1]
+           │    │    │    │    │    └── ordering: +1
            │    │    │    │    └── filters
            │    │    │    │         └── instance_types.deleted:13 = $2 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
            │    │    │    ├── project
@@ -837,7 +837,7 @@ sort
            │    │    │    │    │    ├── scan instance_type_projects@secondary
            │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:28!null project_id:29 instance_type_projects.deleted:30
            │    │    │    │    │    │    ├── lax-key: (28-30)
-           │    │    │    │    │    │    └── ordering: +28 opt(29,30) [actual: +28]
+           │    │    │    │    │    │    └── ordering: +28
            │    │    │    │    │    └── filters
            │    │    │    │    │         ├── instance_type_projects.deleted:30 = $3 [outer=(30), constraints=(/30: (/NULL - ]), fd=()-->(30)]
            │    │    │    │    │         └── project_id:29 = $4 [outer=(29), constraints=(/29: (/NULL - ]), fd=()-->(29)]
@@ -1689,7 +1689,7 @@ sort
            │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
            │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:18!null project_id:19!null
            │    │    │         │    │    │    │    │    ├── key: (18,19)
-           │    │    │         │    │    │    │    │    └── ordering: +18 opt(19) [actual: +18]
+           │    │    │         │    │    │    │    │    └── ordering: +18
            │    │    │         │    │    │    │    └── filters
            │    │    │         │    │    │    │         └── project_id:19 = $1 [outer=(19), constraints=(/19: (/NULL - ]), fd=()-->(19)]
            │    │    │         │    │    │    └── projections
@@ -1866,7 +1866,7 @@ sort
            │    │    │         │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13 instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
            │    │    │         │    │    │    │    ├── key: (1)
            │    │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
-           │    │    │         │    │    │    │    └── ordering: +1 opt(13) [actual: +1]
+           │    │    │         │    │    │    │    └── ordering: +1
            │    │    │         │    │    │    └── filters
            │    │    │         │    │    │         └── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
            │    │    │         │    │    ├── project
@@ -1884,7 +1884,7 @@ sort
            │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:19!null project_id:20 instance_type_projects.deleted:21
            │    │    │         │    │    │    │    │    ├── lax-key: (19-21)
-           │    │    │         │    │    │    │    │    └── ordering: +19 opt(20,21) [actual: +19]
+           │    │    │         │    │    │    │    │    └── ordering: +19
            │    │    │         │    │    │    │    └── filters
            │    │    │         │    │    │    │         ├── instance_type_projects.deleted:21 = $2 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
            │    │    │         │    │    │    │         └── project_id:20 = $3 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
@@ -2202,7 +2202,7 @@ sort
            │    │    │    │    │    ├── scan flavor_projects@secondary
            │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:25!null project_id:26!null
            │    │    │    │    │    │    ├── key: (25,26)
-           │    │    │    │    │    │    └── ordering: +25 opt(26) [actual: +25]
+           │    │    │    │    │    │    └── ordering: +25
            │    │    │    │    │    └── filters
            │    │    │    │    │         └── project_id:26 = $1 [outer=(26), constraints=(/26: (/NULL - ]), fd=()-->(26)]
            │    │    │    │    └── projections
@@ -2380,7 +2380,7 @@ sort
            │    │    │         │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13 instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
            │    │    │         │    │    │    │    ├── key: (1)
            │    │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
-           │    │    │         │    │    │    │    └── ordering: +1 opt(13) [actual: +1]
+           │    │    │         │    │    │    │    └── ordering: +1
            │    │    │         │    │    │    └── filters
            │    │    │         │    │    │         ├── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
            │    │    │         │    │    │         └── (flavorid:7 > $4) OR ((flavorid:7 = $5) AND (instance_types.id:1 > $6)) [outer=(1,7), constraints=(/7: (/NULL - ])]
@@ -2399,7 +2399,7 @@ sort
            │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
            │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:19!null project_id:20 instance_type_projects.deleted:21
            │    │    │         │    │    │    │    │    ├── lax-key: (19-21)
-           │    │    │         │    │    │    │    │    └── ordering: +19 opt(20,21) [actual: +19]
+           │    │    │         │    │    │    │    │    └── ordering: +19
            │    │    │         │    │    │    │    └── filters
            │    │    │         │    │    │    │         ├── instance_type_projects.deleted:21 = $2 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
            │    │    │         │    │    │    │         └── project_id:20 = $3 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
@@ -2574,7 +2574,7 @@ sort
            │    │    │         │    │    │    │    ├── scan flavor_projects@secondary
            │    │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:18!null project_id:19!null
            │    │    │         │    │    │    │    │    ├── key: (18,19)
-           │    │    │         │    │    │    │    │    └── ordering: +18 opt(19) [actual: +18]
+           │    │    │         │    │    │    │    │    └── ordering: +18
            │    │    │         │    │    │    │    └── filters
            │    │    │         │    │    │    │         └── project_id:19 = $1 [outer=(19), constraints=(/19: (/NULL - ]), fd=()-->(19)]
            │    │    │         │    │    │    └── projections
@@ -2756,7 +2756,7 @@ project
       │    │    │    │         │    │    │    │    ├── has-placeholder
       │    │    │    │         │    │    │    │    ├── key: (1)
       │    │    │    │         │    │    │    │    ├── fd: ()-->(11,13), (1)-->(2-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
-      │    │    │    │         │    │    │    │    ├── ordering: +1 opt(11,13) [actual: +1]
+      │    │    │    │         │    │    │    │    ├── ordering: +1
       │    │    │    │         │    │    │    │    ├── left-join (merge)
       │    │    │    │         │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11!null is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 instance_type_projects.instance_type_id:19 true:36
       │    │    │    │         │    │    │    │    │    ├── left ordering: +1
@@ -2775,7 +2775,7 @@ project
       │    │    │    │         │    │    │    │    │    │    │    ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13 instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16
       │    │    │    │         │    │    │    │    │    │    │    ├── key: (1)
       │    │    │    │         │    │    │    │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
-      │    │    │    │         │    │    │    │    │    │    │    └── ordering: +1 opt(11,13) [actual: +1]
+      │    │    │    │         │    │    │    │    │    │    │    └── ordering: +1
       │    │    │    │         │    │    │    │    │    │    └── filters
       │    │    │    │         │    │    │    │    │    │         ├── instance_types.deleted:13 = $1 [outer=(13), constraints=(/13: (/NULL - ]), fd=()-->(13)]
       │    │    │    │         │    │    │    │    │    │         └── disabled:11 = false [outer=(11), constraints=(/11: [/false - /false]; tight), fd=()-->(11)]
@@ -2794,7 +2794,7 @@ project
       │    │    │    │         │    │    │    │    │    │    │    ├── scan instance_type_projects@secondary
       │    │    │    │         │    │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:19!null project_id:20 instance_type_projects.deleted:21
       │    │    │    │         │    │    │    │    │    │    │    │    ├── lax-key: (19-21)
-      │    │    │    │         │    │    │    │    │    │    │    │    └── ordering: +19 opt(20,21) [actual: +19]
+      │    │    │    │         │    │    │    │    │    │    │    │    └── ordering: +19
       │    │    │    │         │    │    │    │    │    │    │    └── filters
       │    │    │    │         │    │    │    │    │    │    │         ├── instance_type_projects.deleted:21 = $2 [outer=(21), constraints=(/21: (/NULL - ]), fd=()-->(21)]
       │    │    │    │         │    │    │    │    │    │    │         └── project_id:20 = $3 [outer=(20), constraints=(/20: (/NULL - ]), fd=()-->(20)]
@@ -2851,7 +2851,7 @@ project
       │    │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
       │    │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:28!null project_id:29 instance_type_projects.deleted:30
       │    │    │    │         │    │    │    │    │    ├── lax-key: (28-30)
-      │    │    │    │         │    │    │    │    │    └── ordering: +28 opt(29,30) [actual: +28]
+      │    │    │    │         │    │    │    │    │    └── ordering: +28
       │    │    │    │         │    │    │    │    └── filters
       │    │    │    │         │    │    │    │         ├── instance_type_projects.deleted:30 = $4 [outer=(30), constraints=(/30: (/NULL - ]), fd=()-->(30)]
       │    │    │    │         │    │    │    │         ├── instance_type_projects.deleted:30 = $5 [outer=(30), constraints=(/30: (/NULL - ]), fd=()-->(30)]
@@ -3363,7 +3363,7 @@ sort
            │    │         │    │    │    │    ├── scan flavor_projects@secondary
            │    │         │    │    │    │    │    ├── columns: flavor_projects.flavor_id:18!null project_id:19!null
            │    │         │    │    │    │    │    ├── key: (18,19)
-           │    │         │    │    │    │    │    └── ordering: +18 opt(19) [actual: +18]
+           │    │         │    │    │    │    │    └── ordering: +18
            │    │         │    │    │    │    └── filters
            │    │         │    │    │    │         └── project_id:19 = $1 [outer=(19), constraints=(/19: (/NULL - ]), fd=()-->(19)]
            │    │         │    │    │    └── projections

@@ -605,7 +605,7 @@ func deriveInterestingOrderingPrefix(
 	member memo.RelExpr, requiredOrdering props.OrderingChoice,
 ) props.OrderingChoice {
 	// Find the interesting orderings of the member expression.
-	interestingOrderings := DeriveInterestingOrderings(member)
+	interestingOrderings := ordering.DeriveInterestingOrderings(member)
 
 	// Find the longest interesting ordering that is a prefix of the required ordering.
 	var longestCommonPrefix props.OrderingChoice
