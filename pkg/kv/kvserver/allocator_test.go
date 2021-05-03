@@ -1525,7 +1525,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		}
 		remove, _, err := a.RemoveVoter(
 			ctx,
-			zonepb.EmptyCompleteZoneConfig(),
+			emptySpanConfig(),
 			subtest.existingRepls,
 			subtest.existingRepls,
 			nil,
