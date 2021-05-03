@@ -12,6 +12,7 @@ package storage
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -133,7 +134,8 @@ func (p *pebbleBatch) ExportMVCCToSst(
 	exportAllRevisions bool,
 	targetSize, maxSize uint64,
 	useTBI bool,
-) ([]byte, roachpb.BulkOpSummary, roachpb.Key, error) {
+	dest io.WriteCloser,
+) (roachpb.BulkOpSummary, roachpb.Key, error) {
 	panic("unimplemented")
 }
 
