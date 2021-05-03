@@ -231,7 +231,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+	iterFunc := func(kv storage.MVCCKeyValue) error {
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -244,7 +244,27 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			return iterutil.StopIteration()
 		}
 		return nil
-	})
+	}
+	endKey := debugCtx.endKey.Key
+	splitScan := false
+	// If the startKey is local and the endKey is global, split into two parts
+	// to do the scan. This is because MVCCKeyAndIntentsIterKind cannot span
+	// across the two key kinds.
+	if (len(debugCtx.startKey.Key) == 0 || keys.IsLocal(debugCtx.startKey.Key)) && !(keys.IsLocal(endKey) || bytes.Equal(endKey, keys.LocalMax)) {
+		splitScan = true
+		endKey = keys.LocalMax
+	}
+	if err := db.MVCCIterate(
+		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
+		return err
+	}
+	if splitScan {
+		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
+			iterFunc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
