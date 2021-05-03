@@ -519,6 +519,13 @@ func (pb *ProcessorBase) MustBeStreaming() bool {
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
 func (pb *ProcessorBase) Reset() {
 	pb.Out.Reset()
+	// Deeply reset the slices so that we don't hold onto the old objects.
+	for i := range pb.trailingMeta {
+		pb.trailingMeta[i] = execinfrapb.ProducerMetadata{}
+	}
+	for i := range pb.inputsToDrain {
+		pb.inputsToDrain[i] = nil
+	}
 	*pb = ProcessorBase{
 		Out:           pb.Out,
 		trailingMeta:  pb.trailingMeta[:0],
