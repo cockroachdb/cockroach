@@ -705,7 +705,7 @@ CREATE TABLE crdb_internal.jobs (
 				} else {
 					jobType = tree.NewDString(payload.Type().String())
 					description = tree.NewDString(payload.Description)
-					statement = tree.NewDString(payload.Statement)
+					statement = tree.NewDString(strings.Join(payload.Statement, "; "))
 					username = tree.NewDString(sqlUsername.Normalized())
 					descriptorIDsArr := tree.NewDArray(types.Int)
 					for _, descID := range payload.DescriptorIDs {

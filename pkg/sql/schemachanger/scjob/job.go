@@ -103,7 +103,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		return err
 	}
 
-	for _, s := range sc.Stages {
+	for i, s := range sc.Stages {
 		var descriptorsWithUpdatedVersions []lease.IDVersion
 		if err := descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 			jt := badJobTracker{
@@ -111,8 +111,23 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				descriptors: descriptors,
 				codec:       execCtx.ExecCfg().Codec,
 			}
-			if err := scexec.NewExecutor(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
+			if err := scexec.NewExecutor(
+				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
+				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs,
+			).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
+				Statements: n.job.Payload().Statement,
+				Phase:      scplan.PostCommitPhase,
+			}); err != nil {
 				return err
+			}
+			// If this is the last stage, also update all the table descriptors to
+			// remove the job ID.
+			if i == len(sc.Stages)-1 {
+				if err := scexec.UpdateDescriptorJobIDs(
+					ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
+				); err != nil {
+					return err
+				}
 			}
 			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {

@@ -1943,7 +1943,7 @@ func TestJobStatusResponse(t *testing.T) {
 		ctx,
 		jobs.Record{
 			Description: "testing",
-			Statement:   "SELECT 1",
+			Statements:  []string{"SELECT 1"},
 			Username:    security.RootUserName(),
 			Details: jobspb.ImportDetails{
 				Tables: []jobspb.ImportDetails_Table{

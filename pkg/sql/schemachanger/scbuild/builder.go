@@ -81,6 +81,26 @@ func (e *notImplementedError) Error() string {
 	return buf.String()
 }
 
+// ConcurrentSchemaChangeError indicates that building the schema change plan
+// is not currently possible because there are other concurrent schema changes
+// on one of the descriptors.
+type ConcurrentSchemaChangeError struct {
+	// TODO(ajwerner): Instead of waiting for one descriptor at a time, we should
+	// get all the IDs of the descriptors we might be waiting for and return them
+	// from the builder.
+	descID descpb.ID
+}
+
+func (e *ConcurrentSchemaChangeError) Error() string {
+	return fmt.Sprintf("descriptor %d is undergoing another schema change", e.descID)
+}
+
+// DescriptorID is the ID of the descriptor undergoing concurrent schema
+// changes.
+func (e *ConcurrentSchemaChangeError) DescriptorID() descpb.ID {
+	return e.descID
+}
+
 // NewBuilder creates a new Builder.
 func NewBuilder(
 	res resolver.SchemaResolver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
@@ -130,8 +150,7 @@ func (b *Builder) AlterTable(
 
 	// Resolve the table.
 	tn := n.Table.ToTableName()
-	table, err := resolver.ResolveExistingTableObject(ctx, b.res, &tn,
-		tree.ObjectLookupFlagsWithRequired())
+	table, err := b.getTableDescriptorForLockingChange(ctx, &tn)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
 			return nodes, nil
@@ -437,9 +456,7 @@ func (b *Builder) maybeAddSequenceReferenceDependencies(
 			}
 			tn = parsedSeqName.ToTableName()
 		}
-
-		seqDesc, err := resolver.ResolveExistingTableObject(ctx, b.res, &tn,
-			tree.ObjectLookupFlagsWithRequired())
+		seqDesc, err := b.getTableDescriptor(ctx, &tn)
 		if err != nil {
 			return err
 		}
@@ -669,6 +686,51 @@ func (b *Builder) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 		Target: scpb.NewTarget(dir, elem),
 		State:  s,
 	})
+}
+
+// getTableDescriptorForLockingChange returns a table descriptor that is
+// guaranteed to have no concurrent running schema changes and can therefore
+// undergo a "locking" change, or else a ConcurrentSchemaChangeError if the
+// table is not currently in the required state. Locking changes roughly
+// correspond to schema changes with mutations, which must be serialized and
+// (in the new schema changer) require mutual exclusion.
+func (b *Builder) getTableDescriptorForLockingChange(
+	ctx context.Context, tn *tree.TableName,
+) (catalog.TableDescriptor, error) {
+	table, err := b.getTableDescriptor(ctx, tn)
+	if err != nil {
+		return nil, err
+	}
+	if HasConcurrentSchemaChanges(table) {
+		return nil, &ConcurrentSchemaChangeError{descID: table.GetID()}
+	}
+	return table, nil
+}
+
+func (b *Builder) getTableDescriptor(
+	ctx context.Context, tn *tree.TableName,
+) (catalog.TableDescriptor, error) {
+	// This will return an error for dropped and offline tables, but it's possible
+	// that later iterations of the builder will want to handle those cases
+	// in a different way.
+	return resolver.ResolveExistingTableObject(ctx, b.res, tn,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:    true,
+				AvoidCached: true,
+			},
+		},
+	)
+}
+
+// HasConcurrentSchemaChanges returns whether the table descriptor is undergoing
+// concurrent schema changes.
+func HasConcurrentSchemaChanges(table catalog.TableDescriptor) bool {
+	// TODO(ajwerner): For now we simply check for the absence of mutations. Once
+	// we start implementing schema changes with ops to be executed during
+	// statement execution, we'll have to take into account mutations that were
+	// written in this transaction.
+	return len(table.AllMutations()) > 0
 }
 
 // minimumTypeUsageVersions defines the minimum version needed for a new
