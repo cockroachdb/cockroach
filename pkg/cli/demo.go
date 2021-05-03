@@ -189,6 +189,31 @@ func checkDemoConfiguration(
 		gen = defaultGenerator
 	}
 
+	// Since --insecure disables all security controls, --secure-http would
+	// not work properly. Better prevent the combination altogether.
+	if demoCtx.insecure && demoCtx.secureHTTP {
+		return nil, errors.New("cannot enable HTTPS in insecure mode")
+	}
+
+	fs := flagSetForCmd(cmd)
+
+	// Ensure that an explicit --http-addr is always combined with
+	// and explicit --secure-http.
+	if fs.Lookup(cliflags.DemoHTTPAddr.Name).Changed &&
+		!fs.Lookup(cliflags.DemoSecureHTTP.Name).Changed {
+		return nil, errors.WithHintf(
+			errors.Newf("using --%[1]s requires either --%[2]s=true or --%[2]s=false",
+				cliflags.DemoHTTPAddr.Name, cliflags.DemoSecureHTTP.Name),
+			"Note that --%[2]s=false with a non-default --%[1]s can result in undesired network accesses.",
+			cliflags.DemoHTTPAddr.Name, cliflags.DemoSecureHTTP.Name)
+	}
+
+	// If --http-advertise-addr was not specified, fall back
+	// to the http addr.
+	if !fs.Lookup(cliflags.DemoHTTPAdvertiseAddr.Name).Changed {
+		demoCtx.httpAdvertiseAddr = demoCtx.httpAddr + ":0"
+	}
+
 	// Make sure that the user didn't request a workload and an empty database.
 	if demoCtx.runWorkload && demoCtx.noExampleDatabase {
 		return nil, errors.New("cannot run a workload when generation of the example database is disabled")

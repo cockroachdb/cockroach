@@ -105,7 +105,7 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 	}
 
 	if !demoCtx.insecure {
-		if err := generateCerts(c.demoDir); err != nil {
+		if err := generateCerts(c.demoDir, demoCtx.secureHTTP, demoCtx.httpAdvertiseAddr); err != nil {
 			return err
 		}
 	}
@@ -560,11 +560,15 @@ func testServerArgsForTransientCluster(
 	storeSpec.StickyInMemoryEngineID = fmt.Sprintf("demo-node%d", nodeID)
 
 	args := base.TestServerArgs{
-		SocketFile:              sock.filename(),
-		PartOfCluster:           true,
-		Stopper:                 stop.NewStopper(),
-		JoinAddr:                joinAddr,
-		DisableTLSForHTTP:       true,
+		SocketFile:    sock.filename(),
+		PartOfCluster: true,
+		Stopper:       stop.NewStopper(),
+		JoinAddr:      joinAddr,
+
+		SQLAddr:           demoCtx.sqlAddr + ":0",  // The port number may be overridden below.
+		HTTPAddr:          demoCtx.httpAddr + ":0", // The port number may be overridden below.
+		HTTPAdvertiseAddr: demoCtx.httpAdvertiseAddr,
+
 		StoreSpecs:              []base.StoreSpec{storeSpec},
 		SQLMemoryPoolSize:       demoCtx.sqlPoolMemorySize,
 		CacheSize:               demoCtx.cacheSize,
@@ -580,19 +584,27 @@ func testServerArgsForTransientCluster(
 		},
 	}
 
+	if !demoCtx.secureHTTP {
+		args.DisableTLSForHTTP = true
+	}
+
 	if !testingForceRandomizeDemoPorts {
 		// Unit tests can be run with multiple processes side-by-side with
 		// `make stress`. This is bound to not work with fixed ports.
 		sqlPort := sqlBasePort + int(nodeID) - 1
 		if sqlBasePort == 0 {
+			// In case the user specified zero explicitly, this is an
+			// instruction to revert to automatic allocation.
 			sqlPort = 0
 		}
 		httpPort := httpBasePort + int(nodeID) - 1
 		if httpBasePort == 0 {
+			// In case the user specified zero explicitly, this is an
+			// instruction to revert to automatic allocation.
 			httpPort = 0
 		}
-		args.SQLAddr = fmt.Sprintf(":%d", sqlPort)
-		args.HTTPAddr = fmt.Sprintf(":%d", httpPort)
+		args.SQLAddr = fmt.Sprintf("%s:%d", demoCtx.sqlAddr, sqlPort)
+		args.HTTPAddr = fmt.Sprintf("%s:%d", demoCtx.httpAddr, httpPort)
 	}
 
 	if demoCtx.localities != nil {
@@ -846,7 +858,32 @@ This server is running at increased risk of memory-related failures.`,
 }
 
 // generateCerts generates some temporary certificates for cockroach demo.
-func generateCerts(certsDir string) (err error) {
+func generateCerts(certsDir string, generateHTTPCerts bool, httpAdvAddr string) (err error) {
+	if generateHTTPCerts {
+		uicaKeyPath := filepath.Join(certsDir, security.EmbeddedUICAKey)
+		// Create a CA-Key for the UI certificates.
+		if err := security.CreateUICAPair(
+			certsDir,
+			uicaKeyPath,
+			defaultKeySize,
+			defaultCALifetime,
+			false, /* allowKeyReuse */
+			false, /*overwrite */
+		); err != nil {
+			return err
+		}
+		// Generate a certificate for the demo nodes's HTTP interface.
+		if err := security.CreateUIPair(
+			certsDir,
+			uicaKeyPath,
+			defaultKeySize,
+			defaultCertLifetime,
+			false, /* overwrite */
+			[]string{httpAdvAddr},
+		); err != nil {
+			return err
+		}
+	}
 	caKeyPath := filepath.Join(certsDir, security.EmbeddedCAKey)
 	// Create a CA-Key.
 	if err := security.CreateCAPair(

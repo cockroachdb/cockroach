@@ -1125,11 +1125,57 @@ There should be as many TCP ports available as the value of --nodes
 starting at the specified value.`,
 	}
 
+	DemoSQLAddr = FlagInfo{
+		Name: "sql-addr",
+		Description: `The network address for demo nodes
+to listen for connection requests from SQL clients.
+The port number must not be included.`,
+	}
+
 	DemoHTTPPort = FlagInfo{
 		Name: "http-port",
 		Description: `First port number for HTTP servers.
 There should be as many TCP ports available as the value of --nodes
 starting at the specified value.`,
+	}
+
+	DemoHTTPAddr = FlagInfo{
+		Name: "http-addr",
+		Description: `The network address for demo nodes
+to listen for connection requests from HTTP clients.
+The port number must not be included.
+
+Attention: if using --secure-http=false with a non-default
+--http-addr, the resulting configuration may expose an unsecured
+HTTP service over a shared network, resulting in possible
+remote access to the local machine.`,
+	}
+
+	DemoHTTPAdvertiseAddr = FlagInfo{
+		Name: "http-advertise-addr",
+		Description: `The address to include in the web UI URL
+displayed upon server startup and \demo ls. It is also
+the address embedded in the server TLS certificate as
+Common Name (CN) when the HTTPS console is enabled with
+--secure-http.
+The port number should be included; add :0 after the network
+address to reuse the same HTTP port as each simulated node.
+
+The default is the same as --http-addr.`,
+	}
+
+	DemoSecureHTTP = FlagInfo{
+		Name: "secure-http",
+		Description: `If set, enable TLS for accessing the web UI.
+This causes the demo nodes to use a self-signed
+TLS certificate for the HTTP port.
+Use --http-advertise-addr to control the network
+address listed as Common Name (CN) in the TLS certificate.
+
+Attention: if using --secure-http=false with a non-default
+--http-addr, the resulting configuration may expose an unsecured
+HTTP service over a shared network, resulting in possible
+remote access to the local machine.`,
 	}
 
 	DemoNodes = FlagInfo{

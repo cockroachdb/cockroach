@@ -780,6 +780,11 @@ func init() {
 
 		intFlag(f, &demoCtx.sqlPort, cliflags.DemoSQLPort)
 		intFlag(f, &demoCtx.httpPort, cliflags.DemoHTTPPort)
+
+		stringFlag(f, &demoCtx.sqlAddr, cliflags.DemoSQLAddr)
+		stringFlag(f, &demoCtx.httpAddr, cliflags.DemoHTTPAddr)
+		stringFlag(f, &demoCtx.httpAdvertiseAddr, cliflags.DemoHTTPAdvertiseAddr)
+		boolFlag(f, &demoCtx.secureHTTP, cliflags.DemoSecureHTTP)
 	}
 
 	// statement-diag command.

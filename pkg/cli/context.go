@@ -564,6 +564,11 @@ var demoCtx struct {
 	insecure                  bool
 	sqlPort                   int
 	httpPort                  int
+
+	sqlAddr           string
+	httpAddr          string
+	httpAdvertiseAddr string
+	secureHTTP        bool
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
@@ -584,6 +589,10 @@ func setDemoContextDefaults() {
 	demoCtx.insecure = false
 	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
 	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
+	demoCtx.sqlAddr = "127.0.0.1"
+	demoCtx.httpAddr = "127.0.0.1"
+	demoCtx.httpAdvertiseAddr = ""
+	demoCtx.secureHTTP = false
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'

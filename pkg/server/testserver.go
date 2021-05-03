@@ -218,6 +218,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
 	}
+	if params.HTTPAdvertiseAddr != "" {
+		cfg.HTTPAdvertiseAddr = params.HTTPAdvertiseAddr
+	}
 	cfg.DisableTLSForHTTP = params.DisableTLSForHTTP
 	if params.DisableWebSessionAuthentication {
 		cfg.EnableWebSessionAuthentication = false
