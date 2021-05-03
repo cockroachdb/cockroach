@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
 	"time"
@@ -342,4 +343,10 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
+
+	// Prioritize the NodeLiveness Range in the Raft scheduler above all other
+	// Ranges to ensure that liveness never sees high Raft scheduler latency.
+	if bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix) {
+		r.store.scheduler.SetPriorityID(desc.RangeID)
+	}
 }
