@@ -34,6 +34,7 @@ const (
 	OwnerCDC           Owner = `cdc`
 	OwnerKV            Owner = `kv`
 	OwnerPartitioning  Owner = `partitioning`
+	OwnerServer        Owner = `server`
 	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
@@ -80,6 +81,9 @@ var roachtestOwners = map[Owner]OwnerMetadata{
 	// This is an alias for the KV team.
 	OwnerPartitioning: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
 		TriageColumnID: 3550674,
+	},
+	OwnerServer: {SlackRoom: `server`, Mention: []string{`@cockroachdb/server`},
+		TriageColumnID: 2521812,
 	},
 	OwnerSQLQueries: {SlackRoom: `sql-queries`, Mention: []string{`@cockroachdb/sql-queries`},
 		TriageColumnID: 13549252,
