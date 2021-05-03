@@ -62,7 +62,7 @@ func registerAcceptance(r *testRegistry) {
 			{name: "cluster-init", fn: runClusterInit},
 			{
 				name: "rapid-restart", fn: runRapidRestart,
-				skip:       "https://github.com/cockroachdb/cockroach/issues/65295",
+				skip: "https://github.com/cockroachdb/cockroach/issues/65295",
 			},
 			{name: "status-server", fn: runStatusServer},
 		},
