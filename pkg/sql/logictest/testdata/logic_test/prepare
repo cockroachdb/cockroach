@@ -1181,7 +1181,8 @@ select
  │    ├── cost: 1054.41
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
- │    └── prune: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
  └── filters
       └── (k:1 % 2) = 1 [outer=(1), immutable]
 

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -751,7 +752,7 @@ func fillInLazyProps(e opt.Expr) {
 		norm.DeriveRejectNullCols(rel)
 
 		// Make sure the interesting orderings are calculated.
-		xform.DeriveInterestingOrderings(rel)
+		ordering.DeriveInterestingOrderings(rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {

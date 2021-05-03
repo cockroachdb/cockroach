@@ -13,6 +13,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/errors"
 )
@@ -65,7 +66,7 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 	aggs memo.AggregationsExpr,
 	private *memo.GroupingPrivate,
 ) {
-	orders := DeriveInterestingOrderings(input)
+	orders := ordering.DeriveInterestingOrderings(input)
 	intraOrd := private.Ordering
 	for _, ord := range orders {
 		o := ord.ToOrdering()
