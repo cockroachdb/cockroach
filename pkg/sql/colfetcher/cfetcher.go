@@ -141,6 +141,8 @@ func newCTableInfo() *cTableInfo {
 
 // Release implements the execinfra.Releasable interface.
 func (c *cTableInfo) Release() {
+	// Note that all slices are being reused, but there is no need to deeply
+	// reset them since all of the slices are of Go native types.
 	c.colIdxMap.ords = c.colIdxMap.ords[:0]
 	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
@@ -1564,6 +1566,8 @@ var cFetcherPool = sync.Pool{
 func (rf *cFetcher) Release() {
 	rf.table.Release()
 	*rf = cFetcher{
+		// The types are small objects, so we don't bother deeply resetting this
+		// slice.
 		typs: rf.typs[:0],
 	}
 	cFetcherPool.Put(rf)
