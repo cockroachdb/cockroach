@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRangeIDChunk(t *testing.T) {
@@ -93,7 +95,7 @@ func TestRangeIDQueue(t *testing.T) {
 
 	const count = 3 * rangeIDChunkSize
 	for i := 1; i <= count; i++ {
-		q.PushBack(roachpb.RangeID(i))
+		q.Push(roachpb.RangeID(i))
 		if e := i; e != q.Len() {
 			t.Fatalf("expected %d, but found %d", e, q.Len())
 		}
@@ -116,6 +118,41 @@ func TestRangeIDQueue(t *testing.T) {
 	}
 	if _, ok := q.PopFront(); ok {
 		t.Fatalf("successfully popped from empty queue")
+	}
+}
+
+func TestRangeIDQueuePrioritization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q rangeIDQueue
+	for _, withPriority := range []bool{false, true} {
+		if withPriority {
+			q.SetPriorityID(3)
+		}
+
+		// Push 5 ranges in order, then pop them off.
+		for i := 1; i <= 5; i++ {
+			q.Push(roachpb.RangeID(i))
+			require.Equal(t, i, q.Len())
+		}
+		var popped []int
+		for i := 5; ; i-- {
+			require.Equal(t, i, q.Len())
+			id, ok := q.PopFront()
+			if !ok {
+				require.Equal(t, i, 0)
+				break
+			}
+			popped = append(popped, int(id))
+		}
+
+		// Assert pop order.
+		if withPriority {
+			require.Equal(t, []int{3, 1, 2, 4, 5}, popped)
+		} else {
+			require.Equal(t, []int{1, 2, 3, 4, 5}, popped)
+		}
 	}
 }
 
