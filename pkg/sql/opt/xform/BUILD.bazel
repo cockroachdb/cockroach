@@ -8,7 +8,6 @@ go_library(
         "general_funcs.go",
         "groupby_funcs.go",
         "index_scan_builder.go",
-        "interesting_orderings.go",
         "join_funcs.go",
         "join_order_builder.go",
         "limit_funcs.go",

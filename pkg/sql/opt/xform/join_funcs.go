@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -50,7 +51,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	orders := DeriveInterestingOrderings(left).Copy()
+	orders := ordering.DeriveInterestingOrderings(left).Copy()
 	leftCols, leftFDs := leftEq.ToSet(), &left.Relational().FuncDeps
 	orders.RestrictToCols(leftCols, leftFDs)
 
@@ -64,7 +65,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
-		rightOrders := DeriveInterestingOrderings(right).Copy()
+		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
 		rightOrders.RestrictToCols(rightEq.ToSet(), &right.Relational().FuncDeps)
 		orders = append(orders, rightOrders...)
 
