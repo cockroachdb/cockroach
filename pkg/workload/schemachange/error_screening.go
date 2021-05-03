@@ -774,3 +774,43 @@ SELECT
 		val,
 	)
 }
+
+// tableHasOngoingAlterPKSchemaChanges checks whether a given table has an ALTER
+// PRIMARY KEY related change in progress.
+func tableHasOngoingAlterPKSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	EXISTS(
+		SELECT
+			mut
+		FROM
+			(
+				SELECT
+					json_array_elements(d->'mutations')
+						AS mut
+				FROM
+					descriptors
+			)
+		WHERE
+			(mut->'primaryKeySwap') IS NOT NULL
+	);
+		`,
+		tableName.String(),
+	)
+}
