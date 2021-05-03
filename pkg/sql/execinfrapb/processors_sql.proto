@@ -32,14 +32,15 @@ import "gogoproto/gogo.proto";
 // "pre-canned" rows. This is not intended to be used for very large datasets.
 message ValuesCoreSpec {
   // There is one DatumInfo for each element in a row. Can be empty, in which
-  // case raw_bytes must be empty.
+  // case raw_bytes will be empty.
   repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
 
   // The number of rows is especially useful when we have zero columns.
   optional uint64 num_rows = 3 [(gogoproto.nullable) = false];
 
-  // Each raw block encodes one or more data rows; each datum is encoded
-  // according to the corresponding DatumInfo.
+  // Each raw block encodes one row; each datum is encoded according to the
+  // corresponding DatumInfo. As an optimization, if columns is empty, this will
+  // be empty rather than containing empty byte strings.
   repeated bytes raw_bytes = 2;
 }
 

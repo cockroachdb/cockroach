@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -135,6 +136,31 @@ func (t Tuple) less(other Tuple, evalCtx *tree.EvalContext, tupleFromOtherSet Tu
 			if lhsStr == rhsStr {
 				continue
 			} else if lhsStr < rhsStr {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if lhsVal.Type().Name() == "Duration" {
+			lhsDuration := lhsVal.Interface().(duration.Duration)
+			rhsDuration := rhsVal.Interface().(duration.Duration)
+			cmp := lhsDuration.Compare(rhsDuration)
+			if cmp == 0 {
+				continue
+			} else if cmp == -1 {
+				return true
+			} else {
+				return false
+			}
+		}
+
+		if lhsVal.Type().Name() == "Time" {
+			lhsTime := lhsVal.Interface().(time.Time)
+			rhsTime := rhsVal.Interface().(time.Time)
+			if lhsTime.Equal(rhsTime) {
+				continue
+			} else if lhsTime.Before(rhsTime) {
 				return true
 			} else {
 				return false

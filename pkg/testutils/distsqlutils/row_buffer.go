@@ -110,7 +110,13 @@ func (rb *RowBuffer) Push(
 	}
 	// We mimic the behavior of RowChannel.
 	storeRow := func() {
-		rowCopy := append(rowenc.EncDatumRow(nil), row...)
+		var rowCopy rowenc.EncDatumRow
+		if len(row) == 0 && row != nil {
+			// Special handling for empty rows, to avoid pushing nil.
+			rowCopy = make(rowenc.EncDatumRow, 0)
+		} else {
+			rowCopy = append(rowCopy, row...)
+		}
 		rb.Mu.Records = append(rb.Mu.Records, BufferedRecord{row: rowCopy, Meta: meta})
 	}
 	status := execinfra.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))

@@ -512,12 +512,13 @@ func (WindowerSpec_Frame_Exclusion) EnumDescriptor() ([]byte, []int) {
 // "pre-canned" rows. This is not intended to be used for very large datasets.
 type ValuesCoreSpec struct {
 	// There is one DatumInfo for each element in a row. Can be empty, in which
-	// case raw_bytes must be empty.
+	// case raw_bytes will be empty.
 	Columns []DatumInfo `protobuf:"bytes,1,rep,name=columns" json:"columns"`
 	// The number of rows is especially useful when we have zero columns.
 	NumRows uint64 `protobuf:"varint,3,opt,name=num_rows,json=numRows" json:"num_rows"`
-	// Each raw block encodes one or more data rows; each datum is encoded
-	// according to the corresponding DatumInfo.
+	// Each raw block encodes one row; each datum is encoded according to the
+	// corresponding DatumInfo. As an optimization, if columns is empty, this will
+	// be empty rather than containing empty byte strings.
 	RawBytes [][]byte `protobuf:"bytes,2,rep,name=raw_bytes,json=rawBytes" json:"raw_bytes,omitempty"`
 }
 
