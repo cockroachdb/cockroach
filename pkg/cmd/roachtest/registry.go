@@ -82,7 +82,6 @@ func registerTests(r *testRegistry) {
 	registerRestoreNodeShutdown(r)
 	registerRestore(r)
 	registerRoachmart(r)
-	registerScaleData(r)
 	registerSchemaChangeBulkIngest(r)
 	registerSchemaChangeDatabaseVersionUpgrade(r)
 	registerSchemaChangeDuringKV(r)

@@ -116,9 +116,9 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
 		if err != nil && !strings.Contains(err.Error(), "Segmentation fault") {
-			c.l.Printf("sysbench segfaulted; passing test anyway")
 			return err
 		}
+		c.l.Printf("sysbench segfaulted; passing test anyway")
 		return nil
 	})
 	m.Wait()

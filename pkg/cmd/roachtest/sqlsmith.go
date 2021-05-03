@@ -122,29 +122,18 @@ func registerSQLSmith(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0], nil)
-		if err != nil {
+		// We will enable panic injection on this connection in the vectorized
+		// engine (and will ignore the injected errors) in order to test that
+		// the panic-catching mechanism of error propagation works as expected.
+		// Note: it is important to enable this testing knob only after all
+		// other setup queries have already completed, including the smither
+		// instantiation (otherwise, the setup might fail because of the
+		// injected panics).
+		injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+		if _, err := conn.Exec(injectPanicsStmt); err != nil {
 			t.Fatal(err)
 		}
-		crdbVersion, err := toCRDBVersion(versionString)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if crdbVersion >= crdbVersion21_1 {
-			// We will enable panic injection on this connection in the
-			// vectorized engine (and will ignore the injected errors) in order
-			// to test that the panic-catching mechanism of error propagation
-			// works as expected.
-			// Note: it is important to enable this testing knob only after all
-			// other setup queries have already completed, including the smither
-			// instantiation (otherwise, the setup might fail because of the
-			// injected panics).
-			injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
-			if _, err := conn.Exec(injectPanicsStmt); err != nil {
-				t.Fatal(err)
-			}
-			logStmt(injectPanicsStmt)
-		}
+		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
 		until := time.After(t.spec.Timeout / 2)

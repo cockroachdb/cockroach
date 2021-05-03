@@ -92,7 +92,6 @@ go_library(
         "restart.go",
         "restore.go",
         "roachmart.go",
-        "scaledata.go",
         "schema_change_database_version_upgrade.go",
         "schemachange.go",
         "schemachange_random_load.go",
