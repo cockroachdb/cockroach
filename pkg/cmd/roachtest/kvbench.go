@@ -280,17 +280,17 @@ func runKVBench(ctx context.Context, t *test, c *cluster, b kvBenchSpec) {
 			const duration = time.Second * 300
 
 			fmt.Fprintf(&workloadCmd,
-				`./workload run kv --ramp=%fs --duration=%fs {pgurl%s} --read-percent=0`+
-					` --concurrency=%d --histograms=%s --max-rate=%d --num-shards=%d`,
-				ramp.Seconds(), duration.Seconds(), roachNodes,
-				b.CPUs*loadConcurrency, clusterHistPath, maxrate, b.NumShards)
+				`./workload run kv --ramp=%fs --duration=%fs {pgurl%s} --read-percent=0 `+
+					`--concurrency=%d --histograms=%s --max-rate=%d --num-shards=%d`,
+				ramp.Seconds(), duration.Seconds(), roachNodes, b.CPUs*loadConcurrency, clusterHistPath,
+				maxrate, b.NumShards)
 			switch b.KeyDistribution {
 			case sequential:
 				workloadCmd.WriteString(` --sequential`)
 			case zipfian:
 				workloadCmd.WriteString(` --zipfian`)
 			case random:
-				workloadCmd.WriteString(` --random`)
+				// Random is the default.
 			default:
 				panic(`unexpected`)
 			}
