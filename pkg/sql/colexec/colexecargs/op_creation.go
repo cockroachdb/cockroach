@@ -168,9 +168,16 @@ func (r *NewColOperatorResult) Release() {
 			MetadataSources: r.MetadataSources[:0],
 			ToClose:         r.ToClose[:0],
 		},
+		// There is no need to deeply reset the column types and the memory
+		// monitoring infra slices because these objects are very tiny in the
+		// grand scheme of things.
 		ColumnTypes: r.ColumnTypes[:0],
 		OpMonitors:  r.OpMonitors[:0],
 		OpAccounts:  r.OpAccounts[:0],
+		// No need to deeply reset the releasables either because all of these
+		// objects are still referenced by the corresponding sync.Pools, so the
+		// references in r.Releasables will not be the reason for the objects to
+		// not be garbage-collected.
 		Releasables: r.Releasables[:0],
 	}
 	newColOperatorResultPool.Put(r)
