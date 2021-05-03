@@ -57,7 +57,7 @@ var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	// Other types
 	oid.T__aclitem:     oid.T__text,
 	oid.T_pg_node_tree: oid.T_text,
-	oid.T_xid:          oid.T_oid,
+	oid.T_xid:          oid.T_int8, // there are xid's already implemented as int8.
 	oid.T_pg_lsn:       oid.T_text,
 }
 

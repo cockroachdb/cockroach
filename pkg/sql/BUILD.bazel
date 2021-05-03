@@ -497,10 +497,13 @@ go_test(
     ],
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",
+        "//pkg/sql:pg_catalog.go",
+        "//pkg/sql/vtable:pg_catalog.go",
     ],
     embed = [":sql"],
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/config",
