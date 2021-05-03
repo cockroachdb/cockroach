@@ -48,6 +48,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -129,6 +130,15 @@ var (
 )
 
 var none = struct{}{}
+
+// This var will be used to automatically map function names with specific
+// virtualSchemaTable.schema identifiers to populate addRow calls.
+// Add any function that cannot be automatically detected.
+var mappedPopulateFunctions = map[string]string{
+	// Currently pg_type cannot be found automatically by this code because it is
+	// not the populate function.
+	"addPGTypeRow": "PGCatalogType",
+}
 
 // summary will keep accountability for any unexpected difference and report it in the log.
 type summary struct {
@@ -289,7 +299,7 @@ func fixVtable(
 	unimplementedColumns PGMetadataTables,
 	pgCode *pgCatalogCode,
 ) {
-	fileName := filepath.Join(vtablePkg, pgCatalogGo)
+	fileName := getVTablePGCatalogFile()
 
 	// rewriteFile first will check existing create table constants to avoid
 	// duplicates.
@@ -408,9 +418,9 @@ func fixPgCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableDefinitionText := getTableDefinitionsText(pgCatalogGo, notImplemented)
+	tableDefinitionText := getTableDefinitionsText(getSQLPGCatalogFile(), notImplemented)
 
-	rewriteFile(pgCatalogGo, func(input *os.File, output outputFile) {
+	rewriteFile(getSQLPGCatalogFile(), func(input *os.File, output outputFile) {
 		reader := bufio.NewScanner(input)
 		for reader.Scan() {
 			text := reader.Text()
@@ -434,7 +444,7 @@ func fixPgCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
 }
 
 func fixPgCatalogGoColumns(positions addRowPositionList) {
-	rewriteFile(pgCatalogGo, func(input *os.File, output outputFile) {
+	rewriteFile(getSQLPGCatalogFile(), func(input *os.File, output outputFile) {
 		reader := bufio.NewScanner(input)
 		scannedUntil := 0
 		currentPosition := 0
@@ -826,21 +836,23 @@ func getSortedDefKeys(tableDefs map[string]string) []string {
 // new columns (if needed) by mapping all the addRow calls with the table.
 func goParsePgCatalogGo(t *testing.T) *pgCatalogCode {
 	fs := token.NewFileSet()
-	f, err := goParser.ParseFile(fs, pgCatalogGo, nil, goParser.AllErrors)
+	f, err := goParser.ParseFile(fs, getSQLPGCatalogFile(), nil, goParser.AllErrors)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srcFile, err := os.Open(pgCatalogGo)
+	srcFile, err := os.Open(getSQLPGCatalogFile())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer dClose(srcFile)
 	pgCode := &pgCatalogCode{
-		fixableTables:   make(map[string]struct{}),
-		addRowPositions: make(map[string]addRowPositionList),
-		schemaParam:     -1, // This value will be calculated later and once
-		srcFile:         srcFile,
-		t:               t,
+		fixableTables:       make(map[string]struct{}),
+		addRowPositions:     make(mappedRowPositions),
+		functionsWithAddRow: make(mappedRowPositions),
+		schemaParam:         -1, // This value will be calculated later and once.
+		populateIndex:       -1, // Same case as schemaParam.
+		srcFile:             srcFile,
+		t:                   t,
 	}
 
 	ast.Walk(&pgCatalogCodeVisitor{
@@ -850,6 +862,7 @@ func goParsePgCatalogGo(t *testing.T) *pgCatalogCode {
 		bodyStmts:      0,
 	}, f)
 
+	pgCode.matchAddRowsWithSchemas()
 	return pgCode
 }
 
@@ -868,11 +881,13 @@ type mappedRowPositions map[string]addRowPositionList
 // pgCatalogCode describes pg_catalog.go insertion points for addRow calls and
 // virtualSchemaTables which its populate func returns nil.
 type pgCatalogCode struct {
-	fixableTables   map[string]struct{}
-	addRowPositions mappedRowPositions
-	schemaParam     int // Index where we expect to find schema at makeAllRelationsVirtualTableWithDescriptorIDIndex.
-	srcFile         *os.File
-	t               *testing.T
+	fixableTables       map[string]struct{}
+	addRowPositions     mappedRowPositions // Matches addRow calls with actual schemas (Table names).
+	functionsWithAddRow mappedRowPositions // Matches addRow calls with function names.
+	schemaParam         int                // Index to find schema at makeAllRelationsVirtualTableWithDescriptorIDIndex.
+	populateIndex       int                // Index to find populateFromTable at makeAllRelationsVirtualTableWithDescriptorIDIndex.
+	srcFile             *os.File
+	t                   *testing.T
 }
 
 // pgCatalogCodeVisitor implements ast.Visitor for traversing pg_catalog.go.
@@ -880,12 +895,28 @@ type pgCatalogCodeVisitor struct {
 	pgCode         *pgCatalogCode
 	schema         string
 	addRowFuncName string
+	funcLit        string
 	bodyStmts      int
 }
 
+// matchAddRowsWithSchemas will try to identify from which table is the call
+// of addRow function that couldn't be determined when analyzing code.
+func (c *pgCatalogCode) matchAddRowsWithSchemas() {
+	for k, addRows := range c.functionsWithAddRow {
+		if schema, ok := mappedPopulateFunctions[k]; ok {
+			c.fixableTables[schema] = none
+			for _, addRow := range addRows {
+				addRow.schema = schema
+				c.addRowPositions.add(addRow)
+			}
+		}
+	}
+}
+
 // nextWithSchema will set the schema for inner nodes visitors.
-func (v pgCatalogCodeVisitor) nextWithSchema(schema string) pgCatalogCodeVisitor {
-	next := v
+func (v *pgCatalogCodeVisitor) nextWithSchema(schema string) *pgCatalogCodeVisitor {
+	next := &pgCatalogCodeVisitor{}
+	*next = *v
 	next.schema = schema
 	return next
 }
@@ -904,7 +935,7 @@ func (v pgCatalogCodeVisitor) nextWithSchema(schema string) pgCatalogCodeVisitor
 // from virtualSchemaTable, and match this calls and positions to a table
 // schema which later is used to modify addRows if there are new columns to
 // add.
-func (v pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
+func (v *pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 	if node == nil {
 		return nil
 	}
@@ -927,7 +958,11 @@ func (v pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 			if !ok {
 				return v
 			}
+
+			// Modifying this node visitor to have schema available when visiting
+			// populate attribute. Do not use nextWithSchema here.
 			v.schema = val.Sel.String()
+			return v
 		case virtualTablePopulateField:
 			// FuncLit is a function definition, we can look for addRow if this is
 			// a function definition.
@@ -936,10 +971,11 @@ func (v pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 				return v
 			}
 			v.bodyStmts = len(val.Body.List)
-			index := v.findAddRowFuncName(val)
+			next, index := v.findAddRowFuncName(val.Type)
 			if index <= -1 {
 				v.pgCode.t.Fatal("populate function does not have a parameter with 'func(...tree.Datum) error' signature")
 			}
+			return next
 		}
 	case *ast.ReturnStmt:
 		result, ok := n.Results[0].(*ast.Ident)
@@ -963,45 +999,81 @@ func (v pgCatalogCodeVisitor) Visit(node ast.Node) ast.Visitor {
 
 		switch fun.Name {
 		case v.addRowFuncName:
-			if v.schema == "" || v.addRowFuncName == "" {
+			if (v.schema == "" && v.funcLit == "") || v.addRowFuncName == "" {
 				// Could not match addRow with schema
 				return v
-			}
-
-			if _, ok = v.pgCode.fixableTables[v.schema]; !ok {
-				v.pgCode.fixableTables[v.schema] = none
-			}
-			if _, ok = v.pgCode.addRowPositions[v.schema]; !ok {
-				// Capacity of 3 is decided based on the maximum number of calls of
-				// addRow function at any populate function to cover most of the cases.
-				v.pgCode.addRowPositions[v.schema] = make([]*addRowPosition, 0, 3)
 			}
 
 			// missingColumns capacity of 5 is based on the maximum number of new
 			// columns to cover most of the cases without growing the internal array
 			// in the missingColumns slice.
 			addRow := &addRowPosition{
-				schema:         v.schema,
+				schema:         v.funcLit,
 				argSize:        len(n.Args), // Number of arguments must match with amount of columns
 				insertPosition: int64(n.Rparen),
 				missingColumns: make([]string, 0, 5), // This will be filled when fixing vtable and used to comment nils
 			}
-			addRowList := v.pgCode.addRowPositions[v.schema]
-			v.pgCode.addRowPositions[v.schema] = append(addRowList, addRow)
+
+			if v.schema != "" {
+				v.pgCode.fixableTables[v.schema] = none
+				addRow.schema = v.schema
+				v.pgCode.addRowPositions.add(addRow)
+			} else {
+				v.pgCode.functionsWithAddRow.add(addRow)
+			}
+
+			return nil
 		case makeAllRelationsVirtualTableWithDescriptorIDIndexFunc:
 			// This special case when the table definition is in this function and
 			// passed the populate function as an argument.
 			schemaIndex := v.findSchemaIndex(n)
 			if schemaIndex < 0 || len(n.Args) <= schemaIndex {
-				// This is not probably that happen but just in case to avoid hitting an index out of bounds
-				return v
+				// Fail because we cannot retrieve the schema.
+				v.pgCode.t.Fatal(
+					"Could not find parameter for schema on function ",
+					makeAllRelationsVirtualTableWithDescriptorIDIndexFunc,
+				)
 			}
 			val, ok := n.Args[schemaIndex].(*ast.SelectorExpr)
 			if !ok || val == nil {
 				return v
 			}
+			// This will check for the populate function parameter and look for
+			// addRow parameter (func (...Datum) error) inside this populate function.
+			populateIndex := v.findPopulateFunc(n)
+			if populateIndex < 0 || len(n.Args) <= populateIndex {
+				// Fail because we cannot retrieve the populate function.
+				v.pgCode.t.Fatal("Could not find the parameter for populate on function ",
+					makeAllRelationsVirtualTableWithDescriptorIDIndexFunc,
+				)
+			}
+
+			switch populateParam := n.Args[populateIndex].(type) {
+			case *ast.FuncLit:
+				// On *ast.FuncLit the function implementation is in the call of
+				// makeAllRelationsVirtualTableWithDescriptorIDIndex so the addRow
+				// calls will be in this definition.
+				next := v.nextWithSchema(val.Sel.String())
+				next, i := next.findAddRowFuncName(populateParam.Type)
+				if i < 0 {
+					// This populate function does not have addRow function
+					v.pgCode.t.Fatal("populate function does not have a parameter with 'func(...tree.Datum) error' signature")
+				}
+				return next
+			case *ast.Ident:
+				mappedPopulateFunctions[populateParam.Name] = val.Sel.String()
+				return v
+			}
 
 			return v.nextWithSchema(val.Sel.String())
+		}
+	case *ast.FuncDecl:
+		next, i := v.findAddRowFuncName(n.Type)
+		if i >= 0 {
+			// We return next if there are addRow parameter on this function
+			next.schema = ""
+			next.funcLit = n.Name.String()
+			return next
 		}
 	}
 
@@ -1057,6 +1129,19 @@ func (m mappedRowPositions) reportNewColumns(sb *strings.Builder, constName, tab
 	}
 }
 
+// add appends a new *addRowPosition to the returning list resulting on getting
+// the value from addRow.schema as key.
+func (m mappedRowPositions) add(addRow *addRowPosition) {
+	if _, ok := m[addRow.schema]; !ok {
+		// Capacity of 3 is decided based on the maximum number of calls of
+		// addRow function at any populate function to cover most of the cases.
+		m[addRow.schema] = make([]*addRowPosition, 0, 3)
+	}
+
+	addRowList := m[addRow.schema]
+	m[addRow.schema] = append(addRowList, addRow)
+}
+
 // findSchemaIndex is a helper function to retrieve what is the parameter index for schemaDef at function
 // makeAllRelationsVirtualTableWithDescriptorIDIndex.
 func (v *pgCatalogCodeVisitor) findSchemaIndex(call *ast.CallExpr) int {
@@ -1080,16 +1165,50 @@ func (v *pgCatalogCodeVisitor) findSchemaIndex(call *ast.CallExpr) int {
 	return index
 }
 
+// findPopulateFunc will check in the parameters of
+// makeAllRelationsVirtualTableWithDescriptorIDIndex to find its populate func
+// parameter, to later determine if the populate function is being defined
+// in the makeAllRelations... call or if that parameter is the name of another
+// function, which later will be used to find "addRow" calls.
+// The difference is: If populate func is defined there, then that function
+// definition has the addRow calls (And we can match these addRow calls with
+// the schema as soon as we find it. If it is a function name (declared at
+// another place), addRow calls are matched to that function name (When parsing
+// the definition of that function) name, schema will be resolved after parsing
+// ends.
+func (v *pgCatalogCodeVisitor) findPopulateFunc(call *ast.CallExpr) int {
+	if v.pgCode.populateIndex != -1 {
+		return v.pgCode.populateIndex
+	}
+
+	fun, ok := call.Fun.(*ast.Ident)
+	if !ok {
+		return -1
+	}
+	decl, ok := fun.Obj.Decl.(*ast.FuncDecl)
+	if !ok {
+		return -1
+	}
+	_, index := v.findInFunctionParameters(decl.Type, "populateFromTable", "")
+	return index
+}
+
 // findAddRowFuncName will retrieve the function name used by populate function
 // with func(...tree.Datum) error signature, which is used to populate
 // virtualSchemaTable.
-func (v *pgCatalogCodeVisitor) findAddRowFuncName(funcLit *ast.FuncLit) int {
-	paramName, index := v.findInFunctionParameters(funcLit.Type, "", "func(...tree.Datum) error")
+func (v *pgCatalogCodeVisitor) findAddRowFuncName(
+	funcType *ast.FuncType,
+) (*pgCatalogCodeVisitor, int) {
+	paramName, index := v.findInFunctionParameters(funcType, "", "func(...tree.Datum) error")
+	var next *pgCatalogCodeVisitor
+
 	if index > -1 {
-		v.addRowFuncName = paramName
+		next = &pgCatalogCodeVisitor{}
+		*next = *v
+		next.addRowFuncName = paramName
 	}
 
-	return index
+	return next, index
 }
 
 // findInFunctionParameters search for name and type of the parameters used
@@ -1121,7 +1240,7 @@ func (v *pgCatalogCodeVisitor) findInFunctionParameters(
 			continue
 		}
 
-		if (name == "" || name == param.Names[0].String()) && (paramTypeString == paramTypeName) {
+		if (name == "" || name == param.Names[0].String()) && (paramTypeName == "" || paramTypeString == paramTypeName) {
 			return param.Names[0].String(), index
 		}
 	}
@@ -1230,11 +1349,48 @@ func TestPGCatalog(t *testing.T) {
 func TestPGMetadataCanFixCode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	// rewrite undefinedTables.
 	validateUndefinedTablesField(t)
 	validateTableDefsField(t)
 	validateVirtualSchemaTable(t)
 	validateFunctionNames(t)
+	validatePGCatalogCodeParser(t)
+}
+
+// validatePGCatalogCodeParser will test that pg_catalog.go can be fixed.
+func validatePGCatalogCodeParser(t *testing.T) {
+	t.Run("validatePGCatalogCodeParser", func(t *testing.T) {
+		pgCode := goParsePgCatalogGo(t)
+		constants := readAllVTableConstants(t)
+		for _, vTableConstant := range constants {
+			if _, ok := pgCode.fixableTables[vTableConstant]; !ok {
+				t.Errorf("virtual table with constant %s cannot be fixed because could not found populate function", vTableConstant)
+			}
+		}
+
+		if len(pgCode.addRowPositions) == 0 {
+			t.Errorf("pgCode.addRowPositions are not finding calls for addRow function")
+		}
+	})
+}
+
+func readAllVTableConstants(t *testing.T) []string {
+	reader, err := os.Open(getVTablePGCatalogFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dClose(reader)
+
+	scanner := bufio.NewScanner(reader)
+	var constants []string
+	for scanner.Scan() {
+		constDecl := constNameRE.FindStringSubmatch(scanner.Text())
+		if constDecl != nil {
+			constants = append(constants, constDecl[1])
+		}
+	}
+	return constants
 }
 
 // validateUndefinedTablesField checks the definition of virtualSchema objects
@@ -1304,3 +1460,24 @@ func assertProperty(t *testing.T, property string, rtype reflect.Type) {
 		}
 	})
 }
+
+func getCachedFileLookupFn(file string) func() string {
+	path := ""
+	return func() string {
+		if path == "" {
+			var err error
+			if bazel.BuiltWithBazel() {
+				path, err = bazel.Runfile("//pkg/sql/" + file)
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				path = file
+			}
+		}
+		return path
+	}
+}
+
+var getSQLPGCatalogFile = getCachedFileLookupFn(pgCatalogGo)
+var getVTablePGCatalogFile = getCachedFileLookupFn(filepath.Join(vtablePkg, pgCatalogGo))
