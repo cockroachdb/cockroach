@@ -24,19 +24,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ms(i int) time.Time {
+	ts, err := time.Parse(time.RFC3339, "2000-01-01T00:00:00Z")
+	if err != nil {
+		panic(err)
+	}
+	return ts.Add(time.Duration(i) * time.Millisecond)
+}
+
 func TestDecider(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	intn := rand.New(rand.NewSource(12)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 10.0 })
-
-	ms := func(i int) time.Time {
-		ts, err := time.Parse(time.RFC3339, "2000-01-01T00:00:00Z")
-		assert.NoError(t, err)
-		return ts.Add(time.Duration(i) * time.Millisecond)
-	}
+	Init(&d, intn, func() float64 { return 10.0 }, func() time.Duration { return 2 * time.Second })
 
 	op := func(s string) func() roachpb.Span {
 		return func() roachpb.Span { return roachpb.Span{Key: roachpb.Key(s)} }
@@ -48,27 +50,36 @@ func TestDecider(t *testing.T) {
 		assert.Equal(t, expQPS, qps)
 	}
 
+	assertMaxQPS := func(i int, expMaxQPS float64, expOK bool) {
+		t.Helper()
+		maxQPS, ok := d.MaxQPS(ms(i))
+		assert.Equal(t, expMaxQPS, maxQPS)
+		assert.Equal(t, expOK, ok)
+	}
+
 	assert.Equal(t, false, d.Record(ms(100), 1, nil))
 	assertQPS(100, 0)
+	assertMaxQPS(100, 0, false)
 
-	// The first operation was interpreted as having happened after an eternity
-	// of no activity, and rolled over the qps to mark the beginning of a new
-	// second. The next qps computation is expected for timestamps >= 1100.
 	assert.Equal(t, ms(100), d.mu.lastQPSRollover)
-	assert.EqualValues(t, 0, d.mu.count)
+	assert.EqualValues(t, 1, d.mu.count)
 
-	assert.Equal(t, false, d.Record(ms(400), 4, nil))
+	assert.Equal(t, false, d.Record(ms(400), 3, nil))
 	assertQPS(100, 0)
 	assertQPS(700, 0)
+	assertMaxQPS(400, 0, false)
 
 	assert.Equal(t, false, d.Record(ms(300), 3, nil))
 	assertQPS(100, 0)
+	assertMaxQPS(300, 0, false)
 
 	assert.Equal(t, false, d.Record(ms(900), 1, nil))
 	assertQPS(0, 0)
+	assertMaxQPS(900, 0, false)
 
 	assert.Equal(t, false, d.Record(ms(1099), 1, nil))
 	assertQPS(0, 0)
+	assertMaxQPS(1099, 0, false)
 
 	// Now 9 operations happened in the interval [100, 1099]. The next higher
 	// timestamp will decide whether to engage the split finder.
@@ -78,6 +89,7 @@ func TestDecider(t *testing.T) {
 	assert.Equal(t, false, d.Record(ms(1200), 1, nil))
 	assertQPS(0, float64(10)/float64(1.1))
 	assert.Equal(t, ms(1200), d.mu.lastQPSRollover)
+	assertMaxQPS(1099, 0, false)
 
 	var nilFinder *Finder
 
@@ -90,6 +102,7 @@ func TestDecider(t *testing.T) {
 	assert.Equal(t, false, d.Record(ms(2200), 1, op("a")))
 	assert.Equal(t, ms(2200), d.mu.lastQPSRollover)
 	assertQPS(0, float64(13))
+	assertMaxQPS(2200, 13, true)
 
 	assert.NotNil(t, d.mu.splitFinder)
 	assert.False(t, d.mu.splitFinder.Ready(ms(10)))
@@ -123,7 +136,8 @@ func TestDecider(t *testing.T) {
 	}
 	// But after minSplitSuggestionInterval of ticks, we get another one.
 	assert.True(t, d.Record(ms(tick), 11, op("a")))
-	assert.True(t, d.LastQPS(ms(tick)) > 1.0)
+	assertQPS(tick, float64(11))
+	assertMaxQPS(tick, 11, true)
 
 	// Split key suggestion vanishes once qps drops.
 	tick += 1000
@@ -170,9 +184,52 @@ func TestDecider(t *testing.T) {
 	// back up at zero.
 	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
 	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(ms(tick)))
-	d.Reset()
+	d.Reset(ms(tick))
 	assert.Nil(t, d.MaybeSplitKey(ms(tick)))
 	assert.Nil(t, d.mu.splitFinder)
+}
+
+func TestDecider_MaxQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	intn := rand.New(rand.NewSource(11)).Intn
+
+	var d Decider
+	Init(&d, intn, func() float64 { return 100.0 }, func() time.Duration { return 10 * time.Second })
+
+	assertMaxQPS := func(i int, expMaxQPS float64, expOK bool) {
+		t.Helper()
+		maxQPS, ok := d.MaxQPS(ms(i))
+		assert.Equal(t, expMaxQPS, maxQPS)
+		assert.Equal(t, expOK, ok)
+	}
+
+	assertMaxQPS(1000, 0, false)
+
+	// Record a large number of samples.
+	d.Record(ms(1500), 5, nil)
+	d.Record(ms(2000), 5, nil)
+	d.Record(ms(4500), 1, nil)
+	d.Record(ms(5000), 15, nil)
+	d.Record(ms(5500), 2, nil)
+	d.Record(ms(8000), 5, nil)
+	d.Record(ms(10000), 9, nil)
+
+	assertMaxQPS(10000, 0, false)
+	assertMaxQPS(11000, 17, true)
+
+	// Record more samples with a lower QPS.
+	d.Record(ms(12000), 1, nil)
+	d.Record(ms(13000), 4, nil)
+	d.Record(ms(15000), 2, nil)
+	d.Record(ms(19000), 3, nil)
+
+	assertMaxQPS(20000, 4.5, true)
+	assertMaxQPS(21000, 4, true)
+
+	// Add in a few QPS reading directly.
+	d.RecordMax(ms(24000), 6)
+
+	assertMaxQPS(25000, 6, true)
 }
 
 func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
@@ -180,7 +237,7 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 })
+	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second })
 
 	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
@@ -213,7 +270,7 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 })
+	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second })
 
 	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
@@ -243,4 +300,95 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	}
 
 	require.Equal(t, c1().Key, k)
+}
+
+func TestMaxQPSTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tick := 100
+	minRetention := time.Second
+
+	var mt maxQPSTracker
+	mt.reset(ms(tick), minRetention)
+	require.Equal(t, 200*time.Millisecond, mt.windowWidth())
+
+	// Check the maxQPS returns false before any samples are recorded.
+	qps, ok := mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 0.0, qps)
+	require.Equal(t, false, ok)
+	require.Equal(t, [6]float64{0, 0, 0, 0, 0, 0}, mt.windows)
+	require.Equal(t, 0, mt.curIdx)
+
+	// Add some samples, but not for the full minRetention period. Each window
+	// should contain 4 samples.
+	for i := 0; i < 15; i++ {
+		tick += 50
+		mt.record(ms(tick), minRetention, float64(10+i))
+	}
+
+	// maxQPS should still return false, but some windows should have samples.
+	qps, ok = mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 0.0, qps)
+	require.Equal(t, false, ok)
+	require.Equal(t, [6]float64{12, 16, 20, 24, 0, 0}, mt.windows)
+	require.Equal(t, 3, mt.curIdx)
+
+	// Add some more samples.
+	for i := 0; i < 15; i++ {
+		tick += 50
+		mt.record(ms(tick), minRetention, float64(24+i))
+	}
+
+	// maxQPS should now return the maximum qps observed during the measurement
+	// period.
+	qps, ok = mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 38.0, qps)
+	require.Equal(t, true, ok)
+	require.Equal(t, [6]float64{35, 38, 20, 24, 27, 31}, mt.windows)
+	require.Equal(t, 1, mt.curIdx)
+
+	// Add another sample, this time with a small gap between it and the previous
+	// sample, so that 2 windows are skipped.
+	tick += 500
+	mt.record(ms(tick), minRetention, float64(17))
+
+	qps, ok = mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 38.0, qps)
+	require.Equal(t, true, ok)
+	require.Equal(t, [6]float64{35, 38, 0, 0, 17, 31}, mt.windows)
+	require.Equal(t, 4, mt.curIdx)
+
+	// A query far in the future should return 0, because this indicates no
+	// recent activity.
+	tick += 1900
+	qps, ok = mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 0.0, qps)
+	require.Equal(t, true, ok)
+	require.Equal(t, [6]float64{0, 0, 0, 0, 0, 0}, mt.windows)
+	require.Equal(t, 0, mt.curIdx)
+
+	// Add some new samples, then change the retention period, Should reset
+	// tracker.
+	for i := 0; i < 15; i++ {
+		tick += 50
+		mt.record(ms(tick), minRetention, float64(33+i))
+	}
+
+	qps, ok = mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 47.0, qps)
+	require.Equal(t, true, ok)
+	require.Equal(t, [6]float64{35, 39, 43, 47, 0, 0}, mt.windows)
+	require.Equal(t, 3, mt.curIdx)
+
+	minRetention = 2 * time.Second
+	for i := 0; i < 15; i++ {
+		tick += 50
+		mt.record(ms(tick), minRetention, float64(13+i))
+	}
+
+	qps, ok = mt.maxQPS(ms(tick), minRetention)
+	require.Equal(t, 0.0, qps)
+	require.Equal(t, false, ok)
+	require.Equal(t, [6]float64{20, 27, 0, 0, 0, 0}, mt.windows)
+	require.Equal(t, 1, mt.curIdx)
 }
