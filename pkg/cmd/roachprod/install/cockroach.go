@@ -393,7 +393,6 @@ set -euo pipefail
 
 if [[ "${1}" == "run" ]]; then
   local="{{if .Local}}true{{end}}"
-  ulimit -c unlimited
   mkdir -p {{.LogDir}}
   echo "cockroach start: $(date), logging to {{.LogDir}}" | tee -a {{.LogDir}}/{roachprod,cockroach.std{out,err}}.log
   {{.KeyCmd}}
@@ -450,8 +449,10 @@ fi
 # notification doesn't come from the main PID (which is bash).
 sudo systemd-run --unit cockroach \
   --same-dir --uid $(id -u) --gid $(id -g) \
-	--service-type=notify -p NotifyAccess=all \
-	-p MemoryMax={{.MemoryMax}} \
+  --service-type=notify -p NotifyAccess=all \
+  -p MemoryMax={{.MemoryMax}} \
+  -p LimitCORE=infinity \
+  -p LimitNOFILE=65536 \
 	bash $0 run
 EOF
 `)
