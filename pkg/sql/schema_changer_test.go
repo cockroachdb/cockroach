@@ -6243,6 +6243,16 @@ ALTER TABLE t.public.test DROP COLUMN v;
 	require.Equal(t, [][]string{
 		{"1", "2"},
 	}, rows)
+
+	// Validate the job cancellation metrics.
+	rows = runner.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
+	if len(rows) != 1 ||
+		len(rows[0]) != 2 ||
+		rows[0][0] != "job.schema_change.canceled" {
+		require.Failf(t, "Unexpected result set", "Rows: %s", rows)
+	} else if val, err := strconv.ParseInt(rows[0][1], 10, 32); err != nil || val < 0 {
+		require.Failf(t, "Invalid integer or value", "Error: %s Val: %d", err, val)
+	}
 }
 
 // TestRetriableErrorDuringRollback tests that a retriable error while rolling
@@ -6731,6 +6741,16 @@ SELECT job_id FROM crdb_internal.jobs
 	withJobsToFail(func(m map[jobspb.JobID]struct{}) {
 		require.Len(t, m, 0)
 	})
+
+	// Validate the job cancellation metrics.
+	rows := tdb.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
+	if len(rows) != 1 ||
+		len(rows[0]) != 2 ||
+		rows[0][0] != "job.schema_change.canceled" {
+		require.Failf(t, "Unexpected result set", "Rows: %s", rows)
+	} else if val, err := strconv.ParseInt(rows[0][1], 10, 32); err != nil || val < 2 {
+		require.Failf(t, "Invalid integer or value", "Error: %s Val: %d", err, val)
+	}
 }
 
 // TestCancelMultipleQueued tests that canceling schema changes when there are
@@ -6815,6 +6835,16 @@ SELECT job_id FROM crdb_internal.jobs
 		if shouldCancel[i] {
 			tdb.Exec(t, "CANCEL JOB $1", id)
 		}
+	}
+
+	// Validate the job cancellation metrics.
+	rows := tdb.QueryStr(t, "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'job.%.canceled'")
+	if len(rows) != 1 ||
+		len(rows[0]) != 2 ||
+		rows[0][0] != "job.schema_change.canceled" {
+		require.Failf(t, "Unexpected result set", "Rows: %s", rows)
+	} else if val, err := strconv.ParseInt(rows[0][1], 10, 32); err != nil || val < 2 {
+		require.Failf(t, "Invalid integer or value", "Error: %s Val: %d", err, val)
 	}
 }
 
