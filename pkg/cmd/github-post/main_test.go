@@ -48,7 +48,7 @@ func TestListFailures(t *testing.T) {
 				message:    "this is just a testing issue",
 				author:     "nvanbenschoten@gmail.com",
 				mention:    []string{"@cockroachdb/server"},
-				hasProject: false,
+				hasProject: true,
 			}},
 			formatter: defaultFormatter,
 		},
