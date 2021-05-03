@@ -321,10 +321,16 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
 		{code: pgcode.UndefinedObject, condition: typ == nil},
 		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		// UNIQUE is only supported for indexable types.
 		{
 			code:      pgcode.FeatureNotSupported,
@@ -379,10 +385,16 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
 	codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
+		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
 	}.add(og.expectedExecErrors)
 
 	if !canApplyConstraint {
@@ -780,6 +792,11 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
@@ -797,6 +814,7 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.Uncategorized, condition: virtualComputedStored},
+			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		}.add(og.expectedExecErrors)
 	}
 
@@ -1210,12 +1228,17 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
 
 	codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
@@ -1398,6 +1421,14 @@ func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
 	}
 	if !indexExists {
 		og.expectedExecErrors.add(pgcode.UndefinedObject)
+	}
+
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if hasAlterPKSchemaChange {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
 	return fmt.Sprintf(`DROP INDEX %s@"%s" CASCADE`, tableName, indexName), nil
