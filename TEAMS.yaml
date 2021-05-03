@@ -4,7 +4,11 @@
 
 # Finding triage_column_id:
 #   TriageColumnID is the column id of the project column the team uses to
-#   triage issues. This is tricky to get, but is doable by installing
+#   triage issues. To get it, open the project, click the "..." on top of
+#   the project column, and click "Copy column link". That link contains
+#   the ID as the `#column-<ID>` fragment.
+#
+# You can also use:
 #   https://github.com/cockroachlabs/github-find-triage-column-id using
 #   `go install github.com/cockroachlabs/github-find-triage-column-id@latest`.
 #
