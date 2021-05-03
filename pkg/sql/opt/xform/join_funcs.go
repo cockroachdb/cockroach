@@ -908,11 +908,14 @@ func (c *CustomFuncs) mapInvertedJoin(
 // findJoinFilterConstants tries to find a filter that is exactly equivalent to
 // constraining the given column to a constant value or a set of constant
 // values. If successful, the constant values and the index of the constraining
-// FiltersItem are returned. Note that the returned constant values do not
-// contain NULL.
+// FiltersItem are returned. If multiple filters match, the one that minimizes
+// the number of returned values is chosen. Note that the returned constant
+// values do not contain NULL.
 func (c *CustomFuncs) findJoinFilterConstants(
 	filters memo.FiltersExpr, col opt.ColumnID,
 ) (values tree.Datums, filterIdx int, ok bool) {
+	var bestValues tree.Datums
+	var bestFilterIdx int
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
@@ -927,12 +930,16 @@ func (c *CustomFuncs) findJoinFilterConstants(
 					break
 				}
 			}
-			if !hasNull {
-				return constVals, filterIdx, true
+			if !hasNull && (bestValues == nil || len(bestValues) > len(constVals)) {
+				bestValues = constVals
+				bestFilterIdx = filterIdx
 			}
 		}
 	}
-	return nil, -1, false
+	if bestValues == nil {
+		return nil, -1, false
+	}
+	return bestValues, bestFilterIdx, true
 }
 
 // constructJoinWithConstants constructs a cross join that joins every row in
