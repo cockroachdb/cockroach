@@ -87,10 +87,14 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
+// TODO(aayush): Maybe turn this into an interface with one implementation
+// that cares about range count and another that cares about QPS, so its
+// impossible to misuse.
 type scorerOptions struct {
 	deterministic           bool
 	rangeRebalanceThreshold float64
-	qpsRebalanceThreshold   float64 // only considered if non-zero
+	// Only used if `rangeRebalanceThreshold` is not set.
+	qpsRebalanceThreshold float64
 }
 
 // candidate store for allocation.
@@ -426,26 +430,11 @@ func rankedCandidateListForAllocation(
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := balanceScore(candidateStores, s.Capacity, options)
-		var convergesScore int
-		if options.qpsRebalanceThreshold > 0 {
-			if s.Capacity.QueriesPerSecond < underfullQPSThreshold(
-				options, candidateStores.candidateQueriesPerSecond.mean) {
-				convergesScore = 1
-			} else if s.Capacity.QueriesPerSecond < candidateStores.candidateQueriesPerSecond.mean {
-				convergesScore = 0
-			} else if s.Capacity.QueriesPerSecond < overfullQPSThreshold(
-				options, candidateStores.candidateQueriesPerSecond.mean) {
-				convergesScore = -1
-			} else {
-				convergesScore = -2
-			}
-		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
-			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
@@ -757,11 +746,11 @@ func rankedCandidateListForRebalancing(
 				existingCandidates = append(existingCandidates, existing)
 				continue
 			}
-			balanceScore := balanceScore(comparable.sl, existing.store.Capacity, options)
 			// Similarly to in rankedCandidateListForRemoval, any replica whose
 			// removal would not converge the range stats to their means is given a
 			// constraint score boost of 1 to make it less attractive for removal.
 			convergesScore := rebalanceFromConvergesScore(comparable.sl, existing.store.Capacity, options)
+			balanceScore := balanceScore(comparable.sl, existing.store.Capacity, options)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
 			existing.rangeCount = int(existing.store.Capacity.RangeCount)
@@ -1211,11 +1200,9 @@ func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
 	return false
 }
 
-// constraintsCheck returns true iff the provided store would be a valid in a
+// isStoreValid returns true iff the provided store would be a valid in a
 // range with the provided constraints.
-func constraintsCheck(
-	store roachpb.StoreDescriptor, constraints []zonepb.ConstraintsConjunction,
-) bool {
+func isStoreValid(store roachpb.StoreDescriptor, constraints []zonepb.ConstraintsConjunction) bool {
 	if len(constraints) == 0 {
 		return true
 	}
@@ -1279,7 +1266,7 @@ func diversityAllocateScore(
 }
 
 // diversityRemovalScore returns a value between 0 and 1 based on how desirable
-// it would be to remove a node's replica of a range.  A higher score indicates
+// it would be to remove a store's replica of a range.  A higher score indicates
 // that the node is a better fit (i.e. keeping it around is good for diversity).
 func diversityRemovalScore(
 	storeID roachpb.StoreID, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
@@ -1287,8 +1274,9 @@ func diversityRemovalScore(
 	var sumScore float64
 	var numSamples int
 	locality := existingStoreLocalities[storeID]
-	// We don't need to calculate the overall diversityScore for the range, because the original overall diversityScore
-	// of this range is always the same.
+	// We don't need to calculate the overall diversityScore for the range,
+	// because the original overall diversityScore of this range is always the
+	// same.
 	for otherStoreID, otherLocality := range existingStoreLocalities {
 		if otherStoreID == storeID {
 			continue
@@ -1304,11 +1292,10 @@ func diversityRemovalScore(
 }
 
 // diversityRebalanceScore returns a value between 0 and 1 based on how
-// desirable it would be to rebalance away from an existing store to the target
-// store. Because the store to be removed isn't specified, this assumes that
+// desirable it would be to rebalance to `store` from any of the existing
+// stores. Because the store to be removed isn't specified, this assumes that
 // the worst-fitting store from a diversity perspective will be removed. A
-// higher score indicates that the provided store is a better fit for the
-// range.
+// higher score indicates that the provided store is a better fit for the range.
 func diversityRebalanceScore(
 	store roachpb.StoreDescriptor, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
@@ -1336,20 +1323,20 @@ func diversityRebalanceScore(
 func diversityRebalanceFromScore(
 	store roachpb.StoreDescriptor,
 	fromStoreID roachpb.StoreID,
-	existingNodeLocalities map[roachpb.StoreID]roachpb.Locality,
+	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
 	// Compute the pairwise diversity score of all replicas that will exist
 	// after adding store and removing fromNodeID.
 	var sumScore float64
 	var numSamples int
-	for storeID, locality := range existingNodeLocalities {
+	for storeID, locality := range existingStoreLocalities {
 		if storeID == fromStoreID {
 			continue
 		}
 		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
-		for otherStoreID, otherLocality := range existingNodeLocalities {
+		for otherStoreID, otherLocality := range existingStoreLocalities {
 			// Only compare pairs of replicas where otherNodeID > nodeID to avoid
 			// computing the diversity score between each pair of localities twice.
 			if otherStoreID <= storeID || otherStoreID == fromStoreID {

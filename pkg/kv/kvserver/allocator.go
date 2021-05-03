@@ -1069,7 +1069,7 @@ func (a Allocator) rebalanceTarget(
 			return zero, zero, "", false
 		}
 
-		// Add a fake new replica to our copy of the range descriptor so that we can
+		// Add a fake new replica to our copy of the replica descriptor so that we can
 		// simulate the removal logic. If we decide not to go with this target, note
 		// that this needs to be removed from desc before we try any other target.
 		newReplica := roachpb.ReplicaDescriptor{
@@ -1258,8 +1258,8 @@ func (a *Allocator) TransferLeaseTarget(
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
-	sl = sl.filter(zone.Constraints)
-	sl = sl.filter(zone.VoterConstraints)
+	sl = sl.excludeInvalid(zone.Constraints)
+	sl = sl.excludeInvalid(zone.VoterConstraints)
 	// The only thing we use the storeList for is for the lease mean across the
 	// eligible stores, make that explicit here.
 	candidateLeasesMean := sl.candidateLeases.mean
@@ -1403,8 +1403,8 @@ func (a *Allocator) ShouldTransferLease(
 	}
 
 	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
-	sl = sl.filter(zone.Constraints)
-	sl = sl.filter(zone.VoterConstraints)
+	sl = sl.excludeInvalid(zone.Constraints)
+	sl = sl.excludeInvalid(zone.VoterConstraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	// Only consider live, non-draining replicas.
