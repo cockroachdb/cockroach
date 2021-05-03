@@ -893,8 +893,8 @@ CREATE TABLE mnop (
 )
 
 statement ok
-INSERT INTO mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
-  generate_series(1, 2e4) AS i(i)
+INSERT INTO mnop (m, n) SELECT i, (1e9 + i/100.0)::float FROM
+  generate_series(1, 100) AS i(i)
 
 statement ok
 UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
