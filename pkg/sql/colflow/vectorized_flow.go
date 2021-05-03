@@ -565,16 +565,29 @@ func (s *vectorizedFlowCreator) Release() {
 	for _, r := range s.releasables {
 		r.Release()
 	}
+	// Deeply reset slices that might point to the objects of non-trivial size
+	// so that the old references don't interfere with the objects being
+	// garbage-collected.
+	for i := range s.leaves {
+		s.leaves[i] = nil
+	}
+	for i := range s.releasables {
+		s.releasables[i] = nil
+	}
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp: s.streamIDToInputOp,
 		streamIDToSpecIdx: s.streamIDToSpecIdx,
 		exprHelper:        s.exprHelper,
-		procIdxQueue:      s.procIdxQueue[:0],
-		leaves:            s.leaves[:0],
-		monitors:          s.monitors[:0],
-		accounts:          s.accounts[:0],
-		releasables:       s.releasables[:0],
-		inputsScratch:     s.inputsScratch[:0],
+		// procIdxQueue is a slice of ints, so it's ok to just slice up to 0 to
+		// prime it for reuse.
+		procIdxQueue: s.procIdxQueue[:0],
+		leaves:       s.leaves[:0],
+		// There is no need to deeply reset the memory monitoring infra slices
+		// because these objects are very tiny in the grand scheme of things.
+		monitors:      s.monitors[:0],
+		accounts:      s.accounts[:0],
+		releasables:   s.releasables[:0],
+		inputsScratch: s.inputsScratch[:0],
 	}
 	vectorizedFlowCreatorPool.Put(s)
 }
@@ -1329,6 +1342,13 @@ func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 }
 
 func (r *vectorizedFlowCreatorHelper) Release() {
+	// Note that processors here can only be of 0 or 1 length, but always of
+	// 1 capacity (only the root materializer can be appended to this
+	// slice). Unset the slot so that we don't keep the reference to the old
+	// materializer.
+	if len(r.processors) == 1 {
+		r.processors[0] = nil
+	}
 	*r = vectorizedFlowCreatorHelper{
 		processors: r.processors[:0],
 	}

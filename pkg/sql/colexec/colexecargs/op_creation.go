@@ -111,6 +111,21 @@ func (r *NewColOperatorResult) Release() {
 	for _, releasable := range r.Releasables {
 		releasable.Release()
 	}
+	// Explicitly unset each slot in the slices of objects of non-trivial size
+	// in order to lose references to the old objects. If we don't do it, we
+	// might have a memory leak in case the slices aren't appended to for a
+	// while (because we're slicing them up to 0 below, the references to the
+	// old objects would be kept "alive" until the spot in the slice is
+	// overwritten by a new object).
+	for i := range r.MetadataSources {
+		r.MetadataSources[i] = nil
+	}
+	for i := range r.ToClose {
+		r.ToClose[i] = nil
+	}
+	for i := range r.Releasables {
+		r.Releasables[i] = nil
+	}
 	*r = NewColOperatorResult{
 		ColumnTypes:     r.ColumnTypes[:0],
 		MetadataSources: r.MetadataSources[:0],
