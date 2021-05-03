@@ -79,8 +79,16 @@ func Run(ctx context.Context, cfg Config) error {
 		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 		pff = rangefeedFactory(distSender.RangeFeed)
 	}
-	bf := func() EventBuffer {
-		return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
+
+	bufferFactory := func() func() EventBuffer {
+		if changefeedbase.EnableChangefeedPushback.Get(&cfg.Settings.SV) {
+			return func() EventBuffer {
+				return MakeChanBuffer()
+			}
+		}
+		return func() EventBuffer {
+			return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
+		}
 	}
 
 	f := newKVFeed(
@@ -90,7 +98,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf)
+		sc, pff, bufferFactory())
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)

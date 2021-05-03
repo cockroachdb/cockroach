@@ -1721,6 +1721,9 @@ func TestChangefeedMonitoring(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Too slow; too flaky.
+	skip.WithIssue(t, 64583)
+
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		beforeEmitRowCh := make(chan struct{}, 2)
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
@@ -3081,6 +3084,12 @@ func TestChangefeedTelemetry(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func skipTestWhenPushbackEnabled(t *testing.T, s serverutils.TestServerInterface) {
+	if changefeedbase.EnableChangefeedPushback.Get(&s.ClusterSettings().SV) {
+		skip.IgnoreLint(t, "test disabled when using pushback")
+	}
+}
+
 func TestChangefeedMemBufferCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3089,6 +3098,7 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 	// and verifies that memory limits are honored.
 	memLimitTest := func(numFeeds int) cdcTestFn {
 		return func(t *testing.T, db *gosql.DB, ff cdctest.TestFeedFactory) {
+			skipTestWhenPushbackEnabled(t, ff.Server())
 			feeds := make([]cdctest.TestFeed, numFeeds)
 			knobs := ff.Server().(*server.TestServer).Cfg.TestingKnobs.
 				DistSQL.(*execinfra.TestingKnobs).

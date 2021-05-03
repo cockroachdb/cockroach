@@ -53,3 +53,10 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 	0,
 	settings.NonNegativeDuration,
 )
+
+// EnableChangefeedPushback enables pushback mechanism in changefeeds.
+var EnableChangefeedPushback = settings.RegisterBoolSetting(
+	"changefeed.enable_pushback",
+	"enables pushback mechanism in changefeed",
+	false,
+)
