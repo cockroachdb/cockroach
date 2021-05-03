@@ -77,10 +77,11 @@ func assertExportedKVs(
 	useTBI bool,
 ) {
 	const big = 1 << 30
-	data, _, _, err := e.ExportMVCCToSst(startKey, endKey, startTime, endTime, revisions, big, big,
-		useTBI)
+	sstFile := &MemFile{}
+	_, _, err := e.ExportMVCCToSst(startKey, endKey, startTime, endTime, revisions, big, big,
+		useTBI, sstFile)
 	require.NoError(t, err)
-
+	data := sstFile.Data()
 	if data == nil {
 		require.Nil(t, expected)
 		return
