@@ -373,29 +373,82 @@ func TestAdminRelocateRangeRandom(t *testing.T) {
 // Regression test for https://github.com/cockroachdb/cockroach/issues/64325
 // which makes sure an in-flight read operation during replica removal won't
 // return empty results.
-func TestReplicaRemovalDuringRequestEvaluation(t *testing.T) {
+func TestReplicaRemovalDuringGet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	tc, key, evalDuringReplicaRemoval := setupReplicaRemovalTest(t, ctx)
+	defer tc.Stopper().Stop(ctx)
+
+	// Perform write.
+	pArgs := putArgs(key, []byte("foo"))
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	require.Nil(t, pErr)
+
+	// Perform delayed read during replica removal.
+	resp, pErr := evalDuringReplicaRemoval(ctx, getArgs(key))
+	require.Nil(t, pErr)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+	val, err := resp.(*roachpb.GetResponse).Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), val)
+}
+
+// Regression test for https://github.com/cockroachdb/cockroach/issues/46329
+// which makes sure an in-flight conditional put operation during replica
+// removal won't spuriously error due to an unexpectedly missing value.
+func TestReplicaRemovalDuringCPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, key, evalDuringReplicaRemoval := setupReplicaRemovalTest(t, ctx)
+	defer tc.Stopper().Stop(ctx)
+
+	// Perform write.
+	pArgs := putArgs(key, []byte("foo"))
+	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
+	require.Nil(t, pErr)
+
+	// Perform delayed conditional put during replica removal. This will cause
+	// an ambiguous result error, as outstanding proposals in the leaseholder
+	// replica's proposal queue will be aborted when the replica is removed.
+	// If the replica was removed from under us, it would instead return a
+	// ConditionFailedError since it finds nil in place of "foo".
+	req := cPutArgs(key, []byte("bar"), []byte("foo"))
+	_, pErr = evalDuringReplicaRemoval(ctx, req)
+	require.NotNil(t, pErr)
+	require.IsType(t, &roachpb.AmbiguousResultError{}, pErr.GetDetail())
+}
+
+// setupReplicaRemovalTest sets up a test cluster that can be used to test
+// request evaluation during replica removal. It returns a running test
+// cluster, the first key of a blank scratch range on the replica to be
+// removed, and a function that can execute a delayed request just as the
+// replica is being removed.
+func setupReplicaRemovalTest(
+	t *testing.T, ctx context.Context,
+) (
+	*testcluster.TestCluster,
+	roachpb.Key,
+	func(context.Context, roachpb.Request) (roachpb.Response, *roachpb.Error),
+) {
+	t.Helper()
+
 	type magicKey struct{}
 
-	// delayReadC is used to synchronize the in-flight read request with the main
-	// test goroutine. It is read from twice:
-	//
-	// 1. The first read allows the test to block until the request eval filter
-	//    is called, i.e. when the read request is ready.
-	// 2. The second read allows the test to close the channel to unblock
-	//    the eval filter, causing the read request to be evaluated.
-	delayReadC := make(chan struct{})
+	requestReadyC := make(chan struct{}) // signals main thread that request is teed up
+	requestEvalC := make(chan struct{})  // signals cluster to evaluate the request
 	evalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
 		if args.Ctx.Value(magicKey{}) != nil {
-			<-delayReadC
-			<-delayReadC
+			requestReadyC <- struct{}{}
+			<-requestEvalC
 		}
 		return nil
 	}
 
-	ctx := context.Background()
 	manual := hlc.NewHybridManualClock()
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
@@ -415,62 +468,57 @@ func TestReplicaRemovalDuringRequestEvaluation(t *testing.T) {
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 2, args)
-	defer tc.Stopper().Stop(ctx)
 
 	// Create range and upreplicate.
 	key := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
 
-	// Perform write.
-	pArgs := putArgs(key, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), pArgs)
-	require.Nil(t, pErr)
+	// Return a function that can be used to evaluate a delayed request
+	// during replica removal.
+	evalDuringReplicaRemoval := func(ctx context.Context, req roachpb.Request) (roachpb.Response, *roachpb.Error) {
+		// Submit request and wait for it to block.
+		type result struct {
+			resp roachpb.Response
+			err  *roachpb.Error
+		}
+		resultC := make(chan result)
+		err := tc.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
+			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
+			resp, pErr := kv.SendWrapped(reqCtx, tc.Servers[0].DistSender(), req)
+			resultC <- result{resp, pErr}
+		})
+		require.NoError(t, err)
+		<-requestReadyC
 
-	// Perform read on write and wait for read to block.
-	type reply struct {
-		resp roachpb.Response
-		err  *roachpb.Error
+		// Transfer leaseholder to other store.
+		rangeDesc, err := tc.LookupRange(key)
+		require.NoError(t, err)
+		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rangeDesc.RangeID)
+		require.NoError(t, err)
+		err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1), manual)
+		require.NoError(t, err)
+
+		// Remove first store from raft group.
+		tc.RemoveVotersOrFatal(t, key, tc.Target(0))
+
+		// Wait for replica removal. This is a bit iffy. We want to make sure
+		// that, in the buggy case, we will typically fail (i.e. the request
+		// returns incorrect results because the replica was removed). However,
+		// in the non-buggy case the in-flight request will be holding
+		// readOnlyCmdMu until evaluated, blocking the replica removal, so
+		// waiting for replica removal would deadlock. We therefore take the
+		// easy way out by starting an async replica GC and sleeping for a bit.
+		err = tc.Stopper().RunAsyncTask(ctx, "replicaGC", func(ctx context.Context) {
+			assert.NoError(t, tc.GetFirstStoreFromServer(t, 0).ManualReplicaGC(repl))
+		})
+		require.NoError(t, err)
+		time.Sleep(500 * time.Millisecond)
+
+		// Allow request to resume, and return the result.
+		close(requestEvalC)
+		r := <-resultC
+		return r.resp, r.err
 	}
-	readResC := make(chan reply)
-	err := tc.Stopper().RunAsyncTask(ctx, "get", func(ctx context.Context) {
-		readCtx := context.WithValue(ctx, magicKey{}, struct{}{})
-		gArgs := getArgs(key)
-		resp, pErr := kv.SendWrapped(readCtx, tc.Servers[0].DistSender(), gArgs)
-		readResC <- reply{resp, pErr}
-	})
-	require.NoError(t, err)
-	delayReadC <- struct{}{}
 
-	// Transfer leaseholder to other store.
-	rangeDesc, err := tc.LookupRange(key)
-	require.NoError(t, err)
-	repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rangeDesc.RangeID)
-	require.NoError(t, err)
-	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1), manual)
-	require.NoError(t, err)
-
-	// Remove first store from raft group.
-	tc.RemoveVotersOrFatal(t, key, tc.Target(0))
-
-	// This is a bit iffy. We want to make sure that, in the buggy case, we
-	// will typically fail (i.e. the read returns empty because the replica was
-	// removed). However, in the non-buggy case the in-flight read request will
-	// be holding readOnlyCmdMu until evaluated, blocking the replica removal,
-	// so waiting for replica removal would deadlock. We therefore take the
-	// easy way out by starting an async replica GC and sleeping for a bit.
-	err = tc.Stopper().RunAsyncTask(ctx, "replicaGC", func(ctx context.Context) {
-		assert.NoError(t, tc.GetFirstStoreFromServer(t, 0).ManualReplicaGC(repl))
-	})
-	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
-
-	// Allow read to resume. Should return "foo".
-	close(delayReadC)
-	r := <-readResC
-	require.Nil(t, r.err)
-	require.NotNil(t, r.resp)
-	require.NotNil(t, r.resp.(*roachpb.GetResponse).Value)
-	val, err := r.resp.(*roachpb.GetResponse).Value.GetBytes()
-	require.NoError(t, err)
-	require.Equal(t, []byte("foo"), val)
+	return tc, key, evalDuringReplicaRemoval
 }
