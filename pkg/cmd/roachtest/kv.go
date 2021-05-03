@@ -30,10 +30,20 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func synthesizeGCEZones(regions []string) string {
+	var gceZones []string
+	for _, region := range regions {
+		gceZones = append(gceZones, region+"-b")
+	}
+	return strings.Join(gceZones, ",")
+}
+
 func registerKV(r *testRegistry) {
 	type kvOptions struct {
 		nodes       int
 		cpus        int
+		regions     []string
+		survival    survivalGoal
 		readPercent int
 		batchSize   int
 		blockSize   int
@@ -58,6 +68,12 @@ func registerKV(r *testRegistry) {
 	}
 	runKV := func(ctx context.Context, t *test, c *cluster, opts kvOptions) {
 		nodes := c.spec.NodeCount - 1
+		loadGenTargets := nodes
+		if numRegions := len(opts.regions); numRegions > 0 {
+			// If we're running under a multi-region database, only point the workload
+			// generator to the nodes inside the primary region.
+			loadGenTargets = nodes / numRegions
+		}
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, t, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
@@ -90,9 +106,20 @@ func registerKV(r *testRegistry) {
 				splits = "" // no splits
 				sequential = " --sequential"
 			}
+
+			var regions string
+			if opts.regions != nil {
+				regions = fmt.Sprintf(" --regions=%s", strings.Join(opts.regions, ","))
+			}
+
+			var survival string
+			if opts.survival != "" {
+				survival = fmt.Sprintf(" --survival=%s", opts.survival)
+			}
+
 			cmd := fmt.Sprintf("./workload run kv --init"+
-				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+
-				" {pgurl:1-%d}", nodes)
+				histograms+concurrency+splits+duration+readPercent+batchSize+blockSize+sequential+regions+survival+
+				" {pgurl:1-%d}", loadGenTargets)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
@@ -143,6 +170,60 @@ func registerKV(r *testRegistry) {
 		{nodes: 3, cpus: 32, readPercent: 0, sequential: true},
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 
+		// Configs running with 3 regions under multi-region databases with medium
+		// sized nodes.
+		{
+			nodes:       9,
+			cpus:        8,
+			regions:     []string{"us-east1", "us-west1", "europe-west1"},
+			survival:    "zone",
+			readPercent: 0,
+			blockSize:   1 << 12, /* 4 KB */
+		},
+		{
+			nodes:       9,
+			cpus:        8,
+			regions:     []string{"us-east1", "us-west1", "europe-west1"},
+			survival:    "region",
+			readPercent: 0,
+			blockSize:   1 << 12, /* 4 KB */
+		},
+		{
+			nodes:       9,
+			cpus:        8,
+			regions:     []string{"us-east1", "us-west1", "europe-west1"},
+			survival:    "zone",
+			readPercent: 0,
+			blockSize:   1 << 16, /* 64 KB */
+		},
+		{
+			nodes:       9,
+			cpus:        8,
+			regions:     []string{"us-east1", "us-west1", "europe-west1"},
+			survival:    "region",
+			readPercent: 0,
+			blockSize:   1 << 16, /* 64 KB */
+		},
+
+		// Configs running with 3 regions under multi-region databases with large
+		// nodes.
+		{
+			nodes:       9,
+			cpus:        32,
+			regions:     []string{"us-east1", "us-west1", "europe-west1"},
+			survival:    "zone",
+			readPercent: 0,
+			blockSize:   1 << 12, /* 4 KB */
+		},
+		{
+			nodes:       9,
+			cpus:        32,
+			regions:     []string{"us-east1", "us-west1", "europe-west1"},
+			survival:    "region",
+			readPercent: 0,
+			blockSize:   1 << 12, /* 4 KB */
+		},
+
 		// Weekly larger scale configurations.
 		{nodes: 32, cpus: 8, readPercent: 0, tags: []string{"weekly"}, duration: time.Hour},
 		{nodes: 32, cpus: 8, readPercent: 95, tags: []string{"weekly"}, duration: time.Hour},
@@ -158,6 +239,12 @@ func registerKV(r *testRegistry) {
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
 		if opts.cpus != 8 { // support legacy test name which didn't include cpu
 			nameParts = append(nameParts, fmt.Sprintf("cpu=%d", opts.cpus))
+		}
+		if opts.regions != nil { // support legacy test name which didn't include regions
+			nameParts = append(nameParts, fmt.Sprintf("regions=%s", strings.Join(opts.regions, ",")))
+		}
+		if opts.survival != "" { // support legacy test name which didn't include survival
+			nameParts = append(nameParts, fmt.Sprintf("survival=%s", opts.survival))
 		}
 		if opts.batchSize != 0 { // support legacy test name which didn't include batch size
 			nameParts = append(nameParts, fmt.Sprintf("batch=%d", opts.batchSize))
@@ -177,11 +264,20 @@ func registerKV(r *testRegistry) {
 			minVersion = "v2.1.0"
 		}
 
+		var cs clusterSpec
+		if opts.regions != nil {
+			cs = makeClusterSpec(
+				opts.nodes+1, cpu(opts.cpus), geo(), zones(synthesizeGCEZones(opts.regions)),
+			)
+		} else {
+			cs = makeClusterSpec(opts.nodes+1, cpu(opts.cpus))
+		}
+
 		r.Add(testSpec{
 			Name:       strings.Join(nameParts, "/"),
 			Owner:      OwnerKV,
 			MinVersion: minVersion,
-			Cluster:    makeClusterSpec(opts.nodes+1, cpu(opts.cpus)),
+			Cluster:    cs,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runKV(ctx, t, c, opts)
 			},
