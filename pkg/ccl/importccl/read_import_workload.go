@@ -128,10 +128,11 @@ func (w *workloadReader) readFiles(
 		if err != nil {
 			return err
 		}
-		conf, err := cloudimpl.ParseWorkloadConfig(file)
+		e, err := cloudimpl.ParseWorkloadConfig(cloudimpl.ExternalStorageURIContext{}, file)
 		if err != nil {
 			return err
 		}
+		conf := e.WorkloadConfig
 		meta, err := workload.Get(conf.Generator)
 		if err != nil {
 			return err

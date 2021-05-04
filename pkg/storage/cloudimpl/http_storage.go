@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -34,6 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
+
+func parseHTTPURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_Http
+	conf.HttpPath.BaseUri = uri.String()
+	return conf, nil
+}
 
 type httpStorage struct {
 	base     *url.URL
@@ -94,13 +102,18 @@ func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
 func MakeHTTPStorage(
-	base string, settings *cluster.Settings, ioConf base.ExternalIODirConfig,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.http")
+	if args.IOConf.DisableHTTP {
+		return nil, errors.New("external http access disabled")
+	}
+	base := dest.HttpPath.BaseUri
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but prefix path not provided")
 	}
 
-	client, err := makeHTTPClient(settings)
+	client, err := makeHTTPClient(args.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +125,8 @@ func MakeHTTPStorage(
 		base:     uri,
 		client:   client,
 		hosts:    strings.Split(uri.Host, ","),
-		settings: settings,
-		ioConf:   ioConf,
+		settings: args.Settings,
+		ioConf:   args.IOConf,
 	}, nil
 }
 

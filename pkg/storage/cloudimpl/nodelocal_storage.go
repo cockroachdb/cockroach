@@ -14,12 +14,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
@@ -27,6 +30,28 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func parseNodelocalURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	if uri.Host == "" {
+		return conf, errors.Errorf(
+			"host component of nodelocal URI must be a node ID ("+
+				"use 'self' to specify each node should access its own local filesystem): %s",
+			uri.String(),
+		)
+	} else if uri.Host == "self" {
+		uri.Host = "0"
+	}
+
+	nodeID, err := strconv.Atoi(uri.Host)
+	if err != nil {
+		return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
+	}
+	conf.Provider = roachpb.ExternalStorageProvider_LocalFile
+	conf.LocalFile.Path = uri.Path
+	conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
+	return conf, nil
+}
 
 type localFileStorage struct {
 	cfg        roachpb.ExternalStorage_LocalFilePath // contains un-prefixed filepath -- DO NOT use for I/O ops.
@@ -57,25 +82,27 @@ func TestingMakeLocalStorage(
 	blobClientFactory blobs.BlobClientFactory,
 	ioConf base.ExternalIODirConfig,
 ) (cloud.ExternalStorage, error) {
-	return makeLocalStorage(ctx, cfg, settings, blobClientFactory, ioConf)
+	args := ExternalStorageContext{IOConf: ioConf, BlobClientFactory: blobClientFactory, Settings: settings}
+	return makeLocalStorage(ctx, args, roachpb.ExternalStorage{LocalFile: cfg})
 }
 
 func makeLocalStorage(
-	ctx context.Context,
-	cfg roachpb.ExternalStorage_LocalFilePath,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	ioConf base.ExternalIODirConfig,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.nodelocal")
+	if args.BlobClientFactory == nil {
+		return nil, errors.New("nodelocal storage is not available")
+	}
+	cfg := dest.LocalFile
 	if cfg.Path == "" {
 		return nil, errors.Errorf("local storage requested but path not provided")
 	}
-	client, err := blobClientFactory(ctx, cfg.NodeID)
+	client, err := args.BlobClientFactory(ctx, cfg.NodeID)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blob client")
 	}
-	return &localFileStorage{base: cfg.Path, cfg: cfg, ioConf: ioConf, blobClient: client,
-		settings: settings}, nil
+	return &localFileStorage{base: cfg.Path, cfg: cfg, ioConf: args.IOConf, blobClient: client,
+		settings: args.Settings}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExternalStorage {
