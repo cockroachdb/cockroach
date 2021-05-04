@@ -196,8 +196,19 @@ func (p *planner) LookupObject(
 	sc := p.Accessor()
 	lookupFlags.CommonLookupFlags.Required = false
 	lookupFlags.CommonLookupFlags.AvoidCached = p.avoidCachedDescriptors
-	objDesc, err := sc.GetObjectDesc(ctx, p.txn, dbName, scName, tbName, lookupFlags)
 
+	// Check if we are looking up a type which matches a built-in type in
+	// CockroachDB but is an extension type on the public schema in PostgreSQL.
+	if lookupFlags.DesiredObjectKind == tree.TypeObject && scName == tree.PublicSchema {
+		if alias, ok := types.PublicSchemaAliases[tbName]; ok {
+			if lookupFlags.RequireMutable {
+				return true, nil, pgerror.Newf(pgcode.WrongObjectType, "type %q is a built-in type", tbName)
+			}
+			return true, typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
+		}
+	}
+
+	objDesc, err := sc.GetObjectDesc(ctx, p.txn, dbName, scName, tbName, lookupFlags)
 	return objDesc != nil, objDesc, err
 }
 
