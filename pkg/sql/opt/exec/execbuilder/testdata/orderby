@@ -1179,25 +1179,22 @@ EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 distribution: local
 vectorized: true
 ·
-• sort
+• filter
 │ columns: (x, y, z)
-│ ordering: +x
+│ ordering: +y
 │ estimated row count: 1 (missing stats)
-│ order: +x
+│ filter: x = y
 │
-└── • filter
+└── • index join
     │ columns: (x, y, z)
-    │ estimated row count: 1 (missing stats)
-    │ filter: x = y
+    │ ordering: +y
+    │ estimated row count: 10 (missing stats)
+    │ table: xyz@primary
+    │ key columns: rowid
     │
-    └── • index join
-        │ columns: (x, y, z)
-        │ estimated row count: 10 (missing stats)
-        │ table: xyz@primary
-        │ key columns: rowid
-        │
-        └── • scan
-              columns: (y, z, rowid)
-              estimated row count: 10 (missing stats)
-              table: xyz@xyz_z_y_idx
-              spans: /1/!NULL-/2
+    └── • scan
+          columns: (y, z, rowid)
+          ordering: +y
+          estimated row count: 10 (missing stats)
+          table: xyz@xyz_z_y_idx
+          spans: /1/!NULL-/2

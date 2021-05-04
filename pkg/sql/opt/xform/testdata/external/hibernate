@@ -1405,7 +1405,7 @@ project
       │         ├── ordering: +8 opt(9) [actual: +8]
       │         ├── scan person_addresses [as=addresses1_]
       │         │    ├── columns: person_id:8!null addresses:9
-      │         │    └── ordering: +8 opt(9) [actual: +8]
+      │         │    └── ordering: +8
       │         └── filters
       │              └── addresses:9 = 'Home address' [outer=(9), constraints=(/9: [/'Home address' - /'Home address']; tight), fd=()-->(9)]
       └── filters (true)

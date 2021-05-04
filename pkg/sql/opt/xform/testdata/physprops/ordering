@@ -1492,34 +1492,28 @@ union
  ├── key: (10,11)
  ├── fd: (9)==(10), (10)==(9)
  ├── ordering: +(9|10) [actual: +9]
- ├── sort
+ ├── select
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
  │    ├── key: (2,3)
  │    ├── fd: (1)==(2), (2)==(1)
  │    ├── ordering: +(1|2),+3 [actual: +1,+3]
- │    └── select
- │         ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
- │         ├── key: (2,3)
- │         ├── fd: (1)==(2), (2)==(1)
- │         ├── scan abc
- │         │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
- │         │    └── key: (1-3)
- │         └── filters
- │              └── abc.a:1 = abc.b:2 [outer=(1,2), fd=(1)==(2), (2)==(1)]
- └── sort
+ │    ├── scan abc
+ │    │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
+ │    │    ├── key: (1-3)
+ │    │    └── ordering: +1,+2,+3
+ │    └── filters
+ │         └── abc.a:1 = abc.b:2 [outer=(1,2), fd=(1)==(2), (2)==(1)]
+ └── select
       ├── columns: x:5!null y:6!null z:7!null
       ├── key: (6,7)
       ├── fd: (5)==(6), (6)==(5)
       ├── ordering: +(5|6),+7 [actual: +5,+7]
-      └── select
-           ├── columns: x:5!null y:6!null z:7!null
-           ├── key: (6,7)
-           ├── fd: (5)==(6), (6)==(5)
-           ├── scan xyz
-           │    ├── columns: x:5!null y:6!null z:7!null
-           │    └── key: (5-7)
-           └── filters
-                └── y:6 = x:5 [outer=(5,6), fd=(5)==(6), (6)==(5)]
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5,+6,+7
+      └── filters
+           └── y:6 = x:5 [outer=(5,6), fd=(5)==(6), (6)==(5)]
 
 opt
 SELECT * FROM (SELECT a, b, c, d FROM abcd UNION ALL SELECT c, d, a, b FROM abcd) ORDER BY a, b
@@ -1561,33 +1555,34 @@ intersect
 opt
 SELECT * FROM (SELECT a, b, c FROM abc INTERSECT ALL SELECT y, x, z FROM xyz) WHERE a = b ORDER BY b
 ----
-sort
+intersect-all
  ├── columns: a:1!null b:2!null c:3!null
+ ├── left columns: a:1!null b:2!null c:3!null
+ ├── right columns: y:6 x:5 z:7
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2) [actual: +1]
- └── intersect-all
-      ├── columns: a:1!null b:2!null c:3!null
-      ├── left columns: a:1!null b:2!null c:3!null
-      ├── right columns: y:6 x:5 z:7
-      ├── fd: (1)==(2), (2)==(1)
-      ├── select
-      │    ├── columns: a:1!null b:2!null c:3!null
-      │    ├── key: (2,3)
-      │    ├── fd: (1)==(2), (2)==(1)
-      │    ├── scan abc
-      │    │    ├── columns: a:1!null b:2!null c:3!null
-      │    │    └── key: (1-3)
-      │    └── filters
-      │         └── a:1 = b:2 [outer=(1,2), fd=(1)==(2), (2)==(1)]
-      └── select
-           ├── columns: x:5!null y:6!null z:7!null
-           ├── key: (6,7)
-           ├── fd: (5)==(6), (6)==(5)
-           ├── scan xyz
-           │    ├── columns: x:5!null y:6!null z:7!null
-           │    └── key: (5-7)
-           └── filters
-                └── y:6 = x:5 [outer=(5,6), fd=(5)==(6), (6)==(5)]
+ ├── select
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── key: (2,3)
+ │    ├── fd: (1)==(2), (2)==(1)
+ │    ├── ordering: +(1|2),+3 [actual: +1,+3]
+ │    ├── scan abc
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── key: (1-3)
+ │    │    └── ordering: +1,+2,+3
+ │    └── filters
+ │         └── a:1 = b:2 [outer=(1,2), fd=(1)==(2), (2)==(1)]
+ └── select
+      ├── columns: x:5!null y:6!null z:7!null
+      ├── key: (6,7)
+      ├── fd: (5)==(6), (6)==(5)
+      ├── ordering: +(5|6),+7 [actual: +5,+7]
+      ├── scan xyz
+      │    ├── columns: x:5!null y:6!null z:7!null
+      │    ├── key: (5-7)
+      │    └── ordering: +5,+6,+7
+      └── filters
+           └── y:6 = x:5 [outer=(5,6), fd=(5)==(6), (6)==(5)]
 
 opt
 SELECT * FROM (SELECT a, b, c FROM abc EXCEPT SELECT z, y, x FROM xyz) WHERE a = c ORDER BY a, b

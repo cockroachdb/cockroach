@@ -364,7 +364,7 @@ GenerateMergeJoins
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters
@@ -398,7 +398,7 @@ GenerateLookupJoins
          │    │    ├── columns: k:1!null i:2 s:4
          │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    │    └── ordering: +1
   +      │    │    └── fd: (1)-->(2,4)
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
@@ -431,7 +431,7 @@ GenerateMergeJoins (higher cost)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      ├── scan xy
@@ -470,7 +470,7 @@ GenerateMergeJoins (higher cost)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          └── filters (true)
@@ -501,7 +501,7 @@ GenerateLookupJoinsWithFilter (higher cost)
   -      │    │    ├── columns: k:1!null i:2 s:4
   -      │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    │    └── ordering: +1
   -      │    └── filters
   -      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters (true)

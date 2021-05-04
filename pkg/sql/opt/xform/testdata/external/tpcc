@@ -1395,7 +1395,7 @@ scalar-group-by
  │    │    │         │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null o_carrier_id:6
  │    │    │         │    ├── key: (1-3)
  │    │    │         │    ├── fd: (1-3)-->(6)
- │    │    │         │    └── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
+ │    │    │         │    └── ordering: +3,+2,-1
  │    │    │         └── filters
  │    │    │              └── o_carrier_id:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  │    │    ├── project
@@ -1407,7 +1407,7 @@ scalar-group-by
  │    │    │         ├── ordering: +12,+11,-10 opt(16) [actual: +12,+11,-10]
  │    │    │         ├── scan order_line
  │    │    │         │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_delivery_d:16
- │    │    │         │    └── ordering: +12,+11,-10 opt(16) [actual: +12,+11,-10]
+ │    │    │         │    └── ordering: +12,+11,-10
  │    │    │         └── filters
  │    │    │              └── ol_delivery_d:16 IS NULL [outer=(16), constraints=(/16: [/NULL - /NULL]; tight), fd=()-->(16)]
  │    │    └── filters (true)
