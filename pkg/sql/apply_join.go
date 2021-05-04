@@ -255,14 +255,22 @@ func runPlanInsidePlan(
 	)
 	defer recv.Release()
 
-	if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
-		params.ctx,
-		params.p,
-		params.extendedEvalCtx.copy,
-		plan.subqueryPlans,
-		recv,
-	) {
-		return rowResultWriter.Err()
+	if len(plan.subqueryPlans) != 0 {
+		// Create a separate memory account for the results of the subqueries.
+		// Note that we intentionally defer the closure of the account until we
+		// return from this method (after the main query is executed).
+		subqueryResultMemAcc := params.p.EvalContext().Mon.MakeBoundAccount()
+		defer subqueryResultMemAcc.Close(params.ctx)
+		if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
+			params.ctx,
+			params.p,
+			params.extendedEvalCtx.copy,
+			plan.subqueryPlans,
+			recv,
+			&subqueryResultMemAcc,
+		) {
+			return rowResultWriter.Err()
+		}
 	}
 
 	// Make a copy of the EvalContext so it can be safely modified.
