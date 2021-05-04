@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -182,7 +181,7 @@ func showBackupPlanHook(
 
 		incPaths, err := findPriorBackupNames(ctx, store)
 		if err != nil {
-			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
+			if errors.Is(err, cloud.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
 				// and show the specified base.
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", store)

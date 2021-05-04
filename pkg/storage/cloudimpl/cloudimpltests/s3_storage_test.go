@@ -287,7 +287,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	_, err = s.ReadFile(ctx, "")
 	require.Error(t, err, "")
-	require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
+	require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
 }
 
 func TestAntagonisticS3Read(t *testing.T) {

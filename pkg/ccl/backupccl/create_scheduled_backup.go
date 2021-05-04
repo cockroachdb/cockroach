@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
@@ -416,7 +417,7 @@ func checkForExistingBackupsInCollection(
 			"the schedule can be created with the 'ignore_existing_backups' option",
 			collectionURI)
 	}
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Newf("unexpected error occurred when checking for existing backups in %s",
 			collectionURI)
 	}

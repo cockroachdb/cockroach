@@ -263,7 +263,7 @@ func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io
 }
 
 func (h *httpStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
-	return nil, errors.Mark(errors.New("http storage does not support listing"), ErrListingUnsupported)
+	return nil, errors.Mark(errors.New("http storage does not support listing"), cloud.ErrListingUnsupported)
 }
 
 func (h *httpStorage) Delete(ctx context.Context, basename string) error {
@@ -349,7 +349,7 @@ func (h *httpStorage) req(
 		_ = resp.Body.Close()
 		err := errors.Errorf("error response from server: %s %q", resp.Status, body)
 		if err != nil && resp.StatusCode == 404 {
-			err = errors.Wrapf(ErrFileDoesNotExist, "http storage file does not exist: %s", err.Error())
+			err = errors.Wrapf(cloud.ErrFileDoesNotExist, "http storage file does not exist: %s", err.Error())
 		}
 		return nil, err
 	}
