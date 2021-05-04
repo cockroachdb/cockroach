@@ -1616,16 +1616,15 @@ func checkPrivilegesForRestore(
 	// Check that none of the sources rely on implicit access.
 	for i := range from {
 		for j := range from[i] {
-			uri := from[i][j]
-			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(from[i][j], p.User())
 			if err != nil {
 				return err
 			}
-			if !hasExplicitAuth {
+			if !conf.AccessIsWithExplicitAuth() {
 				return pgerror.Newf(
 					pgcode.InsufficientPrivilege,
 					"only users with the admin role are allowed to RESTORE from the specified %s URI",
-					uriScheme)
+					conf.Provider.String())
 			}
 		}
 	}

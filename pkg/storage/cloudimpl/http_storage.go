@@ -38,7 +38,7 @@ import (
 
 func parseHTTPURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_Http
+	conf.Provider = roachpb.ExternalStorageProvider_http
 	conf.HttpPath.BaseUri = uri.String()
 	return conf, nil
 }
@@ -132,7 +132,7 @@ func MakeHTTPStorage(
 
 func (h *httpStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider: roachpb.ExternalStorageProvider_Http,
+		Provider: roachpb.ExternalStorageProvider_http,
 		HttpPath: roachpb.ExternalStorage_Http{
 			BaseUri: h.base.String(),
 		},
