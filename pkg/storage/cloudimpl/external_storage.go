@@ -106,14 +106,7 @@ const (
 	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
 
-// See SanitizeExternalStorageURI.
-var redactedQueryParams = map[string]struct{}{
-	AWSSecretParam:       {},
-	AWSTempTokenParam:    {},
-	AzureAccountKeyParam: {},
-	CredentialsParam:     {},
-}
-
+var redactedQueryParams = map[string]struct{}{}
 var confParsers = map[string]ExternalStorageURIParser{}
 var implementations = map[roachpb.ExternalStorageProvider]ExternalStorageConstructor{}
 
@@ -123,6 +116,7 @@ func RegisterExternalStorageProvider(
 	providerType roachpb.ExternalStorageProvider,
 	parseFn ExternalStorageURIParser,
 	constructFn ExternalStorageConstructor,
+	redactedParams map[string]struct{},
 	schemes ...string,
 ) {
 	for _, scheme := range schemes {
@@ -130,6 +124,9 @@ func RegisterExternalStorageProvider(
 			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
 		}
 		confParsers[scheme] = parseFn
+		for param := range redactedParams {
+			redactedQueryParams[param] = struct{}{}
+		}
 	}
 	if _, ok := implementations[providerType]; ok {
 		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
@@ -137,14 +134,33 @@ func RegisterExternalStorageProvider(
 	implementations[providerType] = constructFn
 }
 
+// RedactedParams is a helper for making a set of param names to redact in URIs.
+func RedactedParams(strs ...string) map[string]struct{} {
+	if len(strs) == 0 {
+		return nil
+	}
+	m := make(map[string]struct{}, len(strs))
+	for i := range strs {
+		m[strs[i]] = struct{}{}
+	}
+	return m
+}
+
 func init() {
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_azure, parseAzureURL, makeAzureStorage, "azure")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_gs, parseGSURL, makeGCSStorage, "gs")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_http, parseHTTPURL, MakeHTTPStorage, "http", "https")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal, parseNodelocalURL, makeLocalStorage, "nodelocal")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_null, parseNullURL, makeNullSinkStorage, "null")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_s3, parseS3URL, MakeS3Storage, "s3")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_userfile, parseUserfileURL, makeFileTableStorage, "userfile")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_azure,
+		parseAzureURL, makeAzureStorage, RedactedParams(AzureAccountKeyParam), "azure")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_gs,
+		parseGSURL, makeGCSStorage, RedactedParams(CredentialsParam), "gs")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_http,
+		parseHTTPURL, MakeHTTPStorage, RedactedParams(), "http", "https")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal,
+		parseNodelocalURL, makeLocalStorage, RedactedParams(), "nodelocal")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_null,
+		parseNullURL, makeNullSinkStorage, RedactedParams(), "null")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_s3,
+		parseS3URL, MakeS3Storage, RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_userfile,
+		parseUserfileURL, makeFileTableStorage, RedactedParams(), "userfile")
 }
 
 // ExternalStorageURIContext contains arguments needed to parse external storage
