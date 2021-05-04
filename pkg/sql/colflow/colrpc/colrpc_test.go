@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -115,9 +116,24 @@ func makeMockFlowStreamRPCLayer() mockFlowStreamRPCLayer {
 func handleStream(
 	ctx context.Context, inbox *Inbox, stream flowStreamServer, doneFn func(),
 ) chan error {
+	return handleStreamWithFlowCtxDone(ctx, inbox, stream, nil /* flowCtxDone */, doneFn)
+}
+
+// handleStreamWithFlowCtxDone is the same as handleStream but also takes in
+// an optional Done channel for the flow context of the inbox host.
+func handleStreamWithFlowCtxDone(
+	ctx context.Context,
+	inbox *Inbox,
+	stream flowStreamServer,
+	flowCtxDone <-chan struct{},
+	doneFn func(),
+) chan error {
 	handleStreamErrCh := make(chan error, 1)
+	if flowCtxDone == nil {
+		flowCtxDone = make(<-chan struct{})
+	}
 	go func() {
-		handleStreamErrCh <- inbox.RunWithStream(ctx, stream)
+		handleStreamErrCh <- inbox.RunWithStream(ctx, stream, flowCtxDone)
 		if doneFn != nil {
 			doneFn()
 		}
@@ -413,6 +429,95 @@ func TestOutboxInbox(t *testing.T) {
 			require.True(t, atomic.LoadUint32(&canceled) == 1)
 		}
 	})
+}
+
+// TestInboxHostCtxCancellation verifies that the inbox-outbox pair is properly
+// shutdown if the inbox host's flow context is canceled and Inbox.Init is never
+// called.
+func TestInboxHostCtxCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set up the RPC layer.
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(clock, stopper, execinfra.StaticNodeID)
+	require.NoError(t, err)
+
+	rng, _ := randutil.NewPseudoRand()
+	conn, err := grpc.Dial(addr.String(), grpc.WithInsecure())
+	require.NoError(t, err)
+	defer func() {
+		err := conn.Close() // nolint:grpcconnclose
+		require.NoError(t, err)
+	}()
+
+	// Simulate the "remote" node with a separate context.
+	outboxHostCtx, outboxHostCtxCancel := context.WithCancel(context.Background())
+	// Derive a separate context for the outbox itself (this is what is done in
+	// Outbox.Run).
+	outboxCtx, outboxCtxCancel := context.WithCancel(outboxHostCtx)
+
+	// Initiate the FlowStream RPC from the outbox.
+	client := execinfrapb.NewDistSQLClient(conn)
+	clientStream, err := client.FlowStream(outboxCtx)
+	require.NoError(t, err)
+
+	// Create and run the outbox.
+	//
+	// The input to the outbox doesn't matter, so we just create an arbitrary
+	// operator that returns a single row with no columns.
+	typs := []*types.T{}
+	outboxInput := colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 1 /* numTuples */, nil /* opToInitialize */)
+	outboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer outboxMemAcc.Close(outboxHostCtx)
+	outbox, err := NewOutbox(
+		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
+		outboxInput, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
+	)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		outbox.runWithStream(outboxCtx, clientStream, outboxHostCtxCancel, outboxCtxCancel)
+		wg.Done()
+	}()
+
+	// Create the inbox on the "local" node (simulated by a separate context).
+	inboxHostCtx, inboxHostCtxCancel := context.WithCancel(context.Background())
+	inboxMemAcc := testMemMonitor.MakeBoundAccount()
+	defer inboxMemAcc.Close(inboxHostCtx)
+	inbox, err := NewInbox(colmem.NewAllocator(inboxHostCtx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+	require.NoError(t, err)
+
+	// Spawn up the stream handler (a separate goroutine) for the server side
+	// of the FlowStream RPC.
+	serverStreamNotification := <-mockServer.InboundStreams
+	serverStream := serverStreamNotification.Stream
+	streamHandlerErrCh := handleStreamWithFlowCtxDone(
+		serverStream.Context(), inbox, serverStream,
+		inboxHostCtx.Done(), func() { close(serverStreamNotification.Donec) },
+	)
+
+	// Here is the meat of the test - the inbox is never initialized, and,
+	// instead, the inbox host's flow context is canceled after some delay.
+	var sleepBeforeCancellation = rng.Float64() <= 0.25
+	var sleepTime = time.Microsecond * time.Duration(rng.Intn(500))
+	wg.Add(1)
+	go func() {
+		if sleepBeforeCancellation {
+			time.Sleep(sleepTime)
+		}
+		inboxHostCtxCancel()
+		wg.Done()
+	}()
+
+	// Wait for the Outbox to return.
+	wg.Wait()
+	// Make sure the Inbox stream handler returned.
+	streamHandlerErr := <-streamHandlerErrCh
+	require.Equal(t, cancelchecker.QueryCanceledError, streamHandlerErr)
 }
 
 func TestOutboxInboxMetadataPropagation(t *testing.T) {
