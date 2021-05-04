@@ -1580,6 +1580,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				for i, c := range desc.Checks {
 					if c.Name == t.Constraint.Check.Name {
 						desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+						break
 					}
 				}
 				col, err := desc.FindColumnWithID(t.Constraint.NotNullColumn)
