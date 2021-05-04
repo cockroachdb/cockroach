@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -182,7 +182,7 @@ func ExternalStorageFromURI(
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 	user security.SQLUsername,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
@@ -232,7 +232,7 @@ type ExternalStorageContext struct {
 	IOConf            base.ExternalIODirConfig
 	Settings          *cluster.Settings
 	BlobClientFactory blobs.BlobClientFactory
-	InternalExecutor  *sql.InternalExecutor
+	InternalExecutor  sqlutil.InternalExecutor
 	DB                *kv.DB
 }
 
@@ -249,7 +249,7 @@ func MakeExternalStorage(
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {
 	args := ExternalStorageContext{
