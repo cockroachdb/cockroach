@@ -158,13 +158,14 @@ $input
     (Window $input:* $fns:* & (AllArePrefixSafe $fns) $private:*)
     $limit:*
     $ordering:* &
-        (OrderingSucceeded
-            $newOrdering:(MakeSegmentedOrdering
+        (Let
+            ($newOrdering $ok):(MakeSegmentedOrdering
                 $input
                 (WindowPartition $private)
                 (WindowOrdering $private)
                 $ordering
             )
+            $ok
         )
 )
 =>

@@ -170,20 +170,21 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 }
 
 // SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
-// that each scan over a single key from the original Scan's constraints. This
-// is beneficial in cases where the original Scan had to scan over many rows but
-// had relatively few keys to scan over.
+// that each scan over a single key from the original Scan's constraints. If no
+// such Union of Scans can be found, ok=false is returned. This is beneficial in
+// cases where the original Scan had to scan over many rows but had relatively
+// few keys to scan over.
 // TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
 	limitOrdering props.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
-) memo.RelExpr {
+) (_ memo.RelExpr, ok bool) {
 	const maxScanCount = 16
 	const threshold = 4
 
 	cons, ok := c.getKnownScanConstraint(sp)
 	if !ok {
 		// No valid constraint was found.
-		return nil
+		return nil, false
 	}
 
 	// Find the length of the prefix of index columns preceding the first limit
@@ -194,7 +195,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	//
 	if len(limitOrdering.Columns) == 0 {
 		// This case can be handled by GenerateLimitedScans.
-		return nil
+		return nil, false
 	}
 	keyPrefixLength := cons.Columns.Count()
 	for i := 0; i < cons.Columns.Count(); i++ {
@@ -205,7 +206,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 	if keyPrefixLength == 0 {
 		// This case can be handled by GenerateLimitedScans.
-		return nil
+		return nil, false
 	}
 
 	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
@@ -230,7 +231,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 	if keyCount <= 0 || (keyCount == 1 && spans.Count() == 1) || budgetExceededIndex == 0 {
 		// Ensure that at least one new Scan will be constructed.
-		return nil
+		return nil, false
 	}
 
 	scanCount := keyCount
@@ -246,7 +247,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		// Splitting the Scan may not be worth the overhead. Creating a sequence of
 		// Scans and Unions is expensive, so we only want to create the plan if it
 		// is likely to be used.
-		return nil
+		return nil, false
 	}
 
 	// The index ordering must have a prefix of columns of length keyLength
@@ -254,7 +255,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	hasLimitOrderingSeq, reverse := indexHasOrderingSequence(
 		c.e.mem.Metadata(), scan, sp, limitOrdering, keyPrefixLength)
 	if !hasLimitOrderingSeq {
-		return nil
+		return nil, false
 	}
 	newHardLimit := memo.MakeScanLimit(int64(limitVal), reverse)
 
@@ -313,11 +314,11 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		// Expect to generate at least one new limited single-key Scan. This could
 		// happen if a valid key count could be obtained for at least span, but no
 		// span could be split into single-key spans.
-		return nil
+		return nil, false
 	}
 	if noLimitSpans.Count() == 0 {
 		// All spans could be used to generate limited Scans.
-		return last
+		return last, true
 	}
 
 	// If any spans could not be used to generate limited Scans, use them to
@@ -328,7 +329,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		Spans:   noLimitSpans,
 	})
 	newScan := c.e.f.ConstructScan(newScanPrivate)
-	return makeNewUnion(last, newScan, sp.Cols.ToList())
+	return makeNewUnion(last, newScan, sp.Cols.ToList()), true
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given

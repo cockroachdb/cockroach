@@ -395,7 +395,6 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 		))
 
 		binding := pretty.Group(pretty.Fold(pretty.Concat,
-			pretty.Line,
 			labels,
 			pretty.Text("):"),
 			p.docExpr(e.Target),
@@ -407,12 +406,11 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 			p.docExpr(e.Result),
 		))
 
-		return pretty.Group(pretty.Fold(pretty.Concat,
-			pretty.Text("(Let"),
-			pretty.NestT(inner),
-			pretty.SoftBreak,
+		return pretty.BracketDoc(
+			pretty.Text("(Let "),
+			inner,
 			pretty.Text(")"),
-		))
+		)
 	case *lang.AnyExpr:
 		return pretty.Text("*")
 	case *lang.ListAnyExpr:
