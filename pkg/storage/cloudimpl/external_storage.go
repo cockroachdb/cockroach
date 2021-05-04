@@ -12,10 +12,10 @@ package cloudimpl
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -123,125 +122,65 @@ var ErrListingUnsupported = errors.New("listing is not supported")
 // This error is raised by the ReadFile method.
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
+var confParsers = map[string]ExternalStorageURIParser{}
+var implementations = map[roachpb.ExternalStorageProvider]ExternalStorageConstructor{}
+
+// RegisterExternalStorageProvider registers an external storage provider for a
+// given URI scheme and provider type.
+func RegisterExternalStorageProvider(
+	providerType roachpb.ExternalStorageProvider,
+	parseFn ExternalStorageURIParser,
+	constructFn ExternalStorageConstructor,
+	schemes ...string,
+) {
+	for _, scheme := range schemes {
+		if _, ok := confParsers[scheme]; ok {
+			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
+		}
+		confParsers[scheme] = parseFn
+	}
+	if _, ok := implementations[providerType]; ok {
+		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
+	}
+	implementations[providerType] = constructFn
+}
+
 func init() {
 	cloud.AccessIsWithExplicitAuth = AccessIsWithExplicitAuth
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_Azure, parseAzureURL, makeAzureStorage, "azure")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_GoogleCloud, parseGSURL, makeGCSStorage, "gs")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_Http, parseHTTPURL, MakeHTTPStorage, "http", "https")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_LocalFile, parseNodelocalURL, makeLocalStorage, "nodelocal")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_NullSink, parseNullURL, makeNullSinkStorage, "null")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_S3, parseS3URL, MakeS3Storage, "s3")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_FileTable, parseUserfileURL, makeFileTableStorage, "userfile")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_Workload, ParseWorkloadConfig, makeWorkloadStorage, "workload")
 }
+
+// ExternalStorageURIContext contains arguments needed to parse external storage
+// URIs.
+type ExternalStorageURIContext struct {
+	CurrentUser security.SQLUsername
+}
+
+// ExternalStorageURIParser functions parses a URL into a structured
+// ExternalStorage configuration.
+type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (roachpb.ExternalStorage, error)
 
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
 func ExternalStorageConfFromURI(
 	path string, user security.SQLUsername,
 ) (roachpb.ExternalStorage, error) {
-	conf := roachpb.ExternalStorage{}
 	uri, err := url.Parse(path)
 	if err != nil {
-		return conf, err
+		return roachpb.ExternalStorage{}, err
 	}
-	switch uri.Scheme {
-	case "s3":
-		conf.Provider = roachpb.ExternalStorageProvider_S3
-		conf.S3Config = &roachpb.ExternalStorage_S3{
-			Bucket:        uri.Host,
-			Prefix:        uri.Path,
-			AccessKey:     uri.Query().Get(AWSAccessKeyParam),
-			Secret:        uri.Query().Get(AWSSecretParam),
-			TempToken:     uri.Query().Get(AWSTempTokenParam),
-			Endpoint:      uri.Query().Get(AWSEndpointParam),
-			Region:        uri.Query().Get(S3RegionParam),
-			Auth:          uri.Query().Get(AuthParam),
-			ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
-			ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
-			/* NB: additions here should also update s3QueryParams() serializer */
-		}
-		conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
-		// AWS secrets often contain + characters, which must be escaped when
-		// included in a query string; otherwise, they represent a space character.
-		// More than a few users have been bitten by this.
-		//
-		// Luckily, AWS secrets are base64-encoded data and thus will never actually
-		// contain spaces. We can convert any space characters we see to +
-		// characters to recover the original secret.
-		conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
-	case "gs":
-		conf.Provider = roachpb.ExternalStorageProvider_GoogleCloud
-		conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
-			Bucket:         uri.Host,
-			Prefix:         uri.Path,
-			Auth:           uri.Query().Get(AuthParam),
-			BillingProject: uri.Query().Get(GoogleBillingProjectParam),
-			Credentials:    uri.Query().Get(CredentialsParam),
-			/* NB: additions here should also update gcsQueryParams() serializer */
-		}
-		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
-	case "azure":
-		conf.Provider = roachpb.ExternalStorageProvider_Azure
-		conf.AzureConfig = &roachpb.ExternalStorage_Azure{
-			Container:   uri.Host,
-			Prefix:      uri.Path,
-			AccountName: uri.Query().Get(AzureAccountNameParam),
-			AccountKey:  uri.Query().Get(AzureAccountKeyParam),
-			/* NB: additions here should also update azureQueryParams() serializer */
-		}
-		if conf.AzureConfig.AccountName == "" {
-			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
-		}
-		if conf.AzureConfig.AccountKey == "" {
-			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
-		}
-		conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
-	case "http", "https":
-		conf.Provider = roachpb.ExternalStorageProvider_Http
-		conf.HttpPath.BaseUri = path
-	case "nodelocal":
-		if uri.Host == "" {
-			return conf, errors.Errorf(
-				"host component of nodelocal URI must be a node ID ("+
-					"use 'self' to specify each node should access its own local filesystem): %s",
-				path,
-			)
-		} else if uri.Host == "self" {
-			uri.Host = "0"
-		}
-
-		nodeID, err := strconv.Atoi(uri.Host)
-		if err != nil {
-			return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", path)
-		}
-		conf.Provider = roachpb.ExternalStorageProvider_LocalFile
-		conf.LocalFile.Path = uri.Path
-		conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
-	case "experimental-workload", "workload":
-		conf.Provider = roachpb.ExternalStorageProvider_Workload
-		if conf.WorkloadConfig, err = ParseWorkloadConfig(uri); err != nil {
-			return conf, err
-		}
-	case "userfile":
-		qualifiedTableName := uri.Host
-		if user.Undefined() {
-			return conf, errors.Errorf("user creating the FileTable ExternalStorage must be specified")
-		}
-
-		// If the import statement does not specify a qualified table name then use
-		// the default to attempt to locate the file(s).
-		if qualifiedTableName == "" {
-			composedTableName := security.MakeSQLUsernameFromPreNormalizedString(
-				DefaultQualifiedNamePrefix + user.Normalized())
-			qualifiedTableName = DefaultQualifiedNamespace +
-				// Escape special identifiers as needed.
-				composedTableName.SQLIdentifier()
-		}
-
-		conf.Provider = roachpb.ExternalStorageProvider_FileTable
-		conf.FileTableConfig.User = user.Normalized()
-		conf.FileTableConfig.QualifiedTableName = qualifiedTableName
-		conf.FileTableConfig.Path = uri.Path
-	case "null":
-		conf.Provider = roachpb.ExternalStorageProvider_NullSink
-	default:
-		// TODO(adityamaru): Link dedicated ExternalStorage scheme docs once ready.
-		return conf, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
-			" storage schemes", uri.Scheme)
+	if fn, ok := confParsers[uri.Scheme]; ok {
+		return fn(ExternalStorageURIContext{CurrentUser: user}, uri)
 	}
-	return conf, nil
+	// TODO(adityamaru): Link dedicated ExternalStorage scheme docs once ready.
+	return roachpb.ExternalStorage{}, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
+		" storage schemes", uri.Scheme)
 }
 
 // ExternalStorageFromURI returns an ExternalStorage for the given URI.
@@ -296,6 +235,22 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 	return uri.String(), nil
 }
 
+// ExternalStorageContext contains the dependencies passed to external storage
+// implementations during creation.
+type ExternalStorageContext struct {
+	IOConf            base.ExternalIODirConfig
+	Settings          *cluster.Settings
+	BlobClientFactory blobs.BlobClientFactory
+	InternalExecutor  *sql.InternalExecutor
+	DB                *kv.DB
+}
+
+// ExternalStorageConstructor is a function registered to create instances
+// of a given external storage implamentation.
+type ExternalStorageConstructor func(
+	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
+) (cloud.ExternalStorage, error)
+
 // MakeExternalStorage creates an ExternalStorage from the given config.
 func MakeExternalStorage(
 	ctx context.Context,
@@ -306,40 +261,18 @@ func MakeExternalStorage(
 	ie *sql.InternalExecutor,
 	kvDB *kv.DB,
 ) (cloud.ExternalStorage, error) {
+	args := ExternalStorageContext{
+		IOConf:            conf,
+		Settings:          settings,
+		BlobClientFactory: blobClientFactory,
+		InternalExecutor:  ie,
+		DB:                kvDB,
+	}
 	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_FileTable {
 		return nil, errors.New("external network access is disabled")
 	}
-	switch dest.Provider {
-	case roachpb.ExternalStorageProvider_LocalFile:
-		telemetry.Count("external-io.nodelocal")
-		if blobClientFactory == nil {
-			return nil, errors.New("nodelocal storage is not available")
-		}
-		return makeLocalStorage(ctx, dest.LocalFile, settings, blobClientFactory, conf)
-	case roachpb.ExternalStorageProvider_Http:
-		if conf.DisableHTTP {
-			return nil, errors.New("external http access disabled")
-		}
-		telemetry.Count("external-io.http")
-		return MakeHTTPStorage(dest.HttpPath.BaseUri, settings, conf)
-	case roachpb.ExternalStorageProvider_S3:
-		telemetry.Count("external-io.s3")
-		return MakeS3Storage(ctx, conf, dest.S3Config, settings)
-	case roachpb.ExternalStorageProvider_GoogleCloud:
-		telemetry.Count("external-io.google_cloud")
-		return makeGCSStorage(ctx, conf, dest.GoogleCloudConfig, settings)
-	case roachpb.ExternalStorageProvider_Azure:
-		telemetry.Count("external-io.azure")
-		return makeAzureStorage(dest.AzureConfig, settings, conf)
-	case roachpb.ExternalStorageProvider_Workload:
-		telemetry.Count("external-io.workload")
-		return makeWorkloadStorage(dest.WorkloadConfig, settings, conf)
-	case roachpb.ExternalStorageProvider_FileTable:
-		telemetry.Count("external-io.filetable")
-		return makeFileTableStorage(ctx, dest.FileTableConfig, ie, kvDB, settings, conf)
-	case roachpb.ExternalStorageProvider_NullSink:
-		telemetry.Count("external-io.nullsink")
-		return makeNullSinkStorage()
+	if fn, ok := implementations[dest.Provider]; ok {
+		return fn(ctx, args, dest)
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
