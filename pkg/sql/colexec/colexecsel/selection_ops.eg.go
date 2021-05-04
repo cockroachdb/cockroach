@@ -60658,7 +60658,7 @@ func GetSelectionConstOperator(
 		selConstOpBase:   selConstOpBase,
 		adapter:          colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 		constArg:         constArg,
-		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
+		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
 	}, nil
 }
 
@@ -61997,6 +61997,6 @@ func GetSelectionOperator(
 	return &defaultCmpSelOp{
 		selOpBase:        selOpBase,
 		adapter:          colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
-		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}, true /* willRelease */),
 	}, nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -37,6 +38,7 @@ type defaultBuiltinFuncOperator struct {
 }
 
 var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
+var _ execinfra.Releasable = &defaultBuiltinFuncOperator{}
 
 func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 	batch := b.Input.Next()
@@ -101,6 +103,11 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 	return batch
 }
 
+// Release is part of the execinfra.Releasable interface.
+func (b *defaultBuiltinFuncOperator) Release() {
+	b.toDatumConverter.Release()
+}
+
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	allocator *colmem.Allocator,
@@ -128,7 +135,7 @@ func NewBuiltinFunctionOperator(
 			outputIdx:           outputIdx,
 			columnTypes:         columnTypes,
 			outputType:          outputType,
-			toDatumConverter:    colconv.NewVecToDatumConverter(len(columnTypes), argumentCols),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(columnTypes), argumentCols, true /* willRelease */),
 			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
 			row:                 make(tree.Datums, len(argumentCols)),
 			argumentCols:        argumentCols,
