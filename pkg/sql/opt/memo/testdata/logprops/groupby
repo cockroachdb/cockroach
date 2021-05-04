@@ -18,7 +18,7 @@ project
  ├── key: (1)
  ├── fd: ()-->(11), (1)-->(2,6,8,10)
  ├── prune: (1,2,6,8,10,11)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1 opt(11))
  ├── group-by
  │    ├── columns: x:1(int!null) y:2(int) sum:6(float!null) avg:8(float) string_agg:10(string!null)
  │    ├── grouping columns: x:1(int!null) y:2(int)
@@ -31,13 +31,13 @@ project
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(9), (1)-->(2-4,7), (3,4)-->(1,2,7), (3)-->(7)
  │    │    ├── prune: (1-4,7,9)
- │    │    ├── interesting orderings: (+1) (-4,+3,+1)
+ │    │    ├── interesting orderings: (+1 opt(9)) (-4,+3 opt(9))
  │    │    ├── select
  │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string!null) crdb_internal_mvcc_timestamp:5(decimal)
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
  │    │    │    ├── prune: (1-3,5)
- │    │    │    ├── interesting orderings: (+1) (-4,+3,+1)
+ │    │    │    ├── interesting orderings: (+1) (-4,+3)
  │    │    │    ├── scan xyzs
  │    │    │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal)
  │    │    │    │    ├── key: (1)
@@ -310,8 +310,7 @@ group-by
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(1,2)
- │    ├── prune: (2)
- │    └── interesting orderings: (+1)
+ │    └── prune: (2)
  └── aggregations
       ├── count [as=count:6, type=int, outer=(2)]
       │    └── variable: y:2 [type=int]

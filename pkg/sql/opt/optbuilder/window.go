@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,7 +70,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
 	partitions := make([]opt.ColSet, len(inScope.windows))
-	orderings := make([]physical.OrderingChoice, len(inScope.windows))
+	orderings := make([]props.OrderingChoice, len(inScope.windows))
 	filterCols := make([]opt.ColumnID, len(inScope.windows))
 	defs := make([]*tree.WindowDef, len(inScope.windows))
 	windowFrames := make([]tree.WindowFrame, len(inScope.windows))
@@ -235,7 +235,7 @@ func (b *Builder) buildAggregationAsWindow(
 	// Create the window frames based on the orderings and groupings specified.
 	argLists := make([][]opt.ScalarExpr, len(g.aggs))
 	partitions := make([]opt.ColSet, len(g.aggs))
-	orderings := make([]physical.OrderingChoice, len(g.aggs))
+	orderings := make([]props.OrderingChoice, len(g.aggs))
 	filterCols := make([]opt.ColumnID, len(g.aggs))
 
 	// Construct the pre-projection, which renders the grouping columns and the
@@ -442,7 +442,7 @@ func (b *Builder) buildFilterCol(
 // given partition and ordering can be added to. If no such frame is found, a
 // new one is made.
 func (b *Builder) findMatchingFrameIndex(
-	frames *[]memo.WindowExpr, partition opt.ColSet, ordering physical.OrderingChoice,
+	frames *[]memo.WindowExpr, partition opt.ColSet, ordering props.OrderingChoice,
 ) int {
 	frameIdx := -1
 

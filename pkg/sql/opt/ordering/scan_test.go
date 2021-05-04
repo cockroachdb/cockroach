@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -169,7 +169,7 @@ func TestScan(t *testing.T) {
 		t.Run(fmt.Sprintf("group%d", gIdx+1), func(t *testing.T) {
 			for tcIdx, tc := range g.cases {
 				t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
-					req := physical.ParseOrderingChoice(tc.req)
+					req := props.ParseOrderingChoice(tc.req)
 					g.p.SetConstraint(evalCtx, g.c)
 					ok, rev := ScanPrivateCanProvide(md, &g.p, &req)
 					res := "no"

@@ -946,23 +946,26 @@ vectorized: true
 │ columns: (a, b, c, d)
 │ estimated row count: 0 (missing stats)
 │
-└── • hash join (inner)
+└── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
     │ estimated row count: 0 (missing stats)
-    │ equality: (a, b, c, d) = (a, b, c, d)
+    │ equality: (b, a, d, c) = (b, a, d, c)
     │ left cols are key
     │ right cols are key
+    │ merge ordering: +"(b=b)",+"(a=a)",+"(d=d)",+"(c=c)"
     │
     ├── • scan
     │     columns: (a, b, c, d)
+    │     ordering: +b,+a,+d
     │     estimated row count: 1,000 (missing stats)
-    │     table: pkba@primary
+    │     table: pkbad@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c, d)
+          ordering: +b,+a
           estimated row count: 1,000 (missing stats)
-          table: pkbad@primary
+          table: pkba@primary
           spans: FULL SCAN
 
 query T
@@ -1158,21 +1161,24 @@ vectorized: true
 │ render s: COALESCE(s, s)
 │ render a: a
 │
-└── • hash join (left outer)
+└── • merge join (left outer)
     │ columns: (a, s, a, s)
     │ estimated row count: 1,000 (missing stats)
     │ equality: (a, s) = (a, s)
     │ left cols are key
     │ right cols are key
+    │ merge ordering: +"(a=a)",+"(s=s)"
     │
     ├── • scan
     │     columns: (a, s)
+    │     ordering: +a
     │     estimated row count: 1,000 (missing stats)
     │     table: str2@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, s)
+          ordering: +a
           estimated row count: 1,000 (missing stats)
           table: str1@primary
           spans: FULL SCAN
@@ -1323,8 +1329,8 @@ vectorized: true
 • merge join (inner)
 │ columns: (x, y, u, x, y, v)
 │ estimated row count: 9 (missing stats)
-│ equality: (x, y) = (x, y)
-│ merge ordering: +"(x=x)",+"(y=y)"
+│ equality: (y, x) = (y, x)
+│ merge ordering: +"(y=y)",+"(x=x)"
 │
 ├── • scan
 │     columns: (x, y, u)
@@ -1349,8 +1355,8 @@ vectorized: true
 • merge join (inner)
 │ columns: (x, y, u, x, y, v)
 │ estimated row count: 9 (missing stats)
-│ equality: (x, y) = (x, y)
-│ merge ordering: +"(x=x)",+"(y=y)"
+│ equality: (y, x) = (y, x)
+│ merge ordering: +"(y=y)",+"(x=x)"
 │
 ├── • scan
 │     columns: (x, y, u)

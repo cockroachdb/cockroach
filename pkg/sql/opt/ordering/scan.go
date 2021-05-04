@@ -13,12 +13,12 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
-func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func scanCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	ok, _ := ScanPrivateCanProvide(
 		expr.Memo().Metadata(),
 		&expr.(*memo.ScanExpr).ScanPrivate,
@@ -31,7 +31,7 @@ func scanCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice
 // in order to satisfy the required ordering. If either direction is ok (e.g. no
 // required ordering), reutrns false. The scan must be able to satisfy the
 // required ordering, according to ScanCanProvideOrdering.
-func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool {
+func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 	ok, reverse := ScanPrivateCanProvide(
 		scan.Memo().Metadata(),
 		&scan.ScanPrivate,
@@ -47,7 +47,7 @@ func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool 
 // that satisfy the given required ordering; it also returns whether the scan
 // needs to be in reverse order to match the required ordering.
 func ScanPrivateCanProvide(
-	md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
+	md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
 ) (ok bool, reverse bool) {
 	// Scan naturally orders according to scanned index's key columns. A scan can
 	// be executed either as a forward or as a reverse scan (unless it has a row
@@ -118,7 +118,7 @@ func ScanPrivateCanProvide(
 	return true, direction == rev
 }
 
-func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	scan := expr.(*memo.ScanExpr)
 	md := scan.Memo().Metadata()
 	index := md.Table(scan.Table).Index(scan.Index)
@@ -155,7 +155,7 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 
 func init() {
 	memo.ScanIsReverseFn = func(
-		md *opt.Metadata, s *memo.ScanPrivate, required *physical.OrderingChoice,
+		md *opt.Metadata, s *memo.ScanPrivate, required *props.OrderingChoice,
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
 		if !ok {

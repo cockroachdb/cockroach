@@ -1167,7 +1167,7 @@ project
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── prune: (1)
-      └── interesting orderings: (+1) (+2,+1)
+      └── interesting orderings: (+1 opt(2))
 
 opt expect-not=UnifyComparisonTypes format=show-all
 SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT

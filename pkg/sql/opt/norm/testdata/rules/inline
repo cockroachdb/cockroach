@@ -873,35 +873,22 @@ FROM t63794_a AS a
 project
  └── inner-join (hash)
       ├── scan t63794_a [as=a]
-      ├── inner-join (hash)
+      ├── inner-join (merge)
+      │    ├── inner-join (merge)
+      │    │    ├── project
+      │    │    │    ├── scan t63794_bc@secondary
+      │    │    │    └── projections
+      │    │    │         └── b % 2
+      │    │    ├── project
+      │    │    │    ├── scan t63794_bc@secondary
+      │    │    │    └── projections
+      │    │    │         └── b % 2
+      │    │    └── filters (true)
       │    ├── project
-      │    │    ├── scan t63794_bc
-      │    │    │    └── computed column expressions
-      │    │    │         └── c
-      │    │    │              └── b % 2
+      │    │    ├── scan t63794_bc@secondary
       │    │    └── projections
       │    │         └── b % 2
-      │    ├── inner-join (hash)
-      │    │    ├── project
-      │    │    │    ├── scan t63794_bc
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── c
-      │    │    │    │              └── b % 2
-      │    │    │    └── projections
-      │    │    │         └── b % 2
-      │    │    ├── project
-      │    │    │    ├── scan t63794_bc
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── c
-      │    │    │    │              └── b % 2
-      │    │    │    └── projections
-      │    │    │         └── b % 2
-      │    │    └── filters
-      │    │         ├── b = b
-      │    │         └── c = c
-      │    └── filters
-      │         ├── b = b
-      │         └── b = c
+      │    └── filters (true)
       └── filters
            └── a = b
 

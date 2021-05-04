@@ -111,7 +111,7 @@ project
                           ├── key: (6)
                           ├── fd: ()-->(4), (6)-->(5,7)
                           ├── prune: (5-7)
-                          ├── interesting orderings: (+6)
+                          ├── interesting orderings: (+6 opt(4))
                           ├── scan uv
                           │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
                           │    ├── key: (6)
@@ -156,7 +156,7 @@ project
                 │         ├── key: (6)
                 │         ├── fd: ()-->(4), (6)-->(5,7)
                 │         ├── prune: (5-7)
-                │         ├── interesting orderings: (+6)
+                │         ├── interesting orderings: (+6 opt(4))
                 │         ├── scan uv
                 │         │    ├── columns: u:4(int) v:5(int!null) rowid:6(int!null) uv.crdb_internal_mvcc_timestamp:7(decimal)
                 │         │    ├── key: (6)

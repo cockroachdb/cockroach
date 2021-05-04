@@ -13,7 +13,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,7 +67,8 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 ) {
 	orders := DeriveInterestingOrderings(input)
 	intraOrd := private.Ordering
-	for _, o := range orders {
+	for _, ord := range orders {
+		o := ord.ToOrdering()
 		// We are looking for a prefix of o that satisfies the intra-group ordering
 		// if we ignore grouping columns.
 		oIdx, intraIdx := 0, 0
@@ -93,7 +94,7 @@ func (c *CustomFuncs) GenerateStreamingGroupBy(
 		}
 		o = o[:oIdx]
 
-		var newOrd physical.OrderingChoice
+		var newOrd props.OrderingChoice
 		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
 
 		// Simplify the ordering according to the input's FDs. Note that this is not
@@ -186,8 +187,8 @@ func (c *CustomFuncs) OtherAggsAreConst(
 // is because NULL values sort first in CRDB.
 func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 	op opt.Operator, col opt.ColumnID,
-) physical.OrderingChoice {
-	oc := physical.OrderingChoice{}
+) props.OrderingChoice {
+	oc := props.OrderingChoice{}
 	switch op {
 	case opt.MinOp:
 		oc.AppendCol(col, false /* descending */)

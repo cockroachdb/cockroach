@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -27,7 +26,7 @@ import (
 // which must be a constant int datum value. The other fields are inherited from
 // the existing private.
 func (c *CustomFuncs) LimitScanPrivate(
-	scanPrivate *memo.ScanPrivate, limit tree.Datum, required physical.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
 	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
@@ -46,7 +45,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 //       GenerateLimitedScans rule, since that can require IndexJoin operators
 //       to be generated.
 func (c *CustomFuncs) CanLimitFilteredScan(
-	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, required props.OrderingChoice,
 ) bool {
 	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
@@ -87,10 +86,7 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 // limited partial index scans. Limiting partial indexes is done by the
 // PushLimitIntoFilteredScans rule.
 func (c *CustomFuncs) GenerateLimitedScans(
-	grp memo.RelExpr,
-	scanPrivate *memo.ScanPrivate,
-	limit tree.Datum,
-	required physical.OrderingChoice,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
@@ -119,9 +115,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := ordering.ScanPrivateCanProvide(
-			c.e.mem.Metadata(), &newScanPrivate, &required,
-		)
+		ok, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), &newScanPrivate, &required)
 		if !ok {
 			return
 		}
@@ -181,7 +175,7 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 // had relatively few keys to scan over.
 // TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
-	limitOrdering physical.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
+	limitOrdering props.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
 ) memo.RelExpr {
 	const maxScanCount = 16
 	const threshold = 4
@@ -364,7 +358,7 @@ func indexHasOrderingSequence(
 	md *opt.Metadata,
 	scan memo.RelExpr,
 	sp *memo.ScanPrivate,
-	limitOrdering physical.OrderingChoice,
+	limitOrdering props.OrderingChoice,
 	keyLength int,
 ) (hasSequence, reverse bool) {
 	tableMeta := md.TableMeta(sp.Table)
