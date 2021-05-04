@@ -434,6 +434,31 @@ func TestAvroArray(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestAvroCollatedString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b string collate "fr-CA")`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'désolée' collate "fr-CA")`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"désolée"}}}}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestAvroSchemaNaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

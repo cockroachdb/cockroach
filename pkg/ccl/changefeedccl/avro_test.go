@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/collate"
 )
 
 func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
@@ -230,8 +231,7 @@ func TestAvroSchema(t *testing.T) {
 		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
 			return true
-		case types.IntervalFamily, types.BitFamily,
-			types.CollatedStringFamily:
+		case types.IntervalFamily, types.BitFamily:
 			// Implement these as customer demand dictates.
 			return true
 		case types.ArrayFamily:
@@ -242,11 +242,24 @@ func TestAvroSchema(t *testing.T) {
 		return false
 	}
 
-	// Generate a test for each column type with a random datum of that type.
+	typesToTest := make([]*types.T, 0, 256)
+
 	for _, typ := range types.OidToType {
 		if skipType(typ) {
 			continue
 		}
+		typesToTest = append(typesToTest, typ)
+		switch typ.Family() {
+		case types.StringFamily:
+			collationTags := collate.Supported()
+			randCollationTag := collationTags[rand.Intn(len(collationTags))]
+			collatedType := types.MakeCollatedString(typ, randCollationTag.String())
+			typesToTest = append(typesToTest, collatedType)
+		}
+	}
+
+	// Generate a test for each column type with a random datum of that type.
+	for _, typ := range typesToTest {
 		var datum tree.Datum
 		datum, typ = overrideRandGen(typ)
 		if datum == nil {
@@ -334,27 +347,28 @@ func TestAvroSchema(t *testing.T) {
 	// reference.
 	t.Run("type_goldens", func(t *testing.T) {
 		goldens := map[string]string{
-			`BOOL`:         `["null","boolean"]`,
-			`BOOL[]`:       `["null",{"type":"array","items":["null","boolean"]}]`,
-			`BOX2D`:        `["null","string"]`,
-			`BYTES`:        `["null","bytes"]`,
-			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
-			`FLOAT8`:       `["null","double"]`,
-			`GEOGRAPHY`:    `["null","bytes"]`,
-			`GEOMETRY`:     `["null","bytes"]`,
-			`INET`:         `["null","string"]`,
-			`INT8`:         `["null","long"]`,
-			`JSONB`:        `["null","string"]`,
-			`STRING`:       `["null","string"]`,
-			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
-			`TIMETZ`:       `["null","string"]`,
-			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`UUID`:         `["null","string"]`,
-			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`BOOL`:              `["null","boolean"]`,
+			`BOOL[]`:            `["null",{"type":"array","items":["null","boolean"]}]`,
+			`BOX2D`:             `["null","string"]`,
+			`BYTES`:             `["null","bytes"]`,
+			`DATE`:              `["null",{"type":"int","logicalType":"date"}]`,
+			`FLOAT8`:            `["null","double"]`,
+			`GEOGRAPHY`:         `["null","bytes"]`,
+			`GEOMETRY`:          `["null","bytes"]`,
+			`INET`:              `["null","string"]`,
+			`INT8`:              `["null","long"]`,
+			`JSONB`:             `["null","string"]`,
+			`STRING`:            `["null","string"]`,
+			`STRING COLLATE fr`: `["null","string"]`,
+			`TIME`:              `["null",{"type":"long","logicalType":"time-micros"}]`,
+			`TIMETZ`:            `["null","string"]`,
+			`TIMESTAMP`:         `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`TIMESTAMPTZ`:       `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`UUID`:              `["null","string"]`,
+			`DECIMAL(3,2)`:      `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for _, typ := range append(types.Scalar, types.BoolArray) {
+		for _, typ := range append(types.Scalar, types.BoolArray, types.MakeCollatedString(types.String, `fr`)) {
 			switch typ.Family() {
 			case types.IntervalFamily, types.OidFamily, types.BitFamily:
 				continue
@@ -482,6 +496,9 @@ func TestAvroSchema(t *testing.T) {
 			{sqlType: `BOOL[]`,
 				sql:  `'{true, true, false, null}'`,
 				avro: `{"array":[{"boolean":true},{"boolean":true},{"boolean":false},null]}`},
+			{sqlType: `VARCHAR COLLATE "fr"`,
+				sql:  `'Bonjour' COLLATE "fr"`,
+				avro: `{"string":"Bonjour"}`},
 		}
 
 		for _, test := range goldens {

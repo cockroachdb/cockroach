@@ -297,6 +297,16 @@ func typeToAvroSchema(typ *types.T, reuseMap bool) (*avroSchemaField, error) {
 				return tree.NewDString(x.(string)), nil
 			},
 		)
+	case types.CollatedStringFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum) (interface{}, error) {
+				return d.(*tree.DCollatedString).Contents, nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.NewDCollatedString(x.(string), typ.Locale(), &tree.CollationEnvironment{})
+			},
+		)
 	case types.BytesFamily:
 		setNullable(
 			avroSchemaBytes,
