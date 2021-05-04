@@ -319,6 +319,7 @@ func changefeedPlanHook(
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
 				ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details, nilOracle, p.User(), mon.BoundAccount{},
+				jobspb.InvalidJobID,
 			)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
