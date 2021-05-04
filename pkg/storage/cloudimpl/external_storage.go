@@ -146,7 +146,6 @@ func init() {
 	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_NullSink, parseNullURL, makeNullSinkStorage, "null")
 	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_S3, parseS3URL, MakeS3Storage, "s3")
 	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_FileTable, parseUserfileURL, makeFileTableStorage, "userfile")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_Workload, ParseWorkloadConfig, makeWorkloadStorage, "workload")
 }
 
 // ExternalStorageURIContext contains arguments needed to parse external storage
