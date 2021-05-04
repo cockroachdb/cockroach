@@ -329,8 +329,7 @@ project
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3)
-      ├── prune: (1,2)
-      └── interesting orderings: (+3)
+      └── prune: (1,2)
 
 # Test IN in combination with another condition on the same column (which rules
 # out some of the entries in the IN condition).
@@ -724,7 +723,7 @@ scan c@v
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
- └── interesting orderings: (+1) (+3,+2,+1)
+ └── interesting orderings: (+1 opt(3)) (+2,+1 opt(3))
 
 opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
@@ -738,7 +737,7 @@ scan c@v
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
- └── interesting orderings: (+1) (+3,+2,+1)
+ └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
 
 opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
@@ -749,7 +748,7 @@ scan c@v
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── prune: (1)
- └── interesting orderings: (+1) (+3,+2,+1)
+ └── interesting orderings: (+1 opt(2,3))
 
 opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
@@ -760,7 +759,7 @@ scan c@v
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
- └── interesting orderings: (+1) (+3,+2,+1)
+ └── interesting orderings: (+1 opt(3)) (+2,+1 opt(3))
 
 opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
@@ -774,7 +773,7 @@ scan c@v
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
- └── interesting orderings: (+1) (+3,+2,+1)
+ └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
 
 opt format=hide-qual
 SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
@@ -785,7 +784,7 @@ scan c@v
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── prune: (1)
- └── interesting orderings: (+1) (+3,+2,+1)
+ └── interesting orderings: (+1 opt(2,3))
 
 # A tuple with NULL in it can't match anything, so it should be excluded from the constraints.
 opt
@@ -821,7 +820,7 @@ select
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+1) (+3,+2,+1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── filters
       └── in [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
            ├── tuple [type=tuple{int, int}]
@@ -860,7 +859,7 @@ select
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+1) (+3,+2,+1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── filters
       └── in [type=bool, outer=(2,3), immutable, constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
            ├── tuple [type=tuple{int, int}]
@@ -926,7 +925,7 @@ select
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3)
  ├── prune: (1)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1 opt(2))
  ├── scan d
  │    ├── columns: k:1(int!null) p:2(int) q:3(int)
  │    ├── key: (1)
@@ -957,7 +956,7 @@ select
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1 opt(3))
  ├── scan d
  │    ├── columns: k:1(int!null) p:2(int) q:3(int)
  │    ├── key: (1)
@@ -1103,7 +1102,7 @@ select
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1,2)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1 opt(3))
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)
@@ -1203,7 +1202,7 @@ select
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  ├── prune: (1,2)
- ├── interesting orderings: (+1)
+ ├── interesting orderings: (+1 opt(3))
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
  │    ├── key: (1)

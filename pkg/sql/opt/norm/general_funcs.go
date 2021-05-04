@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -588,15 +587,13 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 // OrderingCanProjectCols returns true if the given OrderingChoice can be
 // expressed using only the given columns. Or in other words, at least one
 // column from every ordering group is a member of the given ColSet.
-func (c *CustomFuncs) OrderingCanProjectCols(
-	ordering physical.OrderingChoice, cols opt.ColSet,
-) bool {
+func (c *CustomFuncs) OrderingCanProjectCols(ordering props.OrderingChoice, cols opt.ColSet) bool {
 	return ordering.CanProjectCols(cols)
 }
 
 // OrderingCols returns all non-optional columns that are part of the given
 // OrderingChoice.
-func (c *CustomFuncs) OrderingCols(ordering physical.OrderingChoice) opt.ColSet {
+func (c *CustomFuncs) OrderingCols(ordering props.OrderingChoice) opt.ColSet {
 	return ordering.ColSet()
 }
 
@@ -604,8 +601,8 @@ func (c *CustomFuncs) OrderingCols(ordering physical.OrderingChoice) opt.ColSet 
 // not part of the needed column set. Should only be called if
 // OrderingCanProjectCols is true.
 func (c *CustomFuncs) PruneOrdering(
-	ordering physical.OrderingChoice, needed opt.ColSet,
-) physical.OrderingChoice {
+	ordering props.OrderingChoice, needed opt.ColSet,
+) props.OrderingChoice {
 	if ordering.SubsetOfCols(needed) {
 		return ordering
 	}
@@ -616,13 +613,13 @@ func (c *CustomFuncs) PruneOrdering(
 
 // EmptyOrdering returns a pseudo-choice that does not require any
 // ordering.
-func (c *CustomFuncs) EmptyOrdering() physical.OrderingChoice {
-	return physical.OrderingChoice{}
+func (c *CustomFuncs) EmptyOrdering() props.OrderingChoice {
+	return props.OrderingChoice{}
 }
 
 // OrderingIntersects returns true if <ordering1> and <ordering2> have an
 // intersection. See OrderingChoice.Intersection for more information.
-func (c *CustomFuncs) OrderingIntersects(ordering1, ordering2 physical.OrderingChoice) bool {
+func (c *CustomFuncs) OrderingIntersects(ordering1, ordering2 props.OrderingChoice) bool {
 	return ordering1.Intersects(&ordering2)
 }
 
@@ -630,23 +627,23 @@ func (c *CustomFuncs) OrderingIntersects(ordering1, ordering2 physical.OrderingC
 // called if it is known that an intersection exists.
 // See OrderingChoice.Intersection for more information.
 func (c *CustomFuncs) OrderingIntersection(
-	ordering1, ordering2 physical.OrderingChoice,
-) physical.OrderingChoice {
+	ordering1, ordering2 props.OrderingChoice,
+) props.OrderingChoice {
 	return ordering1.Intersection(&ordering2)
 }
 
 // OrdinalityOrdering returns an ordinality operator's ordering choice.
-func (c *CustomFuncs) OrdinalityOrdering(private *memo.OrdinalityPrivate) physical.OrderingChoice {
+func (c *CustomFuncs) OrdinalityOrdering(private *memo.OrdinalityPrivate) props.OrderingChoice {
 	return private.Ordering
 }
 
 // IsSameOrdering evaluates whether the two orderings are equal.
-func (c *CustomFuncs) IsSameOrdering(first, other physical.OrderingChoice) bool {
+func (c *CustomFuncs) IsSameOrdering(first, other props.OrderingChoice) bool {
 	return first.Equals(&other)
 }
 
 // OrderingImplies returns true if the first OrderingChoice implies the second.
-func (c *CustomFuncs) OrderingImplies(first, second physical.OrderingChoice) bool {
+func (c *CustomFuncs) OrderingImplies(first, second props.OrderingChoice) bool {
 	return first.Implies(&second)
 }
 
@@ -880,7 +877,7 @@ func (c *CustomFuncs) IsUnorderedGrouping(grouping *memo.GroupingPrivate) bool {
 // columns and OrderingChoice. ErrorOnDup will be empty and NullsAreDistinct
 // will be false.
 func (c *CustomFuncs) MakeGrouping(
-	groupingCols opt.ColSet, ordering physical.OrderingChoice,
+	groupingCols opt.ColSet, ordering props.OrderingChoice,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{GroupingCols: groupingCols, Ordering: ordering}
 }
@@ -889,7 +886,7 @@ func (c *CustomFuncs) MakeGrouping(
 // grouping columns, OrderingChoice, and ErrorOnDup text. NullsAreDistinct will
 // be false.
 func (c *CustomFuncs) MakeErrorOnDupGrouping(
-	groupingCols opt.ColSet, ordering physical.OrderingChoice, errorText string,
+	groupingCols opt.ColSet, ordering props.OrderingChoice, errorText string,
 ) *memo.GroupingPrivate {
 	return &memo.GroupingPrivate{
 		GroupingCols: groupingCols, Ordering: ordering, ErrorOnDup: errorText,
@@ -911,9 +908,7 @@ func (c *CustomFuncs) ErrorOnDup(private *memo.GroupingPrivate) string {
 
 // ExtractGroupingOrdering returns the ordering associated with the input
 // GroupingPrivate.
-func (c *CustomFuncs) ExtractGroupingOrdering(
-	private *memo.GroupingPrivate,
-) physical.OrderingChoice {
+func (c *CustomFuncs) ExtractGroupingOrdering(private *memo.GroupingPrivate) props.OrderingChoice {
 	return private.Ordering
 }
 

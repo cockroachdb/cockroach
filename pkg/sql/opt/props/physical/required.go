@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // Required properties are interesting characteristics of an expression that
@@ -42,7 +43,7 @@ type Required struct {
 	// one or more columns, each of which can be sorted in either ascending or
 	// descending order. If Ordering is not defined, then no particular ordering
 	// is required or provided.
-	Ordering OrderingChoice
+	Ordering props.OrderingChoice
 
 	// LimitHint specifies a "soft limit" to the number of result rows that may
 	// be required of the expression. If requested, an expression will still need

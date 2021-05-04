@@ -171,14 +171,14 @@ index-join abc
  ├── lax-key: (2,3)
  ├── fd: ()-->(1), (3)~~>(2)
  ├── prune: (2,3)
- ├── interesting orderings: (+1,+2) (+3)
+ ├── interesting orderings: (+2 opt(1)) (+3 opt(1))
  └── scan abc@secondary
       ├── columns: a:1!null b:2 rowid:4!null
       ├── constraint: /1/2/4: [/1 - /1]
       ├── key: (4)
       ├── fd: ()-->(1), (4)-->(2)
       ├── prune: (1,2,4)
-      └── interesting orderings: (+4) (+1,+2,+4)
+      └── interesting orderings: (+2,+4 opt(1))
 
 # Limit operator.
 opt
@@ -199,7 +199,7 @@ index-join abc
       ├── fd: (4)-->(1,2)
       ├── ordering: +1
       ├── prune: (1,2,4)
-      └── interesting orderings: (+4) (+1,+2,+4)
+      └── interesting orderings: (+1,+2,+4)
 
 opt
 SELECT * FROM abc ORDER BY b LIMIT 10

@@ -58,7 +58,7 @@ scan t.public.abc@bc1
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  ├── prune: (1,3)
- └── interesting orderings: (+1) (+2,+3,+1)
+ └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
 
 # With locality in east, use bc1 index.
 opt format=show-all locality=(region=east)
@@ -72,7 +72,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in west, use bc2 index.
 opt format=show-all locality=(region=west)
@@ -86,7 +86,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # No locality, so use bc1, since it's first.
 opt format=show-all
@@ -100,7 +100,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # Locality doesn't match any constraints, so use bc1, since it's first.
 opt format=show-all locality=(region=central)
@@ -114,7 +114,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Multiple constraints.
@@ -158,7 +158,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + east, use bc1 index.
 opt format=show-all locality=(region=us,dc=east)
@@ -172,7 +172,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + west, use bc2 index, even though region does not match
 # any constraint on the index.
@@ -187,7 +187,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Multiple replica constraints.
@@ -214,7 +214,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + east, use bc2 index (use lowest match count when
 # replicas have different numbers of matches).
@@ -229,7 +229,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Complex constraints.
@@ -255,7 +255,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in eu, use bc2, since it's prohibited with bc1.
 opt format=show-all locality=(region=eu)
@@ -269,7 +269,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + east, use bc2, since it matches both tiers, even though
 # "us" match is after "eu" in list.
@@ -284,7 +284,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in ap + east, use bc1, since ap is not in list of regions for
 # bc2, even though dc=east matches.
@@ -299,7 +299,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 exec-ddl
 ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[-region=eu,+dc=east]'
@@ -321,7 +321,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in eu + east, use bc2, since eu is prohibited for bc1.
 opt format=show-all locality=(region=eu,dc=east)
@@ -335,7 +335,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Lookup join.
@@ -371,7 +371,7 @@ inner-join (lookup t.public.xy@y2)
  ├── key: (1,5)
  ├── fd: ()-->(2,6), (1)-->(3), (2,3)~~>(1), (2)==(6), (6)==(2)
  ├── prune: (1,3,5)
- ├── interesting orderings: (+1) (+2,+3,+1) (+5) (+6,+5)
+ ├── interesting orderings: (+1 opt(2)) (+3,+1 opt(2)) (+5 opt(6))
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
@@ -380,7 +380,7 @@ inner-join (lookup t.public.xy@y2)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  │    ├── prune: (1,3)
- │    └── interesting orderings: (+1) (+2,+3,+1)
+ │    └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
  └── filters
       └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
            ├── variable: t.public.xy.y:6 [type=int]
@@ -409,7 +409,7 @@ inner-join (lookup t.public.xy@y1)
  ├── key: (1,5)
  ├── fd: ()-->(2,6), (1)-->(3), (2,3)~~>(1), (2)==(6), (6)==(2)
  ├── prune: (1,3,5)
- ├── interesting orderings: (+1) (+2,+3,+1) (+5) (+6,+5)
+ ├── interesting orderings: (+1 opt(2)) (+3,+1 opt(2)) (+5 opt(6))
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
@@ -418,7 +418,7 @@ inner-join (lookup t.public.xy@y1)
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
  │    ├── prune: (1,3)
- │    └── interesting orderings: (+1) (+2,+3,+1)
+ │    └── interesting orderings: (+1 opt(2)) (+3,+1 opt(2))
  └── filters
       └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
            ├── variable: t.public.xy.y:6 [type=int]
@@ -465,7 +465,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in east, use bc1 index.
 opt format=show-all locality=(region=east)
@@ -479,7 +479,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in west, use bc2 index.
 opt format=show-all locality=(region=west)
@@ -493,7 +493,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Lease preferences - multiple constraints.
@@ -536,7 +536,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + east, use bc1 index.
 opt format=show-all locality=(region=us,dc=east)
@@ -550,7 +550,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + west, use bc2 index.
 opt format=show-all locality=(region=us,dc=west)
@@ -564,7 +564,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Zone constraint + leaseholder preference.
@@ -610,7 +610,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + east, use bc1 index.
 opt format=show-all locality=(region=us,dc=east)
@@ -624,7 +624,7 @@ scan t.public.abc@bc1
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # With locality in us + west, use bc2 index.
 opt format=show-all locality=(region=us,dc=west)
@@ -638,7 +638,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 exec-ddl
 ALTER TABLE abc CONFIGURE ZONE USING constraints='[+region=us]'
@@ -667,7 +667,7 @@ scan t.public.abc@bc2
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
- └── interesting orderings: (+2,+3)
+ └── interesting orderings: (+3 opt(2))
 
 # --------------------------------------------------
 # Partition zones.
@@ -719,7 +719,6 @@ locality-optimized-search
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1,2)
- ├── interesting orderings: (+2) (+1,+3,+4,+2) (+1,+3,+2)
  ├── scan t.public.abc_part@bc_idx
  │    ├── columns: t.public.abc_part.r:6(string!null) t.public.abc_part.a:7(int!null) t.public.abc_part.b:8(int!null) t.public.abc_part.c:9(string!null)
  │    ├── constraint: /6/8/9: [/'east'/1/'foo' - /'east'/1/'foo']
@@ -728,8 +727,7 @@ locality-optimized-search
  │    ├── cost: 2.532058
  │    ├── key: ()
  │    ├── fd: ()-->(6-9)
- │    ├── prune: (6-9)
- │    └── interesting orderings: (+7) (+6,+8,+9,+7) (+6,+8,+7)
+ │    └── prune: (6-9)
  └── scan t.public.abc_part@bc_idx
       ├── columns: t.public.abc_part.r:11(string!null) t.public.abc_part.a:12(int!null) t.public.abc_part.b:13(int!null) t.public.abc_part.c:14(string!null)
       ├── constraint: /11/13/14: [/'west'/1/'foo' - /'west'/1/'foo']
@@ -738,8 +736,7 @@ locality-optimized-search
       ├── cost: 2.532058
       ├── key: ()
       ├── fd: ()-->(11-14)
-      ├── prune: (11-14)
-      └── interesting orderings: (+12) (+11,+13,+14,+12) (+11,+13,+12)
+      └── prune: (11-14)
 
 # We should prefer locality optimized anti join (a pair of nested anti joins).
 opt locality=(region=east,dc=a)

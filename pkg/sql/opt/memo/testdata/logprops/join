@@ -41,7 +41,7 @@ project
  ├── key: (8)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2,6), (8)-->(1-4,6,7), (1)==(6), (6)==(1)
  ├── prune: (1-4,6-8)
- ├── interesting orderings: (+1) (-3,+4,+1) (+8)
+ ├── interesting orderings: (+(1|6)) (-3,+4,+(1|6)) (+8)
  └── inner-join (hash)
       ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) u:6(int!null) v:7(int!null) rowid:8(int!null) uv.crdb_internal_mvcc_timestamp:9(decimal)
       ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)

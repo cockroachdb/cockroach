@@ -258,7 +258,7 @@ type Relational struct {
 		// InterestingOrderings is lazily populated by interesting_orderings.go.
 		// It is only valid once the Rule.Available.InterestingOrderings bit has
 		// been set.
-		InterestingOrderings opt.OrderingSet
+		InterestingOrderings OrderingSet
 
 		// UnfilteredCols is the set of all columns for which rows from their base
 		// table are guaranteed not to have been filtered. Rows may be duplicated,

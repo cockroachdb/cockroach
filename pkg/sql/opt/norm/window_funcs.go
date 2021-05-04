@@ -13,7 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -24,9 +24,9 @@ import (
 func (c *CustomFuncs) MakeSegmentedOrdering(
 	input memo.RelExpr,
 	prefix opt.ColSet,
-	ordering physical.OrderingChoice,
-	limitOrdering physical.OrderingChoice,
-) *physical.OrderingChoice {
+	ordering props.OrderingChoice,
+	limitOrdering props.OrderingChoice,
+) *props.OrderingChoice {
 
 	// The columns in the closure of the prefix may be included in it. It's
 	// beneficial to do so for a given column iff that column appears in the
@@ -107,7 +107,7 @@ func (c *CustomFuncs) WindowPartition(priv *memo.WindowPrivate) opt.ColSet {
 }
 
 // WindowOrdering returns the ordering used by the window function.
-func (c *CustomFuncs) WindowOrdering(private *memo.WindowPrivate) physical.OrderingChoice {
+func (c *CustomFuncs) WindowOrdering(private *memo.WindowPrivate) props.OrderingChoice {
 	return private.Ordering
 }
 
@@ -141,12 +141,12 @@ func (c *CustomFuncs) ExtractUndeterminedConditions(
 }
 
 // OrderingSucceeded returns true if an OrderingChoice is not nil.
-func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
+func (c *CustomFuncs) OrderingSucceeded(result *props.OrderingChoice) bool {
 	return result != nil
 }
 
 // DerefOrderingChoice returns an OrderingChoice from a pointer.
-func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
+func (c *CustomFuncs) DerefOrderingChoice(result *props.OrderingChoice) props.OrderingChoice {
 	return *result
 }
 

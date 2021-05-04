@@ -1338,7 +1338,7 @@ func (f *ExprFmtCtx) formatCol(label string, id opt.ColumnID, notNullCols opt.Co
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
 // happen in reverse (the code lives in the ordering package, and depending on
 // that directly would be a dependency loop).
-var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *physical.OrderingChoice) bool
+var ScanIsReverseFn func(md *opt.Metadata, s *ScanPrivate, required *props.OrderingChoice) bool
 
 // FormatPrivate outputs a description of the private to f.Buffer.
 func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Required) {
@@ -1416,7 +1416,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
 		}
 
-	case *physical.OrderingChoice:
+	case *props.OrderingChoice:
 		if !t.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t)
 		}

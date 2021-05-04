@@ -1101,14 +1101,12 @@ sort
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
- ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1 rowid:3
            ├── constraint: /1/3: [/10 - /10]
@@ -1127,14 +1125,12 @@ sort
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
- ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1(int!null) rowid:3(int!null)
            ├── constraint: /1/3: [/10 - /10]

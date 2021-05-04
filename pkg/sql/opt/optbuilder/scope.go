@@ -336,8 +336,8 @@ func (s *scope) makeColumnTypes() []*types.T {
 }
 
 // makeOrderingChoice returns an OrderingChoice that corresponds to s.ordering.
-func (s *scope) makeOrderingChoice() physical.OrderingChoice {
-	var oc physical.OrderingChoice
+func (s *scope) makeOrderingChoice() props.OrderingChoice {
+	var oc props.OrderingChoice
 	oc.FromOrdering(s.ordering)
 	return oc
 }

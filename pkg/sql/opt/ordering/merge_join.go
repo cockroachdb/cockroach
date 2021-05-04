@@ -13,10 +13,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	m := expr.(*memo.MergeJoinExpr)
 	// TODO(radu): in principle, we could pass through an ordering that covers
 	// more than the equality columns. For example, if we have a merge join
@@ -40,19 +40,19 @@ func mergeJoinCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingC
 }
 
 func mergeJoinBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	switch childIdx {
 	case 0:
 		return parent.(*memo.MergeJoinExpr).LeftOrdering
 	case 1:
 		return parent.(*memo.MergeJoinExpr).RightOrdering
 	default:
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 }
 
-func mergeJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func mergeJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	m := expr.(*memo.MergeJoinExpr)
 	// This code parallels the one in mergeJoinCanProvideOrdering: the required
 	// ordering has to be provided by one of the inputs (as allowed by the join

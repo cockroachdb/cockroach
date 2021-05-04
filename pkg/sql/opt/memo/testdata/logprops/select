@@ -19,14 +19,12 @@ project
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── prune: (1,2)
- ├── interesting orderings: (+1)
  └── select
       ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── prune: (2,3)
-      ├── interesting orderings: (+1)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal)
       │    ├── key: (1)
@@ -46,13 +44,13 @@ project
  ├── key: (4)
  ├── fd: (1)-->(2), (4)-->(5,6), (1)==(4), (4)==(1)
  ├── prune: (1,2,4-6)
- ├── interesting orderings: (+1) (+4)
+ ├── interesting orderings: (+(1|4))
  └── select
       ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) k:4(int!null) u:5(float) v:6(string) kuv.crdb_internal_mvcc_timestamp:7(decimal)
       ├── key: (4)
       ├── fd: (1)-->(2,3), (4)-->(5-7), (1)==(4), (4)==(1)
       ├── prune: (2,3,5-7)
-      ├── interesting orderings: (+1) (+4)
+      ├── interesting orderings: (+(1|4))
       ├── inner-join (cross)
       │    ├── columns: x:1(int!null) y:2(int) xy.crdb_internal_mvcc_timestamp:3(decimal) k:4(int!null) u:5(float) v:6(string) kuv.crdb_internal_mvcc_timestamp:7(decimal)
       │    ├── key: (1,4)
@@ -110,7 +108,6 @@ project
                      ├── key: ()
                      ├── fd: ()-->(4-6)
                      ├── prune: (5,6)
-                     ├── interesting orderings: (+4)
                      ├── project
                      │    ├── columns: k:4(int!null) u:5(float) v:6(string)
                      │    ├── outer: (2)
@@ -118,7 +115,6 @@ project
                      │    ├── key: ()
                      │    ├── fd: ()-->(4-6)
                      │    ├── prune: (4-6)
-                     │    ├── interesting orderings: (+4)
                      │    └── select
                      │         ├── columns: k:4(int!null) u:5(float) v:6(string) kuv.crdb_internal_mvcc_timestamp:7(decimal)
                      │         ├── outer: (2)
@@ -126,7 +122,6 @@ project
                      │         ├── key: ()
                      │         ├── fd: ()-->(4-7)
                      │         ├── prune: (5-7)
-                     │         ├── interesting orderings: (+4)
                      │         ├── scan kuv
                      │         │    ├── columns: k:4(int!null) u:5(float) v:6(string) kuv.crdb_internal_mvcc_timestamp:7(decimal)
                      │         │    ├── key: (4)
@@ -363,7 +358,7 @@ project
                 │              │         ├── key: (7)
                 │              │         ├── fd: ()-->(8), (7)-->(9)
                 │              │         ├── prune: (7,9)
-                │              │         ├── interesting orderings: (+7)
+                │              │         ├── interesting orderings: (+7 opt(8))
                 │              │         ├── scan xy
                 │              │         │    ├── columns: x:7(int!null) y:8(int) xy.crdb_internal_mvcc_timestamp:9(decimal)
                 │              │         │    ├── key: (7)

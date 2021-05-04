@@ -13,25 +13,25 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func setOpCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func setOpCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	// Set operations can provide any ordering by requiring that both inputs have
 	// the same ordering.
 	return true
 }
 
 func setOpBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 && childIdx != 1 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 
 	required = setOpBuildRequired(parent, required)
 	private := parent.Private().(*memo.SetPrivate)
-	var childReq physical.OrderingChoice
+	var childReq props.OrderingChoice
 	switch childIdx {
 	case 0:
 		childReq = required.RemapColumns(private.OutCols, private.LeftCols)
@@ -40,7 +40,7 @@ func setOpBuildChildReqOrdering(
 		childReq = required.RemapColumns(private.OutCols, private.RightCols)
 
 	default:
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 
 	// Try to simplify the required ordering in case some of the ordering columns
@@ -52,7 +52,7 @@ func setOpBuildChildReqOrdering(
 	return childReq
 }
 
-func setOpBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func setOpBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	// Set operations can always provide the required ordering. Don't use the
 	// provided ordering from the inputs in case they were trimmed to remove
 	// constant columns. Call remapProvided to remove columns that are now
@@ -66,9 +66,7 @@ func setOpBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) op
 // includes all output columns of the set operation. This is necessary because
 // the execution engine can only use a streaming (merge join or distinct)
 // operation if the ordering involves all columns.
-func setOpBuildRequired(
-	expr memo.RelExpr, required *physical.OrderingChoice,
-) *physical.OrderingChoice {
+func setOpBuildRequired(expr memo.RelExpr, required *props.OrderingChoice) *props.OrderingChoice {
 	if required.Any() {
 		return required
 	}
@@ -102,7 +100,7 @@ func setOpBuildRequired(
 // StreamingSetOpOrdering returns an ordering on the set operation output
 // columns that is guaranteed on both inputs. This ordering can be used to
 // perform a streaming set operation.
-func StreamingSetOpOrdering(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func StreamingSetOpOrdering(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	required = setOpBuildRequired(expr, required)
 	ordering := required.ToOrdering()
 	if ordering.Empty() {
