@@ -219,7 +219,8 @@ define FiltersItem {
         ) &
         (OuterFunc
             (InnerFunc
-                (Let ($foo $bar):(SplitFilters $input $filters)
+                (Let
+                    ($foo $bar):(SplitFilters $input $filters)
                     $foo
                 )
             )
@@ -244,3 +245,29 @@ pretty
 (R)
 =>
 (O)
+
+# The closing ")" should not be printed on it's own line if the result, "$ok",
+# is not printed on it's own line.
+pretty
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result
+----
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let
+            ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result
