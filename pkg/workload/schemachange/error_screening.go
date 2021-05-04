@@ -814,3 +814,71 @@ SELECT
 		tableName.String(),
 	)
 }
+
+// tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
+func tableIsRegionalByRow(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	EXISTS(
+		SELECT
+			1
+		FROM
+			descriptors
+		WHERE
+			d->'localityConfig'->'regionalByRow' IS NOT NULL
+	);
+		`,
+		tableName.String(),
+	)
+}
+
+// databaseHasRegionChange determines whether the database is currently undergoing
+// a region change.
+func databaseHasRegionChange(tx *pgx.Tx) (bool, error) {
+	isMultiRegion, err := scanBool(
+		tx,
+		`SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE])`,
+	)
+	if err != nil || (!isMultiRegion && err == nil) {
+		return false, err
+	}
+	return scanBool(
+		tx,
+		`
+WITH enum_members AS (
+	SELECT
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+						)->'type'->'enumMembers'
+				)
+				AS v
+		FROM
+				system.descriptor
+		WHERE
+				id = ('public.crdb_internal_region'::REGTYPE::INT8 - 100000)
+)
+SELECT EXISTS (
+	SELECT 1 FROM enum_members
+	WHERE v->>'direction' <> 'NONE'
+)
+		`,
+	)
+}

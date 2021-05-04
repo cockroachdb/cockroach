@@ -305,7 +305,16 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
 
-	if og.randIntn(10) == 0 {
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
+	if !(tableIsRegionalByRow && databaseHasRegionChange) && og.randIntn(10) == 0 {
 		def.Unique.IsUnique = true
 	}
 
@@ -390,11 +399,21 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
 	codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
 		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
 	}.add(og.expectedExecErrors)
 
 	if !canApplyConstraint {
@@ -795,6 +814,18 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
 	if err != nil {
 		return "", err
+	}
+
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if databaseHasRegionChange && tableIsRegionalByRow {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
 	// When an index exists, but `IF NOT EXISTS` is used, then
@@ -1429,6 +1460,18 @@ func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
 	}
 	if hasAlterPKSchemaChange {
 		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if databaseHasRegionChange && tableIsRegionalByRow {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
 	return fmt.Sprintf(`DROP INDEX %s@"%s" CASCADE`, tableName, indexName), nil
