@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/errors"
 )
 
 // This file is for interfaces only and should not contain any implementation
@@ -100,3 +101,11 @@ type SQLConnI interface {
 // AccessIsWithExplicitAuth is used to check if the provided path has explicit
 // authentication.
 var AccessIsWithExplicitAuth func(path string) (bool, string, error)
+
+// ErrFileDoesNotExist is a sentinel error for indicating that a specified
+// bucket/object/key/file (depending on storage terminology) does not exist.
+// This error is raised by the ReadFile method.
+var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
+
+// ErrListingUnsupported is a marker for indicating listing is unsupported.
+var ErrListingUnsupported = errors.New("listing is not supported")
