@@ -4,7 +4,11 @@
 
 # Finding triage_column_id:
 #   TriageColumnID is the column id of the project column the team uses to
-#   triage issues. This is tricky to get, but is doable by installing
+#   triage issues. To get it, open the project, click the "..." on top of
+#   the project column, and click "Copy column link". That link contains
+#   the ID as the `#column-<ID>` fragment.
+#
+# You can also use:
 #   https://github.com/cockroachlabs/github-find-triage-column-id using
 #   `go install github.com/cockroachlabs/github-find-triage-column-id@latest`.
 #
@@ -14,7 +18,7 @@
 #     github-get-column-id --project "Spatial" --column "Backlog"
 
 cockroachdb/docs:
-  triage_column_id: 0 # TODO
+  triage_column_id: 3971225
 cockroachdb/sql-experience:
   aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sqlproxy-prs]
   triage_column_id: 7259065
@@ -25,7 +29,7 @@ cockroachdb/sql-queries:
   triage_column_id: 13549252
 cockroachdb/sql-observability:
   aliases: [cockroachdb/sql-api-prs]
-  triage_column_id: 0 # TODO
+  triage_column_id: 12618343
 cockroachdb/kv:
   triage_column_id: 3550674
 cockroachdb/geospatial:
@@ -35,7 +39,7 @@ cockroachdb/dev-inf:
 cockroachdb/storage:
   triage_column_id: 6668367
 cockroachdb/test-eng:
-  triage_column_id: 0 # TODO
+  triage_column_id: 14041337
 cockroachdb/security:
   triage_column_id: 0 # TODO
 cockroachdb/bulk-io:
@@ -46,7 +50,7 @@ cockroachdb/cdc:
   triage_column_id: 3570120
 cockroachdb/server:
   aliases: [cockroachdb/cli-prs, cockroachdb/server-prs, cockroachdb/http-api-prs]
-  triage_column_id: 0 # TODO
+  triage_column_id: 2521812
 cockroachdb/cluster-ui:
   aliases: [cockroachdb/cluster-ui-prs]
   triage_column_id: 6598672
