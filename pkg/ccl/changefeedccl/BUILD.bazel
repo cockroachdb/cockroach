@@ -193,5 +193,6 @@ go_test(
         "@com_github_shopify_sarama//:sarama",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_text//collate",
     ],
 )
