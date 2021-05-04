@@ -356,7 +356,7 @@ func testExportStoreWithExternalIOConfig(
 		// Attempt to read a file which does not exist.
 		_, err = singleFile.ReadFile(ctx, "file_does_not_exist")
 		require.Error(t, err)
-		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
 		require.NoError(t, s.Delete(ctx, testingFilename))
 	})
 }
@@ -787,12 +787,12 @@ func TestFileExistence(t *testing.T) {
 		// Try reading a file that doesn't exist and assert we get the error the
 		// interface claims it provides.
 		_, err := es.ReadFile(ctx, "this-doesnt-exist")
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			t.Fatalf("expected a file does not exist error, got %+v", err)
 		}
 
 		_, _, err = es.ReadFileAt(ctx, "this-doesnt-exist", 0 /* offset */)
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			t.Fatalf("expected a file does not exist error, got %+v", err)
 		}
 

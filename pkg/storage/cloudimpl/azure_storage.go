@@ -150,7 +150,7 @@ func (s *azureStorage) ReadFileAt(
 			switch azerr.ServiceCode() {
 			// TODO(adityamaru): Investigate whether both these conditions are required.
 			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
-				return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
+				return nil, 0, errors.Wrapf(cloud.ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
 			}
 		}
 		return nil, 0, errors.Wrap(err, "failed to create azure reader")

@@ -232,7 +232,7 @@ func (f *fileTableStorage) ReadFileAt(
 	}
 	reader, size, err := f.fs.ReadFile(ctx, filepath, offset)
 	if oserror.IsNotExist(err) {
-		return nil, 0, errors.Wrapf(ErrFileDoesNotExist,
+		return nil, 0, errors.Wrapf(cloud.ErrFileDoesNotExist,
 			"file %s does not exist in the UserFileTableSystem", filepath)
 	}
 
