@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/spf13/pflag"
 )
 
@@ -242,18 +243,6 @@ func (w *kv) Ops(
 		}
 	}
 
-	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-	cfg := workload.MultiConnPoolCfg{
-		MaxTotalConnections: w.connFlags.Concurrency + 1,
-	}
-	mcp, err := workload.NewMultiConnPool(cfg, urls...)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-
 	// Read statement
 	var buf strings.Builder
 	if w.shards == 0 {
@@ -304,6 +293,24 @@ func (w *kv) Ops(
 	// Span statement
 	spanStmtStr := "SELECT count(v) FROM kv"
 
+	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	name := "kv"
+	stmts := []string{readStmtStr, writeStmtStr, spanStmtStr}
+	preparedStmts := make(map[string]*pgconn.StatementDescription)
+	prepareStmtsFn := workload.GetPreparedStatementsCallback(name, stmts, preparedStmts)
+	cfg := workload.MultiConnPoolCfg{
+		MaxTotalConnections: w.connFlags.Concurrency + 1,
+		PrepareStatementsFn: prepareStmtsFn,
+	}
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	seq := &sequence{config: w, val: int64(writeSeq)}
 	numEmptyResults := new(int64)
@@ -313,10 +320,10 @@ func (w *kv) Ops(
 			hists:           reg.GetHandle(),
 			numEmptyResults: numEmptyResults,
 		}
-		op.readStmt = op.sr.Define(readStmtStr)
-		op.writeStmt = op.sr.Define(writeStmtStr)
-		op.spanStmt = op.sr.Define(spanStmtStr)
-		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
+		op.readStmt = op.sr.DefinePrepared(readStmtStr, preparedStmts[readStmtStr])
+		op.writeStmt = op.sr.DefinePrepared(writeStmtStr, preparedStmts[writeStmtStr])
+		op.spanStmt = op.sr.DefinePrepared(spanStmtStr, preparedStmts[spanStmtStr])
+		if err := op.sr.Init(ctx, name, mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		if w.sequential {

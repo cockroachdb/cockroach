@@ -17,10 +17,10 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"golang.org/x/exp/rand"
 )
 
@@ -50,26 +50,35 @@ type delivery struct {
 
 var _ tpccTx = &delivery{}
 
+const selectNewOrderStmt = `SELECT no_o_id
+		FROM new_order
+		WHERE no_w_id = $1 AND no_d_id = $2
+		ORDER BY no_o_id ASC
+		LIMIT 1`
+const sumAmountStmt = `
+		SELECT sum(ol_amount) FROM order_line
+		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`
+
+func getDeliveryStmts() []string {
+	return []string{
+		selectNewOrderStmt, sumAmountStmt,
+	}
+}
+
 func createDelivery(
-	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
+	ctx context.Context,
+	config *tpcc,
+	mcp *workload.MultiConnPool,
+	preparedStmts map[string]*pgconn.StatementDescription,
 ) (tpccTx, error) {
 	del := &delivery{
 		config: config,
 		mcp:    mcp,
 	}
 
-	del.selectNewOrder = del.sr.Define(`
-		SELECT no_o_id
-		FROM new_order
-		WHERE no_w_id = $1 AND no_d_id = $2
-		ORDER BY no_o_id ASC
-		LIMIT 1`,
-	)
+	del.selectNewOrder = del.sr.DefinePrepared(selectNewOrderStmt, preparedStmts[selectNewOrderStmt])
 
-	del.sumAmount = del.sr.Define(`
-		SELECT sum(ol_amount) FROM order_line
-		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
-	)
+	del.sumAmount = del.sr.DefinePrepared(sumAmountStmt, preparedStmts[sumAmountStmt])
 
 	if err := del.sr.Init(ctx, "delivery", mcp, config.connFlags); err != nil {
 		return nil, err
@@ -86,12 +95,12 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
-	tx, err := del.mcp.Get().BeginEx(ctx, del.config.txOpts)
+	tx, err := del.mcp.Get().BeginTx(ctx, del.config.txOpts)
 	if err != nil {
 		return nil, err
 	}
-	err = crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+	err = workload.ExecuteInTx(
+		ctx, tx,
 		func() error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)
@@ -118,7 +127,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 			dIDoIDPairsStr := makeInTuples(dIDoIDPairs)
 
-			rows, err := tx.QueryEx(
+			rows, err := tx.Query(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE "order"
@@ -127,7 +136,6 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 					RETURNING o_d_id, o_c_id`,
 					oCarrierID, wID, dIDoIDPairsStr,
 				),
-				nil, /* options */
 			)
 			if err != nil {
 				return err
@@ -152,7 +160,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 			dIDcIDPairsStr := makeInTuples(dIDcIDPairs)
 			dIDToOlTotalStr := makeWhereCases(dIDolTotalPairs)
 
-			if _, err := tx.ExecEx(
+			if _, err := tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE customer
@@ -161,23 +169,21 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 					WHERE c_w_id = %d AND (c_d_id, c_id) IN (%s)`,
 					dIDToOlTotalStr, wID, dIDcIDPairsStr,
 				),
-				nil, /* options */
 			); err != nil {
 				return err
 			}
-			if _, err := tx.ExecEx(
+			if _, err := tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					DELETE FROM new_order
 					WHERE no_w_id = %d AND (no_d_id, no_o_id) IN (%s)`,
 					wID, dIDoIDPairsStr,
 				),
-				nil, /* options */
 			); err != nil {
 				return err
 			}
 
-			_, err = tx.ExecEx(
+			_, err = tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE order_line
@@ -185,7 +191,6 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 					WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,
 					olDeliveryD.Format("2006-01-02 15:04:05"), wID, dIDoIDPairsStr,
 				),
-				nil, /* options */
 			)
 			return err
 		})

@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"golang.org/x/exp/rand"
 )
 
@@ -87,41 +87,24 @@ type payment struct {
 
 var _ tpccTx = &payment{}
 
-func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error) {
-	p := &payment{
-		config: config,
-		mcp:    mcp,
-	}
-
-	// Update warehouse with payment
-	p.updateWarehouse = p.sr.Define(`
+const updateWarehouseStmt = `
 		UPDATE warehouse
 		SET w_ytd = w_ytd + $1
 		WHERE w_id = $2
-		RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip`,
-	)
+		RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip`
 
-	// Update district with payment
-	p.updateDistrict = p.sr.Define(`
+const updateDistrictStmt = `
 		UPDATE district
 		SET d_ytd = d_ytd + $1
 		WHERE d_w_id = $2 AND d_id = $3
-		RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
-	)
+		RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`
 
-	// 2.5.2.2 Case 2: Pick the middle row, rounded up, from the selection by last name.
-	p.selectByLastName = p.sr.Define(`
-		SELECT c_id
+const selectByLastNameStmt = `SELECT c_id
 		FROM customer
 		WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
-		ORDER BY c_first ASC`,
-	)
+		ORDER BY c_first ASC`
 
-	// Update customer with payment.
-	// If the customer has bad credit, update the customer's C_DATA and return
-	// the first 200 characters of it, which is supposed to get displayed by
-	// the terminal. See 2.5.3.3 and 2.5.2.2.
-	p.updateWithPayment = p.sr.Define(`
+const updateWithPaymentStmt = `
 		UPDATE customer
 		SET (c_balance, c_ytd_payment, c_payment_cnt, c_data) =
 		(c_balance - ($1:::float)::decimal, c_ytd_payment + ($1:::float)::decimal, c_payment_cnt + 1,
@@ -131,15 +114,35 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		WHERE c_w_id = $2 AND c_d_id = $3 AND c_id = $4
 		RETURNING c_first, c_middle, c_last, c_street_1, c_street_2,
 					c_city, c_state, c_zip, c_phone, c_since, c_credit,
-					c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end`,
-	)
+					c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end`
 
-	// Insert history line.
-
-	p.insertHistory = p.sr.Define(`
+const insertHistoryStmt = `
 		INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-	)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+
+func getCreatePaymentStmts() []string {
+	return []string{
+		updateWarehouseStmt, updateDistrictStmt, selectByLastNameStmt,
+		updateWithPaymentStmt, insertHistoryStmt,
+	}
+}
+
+func createPayment(
+	ctx context.Context,
+	config *tpcc,
+	mcp *workload.MultiConnPool,
+	preparedStmts map[string]*pgconn.StatementDescription,
+) (tpccTx, error) {
+	p := &payment{
+		config: config,
+		mcp:    mcp,
+	}
+
+	p.updateWarehouse = p.sr.DefinePrepared(updateWarehouseStmt, preparedStmts[updateWarehouseStmt])
+	p.updateDistrict = p.sr.DefinePrepared(updateDistrictStmt, preparedStmts[updateDistrictStmt])
+	p.selectByLastName = p.sr.DefinePrepared(selectByLastNameStmt, preparedStmts[selectByLastNameStmt])
+	p.updateWithPayment = p.sr.DefinePrepared(updateWithPaymentStmt, preparedStmts[updateWithPaymentStmt])
+	p.insertHistory = p.sr.DefinePrepared(insertHistoryStmt, preparedStmts[insertHistoryStmt])
 
 	if err := p.sr.Init(ctx, "payment", mcp, config.connFlags); err != nil {
 		return nil, err
@@ -186,12 +189,12 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = p.config.randCustomerID(rng)
 	}
 
-	tx, err := p.mcp.Get().BeginEx(ctx, p.config.txOpts)
+	tx, err := p.mcp.Get().BeginTx(ctx, p.config.txOpts)
 	if err != nil {
 		return nil, err
 	}
-	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+	if err := workload.ExecuteInTx(
+		ctx, tx,
 		func() error {
 			var wName, dName string
 			// Update warehouse with payment

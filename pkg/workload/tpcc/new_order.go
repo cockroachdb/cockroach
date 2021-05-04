@@ -18,10 +18,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/lib/pq"
 	"golang.org/x/exp/rand"
 )
@@ -84,43 +84,51 @@ type newOrder struct {
 
 var _ tpccTx = &newOrder{}
 
+const updateDistrictOrderStmt = `
+		UPDATE district
+		SET d_next_o_id = d_next_o_id + 1
+		WHERE d_w_id = $1 AND d_id = $2
+		RETURNING d_tax, d_next_o_id`
+
+const selectWarehouseTaxStmt = `
+		SELECT w_tax FROM warehouse WHERE w_id = $1`
+
+const selectCustomerInfoStmt = `
+		SELECT c_discount, c_last, c_credit
+		FROM customer
+		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`
+
+const insertOrderStmt = `
+		INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
+
+const insertNewOrderStmt = `
+		INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
+		VALUES ($1, $2, $3)`
+
+func getCreateNewOrderStmts() []string {
+	return []string{
+		updateDistrictOrderStmt, selectWarehouseTaxStmt, selectCustomerInfoStmt,
+		insertOrderStmt, insertNewOrderStmt,
+	}
+}
+
 func createNewOrder(
-	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
+	ctx context.Context,
+	config *tpcc,
+	mcp *workload.MultiConnPool,
+	preparedStmts map[string]*pgconn.StatementDescription,
 ) (tpccTx, error) {
 	n := &newOrder{
 		config: config,
 		mcp:    mcp,
 	}
 
-	// Select the district tax rate and next available order number, bumping it.
-	n.updateDistrict = n.sr.Define(`
-		UPDATE district
-		SET d_next_o_id = d_next_o_id + 1
-		WHERE d_w_id = $1 AND d_id = $2
-		RETURNING d_tax, d_next_o_id`,
-	)
-
-	// Select the warehouse tax rate.
-	n.selectWarehouseTax = n.sr.Define(`
-		SELECT w_tax FROM warehouse WHERE w_id = $1`,
-	)
-
-	// Select the customer's discount, last name and credit.
-	n.selectCustomerInfo = n.sr.Define(`
-		SELECT c_discount, c_last, c_credit
-		FROM customer
-		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
-	)
-
-	n.insertOrder = n.sr.Define(`
-		INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-	)
-
-	n.insertNewOrder = n.sr.Define(`
-		INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
-		VALUES ($1, $2, $3)`,
-	)
+	n.updateDistrict = n.sr.DefinePrepared(updateDistrictOrderStmt, preparedStmts[updateDistrictOrderStmt])
+	n.selectWarehouseTax = n.sr.DefinePrepared(selectWarehouseTaxStmt, preparedStmts[selectWarehouseTaxStmt])
+	n.selectCustomerInfo = n.sr.DefinePrepared(selectCustomerInfoStmt, preparedStmts[selectCustomerInfoStmt])
+	n.insertOrder = n.sr.DefinePrepared(insertOrderStmt, preparedStmts[insertOrderStmt])
+	n.insertNewOrder = n.sr.DefinePrepared(insertNewOrderStmt, preparedStmts[insertNewOrderStmt])
 
 	if err := n.sr.Init(ctx, "new-order", mcp, config.connFlags); err != nil {
 		return nil, err
@@ -206,12 +214,12 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 	d.oEntryD = timeutil.Now()
 
-	tx, err := n.mcp.Get().BeginEx(ctx, n.config.txOpts)
+	tx, err := n.mcp.Get().BeginTx(ctx, n.config.txOpts)
 	if err != nil {
 		return nil, err
 	}
-	err = crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+	err = workload.ExecuteInTx(
+		ctx, tx,
 		func() error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
@@ -243,7 +251,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			for i, item := range d.items {
 				itemIDs[i] = fmt.Sprint(item.olIID)
 			}
-			rows, err := tx.QueryEx(
+			rows, err := tx.Query(
 				ctx,
 				fmt.Sprintf(`
 					SELECT i_price, i_name, i_data
@@ -252,7 +260,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					ORDER BY i_id`,
 					strings.Join(itemIDs, ", "),
 				),
-				nil, /* options */
 			)
 			if err != nil {
 				return err
@@ -296,7 +303,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			for i, item := range d.items {
 				stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
 			}
-			rows, err = tx.QueryEx(
+			rows, err = tx.Query(
 				ctx,
 				fmt.Sprintf(`
 					SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
@@ -305,7 +312,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					ORDER BY s_i_id`,
 					d.dID, strings.Join(stockIDs, ", "),
 				),
-				nil, /* options */
 			)
 			if err != nil {
 				return err
@@ -376,7 +382,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 
 			// Update the stock table for each item.
-			if _, err := tx.ExecEx(
+			if _, err := tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					UPDATE stock
@@ -392,7 +398,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					strings.Join(sRemoteCntUpdateCases, " "),
 					strings.Join(stockIDs, ", "),
 				),
-				nil, /* options */
 			); err != nil {
 				return err
 			}
@@ -416,14 +421,13 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					distInfos[i],     // ol_dist_info
 				)
 			}
-			if _, err := tx.ExecEx(
+			if _, err := tx.Exec(
 				ctx,
 				fmt.Sprintf(`
 					INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
 					VALUES %s`,
 					strings.Join(olValsStrings, ", "),
 				),
-				nil, /* options */
 			); err != nil {
 				return err
 			}

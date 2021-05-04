@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v4"
 )
 
 // seqNum may be shared across multiple instances of this, so it should only
@@ -142,7 +142,7 @@ const (
 	numOpTypes int = iota
 )
 
-var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
+var opFuncs = map[opType]func(*operationGenerator, pgx.Tx) (string, error){
 	addColumn:               (*operationGenerator).addColumn,
 	addConstraint:           (*operationGenerator).addConstraint,
 	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
@@ -230,7 +230,7 @@ var opWeights = []int{
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, err error) {
+func (og *operationGenerator) randOp(tx pgx.Tx) (stmt string, err error) {
 
 	for {
 		op := opType(og.params.ops.Int())
@@ -273,7 +273,7 @@ func (og *operationGenerator) haveInsertBeforeAnyDDLs() bool {
 	return false
 }
 
-func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) addColumn(tx pgx.Tx) (string, error) {
 
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
@@ -335,13 +335,13 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
 }
 
-func (og *operationGenerator) addConstraint(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) addConstraint(tx pgx.Tx) (string, error) {
 	// TODO(peter): unimplemented
 	// - Export sqlbase.randColumnTableDef.
 	return "", nil
 }
 
-func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) addUniqueConstraint(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -392,7 +392,7 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name), nil
 }
 
-func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) alterTableLocality(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -433,17 +433,17 @@ func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, localityOptions[idx]()), nil
 }
 
-func getClusterRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
+func getClusterRegionNames(tx pgx.Tx) (descpb.RegionNames, error) {
 	return scanRegionNames(tx, "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
 }
 
-func getDatabaseRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
+func getDatabaseRegionNames(tx pgx.Tx) (descpb.RegionNames, error) {
 	return scanRegionNames(tx, "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
 }
 
-func getDatabase(tx *pgx.Tx) (string, error) {
+func getDatabase(tx pgx.Tx) (string, error) {
 	var database string
-	err := tx.QueryRow("SHOW DATABASE").Scan(&database)
+	err := tx.QueryRow(context.TODO(),"SHOW DATABASE").Scan(&database)
 	return database, err
 }
 
@@ -454,7 +454,7 @@ type getRegionsResult struct {
 	regionNamesNotInDatabase descpb.RegionNames
 }
 
-func getRegions(tx *pgx.Tx) (getRegionsResult, error) {
+func getRegions(tx pgx.Tx) (getRegionsResult, error) {
 	regionNamesInCluster, err := getClusterRegionNames(tx)
 	if err != nil {
 		return getRegionsResult{}, err
@@ -482,9 +482,9 @@ func getRegions(tx *pgx.Tx) (getRegionsResult, error) {
 	}, nil
 }
 
-func scanRegionNames(tx *pgx.Tx, query string) (descpb.RegionNames, error) {
+func scanRegionNames(tx pgx.Tx, query string) (descpb.RegionNames, error) {
 	var regionNames descpb.RegionNames
-	rows, err := tx.Query(query)
+	rows, err := tx.Query(context.TODO(), query)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func scanRegionNames(tx *pgx.Tx, query string) (descpb.RegionNames, error) {
 	return regionNames, nil
 }
 
-func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) addRegion(tx pgx.Tx) (string, error) {
 	regionResult, err := getRegions(tx)
 	if err != nil {
 		return "", err
@@ -556,7 +556,7 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 	), nil
 }
 
-func (og *operationGenerator) primaryRegion(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) primaryRegion(tx pgx.Tx) (string, error) {
 	regionResult, err := getRegions(tx)
 	if err != nil {
 		return "", err
@@ -591,7 +591,7 @@ func (og *operationGenerator) primaryRegion(tx *pgx.Tx) (string, error) {
 	), nil
 }
 
-func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) addForeignKeyConstraint(tx pgx.Tx) (string, error) {
 
 	parentTable, parentColumn, err := og.randParentColumnForFkRelation(tx, og.randIntn(100) >= og.params.fkParentInvalidPct)
 	if err != nil {
@@ -668,7 +668,7 @@ func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error
 	return tree.Serialize(def), nil
 }
 
-func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createIndex(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -803,7 +803,7 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(def), nil
 }
 
-func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createSequence(tx pgx.Tx) (string, error) {
 	seqName, err := og.randSequence(tx, og.pctExisting(false), "")
 	if err != nil {
 		return "", err
@@ -887,7 +887,7 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(createSeq), nil
 }
 
-func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createTable(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(false), "")
 	if err != nil {
 		return "", err
@@ -918,7 +918,7 @@ func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(stmt), nil
 }
 
-func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createEnum(tx pgx.Tx) (string, error) {
 	typName, typeExists, err := og.randEnum(tx, og.pctExisting(false))
 	if err != nil {
 		return "", err
@@ -936,7 +936,7 @@ func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(stmt), nil
 }
 
-func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createTableAs(tx pgx.Tx) (string, error) {
 	numSourceTables := og.randIntn(og.params.maxSourceTables) + 1
 
 	sourceTableNames := make([]tree.TableExpr, numSourceTables)
@@ -1055,7 +1055,7 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 		destTableName, selectStatement.String()), nil
 }
 
-func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createView(tx pgx.Tx) (string, error) {
 
 	numSourceTables := og.randIntn(og.params.maxSourceTables) + 1
 
@@ -1175,7 +1175,7 @@ func (og *operationGenerator) createView(tx *pgx.Tx) (string, error) {
 		destViewName, selectStatement.String()), nil
 }
 
-func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropColumn(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1221,7 +1221,7 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
 }
 
-func (og *operationGenerator) dropColumnDefault(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropColumnDefault(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1248,7 +1248,7 @@ func (og *operationGenerator) dropColumnDefault(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName), nil
 }
 
-func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropColumnNotNull(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1284,7 +1284,7 @@ func (og *operationGenerator) dropColumnNotNull(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName), nil
 }
 
-func (og *operationGenerator) dropColumnStored(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropColumnStored(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1320,7 +1320,7 @@ func (og *operationGenerator) dropColumnStored(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
 }
 
-func (og *operationGenerator) dropConstraint(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropConstraint(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1373,7 +1373,7 @@ func (og *operationGenerator) dropConstraint(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName), nil
 }
 
-func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropIndex(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1403,7 +1403,7 @@ func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`DROP INDEX %s@"%s" CASCADE`, tableName, indexName), nil
 }
 
-func (og *operationGenerator) dropSequence(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropSequence(tx pgx.Tx) (string, error) {
 	sequenceName, err := og.randSequence(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1424,7 +1424,7 @@ func (og *operationGenerator) dropSequence(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(dropSeq), nil
 }
 
-func (og *operationGenerator) dropTable(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropTable(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1455,7 +1455,7 @@ func (og *operationGenerator) dropTable(tx *pgx.Tx) (string, error) {
 	return dropTable.String(), nil
 }
 
-func (og *operationGenerator) dropView(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropView(tx pgx.Tx) (string, error) {
 	viewName, err := og.randView(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1485,7 +1485,7 @@ func (og *operationGenerator) dropView(tx *pgx.Tx) (string, error) {
 	return dropView.String(), nil
 }
 
-func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) renameColumn(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1534,7 +1534,7 @@ func (og *operationGenerator) renameColumn(tx *pgx.Tx) (string, error) {
 		tableName, srcColumnName, destColumnName), nil
 }
 
-func (og *operationGenerator) renameIndex(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) renameIndex(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1578,7 +1578,7 @@ func (og *operationGenerator) renameIndex(tx *pgx.Tx) (string, error) {
 		tableName, srcIndexName, destIndexName), nil
 }
 
-func (og *operationGenerator) renameSequence(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) renameSequence(tx pgx.Tx) (string, error) {
 	srcSequenceName, err := og.randSequence(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1621,7 +1621,7 @@ func (og *operationGenerator) renameSequence(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName), nil
 }
 
-func (og *operationGenerator) renameTable(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) renameTable(tx pgx.Tx) (string, error) {
 	srcTableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1669,7 +1669,7 @@ func (og *operationGenerator) renameTable(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName), nil
 }
 
-func (og *operationGenerator) renameView(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) renameView(tx pgx.Tx) (string, error) {
 	srcViewName, err := og.randView(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1717,7 +1717,7 @@ func (og *operationGenerator) renameView(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName), nil
 }
 
-func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) setColumnDefault(tx pgx.Tx) (string, error) {
 
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
@@ -1771,7 +1771,7 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, columnForDefault.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)), nil
 }
 
-func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) setColumnNotNull(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1818,7 +1818,7 @@ func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName), nil
 }
 
-func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) setColumnType(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", err
@@ -1875,7 +1875,7 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		tableName, columnForTypeChange.name, newTypeName.SQLString()), nil
 }
 
-func (og *operationGenerator) survive(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) survive(tx pgx.Tx) (string, error) {
 	dbRegions, err := getDatabaseRegionNames(tx)
 	if err != nil {
 		return "", err
@@ -1909,7 +1909,7 @@ func (og *operationGenerator) survive(tx *pgx.Tx) (string, error) {
 	return fmt.Sprintf(`ALTER DATABASE %s SURVIVE %s`, dbName, survive), nil
 }
 
-func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) insertRow(tx pgx.Tx) (string, error) {
 	tableName, err := og.randTable(tx, og.pctExisting(true), "")
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting random table name")
@@ -1993,12 +1993,12 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	), nil
 }
 
-func (og *operationGenerator) validate(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) validate(tx pgx.Tx) (string, error) {
 	// Finish validation off by validating multi region zone configs are as expected.
 	// Configs can be invalid if a user decides to override a multi-region field, but
 	// this is not performed by the schemachange workload.
 	validateStmt := "SELECT 'validating all objects', crdb_internal.validate_multi_region_zone_configs()"
-	rows, err := tx.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+	rows, err := tx.Query(context.TODO(),`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
 	if err != nil {
 		return validateStmt, err
 	}
@@ -2035,7 +2035,7 @@ type column struct {
 }
 
 func (og *operationGenerator) getTableColumns(
-	tx *pgx.Tx, tableName string, shuffle bool,
+	tx pgx.Tx, tableName string, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
 SELECT column_name,
@@ -2044,7 +2044,7 @@ SELECT column_name,
        generation_expression != '' AS is_generated
   FROM [SHOW COLUMNS FROM %s];
 `, tableName)
-	rows, err := tx.Query(q)
+	rows, err := tx.Query(context.TODO(), q)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
 	}
@@ -2087,7 +2087,7 @@ SELECT column_name,
 }
 
 func (og *operationGenerator) randColumn(
-	tx *pgx.Tx, tableName tree.TableName, pctExisting int,
+	tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
@@ -2103,7 +2103,7 @@ ORDER BY random()
    LIMIT 1;
 `, tableName.String())
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
@@ -2113,7 +2113,7 @@ ORDER BY random()
 // it will return a column struct, which includes type and nullability information, instead of
 // a column name string.
 func (og *operationGenerator) randColumnWithMeta(
-	tx *pgx.Tx, tableName tree.TableName, pctExisting int,
+	tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (column, error) {
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all columns by prefixing them with the table
@@ -2132,7 +2132,7 @@ ORDER BY random()
 `, tableName.String())
 	var col column
 	var typ string
-	if err := tx.QueryRow(q).Scan(&col.name, &typ, &col.nullable); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&col.name, &typ, &col.nullable); err != nil {
 		return column{}, errors.Wrapf(err, "randColumnWithMeta: %q", q)
 	}
 
@@ -2148,7 +2148,7 @@ ORDER BY random()
 // randChildColumnForFkRelation gets a column to use as the child column in a foreign key relation.
 // To successfully use a column as the child, the column must have the same type as the parent and must not be computed.
 func (og *operationGenerator) randChildColumnForFkRelation(
-	tx *pgx.Tx, isNotComputed bool, typ string,
+	tx pgx.Tx, isNotComputed bool, typ string,
 ) (*tree.TableName, *column, error) {
 
 	query := strings.Builder{}
@@ -2173,7 +2173,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	var typName string
 	var nullable string
 
-	err := tx.QueryRow(query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
+	err := tx.QueryRow(context.TODO(), query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2198,7 +2198,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 // randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
 // To successfully use a column as the parent, the column must be unique and must not be generated.
 func (og *operationGenerator) randParentColumnForFkRelation(
-	tx *pgx.Tx, unique bool,
+	tx pgx.Tx, unique bool,
 ) (*tree.TableName, *column, error) {
 
 	subQuery := strings.Builder{}
@@ -2234,7 +2234,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	var typName string
 	var nullable string
 
-	err := tx.QueryRow(fmt.Sprintf(`
+	err := tx.QueryRow(context.TODO(), fmt.Sprintf(`
 	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
 		%s
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
@@ -2259,7 +2259,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	return &table, &columnToReturn, nil
 }
 
-func (og *operationGenerator) randConstraint(tx *pgx.Tx, tableName string) (string, error) {
+func (og *operationGenerator) randConstraint(tx pgx.Tx, tableName string) (string, error) {
 	q := fmt.Sprintf(`
   SELECT constraint_name
     FROM [SHOW CONSTRAINTS FROM %s]
@@ -2267,7 +2267,7 @@ ORDER BY random()
    LIMIT 1;
 `, tableName)
 	var name string
-	err := tx.QueryRow(q).Scan(&name)
+	err := tx.QueryRow(context.TODO(), q).Scan(&name)
 	if err != nil {
 		return "", err
 	}
@@ -2275,7 +2275,7 @@ ORDER BY random()
 }
 
 func (og *operationGenerator) randIndex(
-	tx *pgx.Tx, tableName tree.TableName, pctExisting int,
+	tx pgx.Tx, tableName tree.TableName, pctExisting int,
 ) (string, error) {
 	if og.randIntn(100) >= pctExisting {
 		// We make a unique name for all indices by prefixing them with the table
@@ -2291,7 +2291,7 @@ ORDER BY random()
    LIMIT 1;
 `, tableName.String())
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
@@ -2299,7 +2299,7 @@ ORDER BY random()
 
 // randSequence returns a sequence qualified by a schema
 func (og *operationGenerator) randSequence(
-	tx *pgx.Tx, pctExisting int, desiredSchema string,
+	tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
 
 	if desiredSchema != "" {
@@ -2320,7 +2320,7 @@ func (og *operationGenerator) randSequence(
 		`, desiredSchema)
 
 		var seqName string
-		if err := tx.QueryRow(q).Scan(&seqName); err != nil {
+		if err := tx.QueryRow(context.TODO(), q).Scan(&seqName); err != nil {
 			treeSeqName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
 			return &treeSeqName, err
 		}
@@ -2357,7 +2357,7 @@ func (og *operationGenerator) randSequence(
 
 	var schemaName string
 	var seqName string
-	if err := tx.QueryRow(q).Scan(&schemaName, &seqName); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&schemaName, &seqName); err != nil {
 		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
 		return &treeTableName, err
 	}
@@ -2371,7 +2371,7 @@ func (og *operationGenerator) randSequence(
 }
 
 func (og *operationGenerator) randEnum(
-	tx *pgx.Tx, pctExisting int,
+	tx pgx.Tx, pctExisting int,
 ) (name *tree.TypeName, exists bool, _ error) {
 	if og.randIntn(100) >= pctExisting {
 		// Most of the time, this case is for creating enums, so it
@@ -2392,7 +2392,7 @@ ORDER BY random()
 `
 	var schemaName string
 	var typName string
-	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&schemaName, &typName); err != nil {
 		return nil, false, err
 	}
 	typeName := tree.MakeSchemaQualifiedTypeName(schemaName, typName)
@@ -2401,7 +2401,7 @@ ORDER BY random()
 
 // randTable returns a schema name along with a table name
 func (og *operationGenerator) randTable(
-	tx *pgx.Tx, pctExisting int, desiredSchema string,
+	tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
 
 	if desiredSchema != "" {
@@ -2422,7 +2422,7 @@ func (og *operationGenerator) randTable(
 		`, desiredSchema)
 
 		var tableName string
-		if err := tx.QueryRow(q).Scan(&tableName); err != nil {
+		if err := tx.QueryRow(context.TODO(), q).Scan(&tableName); err != nil {
 			treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
 			return &treeTableName, err
 		}
@@ -2459,7 +2459,7 @@ ORDER BY random()
 `
 	var schemaName string
 	var tableName string
-	if err := tx.QueryRow(q).Scan(&schemaName, &tableName); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&schemaName, &tableName); err != nil {
 		treeTableName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
 		return &treeTableName, err
 	}
@@ -2472,7 +2472,7 @@ ORDER BY random()
 }
 
 func (og *operationGenerator) randView(
-	tx *pgx.Tx, pctExisting int, desiredSchema string,
+	tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
 	if desiredSchema != "" {
 		if og.randIntn(100) >= pctExisting {
@@ -2493,7 +2493,7 @@ func (og *operationGenerator) randView(
 		`, desiredSchema)
 
 		var viewName string
-		if err := tx.QueryRow(q).Scan(&viewName); err != nil {
+		if err := tx.QueryRow(context.TODO(), q).Scan(&viewName); err != nil {
 			treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
 			return &treeViewName, err
 		}
@@ -2527,7 +2527,7 @@ ORDER BY random()
 `
 	var schemaName string
 	var viewName string
-	if err := tx.QueryRow(q).Scan(&schemaName, &viewName); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&schemaName, &viewName); err != nil {
 		treeViewName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, "")
 		return &treeViewName, err
 	}
@@ -2538,13 +2538,13 @@ ORDER BY random()
 	return &treeViewName, nil
 }
 
-func (og *operationGenerator) tableColumnsShuffled(tx *pgx.Tx, tableName string) ([]string, error) {
+func (og *operationGenerator) tableColumnsShuffled(tx pgx.Tx, tableName string) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
 FROM [SHOW COLUMNS FROM %s];
 `, tableName)
 
-	rows, err := tx.Query(q)
+	rows, err := tx.Query(context.TODO(), q)
 	if err != nil {
 		return nil, err
 	}
@@ -2575,7 +2575,7 @@ FROM [SHOW COLUMNS FROM %s];
 }
 
 func (og *operationGenerator) randType(
-	tx *pgx.Tx, enumPctExisting int,
+	tx pgx.Tx, enumPctExisting int,
 ) (*tree.TypeName, *types.T, error) {
 	if og.randIntn(100) <= og.params.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
@@ -2597,7 +2597,7 @@ func (og *operationGenerator) randType(
 	return &typeName, typ, nil
 }
 
-func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) createSchema(tx pgx.Tx) (string, error) {
 	schemaName, err := og.randSchema(tx, og.pctExisting(false))
 	if err != nil {
 		return "", err
@@ -2617,7 +2617,7 @@ func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
 	return tree.Serialize(stmt), nil
 }
 
-func (og *operationGenerator) randSchema(tx *pgx.Tx, pctExisting int) (string, error) {
+func (og *operationGenerator) randSchema(tx pgx.Tx, pctExisting int) (string, error) {
 	if og.randIntn(100) >= pctExisting {
 		return fmt.Sprintf("schema%d", og.newUniqueSeqNum()), nil
 	}
@@ -2631,13 +2631,13 @@ ORDER BY random()
    LIMIT 1;
 `
 	var name string
-	if err := tx.QueryRow(q).Scan(&name); err != nil {
+	if err := tx.QueryRow(context.TODO(), q).Scan(&name); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-func (og *operationGenerator) dropSchema(tx *pgx.Tx) (string, error) {
+func (og *operationGenerator) dropSchema(tx pgx.Tx) (string, error) {
 	schemaName, err := og.randSchema(tx, og.pctExisting(true))
 	if err != nil {
 		return "", err
@@ -2691,7 +2691,7 @@ func (og *operationGenerator) newUniqueSeqNum() int64 {
 
 // typeFromTypeName resolves a type string to a types.T struct so that it can be
 // compared with other types.
-func (og *operationGenerator) typeFromTypeName(tx *pgx.Tx, typeName string) (*types.T, error) {
+func (og *operationGenerator) typeFromTypeName(tx pgx.Tx, typeName string) (*types.T, error) {
 	stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'placeholder'::%s", typeName))
 	if err != nil {
 		return nil, errors.Wrapf(err, "typeFromTypeName: %s", typeName)

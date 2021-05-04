@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/spf13/pflag"
 )
 
@@ -156,16 +157,20 @@ func (w *indexes) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	name := "indexes"
+	var preparedStmts map[string]*pgconn.StatementDescription
+	stmts := []string{`UPSERT INTO indexes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`}
+	prepareStmtsFn := workload.GetPreparedStatementsCallback(name, stmts, preparedStmts)
 	cfg := workload.MultiConnPoolCfg{
 		MaxTotalConnections: w.connFlags.Concurrency + 1,
+		PrepareStatementsFn: prepareStmtsFn,
 	}
-	mcp, err := workload.NewMultiConnPool(cfg, urls...)
+	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	const stmt = `UPSERT INTO indexes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := &indexesOp{
 			config: w,
@@ -173,8 +178,8 @@ func (w *indexes) Ops(
 			rand:   rand.New(rand.NewSource(int64((i + 1)) * w.seed)),
 			buf:    make([]byte, w.payload),
 		}
-		op.stmt = op.sr.Define(stmt)
-		if err := op.sr.Init(ctx, "indexes", mcp, w.connFlags); err != nil {
+		op.sr.DefinePrepared(stmts[0], preparedStmts[stmts[0]])
+		if err := op.sr.Init(ctx, name, mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)

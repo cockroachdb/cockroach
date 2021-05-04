@@ -15,11 +15,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/pgtype"
 	"golang.org/x/exp/rand"
 )
@@ -69,44 +69,46 @@ type orderStatus struct {
 
 var _ tpccTx = &orderStatus{}
 
+const selectByCustIDStmt = `SELECT c_balance, c_first, c_middle, c_last
+		FROM customer
+		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`
+const selectByLastNameOrderStmt = `
+		SELECT c_id, c_balance, c_first, c_middle
+		FROM customer
+		WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
+		ORDER BY c_first ASC`
+const selectOrderStmt = `
+		SELECT o_id, o_entry_d, o_carrier_id
+		FROM "order"
+		WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
+		ORDER BY o_id DESC
+		LIMIT 1`
+const selectItemsStmt = `
+		SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
+		FROM order_line
+		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`
+
+func getOrderStatusStmts() []string {
+	return []string{
+		selectByCustIDStmt, selectByLastNameOrderStmt, selectOrderStmt, selectItemsStmt,
+	}
+}
+
 func createOrderStatus(
-	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
+	ctx context.Context,
+	config *tpcc,
+	mcp *workload.MultiConnPool,
+	preparedStmts map[string]*pgconn.StatementDescription,
 ) (tpccTx, error) {
 	o := &orderStatus{
 		config: config,
 		mcp:    mcp,
 	}
 
-	// Select by customer id.
-	o.selectByCustID = o.sr.Define(`
-		SELECT c_balance, c_first, c_middle, c_last
-		FROM customer
-		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
-	)
-
-	// Pick the middle row, rounded up, from the selection by last name.
-	o.selectByLastName = o.sr.Define(`
-		SELECT c_id, c_balance, c_first, c_middle
-		FROM customer
-		WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
-		ORDER BY c_first ASC`,
-	)
-
-	// Select the customer's order.
-	o.selectOrder = o.sr.Define(`
-		SELECT o_id, o_entry_d, o_carrier_id
-		FROM "order"
-		WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
-		ORDER BY o_id DESC
-		LIMIT 1`,
-	)
-
-	// Select the items from the customer's order.
-	o.selectItems = o.sr.Define(`
-		SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
-		FROM order_line
-		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
-	)
+	o.selectByCustID = o.sr.DefinePrepared(selectByCustIDStmt, preparedStmts[selectByCustIDStmt])
+	o.selectByLastName = o.sr.DefinePrepared(selectByLastNameOrderStmt, preparedStmts[selectByLastNameOrderStmt])
+	o.selectOrder = o.sr.DefinePrepared(selectOrderStmt, preparedStmts[selectOrderStmt])
+	o.selectItems = o.sr.DefinePrepared(selectItemsStmt, preparedStmts[selectItemsStmt])
 
 	if err := o.sr.Init(ctx, "order-status", mcp, config.connFlags); err != nil {
 		return nil, err
@@ -133,12 +135,12 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = o.config.randCustomerID(rng)
 	}
 
-	tx, err := o.mcp.Get().BeginEx(ctx, o.config.txOpts)
+	tx, err := o.mcp.Get().BeginTx(ctx, o.config.txOpts)
 	if err != nil {
 		return nil, err
 	}
-	if err := crdb.ExecuteInTx(
-		ctx, (*workload.PgxTx)(tx),
+	if err := workload.ExecuteInTx(
+		ctx, tx,
 		func() error {
 			// 2.6.2.2 explains this entire transaction.
 
