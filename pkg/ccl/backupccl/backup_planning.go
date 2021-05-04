@@ -52,12 +52,13 @@ import (
 )
 
 const (
-	backupOptRevisionHistory = "revision_history"
-	backupOptEncPassphrase   = "encryption_passphrase"
-	backupOptEncKMS          = "kms"
-	backupOptWithPrivileges  = "privileges"
-	localityURLParam         = "COCKROACH_LOCALITY"
-	defaultLocalityValue     = "default"
+	backupOptRevisionHistory    = "revision_history"
+	backupOptIncludeInterleaves = "include_deprecated_interleaves"
+	backupOptEncPassphrase      = "encryption_passphrase"
+	backupOptEncKMS             = "kms"
+	backupOptWithPrivileges     = "privileges"
+	localityURLParam            = "COCKROACH_LOCALITY"
+	defaultLocalityValue        = "default"
 )
 
 type encryptionMode int
