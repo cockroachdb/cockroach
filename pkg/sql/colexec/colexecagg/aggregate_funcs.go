@@ -221,7 +221,10 @@ func NewAggregateFuncsAlloc(
 			}
 		}
 	}
-	inputArgsConverter := colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert)
+	var inputArgsConverter *colconv.VecToDatumConverter
+	if len(vecIdxsToConvert) > 0 {
+		inputArgsConverter = colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert, false /* willRelease */)
+	}
 	for i, aggFn := range args.Spec.Aggregations {
 		var err error
 		switch aggFn.Func {
