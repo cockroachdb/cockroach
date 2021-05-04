@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -161,14 +164,19 @@ func (i *Inbox) close() {
 }
 
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
-// canceled, a caller of Next cancels the context passed into Init, or an EOF is
-// encountered on the stream by the Next goroutine.
-func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
+// canceled, a caller of Next cancels the context passed into Init, or any error
+// is encountered on the stream by the Next goroutine.
+//
+// flowCtxDone is listened on only during the setup of the handler, before the
+// readerCtx is received. This is needed in case Inbox.Init is never called.
+func (i *Inbox) RunWithStream(
+	streamCtx context.Context, stream flowStreamServer, flowCtxDone <-chan struct{},
+) error {
 	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
 	defer log.VEvent(streamCtx, 2, "Inbox exited stream handler")
-	// Pass the stream to the reader goroutine (non-blocking) and get the context
-	// to listen for cancellation.
+	// Pass the stream to the reader goroutine (non-blocking) and get the
+	// context to listen for cancellation.
 	i.streamCh <- stream
 	var readerCtx context.Context
 	select {
@@ -179,11 +187,19 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return fmt.Errorf("%s: streamCtx while waiting for reader (remote client canceled)", streamCtx.Err())
+	case <-flowCtxDone:
+		// The flow context of the inbox host has been canceled. This can occur
+		// e.g. when the query is canceled, or when another stream encountered
+		// an unrecoverable error forcing it to shutdown the flow.
+		return cancelchecker.QueryCanceledError
 	}
 
 	// Now wait for one of the events described in the method comment. If a
 	// cancellation is encountered, nothing special must be done to cancel the
 	// reader goroutine as returning from the handler will close the stream.
+	//
+	// Note that we don't listen for cancellation on flowCtxDone because
+	// readerCtx must be the child of the flow context.
 	select {
 	case err := <-i.errCh:
 		// nil will be read from errCh when the channel is closed.
@@ -287,6 +303,7 @@ func (i *Inbox) Next() coldata.Batch {
 			// Regardless of the cause we want to propagate such an error as
 			// expected on in all cases so that the caller could decide on how
 			// to handle it.
+			err = pgerror.Newf(pgcode.InternalConnectionFailure, "inbox communication error: %s", err)
 			i.errCh <- err
 			colexecerror.ExpectedError(err)
 		}
