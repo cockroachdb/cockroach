@@ -45,10 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
-	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/errors"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 )
@@ -580,90 +577,6 @@ func TestPutGoogleCloud(t *testing.T) {
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
 			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit), false, user, nil, nil)
 	})
-}
-
-func TestWorkloadStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	settings := cluster.MakeTestingClusterSettings()
-
-	rows, payloadBytes, ranges := 4, 12, 1
-	gen := bank.FromConfig(rows, rows, payloadBytes, ranges)
-	bankTable := gen.Tables()[0]
-	bankURL := func(extraParams ...map[string]string) *url.URL {
-		params := url.Values{`version`: []string{gen.Meta().Version}}
-		flags := gen.(workload.Flagser).Flags()
-		flags.VisitAll(func(f *pflag.Flag) {
-			if flags.Meta[f.Name].RuntimeOnly {
-				return
-			}
-			params[f.Name] = append(params[f.Name], f.Value.String())
-		})
-		for _, p := range extraParams {
-			for key, value := range p {
-				params.Add(key, value)
-			}
-		}
-		return &url.URL{
-			Scheme:   `workload`,
-			Path:     `/` + filepath.Join(`csv`, gen.Meta().Name, bankTable.Name),
-			RawQuery: params.Encode(),
-		}
-	}
-
-	ctx := context.Background()
-	user := security.RootUserName()
-
-	{
-		s, err := cloudimpl.ExternalStorageFromURI(ctx, bankURL().String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-		require.NoError(t, err)
-		r, err := s.ReadFile(ctx, ``)
-		require.NoError(t, err)
-		bytes, err := ioutil.ReadAll(r)
-		require.NoError(t, err)
-		require.Equal(t, strings.TrimSpace(`
-0,0,initial-dTqn
-1,0,initial-Pkyk
-2,0,initial-eJkM
-3,0,initial-TlNb
-		`), strings.TrimSpace(string(bytes)))
-	}
-
-	{
-		params := map[string]string{
-			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
-		s, err := cloudimpl.ExternalStorageFromURI(ctx, bankURL(params).String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-		require.NoError(t, err)
-		r, err := s.ReadFile(ctx, ``)
-		require.NoError(t, err)
-		bytes, err := ioutil.ReadAll(r)
-		require.NoError(t, err)
-		require.Equal(t, strings.TrimSpace(`
-1,0,initial-vOpikz
-2,0,initial-qMvoPe
-		`), strings.TrimSpace(string(bytes)))
-	}
-
-	_, err := cloudimpl.ExternalStorageFromURI(ctx, `workload:///nope`, base.ExternalIODirConfig{}, settings,
-		blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/nope/nope?version=`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `parameter version is required`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
 }
 
 func uploadData(

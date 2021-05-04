@@ -1264,7 +1264,7 @@ enum ExternalStorageProvider {
   S3 = 3;
   GoogleCloud = 4;
   Azure = 5;
-  Workload = 6;
+  reserved 6;
   FileTable = 7;
   NullSink = 8;
 }
@@ -1310,15 +1310,6 @@ message ExternalStorage {
     string account_name = 3;
     string account_key = 4;
   }
-  message Workload {
-    string generator = 1;
-    string version = 2;
-    string table = 3;
-    repeated string flags = 4;
-    string format = 5;
-    int64 batch_begin = 6;
-    int64 batch_end = 7;
-  }
   message FileTable {
     // User interacting with the external storage. This is used to check access
     // privileges of the requested user scoped tables.
@@ -1338,7 +1329,7 @@ message ExternalStorage {
   GCS GoogleCloudConfig = 4;
   S3 S3Config = 5;
   Azure AzureConfig = 6;
-  Workload WorkloadConfig = 7;
+  reserved 7;
   FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
 }
 
