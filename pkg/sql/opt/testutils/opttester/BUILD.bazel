@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/optgen/exprgen",
+        "//pkg/sql/opt/ordering",
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/xform",
