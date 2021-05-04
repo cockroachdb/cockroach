@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
 	"github.com/cockroachdb/errors"
@@ -73,7 +73,7 @@ type fileTableStorage struct {
 	cfg      roachpb.ExternalStorage_FileTable
 	ioConf   base.ExternalIODirConfig
 	db       *kv.DB
-	ie       *sql.InternalExecutor
+	ie       sqlutil.InternalExecutor
 	prefix   string // relative filepath
 	settings *cluster.Settings
 }
