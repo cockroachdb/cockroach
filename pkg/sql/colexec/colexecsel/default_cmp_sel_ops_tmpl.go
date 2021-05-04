@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -43,6 +44,7 @@ type defaultCmp_KINDSelOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmp_KINDSelOp{}
+var _ execinfra.Releasable = &defaultCmp_KINDSelOp{}
 
 func (d *defaultCmp_KINDSelOp) Next() coldata.Batch {
 	for {
@@ -94,6 +96,10 @@ func (d *defaultCmp_KINDSelOp) Next() coldata.Batch {
 			return batch
 		}
 	}
+}
+
+func (d *defaultCmp_KINDSelOp) Release() {
+	d.toDatumConverter.Release()
 }
 
 // {{end}}

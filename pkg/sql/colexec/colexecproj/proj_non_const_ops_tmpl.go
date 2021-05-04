@@ -327,7 +327,7 @@ func GetProjectionOperator(
 		return &defaultCmpProjOp{
 			projOpBase:          projOpBase,
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
-			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}, true /* willRelease */),
 			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
 		}, nil
 	}
