@@ -235,6 +235,8 @@ message CSVWriterSpec {
   optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+  // chunk_size is the target byte size per file.
+  optional int64 chunk_size = 7 [(gogoproto.nullable) = false];
 
   // compression_codec specifies compression used for exported file.
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];

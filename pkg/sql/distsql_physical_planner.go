@@ -3644,6 +3644,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		NamePattern:      n.fileNamePattern,
 		Options:          n.csvOpts,
 		ChunkRows:        int64(n.chunkRows),
+		ChunkSize:        n.chunkSize,
 		CompressionCodec: n.fileCompression,
 		UserProto:        planCtx.planner.User().EncodeProto(),
 	}}

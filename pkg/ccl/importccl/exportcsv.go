@@ -33,20 +33,20 @@ const exportFilePatternDefault = exportFilePatternPart + ".csv"
 
 // csvExporter data structure to augment the compression
 // and csv writer, encapsulating the internals to make
-// exporting oblivious for the consumers
+// exporting oblivious for the consumers.
 type csvExporter struct {
 	compressor *gzip.Writer
 	buf        *bytes.Buffer
 	csvWriter  *csv.Writer
 }
 
-// Write append record to csv file
+// Write append record to csv file.
 func (c *csvExporter) Write(record []string) error {
 	return c.csvWriter.Write(record)
 }
 
 // Close closes the compressor writer which
-// appends archive footers
+// appends archive footers.
 func (c *csvExporter) Close() error {
 	if c.compressor != nil {
 		return c.compressor.Close()
@@ -55,7 +55,7 @@ func (c *csvExporter) Close() error {
 }
 
 // Flush flushes both csv and compressor writer if
-// initialized
+// initialized.
 func (c *csvExporter) Flush() error {
 	c.csvWriter.Flush()
 	if c.compressor != nil {
@@ -68,17 +68,17 @@ func (c *csvExporter) Flush() error {
 func (c *csvExporter) ResetBuffer() {
 	c.buf.Reset()
 	if c.compressor != nil {
-		// Brings compressor to its initial state
+		// Brings compressor to its initial state.
 		c.compressor.Reset(c.buf)
 	}
 }
 
-// Bytes results in the slice of bytes with compressed content
+// Bytes results in the slice of bytes with compressed content.
 func (c *csvExporter) Bytes() []byte {
 	return c.buf.Bytes()
 }
 
-// Len returns length of the buffer with content
+// Len returns length of the buffer with content.
 func (c *csvExporter) Len() int {
 	return c.buf.Len()
 }
@@ -196,6 +196,11 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			var rows int64
 			writer.ResetBuffer()
 			for {
+				// If the bytes.Buffer sink exceeds the target size of a CSV file, we
+				// flush before exporting any additional rows.
+				if int64(writer.buf.Len()) >= sp.spec.ChunkSize {
+					break
+				}
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
 				}
