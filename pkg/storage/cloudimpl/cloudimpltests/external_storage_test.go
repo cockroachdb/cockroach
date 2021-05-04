@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -126,7 +126,7 @@ func storeFromURI(
 	uri string,
 	clientFactory blobs.BlobClientFactory,
 	user security.SQLUsername,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) cloud.ExternalStorage {
 	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
@@ -147,7 +147,7 @@ func testExportStore(
 	storeURI string,
 	skipSingleFile bool,
 	user security.SQLUsername,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) {
 	testExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, user,
@@ -160,7 +160,7 @@ func testExportStoreWithExternalIOConfig(
 	storeURI string,
 	user security.SQLUsername,
 	skipSingleFile bool,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) {
 	ctx := context.Background()
@@ -361,7 +361,11 @@ func testExportStoreWithExternalIOConfig(
 // RunListFilesTest tests the ListFiles() interface method for the ExternalStorage
 // specified by storeURI.
 func testListFiles(
-	t *testing.T, storeURI string, user security.SQLUsername, ie *sql.InternalExecutor, kvDB *kv.DB,
+	t *testing.T,
+	storeURI string,
+	user security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	kvDB *kv.DB,
 ) {
 	ctx := context.Background()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
@@ -646,7 +650,7 @@ func makeUserfile(
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 
 	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, "")
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 
 	// Create a user and grant them privileges on defaultdb.
 	user1 := security.MakeSQLUsernameFromPreNormalizedString("foo")

@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -60,7 +59,7 @@ type FileToTableSystemExecutor interface {
 // InternalFileToTableExecutor is the SQL query executor which uses an internal
 // SQL connection to interact with the database.
 type InternalFileToTableExecutor struct {
-	ie *sql.InternalExecutor
+	ie sqlutil.InternalExecutor
 	db *kv.DB
 }
 
@@ -69,7 +68,7 @@ var _ FileToTableSystemExecutor = &InternalFileToTableExecutor{}
 // MakeInternalFileToTableExecutor returns an instance of a
 // InternalFileToTableExecutor.
 func MakeInternalFileToTableExecutor(
-	ie *sql.InternalExecutor, db *kv.DB,
+	ie sqlutil.InternalExecutor, db *kv.DB,
 ) *InternalFileToTableExecutor {
 	return &InternalFileToTableExecutor{ie, db}
 }
@@ -416,7 +415,7 @@ SELECT file_id FROM %s WHERE filename=$1)`
 // already open explicit txn to provide transactional guarantees. This is used
 // by WriteFile to allow for overwriting of an existing file with the same name.
 func (f *FileToTableSystem) deleteFileWithoutTxn(
-	ctx context.Context, filename string, ie *sql.InternalExecutor,
+	ctx context.Context, filename string, ie sqlutil.InternalExecutor,
 ) error {
 	execSessionDataOverride := sessiondata.InternalExecutorOverride{User: f.username}
 	_, err := ie.ExecEx(ctx, "delete-payload-table",
@@ -466,7 +465,7 @@ func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) err
 // Payload table.
 type payloadWriter struct {
 	fileID                  tree.Datum
-	ie                      *sql.InternalExecutor
+	ie                      sqlutil.InternalExecutor
 	db                      *kv.DB
 	ctx                     context.Context
 	byteOffset              int
@@ -513,7 +512,7 @@ func newChunkWriter(
 	filename string,
 	username security.SQLUsername,
 	fileTableName, payloadTableName string,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 ) (*chunkWriter, error) {
 	execSessionDataOverride := sessiondata.InternalExecutorOverride{User: username}
@@ -781,7 +780,7 @@ func (f *FileToTableSystem) ReadFile(
 }
 
 func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
-	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) (bool, error) {
 	tablePrefix, err := f.GetTableName()
 	if err != nil {
@@ -825,7 +824,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 }
 
 func (f *FileToTableSystem) createFileAndPayloadTables(
-	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) error {
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
@@ -859,7 +858,7 @@ file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableNa
 // Grant the current user all read/edit privileges for the file and payload
 // tables.
 func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
-	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
@@ -876,7 +875,7 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 // Revoke all privileges from every user and role except root/admin and the
 // current user.
 func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
-	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) error {
 	getUsersQuery := `SELECT username FROM system.
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
