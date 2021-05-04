@@ -305,7 +305,16 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
 
-	if og.randIntn(10) == 0 {
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
+	if !(tableIsRegionalByRow && databaseHasRegionChange) && og.randIntn(10) == 0 {
 		def.Unique.IsUnique = true
 	}
 
@@ -321,10 +330,16 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
 		{code: pgcode.UndefinedObject, condition: typ == nil},
 		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		// UNIQUE is only supported for indexable types.
 		{
 			code:      pgcode.FeatureNotSupported,
@@ -379,10 +394,26 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
 	codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
+		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
 	}.add(og.expectedExecErrors)
 
 	if !canApplyConstraint {
@@ -415,22 +446,51 @@ func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
 		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
 	}
 
-	localityOptions := []func() string{
-		func() string {
-			return "REGIONAL BY TABLE"
+	hasSchemaChange, err := tableHasOngoingSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	if hasSchemaChange || databaseHasRegionChange {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return `ALTER TABLE invalid_table SET LOCALITY REGIONAL BY ROW`, nil
+	}
+
+	localityOptions := []func() (string, error){
+		func() (string, error) {
+			return "REGIONAL BY TABLE", nil
 		},
-		func() string {
+		func() (string, error) {
 			idx := og.params.rng.Intn(len(databaseRegionNames))
 			regionName := tree.Name(databaseRegionNames[idx])
-			return fmt.Sprintf(`REGIONAL BY TABLE IN %s`, regionName.String())
+			return fmt.Sprintf(`REGIONAL BY TABLE IN %s`, regionName.String()), nil
 		},
-		func() string {
-			return "GLOBAL"
+		func() (string, error) {
+			return "GLOBAL", nil
 		},
-		// TODO(#62191): do REGIONAL BY ROW and REGIONAL BY ROW AS <column>
+		func() (string, error) {
+			columnForAs, err := og.randColumnWithMeta(tx, *tableName, og.alwaysExisting())
+			if err != nil {
+				return "", err
+			}
+			ret := "REGIONAL BY ROW"
+			if columnForAs.typ.TypeMeta.Name != nil {
+				if columnForAs.typ.TypeMeta.Name.Basename() == tree.RegionEnum {
+					ret += "AS " + columnForAs.name
+				}
+			}
+			return ret, nil
+		},
 	}
 	idx := og.params.rng.Intn(len(localityOptions))
-	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, localityOptions[idx]()), nil
+	toLocality, err := localityOptions[idx]()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, toLocality), nil
 }
 
 func getClusterRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
@@ -537,6 +597,18 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 			database,
 			regionResult.regionNamesInDatabase[idx],
 		), nil
+	}
+	// If the database is undergoing a regional by row related change on the
+	// database, error out.
+	if len(regionResult.regionNamesInDatabase) > 0 {
+		databaseHasRegionalByRowChange, err := databaseHasRegionalByRowChange(tx)
+		if err != nil {
+			return "", err
+		}
+		if databaseHasRegionalByRowChange {
+			og.expectedExecErrors.add(pgcode.InvalidName)
+			return fmt.Sprintf(`ALTER DATABASE %s ADD REGION "invalid-region"`, database), nil
+		}
 	}
 	// Here we have a region that is not yet marked as public on the enum.
 	// Double check this first.
@@ -780,6 +852,23 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		}
 	}
 
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if databaseHasRegionChange && tableIsRegionalByRow {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+	}
+
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
@@ -797,6 +886,7 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.Uncategorized, condition: virtualComputedStored},
+			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		}.add(og.expectedExecErrors)
 	}
 
@@ -1210,12 +1300,17 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
 
 	codesWithConditions{
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName), nil
@@ -1398,6 +1493,26 @@ func (og *operationGenerator) dropIndex(tx *pgx.Tx) (string, error) {
 	}
 	if !indexExists {
 		og.expectedExecErrors.add(pgcode.UndefinedObject)
+	}
+
+	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if hasAlterPKSchemaChange {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	tableIsRegionalByRow, err := tableIsRegionalByRow(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if databaseHasRegionChange && tableIsRegionalByRow {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
 	return fmt.Sprintf(`DROP INDEX %s@"%s" CASCADE`, tableName, indexName), nil
@@ -2674,6 +2789,10 @@ func (og *operationGenerator) pctExisting(shouldAlreadyExist bool) int {
 		return 100 - og.params.errorRate
 	}
 	return og.params.errorRate
+}
+
+func (og operationGenerator) alwaysExisting() int {
+	return 100
 }
 
 func (og *operationGenerator) produceError() bool {
