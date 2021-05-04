@@ -297,7 +297,7 @@ func newDistinctAggregatorHelperBase(
 			}
 		}
 	}
-	b.aggColsConverter = colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert)
+	b.aggColsConverter = colconv.NewVecToDatumConverter(len(args.InputTypes), vecIdxsToConvert, false /* willRelease */)
 	b.scratch.converted = []tree.Datum{nil}
 	b.scratch.sel = make([]int, maxBatchSize)
 	return b

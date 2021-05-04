@@ -21,6 +21,7 @@ go_library(
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
