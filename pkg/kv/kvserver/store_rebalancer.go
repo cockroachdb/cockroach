@@ -506,6 +506,12 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 		currentReplicas := desc.Replicas().All()
 
+		if cur := len(desc.Replicas().Voters()); desiredReplicas != cur {
+			log.VEventf(ctx, 3, "cannot change number of voters from %d to %d for r%d",
+				cur, desiredReplicas, desc.RangeID)
+			continue
+		}
+
 		// Check the range's existing diversity score, since we want to ensure we
 		// don't hurt locality diversity just to improve QPS.
 		curDiversity := rangeDiversityScore(
