@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,13 +42,11 @@ import (
 )
 
 func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri string) error {
-	// Check if the user issuing the SHOW BACKUP needs to be of the admin role
-	// depending on the URI destination.
-	hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
 	if err != nil {
 		return err
 	}
-	if hasExplicitAuth {
+	if conf.AccessIsWithExplicitAuth() {
 		return nil
 	}
 	hasAdmin, err := p.HasAdminRole(ctx)
@@ -58,7 +57,7 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			"only users with the admin role are allowed to SHOW BACKUP from the specified %s URI",
-			uriScheme)
+			conf.Provider.String())
 	}
 	return nil
 }

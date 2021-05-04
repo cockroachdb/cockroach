@@ -1259,14 +1259,14 @@ message ComputeChecksumResponse {
 
 enum ExternalStorageProvider {
   Unknown = 0;
-  LocalFile = 1;
-  Http = 2;
-  S3 = 3;
-  GoogleCloud = 4;
-  Azure = 5;
+  nodelocal = 1;
+  http = 2;
+  s3 = 3;
+  gs = 4;
+  azure = 5;
   reserved 6;
-  FileTable = 7;
-  NullSink = 8;
+  userfile = 7;
+  null = 8;
 }
 
 message ExternalStorage {

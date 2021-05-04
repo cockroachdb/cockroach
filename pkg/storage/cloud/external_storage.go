@@ -98,10 +98,6 @@ type SQLConnI interface {
 	driver.ExecerContext
 }
 
-// AccessIsWithExplicitAuth is used to check if the provided path has explicit
-// authentication.
-var AccessIsWithExplicitAuth func(path string) (bool, string, error)
-
 // ErrFileDoesNotExist is a sentinel error for indicating that a specified
 // bucket/object/key/file (depending on storage terminology) does not exist.
 // This error is raised by the ReadFile method.

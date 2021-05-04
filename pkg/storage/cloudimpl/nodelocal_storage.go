@@ -47,7 +47,7 @@ func parseNodelocalURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.Exter
 	if err != nil {
 		return conf, errors.Errorf("host component of nodelocal URI must be a node ID: %s", uri.String())
 	}
-	conf.Provider = roachpb.ExternalStorageProvider_LocalFile
+	conf.Provider = roachpb.ExternalStorageProvider_nodelocal
 	conf.LocalFile.Path = uri.Path
 	conf.LocalFile.NodeID = roachpb.NodeID(nodeID)
 	return conf, nil
@@ -107,7 +107,7 @@ func makeLocalStorage(
 
 func (l *localFileStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:  roachpb.ExternalStorageProvider_LocalFile,
+		Provider:  roachpb.ExternalStorageProvider_nodelocal,
 		LocalFile: l.cfg,
 	}
 }

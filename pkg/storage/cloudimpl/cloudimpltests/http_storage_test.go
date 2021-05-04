@@ -304,7 +304,7 @@ func TestCanDisableHttp(t *testing.T) {
 	}
 	s, err := cloudimpl.MakeExternalStorage(
 		context.Background(),
-		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
+		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_http},
 		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
 	require.Nil(t, s)
 	require.Error(t, err)
@@ -316,10 +316,10 @@ func TestCanDisableOutbound(t *testing.T) {
 		DisableOutbound: true,
 	}
 	for _, provider := range []roachpb.ExternalStorageProvider{
-		roachpb.ExternalStorageProvider_Http,
-		roachpb.ExternalStorageProvider_S3,
-		roachpb.ExternalStorageProvider_GoogleCloud,
-		roachpb.ExternalStorageProvider_LocalFile,
+		roachpb.ExternalStorageProvider_http,
+		roachpb.ExternalStorageProvider_s3,
+		roachpb.ExternalStorageProvider_gs,
+		roachpb.ExternalStorageProvider_nodelocal,
 	} {
 		s, err := cloudimpl.MakeExternalStorage(
 			context.Background(),

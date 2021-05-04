@@ -61,7 +61,7 @@ func parseUserfileURL(
 			composedTableName.SQLIdentifier()
 	}
 
-	conf.Provider = roachpb.ExternalStorageProvider_FileTable
+	conf.Provider = roachpb.ExternalStorageProvider_userfile
 	conf.FileTableConfig.User = normUser
 	conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 	conf.FileTableConfig.Path = uri.Path
@@ -183,7 +183,7 @@ func (f *fileTableStorage) Close() error {
 // configuration.
 func (f *fileTableStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:        roachpb.ExternalStorageProvider_FileTable,
+		Provider:        roachpb.ExternalStorageProvider_userfile,
 		FileTableConfig: f.cfg,
 	}
 }

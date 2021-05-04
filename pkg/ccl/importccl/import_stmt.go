@@ -355,13 +355,18 @@ func importPlanHook(
 		// Certain ExternalStorage URIs require super-user access. Check all the
 		// URIs passed to the IMPORT command.
 		for _, file := range filenamePatterns {
-			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(file)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(file, p.User())
 			if err != nil {
+				// If it is a workload URI, it won't parse as a storage config, but it
+				// also doesn't have any auth concerns so just continue.
+				if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
+					continue
+				}
 				return err
 			}
-			if !hasExplicitAuth {
+			if !conf.AccessIsWithExplicitAuth() {
 				err := p.RequireAdminRole(ctx,
-					fmt.Sprintf("IMPORT from the specified %s URI", uriScheme))
+					fmt.Sprintf("IMPORT from the specified %s URI", conf.Provider.String()))
 				if err != nil {
 					return err
 				}

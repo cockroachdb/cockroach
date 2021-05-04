@@ -30,7 +30,7 @@ import (
 
 func parseAzureURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_Azure
+	conf.Provider = roachpb.ExternalStorageProvider_azure
 	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
 		Container:   uri.Host,
 		Prefix:      uri.Path,
@@ -103,7 +103,7 @@ func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
 
 func (s *azureStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:    roachpb.ExternalStorageProvider_Azure,
+		Provider:    roachpb.ExternalStorageProvider_azure,
 		AzureConfig: s.conf,
 	}
 }
