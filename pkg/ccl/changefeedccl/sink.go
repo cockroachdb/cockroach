@@ -65,6 +65,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	acc mon.BoundAccount,
+	jobID jobspb.JobID,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -96,9 +97,11 @@ func getSink(
 		return nil, err
 	}
 
-	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.Dial != nil {
-		knobs.Dial(sink)
-	} else if err := sink.Dial(); err != nil {
+	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
+		sink = knobs.WrapSink(sink, jobID)
+	}
+
+	if err := sink.Dial(); err != nil {
 		return nil, err
 	}
 

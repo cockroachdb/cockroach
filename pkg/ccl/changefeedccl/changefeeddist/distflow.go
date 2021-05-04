@@ -78,6 +78,7 @@ func StartDistChangefeed(
 			Watches:   watches,
 			Feed:      details,
 			UserProto: execCtx.User().EncodeProto(),
+			JobID:     jobID,
 		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
