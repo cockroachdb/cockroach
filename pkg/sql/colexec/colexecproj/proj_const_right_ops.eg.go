@@ -62481,7 +62481,7 @@ func GetProjectionRConstOperator(
 			projConstOpBase:     projConstOpBase,
 			adapter:             colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 			constArg:            constArg,
-			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
 			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
 		}, nil
 	}
