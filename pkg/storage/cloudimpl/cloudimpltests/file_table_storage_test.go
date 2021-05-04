@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,7 +44,7 @@ func TestPutUserFileTable(t *testing.T) {
 
 	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, filename)
 
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
 
 	testListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
@@ -53,7 +53,7 @@ func TestPutUserFileTable(t *testing.T) {
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
 		dest := cloudimpl.MakeUserFileStorageURI("", filename)
 
-		ie := s.InternalExecutor().(*sql.InternalExecutor)
+		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 		testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
 
 		testListFiles(t, "userfile:///listing-test/basepath",
@@ -103,7 +103,7 @@ func TestUserScoping(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, "")
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 
 	// Create two users and grant them all privileges on defaultdb.
 	user1 := security.MakeSQLUsernameFromPreNormalizedString("foo")
