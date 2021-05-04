@@ -102,35 +102,22 @@ func makeGCSStorage(
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
-	if args.IOConf.DisableImplicitCredentials && conf.Auth != AuthParamSpecified {
+	if args.IOConf.DisableImplicitCredentials && conf.Auth == AuthParamImplicit {
 		return nil, errors.New(
 			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
 	}
 
 	switch conf.Auth {
-	case "", AuthParamDefault:
-		var key string
-		if args.Settings != nil {
-			key = GcsDefault.Get(&args.Settings.SV)
-		}
-		// We expect a key to be present if default is specified.
-		if conf.Auth == AuthParamDefault && key == "" {
-			return nil, errors.Errorf("expected settings value for %s", CloudstorageGSDefaultKey)
-		}
-		if key != "" {
-			source, err := google.JWTConfigFromJSON([]byte(key), scope)
-			if err != nil {
-				return nil, errors.Wrap(err, "creating GCS oauth token source")
-			}
-			opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
-		}
-	case AuthParamSpecified:
+	case AuthParamImplicit:
+		// Do nothing; use implicit params:
+		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
+	default:
 		if conf.Credentials == "" {
 			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
+				"%s must be set unless %q is %q",
 				CredentialsParam,
+				AuthParam,
+				AuthParamImplicit,
 			)
 		}
 		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
@@ -142,11 +129,6 @@ func makeGCSStorage(
 			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
 		}
 		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
-	case AuthParamImplicit:
-		// Do nothing; use implicit params:
-		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
-	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
 	}
 	g, err := gcs.NewClient(ctx, opts...)
 	if err != nil {

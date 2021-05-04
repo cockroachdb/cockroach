@@ -1327,7 +1327,7 @@ func (m *ExternalStorage) AccessIsWithExplicitAuth() bool {
 	switch m.Provider {
 	case ExternalStorageProvider_s3:
 		// custom endpoints could be a network resource only accessible via this
-		// noode's network context and thus have an element of implicit auth.
+		// node's network context and thus have an element of implicit auth.
 		if m.S3Config.Endpoint != "" {
 			return false
 		}

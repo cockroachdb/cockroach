@@ -909,7 +909,6 @@ func TestLintClusterSettingNames(t *testing.T) {
 				"sql.metrics.statement_details.sample_logical_plans": `sql.metrics.statement_details.sample_logical_plans: use .enabled for booleans`,
 				"sql.trace.log_statement_execute":                    `sql.trace.log_statement_execute: use .enabled for booleans`,
 				"trace.debug.enable":                                 `trace.debug.enable: use .enabled for booleans`,
-				"cloudstorage.gs.default.key":                        `cloudstorage.gs.default.key: part "default" is a reserved keyword`,
 				// These two settings have been deprecated in favor of a new (better named) setting
 				// but the old name is still around to support migrations.
 				// TODO(knz): remove these cases when these settings are retired.

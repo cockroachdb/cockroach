@@ -110,15 +110,7 @@ func appendPath(t *testing.T, s, add string) string {
 	return u.String()
 }
 
-var testSettings *cluster.Settings
-
-func init() {
-	testSettings = cluster.MakeTestingClusterSettings()
-	up := testSettings.MakeUpdater()
-	if err := up.Set(cloudimpl.CloudstorageGSDefaultKey, os.Getenv("GS_JSONKEY"), cloudimpl.GcsDefault.Typ()); err != nil {
-		panic(err)
-	}
-}
+var testSettings *cluster.Settings = cluster.MakeTestingClusterSettings()
 
 func storeFromURI(
 	ctx context.Context,
@@ -538,28 +530,23 @@ func TestPutGoogleCloud(t *testing.T) {
 
 	user := security.RootUserName()
 
-	t.Run("empty", func(t *testing.T) {
-		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"),
-			false, user, nil, nil)
-	})
-	t.Run("default", func(t *testing.T) {
-		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", cloudimpl.AuthParam,
-			cloudimpl.AuthParamDefault), false, user, nil, nil)
-	})
-	t.Run("specified", func(t *testing.T) {
+	testutils.RunTrueAndFalse(t, "specified", func(t *testing.T, specified bool) {
 		credentials := os.Getenv("GS_JSONKEY")
 		if credentials == "" {
 			skip.IgnoreLint(t, "GS_JSONKEY env var must be set")
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
-		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s",
+		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
 			bucket,
 			"backup-test-specified",
-			cloudimpl.AuthParam,
-			cloudimpl.AuthParamSpecified,
 			cloudimpl.CredentialsParam,
 			url.QueryEscape(encoded),
-		), false, user, nil, nil)
+		)
+		if specified {
+			uri += fmt.Sprintf("&%s=%s", cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
+		}
+		t.Log(uri)
+		testExportStore(t, uri, false, user, nil, nil)
 		testListFiles(t,
 			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
 				bucket,

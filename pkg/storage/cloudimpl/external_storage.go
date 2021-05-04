@@ -75,9 +75,6 @@ const (
 	// AuthParamImplicit is the query parameter for the implicit authentication
 	// mode in a URI.
 	AuthParamImplicit = roachpb.ExternalStorageAuthImplicit
-	// AuthParamDefault is the query parameter for the default authentication
-	// mode in a URI.
-	AuthParamDefault = "default"
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
 	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
@@ -87,21 +84,11 @@ const (
 	CredentialsParam = "CREDENTIALS"
 
 	cloudstoragePrefix = "cloudstorage"
-	cloudstorageGS     = cloudstoragePrefix + ".gs"
-	cloudstorageHTTP   = cloudstoragePrefix + ".http"
-
-	cloudstorageDefault = ".default"
-	cloudstorageKey     = ".key"
-
-	cloudstorageGSDefault = cloudstorageGS + cloudstorageDefault
-	// CloudstorageGSDefaultKey is the setting whose value is the JSON key to use
-	// during Google Cloud Storage operations.
-	CloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
 
 	// CloudstorageHTTPCASetting is the setting whose value is the custom root CA
 	// (appended to system's default CAs) for verifying certificates when
 	// interacting with HTTPS storage.
-	CloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
+	CloudstorageHTTPCASetting = cloudstoragePrefix + ".http.custom_ca"
 
 	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
@@ -306,15 +293,6 @@ func containsGlob(str string) bool {
 }
 
 var (
-	// GcsDefault is the setting which defines the JSON key to use during GCS
-	// operations.
-	GcsDefault = settings.RegisterStringSetting(
-		CloudstorageGSDefaultKey,
-		"[deprecated] if set, JSON key to use during Google Cloud Storage operations. "+
-			"This setting will be removed in "+
-			"21.2, as we will no longer support the `default` AUTH mode for GCS operations.",
-		"",
-	).WithPublic()
 	httpCustomCA = settings.RegisterStringSetting(
 		CloudstorageHTTPCASetting,
 		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
