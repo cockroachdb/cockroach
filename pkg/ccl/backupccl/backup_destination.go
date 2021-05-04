@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -254,7 +253,7 @@ func resolveBackupCollection(
 		defer collection.Close()
 		latestFile, err := collection.ReadFile(ctx, latestFileName)
 		if err != nil {
-			if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+			if errors.Is(err, cloud.ErrFileDoesNotExist) {
 				return "", "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
 			}
 			return "", "", pgerror.WithCandidateCode(err, pgcode.Io)

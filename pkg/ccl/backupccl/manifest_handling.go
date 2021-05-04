@@ -158,7 +158,7 @@ func ReadBackupManifestFromStore(
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err != nil {
-		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
 		}
 		return false, err
@@ -228,7 +228,7 @@ func readBackupManifest(
 		}
 	} else {
 		// If we don't have a checksum file, carry on. This might be an old version.
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return BackupManifest{}, err
 		}
 	}
@@ -698,7 +698,7 @@ func resolveBackupManifests(
 		// automatically created incremental layers inside the base layer.
 		prev, err := findPriorBackupNames(ctx, baseStores[0])
 		if err != nil {
-			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
+			if errors.Is(err, cloud.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
 				// If we do not support listing, we have to just assume there are none
 				// and restore the specified base.
@@ -942,7 +942,7 @@ func writeEncryptionInfoIfNotExists(
 		return nil
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"returned an unexpected error when checking for the existence of %s file",
 			backupEncryptionInfoFile)
@@ -984,7 +984,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
 			redactedURI, backupManifestName)
@@ -998,7 +998,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestCheckpointName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
 			redactedURI, backupManifestCheckpointName)

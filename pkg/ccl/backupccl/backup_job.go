@@ -599,7 +599,7 @@ func (b *backupResumer) readManifestOnResume(
 		details.EncryptionOptions)
 
 	if err != nil {
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, errors.Wrapf(err, "reading backup checkpoint")
 		}
 		// Try reading temp checkpoint.

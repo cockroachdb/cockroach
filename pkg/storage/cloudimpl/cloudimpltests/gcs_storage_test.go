@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,7 +62,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
-		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
 	}
 
 	{
@@ -76,7 +77,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
 		require.Error(t, err, "")
-		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
 	}
 }
 
