@@ -882,3 +882,66 @@ SELECT EXISTS (
 		`,
 	)
 }
+
+// databaseHasOngoingAlterPKChanges checks whether a given database has any tables
+// which are currently undergoing a change to or from REGIONAL BY ROW, or
+// REGIONAL BY ROW tables with schema changes on it.
+func databaseHasRegionalByRowChange(tx *pgx.Tx) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id IN (
+					SELECT id FROM system.namespace
+					WHERE "parentID" = (
+						SELECT id FROM system.namespace
+						WHERE name = (SELECT database FROM [SHOW DATABASE])
+						AND "parentID" = 0
+					) AND "parentSchemaID" <> 0
+				)
+		)
+SELECT (
+	EXISTS(
+		SELECT
+			mut
+		FROM
+			(
+				-- no schema changes on regional by row tables
+				SELECT
+					json_array_elements(d->'mutations')
+						AS mut
+				FROM (
+					SELECT
+						d
+					FROM
+						descriptors
+					WHERE
+						d->'localityConfig'->'regionalByRow' IS NOT NULL
+				)
+			)
+	) OR EXISTS (
+		-- no primary key swaps in the current database
+		SELECT mut FROM (
+			SELECT
+				json_array_elements(d->'mutations')
+					AS mut
+			FROM descriptors
+		)
+		WHERE
+			(mut->'primaryKeySwap') IS NOT NULL
+	)
+);
+		`,
+	)
+}
