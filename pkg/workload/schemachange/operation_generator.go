@@ -569,6 +569,18 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 			regionResult.regionNamesInDatabase[idx],
 		), nil
 	}
+	// If the database is undergoing a regional by row related change on the
+	// database, error out.
+	if len(regionResult.regionNamesInDatabase) > 0 {
+		databaseHasRegionalByRowChange, err := databaseHasRegionalByRowChange(tx)
+		if err != nil {
+			return "", err
+		}
+		if databaseHasRegionalByRowChange {
+			og.expectedExecErrors.add(pgcode.InvalidName)
+			return fmt.Sprintf(`ALTER DATABASE %s ADD REGION "invalid-region"`, database), nil
+		}
+	}
 	// Here we have a region that is not yet marked as public on the enum.
 	// Double check this first.
 	idx := og.params.rng.Intn(len(regionResult.regionNamesNotInDatabase))
