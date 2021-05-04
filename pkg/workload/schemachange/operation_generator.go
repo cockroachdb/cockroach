@@ -446,22 +446,51 @@ func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
 		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
 	}
 
-	localityOptions := []func() string{
-		func() string {
-			return "REGIONAL BY TABLE"
+	hasSchemaChange, err := tableHasOngoingSchemaChanges(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	databaseHasRegionChange, err := databaseHasRegionChange(tx)
+	if err != nil {
+		return "", err
+	}
+	if hasSchemaChange || databaseHasRegionChange {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return `ALTER TABLE invalid_table SET LOCALITY REGIONAL BY ROW`, nil
+	}
+
+	localityOptions := []func() (string, error){
+		func() (string, error) {
+			return "REGIONAL BY TABLE", nil
 		},
-		func() string {
+		func() (string, error) {
 			idx := og.params.rng.Intn(len(databaseRegionNames))
 			regionName := tree.Name(databaseRegionNames[idx])
-			return fmt.Sprintf(`REGIONAL BY TABLE IN %s`, regionName.String())
+			return fmt.Sprintf(`REGIONAL BY TABLE IN %s`, regionName.String()), nil
 		},
-		func() string {
-			return "GLOBAL"
+		func() (string, error) {
+			return "GLOBAL", nil
 		},
-		// TODO(#62191): do REGIONAL BY ROW and REGIONAL BY ROW AS <column>
+		func() (string, error) {
+			columnForAs, err := og.randColumnWithMeta(tx, *tableName, og.alwaysExisting())
+			if err != nil {
+				return "", err
+			}
+			ret := "REGIONAL BY ROW"
+			if columnForAs.typ.TypeMeta.Name != nil {
+				if columnForAs.typ.TypeMeta.Name.Basename() == tree.RegionEnum {
+					ret += "AS " + columnForAs.name
+				}
+			}
+			return ret, nil
+		},
 	}
 	idx := og.params.rng.Intn(len(localityOptions))
-	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, localityOptions[idx]()), nil
+	toLocality, err := localityOptions[idx]()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, toLocality), nil
 }
 
 func getClusterRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
@@ -2760,6 +2789,10 @@ func (og *operationGenerator) pctExisting(shouldAlreadyExist bool) int {
 		return 100 - og.params.errorRate
 	}
 	return og.params.errorRate
+}
+
+func (og operationGenerator) alwaysExisting() int {
+	return 100
 }
 
 func (og *operationGenerator) produceError() bool {
