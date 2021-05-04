@@ -1,0 +1,97 @@
+Warning: your version of `make` seems old; your build may fail!
+Running make with -j16
+GOPATH set to /Users/adityamaru/go
+mkdir -p lib
+rm -f lib/lib{geos,geos_c}.dylib
+cp -L /Users/adityamaru/go/native/x86_64-apple-darwin19.6.0/geos/lib/lib{geos,geos_c}.dylib lib
+GOFLAGS= go test   -mod=vendor -tags ' make x86_64_apple_darwin19.6.0 crdb_test' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags "" -X "github.com/cockroachdb/cockroach/pkg/build.tag=v21.2.0-alpha.00000000-171-g959eba7ba9-dirty" -X "github.com/cockroachdb/cockroach/pkg/build.rev=959eba7ba9a934023dd836bc29603fb9cf798941" -X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-apple-darwin19.6.0"  ' -run "TestExportTargetFileSizeSetting"  -timeout 30m ./pkg/ccl/importccl --show-logs -v
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "invered-joiner-batch-size" with value 1
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "coldata-batch-size" with value 70
+initialized metamorphic constant "spilling-queue-initial-len" with value 11
+initialized metamorphic constant "max-batch-size" with value 5041
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 7
+I210504 16:23:29.360962 1 (gostd) rand.go:92  [-] 1  random seed: 8144869072462575591
+=== RUN   TestExportTargetFileSizeSetting
+I210504 16:23:29.363865 20 3@vendor/github.com/cockroachdb/pebble/version_set.go:156  [n?,pebble] 1  [JOB 1] MANIFEST created 000001
+I210504 16:23:29.363956 20 3@vendor/github.com/cockroachdb/pebble/open.go:305  [n?,pebble] 2  [JOB 1] WAL created 000002
+I210504 16:23:29.364109 20 server/config.go:564  [n?] 3  1 storage engine initialized
+I210504 16:23:29.364123 95 3@vendor/github.com/cockroachdb/pebble/table_stats.go:118  [n?,pebble] 4  [JOB 2] all initial table stats loaded
+I210504 16:23:29.364130 20 server/config.go:567  [n?] 5  Pebble cache size: 128 MiB
+I210504 16:23:29.364221 20 server/config.go:567  [n?] 6  store 0: in-memory, size 512 MiB
+I210504 16:23:29.366506 20 1@rpc/tls.go:271  [n?] 7  server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I210504 16:23:29.366565 20 1@rpc/tls.go:320  [n?] 8  web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+W210504 16:23:29.366779 20 server/status/runtime.go:322  [n?] 9  could not parse build timestamp: parsing time "" as "2006/01/02 15:04:05": cannot parse "" as "2006"
+I210504 16:23:29.374178 20 3@vendor/github.com/cockroachdb/pebble/version_set.go:156  [n?,pebble] 10  [JOB 1] MANIFEST created 000001
+I210504 16:23:29.374274 20 3@vendor/github.com/cockroachdb/pebble/open.go:305  [n?,pebble] 11  [JOB 1] WAL created 000002
+I210504 16:23:29.374410 107 3@vendor/github.com/cockroachdb/pebble/table_stats.go:118  [n?,pebble] 12  [JOB 2] all initial table stats loaded
+I210504 16:23:29.388851 20 1@server/server.go:913  [n?] 13  monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I210504 16:23:29.395064 20 server/init.go:196  [n?] 14  no stores initialized
+I210504 16:23:29.395147 20 server/init.go:197  [n?] 15  awaiting `cockroach init` or join with an already initialized node
+I210504 16:23:29.395182 20 server/init.go:261  [n?] 16  cluster 76600760-5eda-4ebe-9768-03b78ee1bfbd has been created
+I210504 16:23:29.395217 20 server/init.go:262  [n?] 17  allocated node ID: n1 (for self)
+I210504 16:23:29.395244 20 server/init.go:263  [n?] 18  active cluster version: 21.1-6
+I210504 16:23:29.395387 147 1@server/server.go:1552  [n1] 19  connecting to gossip network to verify cluster ID "76600760-5eda-4ebe-9768-03b78ee1bfbd"
+I210504 16:23:29.395427 20 gossip/gossip.go:402  [n1] 20  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:57545" > attrs:<> locality:<tiers:<key:"region" value:"test" > tiers:<key:"dc" value:"dc1" > > ServerVersion:<major_val:21 minor_val:1 patch:0 internal:6 > build_tag:"v21.2.0-alpha.00000000-171-g959eba7ba9-dirty" started_at:1620145409395410000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:57547" >
+I210504 16:23:29.395990 108 kv/kvserver/closedts/provider/provider.go:135  [ct-closer] 21  disabling legacy closed-timestamp mechanism; the new one is enabled
+I210504 16:23:29.398345 20 server/node.go:388  [n1] 22  initialized store s1
+I210504 16:23:29.398408 20 kv/kvserver/stores.go:250  [n1] 23  read 0 node addresses from persistent storage
+I210504 16:23:29.398513 20 server/node.go:465  [n1] 25  started with engine type 2
+I210504 16:23:29.398420 147 1@server/server.go:1555  [n1] 24  node connected via gossip
+I210504 16:23:29.398552 20 server/node.go:467  [n1] 26  started with attributes []
+I210504 16:23:29.398622 20 1@server/server.go:1682  [n1] 27  starting https server at 127.0.0.1:57546 (use: 127.0.0.1:57546)
+I210504 16:23:29.398666 20 1@server/server.go:1687  [n1] 28  starting postgres server at 127.0.0.1:57547 (use: 127.0.0.1:57547)
+I210504 16:23:29.398705 20 1@server/server.go:1689  [n1] 29  starting grpc server at 127.0.0.1:57545
+I210504 16:23:29.398738 20 1@server/server.go:1690  [n1] 30  advertising CockroachDB node at 127.0.0.1:57545
+W210504 16:23:29.398745 310 kv/kvserver/store.go:1692  [n1,s1,r6/1:/Table/{SystemCon…-11}] 31  could not gossip system config: [NotLeaseHolderError] lease acquisition attempt lost to another lease, which has expired in the meantime; r6: replica (n1,s1):1 not lease holder; lease holder unknown
+W210504 16:23:29.398745 310 kv/kvserver/store.go:1692  [n1,s1,r6/1:/Table/{SystemCon…-11}] 31 +(1) [NotLeaseHolderError] lease acquisition attempt lost to another lease, which has expired in the meantime; r6: replica (n1,s1):1 not lease holder; lease holder unknown
+W210504 16:23:29.398745 310 kv/kvserver/store.go:1692  [n1,s1,r6/1:/Table/{SystemCon…-11}] 31 +Error types: (1) *roachpb.NotLeaseHolderError
+W210504 16:23:29.441133 134 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Meta2/Table/20/NULL] 32  range lookup of key /Meta2/Table/20/NULL found only non-matching ranges []; retrying
+W210504 16:23:29.442637 133 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Table/20] 33  range lookup of key /Table/20 found only non-matching ranges []; retrying
+I210504 16:23:29.444430 358 kv/kvserver/replica_rangefeed.go:619  [n1,rangefeed=table-stats-cache,s1,r16/1:/Table/2{0-1}] 34  RangeFeed closed timestamp is empty
+W210504 16:23:29.450382 310 kv/kvserver/store.go:1692  [n1,s1,r6/1:/Table/{SystemCon…-11}] 35  could not gossip system config: [NotLeaseHolderError] lease acquisition attempt lost to another lease, which has expired in the meantime; r6: replica (n1,s1):1 not lease holder; lease holder unknown
+W210504 16:23:29.450382 310 kv/kvserver/store.go:1692  [n1,s1,r6/1:/Table/{SystemCon…-11}] 35 +(1) [NotLeaseHolderError] lease acquisition attempt lost to another lease, which has expired in the meantime; r6: replica (n1,s1):1 not lease holder; lease holder unknown
+W210504 16:23:29.450382 310 kv/kvserver/store.go:1692  [n1,s1,r6/1:/Table/{SystemCon…-11}] 35 +Error types: (1) *roachpb.NotLeaseHolderError
+I210504 16:23:29.455508 212 3@vendor/github.com/cockroachdb/pebble/db.go:1464  [n1,pebble] 36  [JOB 3] WAL created 000004
+I210504 16:23:29.548283 20 1@util/log/event_log.go:32  [n1] 37 ={"Timestamp":1620145409548279000,"EventType":"node_join","NodeID":1,"StartedAt":1620145409395410000,"LastUp":1620145409395410000}
+I210504 16:23:29.548384 20 sql/sqlliveness/slinstance/slinstance.go:252  [n1] 38  starting SQL liveness instance
+I210504 16:23:29.548385 378 sql/temporary_schema.go:492  [n1] 39  running temporary object cleanup background job
+I210504 16:23:29.549891 378 sql/temporary_schema.go:527  [n1] 40  found 0 temporary schemas
+I210504 16:23:29.549949 378 sql/temporary_schema.go:530  [n1] 41  early exiting temporary schema cleaner as no temporary schemas were found
+I210504 16:23:29.549978 378 sql/temporary_schema.go:531  [n1] 42  completed temporary object cleanup job
+I210504 16:23:29.549998 378 sql/temporary_schema.go:610  [n1] 43  temporary object cleaner next scheduled to run at 2021-05-04 16:53:29.548358 +0000 UTC
+I210504 16:23:29.554481 469 sql/sqlliveness/slstorage/slstorage.go:352  [n1] 44  inserted sqlliveness session a500ca62dbe34755928658a2a37d9094
+I210504 16:23:29.554556 469 sql/sqlliveness/slinstance/slinstance.go:144  [n1] 45  created new SQL liveness session a500ca62dbe34755928658a2a37d9094
+I210504 16:23:29.557025 376 1@util/log/event_log.go:32  [n1] 46 ={"Timestamp":1620145409548279000,"EventType":"node_join","NodeID":1,"StartedAt":1620145409395410000,"LastUp":1620145409395410000}
+I210504 16:23:29.557658 174 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 47 ={"Timestamp":1620145409550360000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I210504 16:23:29.561142 507 migration/migrationmanager/manager.go:102  [n1,intExec=set-setting,migration-mgr] 48  no need to migrate, cluster already at newest version
+I210504 16:23:29.563263 507 util/log/event_log.go:32  [n1,intExec=set-setting] 49 ={"Timestamp":1620145409559901000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'21.1-6'"],"SettingName":"version","Value":"21.1-6"}
+I210504 16:23:29.571860 996 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 50 ={"Timestamp":1620145409569681000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"c08f6bcc-11a3-4ef8-96f2-32cccd04adfe"}
+I210504 16:23:29.574669 844 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 51 ={"Timestamp":1620145409572899000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I210504 16:23:29.576665 831 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 52 ={"Timestamp":1620145409574860000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","User":"root","DescriptorID":51,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I210504 16:23:29.587309 20 server/server_sql.go:867  [n1] 53  done ensuring all necessary startup migrations have run
+I210504 16:23:29.587380 20 1@server/server.go:2083  [n1] 54  serving sql connections
+I210504 16:23:29.587396 815 jobs/job_scheduler.go:360  [n1] 55  waiting 4m0s before scheduled jobs daemon start
+I210504 16:23:29.588577 20 testutils/testcluster/testcluster.go:1115  [-] 56  WaitForFullReplication
+I210504 16:23:29.588615 20 testutils/testcluster/testcluster.go:1119  [-] 57  WaitForFullReplication took: 3µs
+I210504 16:23:29.589250 817 server/auto_upgrade.go:55  [n1] 58  no need to upgrade, cluster already at the newest version
+I210504 16:23:29.603651 1315 5@util/log/event_log.go:32  [n1,client=127.0.0.1:57551,hostssl,user=root] 59 ={"Timestamp":1620145409601027000,"EventType":"create_table","Statement":"CREATE TABLE defaultdb.public.foo (x BYTES)","User":"root","DescriptorID":52,"TableName":"defaultdb.public.foo"}
+I210504 16:23:29.604923 1003 kv/kvserver/replica_command.go:397  [n1,split,s1,r37/1:/{Table/41-Max}] 60  initiating a split of this range at key /Table/52 [r38] (zone config)
+I210504 16:23:29.618544 1431 jobs/registry.go:1132  [n1] 61  IMPORT job 655605791487754241: stepping through state running with error: <nil>
+I210504 16:23:29.632086 1431 1@util/log/event_log.go:32  [n1,job=655605791487754241] 62 ={"Timestamp":1620145409631083000,"EventType":"import","JobID":655605791487754241,"JobType":"IMPORT","Description":"IMPORT INTO defaultdb.public.foo(x) CSV DATA ('http://127.0.0.1:57550')","User":"root","DescriptorIDs":[52],"Status":"running"}
+I210504 16:23:29.639623 1431 kv/kvserver/replica_command.go:397  [n1,s1,r38/1:/{Table/52-Max}] 63  initiating a split of this range at key /Table/52/1 [r39] (manual)
+I210504 16:23:29.642286 1554 ccl/importccl/read_import_base.go:178  [n1,job=655605791487754241,import-distsql-ingest] 64  could not fetch file size; falling back to per-file progress: bad ContentLength: -1
+I210504 16:23:29.668042 285 3@vendor/github.com/cockroachdb/pebble/db.go:1464  [n1,pebble] 65  [JOB 4] WAL created 000005
+I210504 16:23:29.671911 285 3@vendor/github.com/cockroachdb/pebble/db.go:1464  [n1,pebble] 66  [JOB 5] WAL created 000006
+I210504 16:23:29.695007 1431 1@util/log/event_log.go:32  [n1,job=655605791487754241] 67 ={"Timestamp":1620145409693556000,"EventType":"import","JobID":655605791487754241,"JobType":"IMPORT","Description":"IMPORT INTO defaultdb.public.foo(x) CSV DATA ('http://127.0.0.1:57550')","User":"root","DescriptorIDs":[52],"Status":"succeeded"}
+I210504 16:23:29.695154 1431 jobs/registry.go:1132  [n1] 68  IMPORT job 655605791487754241: stepping through state succeeded with error: <nil>
+I210504 16:23:30.572709 20 testutils/testcluster/testcluster.go:101  [-] 69  TestCluster quiescing nodes
+W210504 16:23:30.572836 1404 kv/kvserver/intentresolver/intent_resolver.go:768  [-] 70  failed to gc transaction record: could not GC completed transaction anchored at /Table/SystemConfigSpan/Start: node unavailable; try another peer
+W210504 16:23:30.572832 470 jobs/registry.go:726  [-] 71  canceling all adopted jobs due to stopper quiescing
+W210504 16:23:30.572912 469 sql/sqlliveness/slinstance/slinstance.go:183  [n1] 72  exiting heartbeat loop
+    exportcsv_test.go:527: -- test log scope end --
+--- PASS: TestExportTargetFileSizeSetting (1.22s)
+PASS
+ok  	github.com/cockroachdb/cockroach/pkg/ccl/importccl	2.404s

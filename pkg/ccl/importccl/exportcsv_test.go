@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -481,4 +483,45 @@ func TestExportPrivileges(t *testing.T) {
 	require.NoError(t, err)
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.NoError(t, err)
+}
+
+func TestExportTargetFileSizeSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+
+	// Every row is 3 bytes, and so the table will be ~25KB. After CSV encoding
+	// every row is 6 bytes, so the total number of CSV bytes is ~50KB.
+	const rows = 8533
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			for i := 0; i < rows; i++ {
+				fmt.Fprintln(w, 'a')
+			}
+		}
+	}))
+	defer srv.Close()
+
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (x BYTES);`)
+	sqlDB.Exec(t, `IMPORT INTO foo (x) CSV DATA ($1)`, srv.URL)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo' WITH chunk_size='10KB' FROM TABLE foo`)
+	files, err := ioutil.ReadDir(filepath.Join(dir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, 5, len(files))
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo-compressed' WITH chunk_size='10KB',compression='gzip' FROM TABLE foo`)
+	zipFiles, err := ioutil.ReadDir(filepath.Join(dir, "foo-compressed"))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(zipFiles))
 }
