@@ -654,11 +654,11 @@ func noteFeedMessage(a fsm.Args) error {
 }
 
 func pause(a fsm.Args) error {
-	return a.Extended.(*nemeses).f.Pause()
+	return a.Extended.(*nemeses).f.(EnterpriseTestFeed).Pause()
 }
 
 func resume(a fsm.Args) error {
-	return a.Extended.(*nemeses).f.Resume()
+	return a.Extended.(*nemeses).f.(EnterpriseTestFeed).Resume()
 }
 
 func abort(a fsm.Args) error {

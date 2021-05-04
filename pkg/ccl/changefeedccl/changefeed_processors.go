@@ -225,7 +225,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	var err error
 	ca.sink, err = getSink(
 		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), kvFeedMemMon.MakeBoundAccount())
+		ca.spec.User(), kvFeedMemMon.MakeBoundAccount(), ca.spec.JobID)
 
 	if err != nil {
 		err = MarkRetryableError(err)
@@ -527,11 +527,6 @@ func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error 
 		return err
 	}
 	ca.lastFlush = timeutil.Now()
-	if ca.knobs.AfterSinkFlush != nil {
-		if err := ca.knobs.AfterSinkFlush(); err != nil {
-			return err
-		}
-	}
 
 	// Iterate the spans in reverse so that if there are a very large number of
 	// spans which we're propagating upwards get processed in newest to oldest
@@ -995,8 +990,8 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	var err error
 	// TODO(yevgeniy): Evaluate if we should introduce changefeed specific monitor.
 	mm := cf.flowCtx.Cfg.BackfillerMonitor
-	cf.sink, err = getSink(
-		ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle, cf.spec.User(), mm.MakeBoundAccount())
+	cf.sink, err = getSink(ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle,
+		cf.spec.User(), mm.MakeBoundAccount(), cf.spec.JobID)
 
 	if err != nil {
 		err = MarkRetryableError(err)
