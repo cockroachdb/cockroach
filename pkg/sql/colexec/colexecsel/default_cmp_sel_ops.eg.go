@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -26,6 +27,7 @@ type defaultCmpSelOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmpSelOp{}
+var _ execinfra.Releasable = &defaultCmpSelOp{}
 
 func (d *defaultCmpSelOp) Next() coldata.Batch {
 	for {
@@ -69,6 +71,10 @@ func (d *defaultCmpSelOp) Next() coldata.Batch {
 	}
 }
 
+func (d *defaultCmpSelOp) Release() {
+	d.toDatumConverter.Release()
+}
+
 type defaultCmpConstSelOp struct {
 	selConstOpBase
 	constArg tree.Datum
@@ -78,6 +84,7 @@ type defaultCmpConstSelOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmpConstSelOp{}
+var _ execinfra.Releasable = &defaultCmpConstSelOp{}
 
 func (d *defaultCmpConstSelOp) Next() coldata.Batch {
 	for {
@@ -117,4 +124,8 @@ func (d *defaultCmpConstSelOp) Next() coldata.Batch {
 			return batch
 		}
 	}
+}
+
+func (d *defaultCmpConstSelOp) Release() {
+	d.toDatumConverter.Release()
 }

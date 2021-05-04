@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -27,6 +28,7 @@ type defaultCmpProjOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmpProjOp{}
+var _ execinfra.Releasable = &defaultCmpProjOp{}
 
 func (d *defaultCmpProjOp) Next() coldata.Batch {
 	batch := d.Input.Next()
@@ -74,6 +76,10 @@ func (d *defaultCmpProjOp) Next() coldata.Batch {
 	return batch
 }
 
+func (d *defaultCmpProjOp) Release() {
+	d.toDatumConverter.Release()
+}
+
 type defaultCmpRConstProjOp struct {
 	projConstOpBase
 	constArg tree.Datum
@@ -84,6 +90,7 @@ type defaultCmpRConstProjOp struct {
 }
 
 var _ colexecop.Operator = &defaultCmpRConstProjOp{}
+var _ execinfra.Releasable = &defaultCmpRConstProjOp{}
 
 func (d *defaultCmpRConstProjOp) Next() coldata.Batch {
 	batch := d.Input.Next()
@@ -127,4 +134,8 @@ func (d *defaultCmpRConstProjOp) Next() coldata.Batch {
 	// the length anyway (this helps maintaining the invariant of flat bytes).
 	batch.SetLength(n)
 	return batch
+}
+
+func (d *defaultCmpRConstProjOp) Release() {
+	d.toDatumConverter.Release()
 }
