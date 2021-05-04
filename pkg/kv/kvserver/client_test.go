@@ -1481,6 +1481,24 @@ func putArgs(key roachpb.Key, value []byte) *roachpb.PutRequest {
 	}
 }
 
+// cPutArgs returns a ConditionPutRequest to the default replica
+// for the specified key and value, with the given expected value.
+func cPutArgs(key roachpb.Key, value, expValue []byte) *roachpb.ConditionalPutRequest {
+	var ev *roachpb.Value
+	if expValue != nil {
+		value := roachpb.MakeValueFromBytes(expValue)
+		ev = &value
+	}
+
+	return &roachpb.ConditionalPutRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: key,
+		},
+		Value:    roachpb.MakeValueFromBytes(value),
+		ExpValue: ev,
+	}
+}
+
 // incrementArgs returns an IncrementRequest addressed to the default replica
 // for the specified key.
 func incrementArgs(key roachpb.Key, inc int64) *roachpb.IncrementRequest {
