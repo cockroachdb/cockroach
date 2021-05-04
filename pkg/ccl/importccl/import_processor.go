@@ -11,6 +11,7 @@ package importccl
 import (
 	"context"
 	"math"
+	"net/url"
 	"sync/atomic"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,7 +206,11 @@ func makeInputConverter(
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := true
 		for _, file := range spec.Uri {
-			if conf, err := cloudimpl.ExternalStorageConfFromURI(file, spec.User()); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
+			uri, err := url.Parse(file)
+			if err != nil {
+				continue
+			}
+			if _, err := parseWorkloadConfig(uri); err != nil {
 				isWorkload = false
 				break
 			}
