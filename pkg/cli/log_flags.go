@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"flag"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -347,20 +348,48 @@ type settableString struct {
 	isSet bool
 }
 
-var _ flag.Value = (*settableString)(nil)
+type stringSetter struct {
+	*settableString
+}
+
+var _ flag.Value = (*stringSetter)(nil)
+var _ flag.Value = (*fileSetter)(nil)
 
 // Set implements the pflag.Value interface.
-func (l *settableString) Set(s string) error {
+func (l *stringSetter) Set(s string) error {
 	l.s = s
 	l.isSet = true
 	return nil
 }
 
 // Type implements the pflag.Value interface.
-func (l settableString) Type() string { return "<string>" }
+func (l stringSetter) Type() string { return "<string>" }
 
 // String implements the pflag.Value interface.
-func (l settableString) String() string { return l.s }
+func (l stringSetter) String() string { return l.s }
+
+type fileSetter struct {
+	*settableString
+	fileName string
+}
+
+// Set implements the pflag.Value interface.
+func (l *fileSetter) Set(s string) error {
+	l.fileName = s
+	b, err := ioutil.ReadFile(s)
+	if err != nil {
+		return err
+	}
+	l.s = string(b)
+	l.isSet = true
+	return nil
+}
+
+// Type implements the pflag.Value interface.
+func (l fileSetter) Type() string { return "<file>" }
+
+// String implements the pflag.Value interface.
+func (l fileSetter) String() string { return l.fileName }
 
 // settableBool represents a boolean that can be set from the command line.
 type settableBool struct {
