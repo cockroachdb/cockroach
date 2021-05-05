@@ -1647,3 +1647,67 @@ SELECT 1 << 5 -- normalized!
 SELECT ((1) << (5)) -- fully parenthetized
 SELECT _ << _ -- literals removed
 SELECT 1 << 5 -- identifiers removed
+
+parse
+SELECT OPERATOR(+) 5
+----
+SELECT 5 -- normalized!
+SELECT (5) -- fully parenthetized
+SELECT _ -- literals removed
+SELECT 5 -- identifiers removed
+
+parse
+SELECT OPERATOR(pg_catalog.+) 5
+----
+SELECT 5 -- normalized!
+SELECT (5) -- fully parenthetized
+SELECT _ -- literals removed
+SELECT 5 -- identifiers removed
+
+parse
+SELECT OPERATOR(-) 5
+----
+SELECT -5 -- normalized!
+SELECT (-5) -- fully parenthetized
+SELECT _ -- literals removed
+SELECT -5 -- identifiers removed
+
+parse
+SELECT OPERATOR(pg_catalog.-) 5
+----
+SELECT -5 -- normalized!
+SELECT (-5) -- fully parenthetized
+SELECT _ -- literals removed
+SELECT -5 -- identifiers removed
+
+parse
+SELECT OPERATOR(~) 5
+----
+SELECT ~5 -- normalized!
+SELECT (~(5)) -- fully parenthetized
+SELECT ~_ -- literals removed
+SELECT ~5 -- identifiers removed
+
+parse
+SELECT OPERATOR(pg_catalog.~) 5
+----
+SELECT ~5 -- normalized!
+SELECT (~(5)) -- fully parenthetized
+SELECT ~_ -- literals removed
+SELECT ~5 -- identifiers removed
+
+parse
+SELECT OPERATOR(||/) 5
+----
+SELECT ||/5 -- normalized!
+SELECT (||/(5)) -- fully parenthetized
+SELECT ||/_ -- literals removed
+SELECT ||/5 -- identifiers removed
+
+parse
+SELECT OPERATOR(pg_catalog.||/) 5
+----
+SELECT ||/5 -- normalized!
+SELECT (||/(5)) -- fully parenthetized
+SELECT ||/_ -- literals removed
+SELECT ||/5 -- identifiers removed

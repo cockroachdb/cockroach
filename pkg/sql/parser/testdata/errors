@@ -740,3 +740,19 @@ at or near "EOF": syntax error: type unknown[] does not exist
 DETAIL: source SQL:
 SELECT ARRAY[]::unknown[]
                          ^
+
+error
+SELECT 1 ||/ 5
+----
+at or near "EOF": syntax error: unknown binary operator ||/
+DETAIL: source SQL:
+SELECT 1 ||/ 5
+              ^
+
+error
+SELECT OPERATOR(#) 5
+----
+at or near "EOF": syntax error: unknown unary operator #
+DETAIL: source SQL:
+SELECT OPERATOR(#) 5
+                    ^

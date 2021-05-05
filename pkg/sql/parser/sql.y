@@ -83,11 +83,37 @@ func processBinaryQualOp(
     case tree.ComparisonOperator:
       return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
     default:
-      sqllex.Error(fmt.Sprintf("unknown operator %s of type %T", op, op))
+      sqllex.Error(fmt.Sprintf("unknown binary operator %s", op))
       return nil, 1
     }
 }
 
+func processUnaryQualOp(
+  sqllex sqlLexer,
+  op tree.Operator,
+  expr tree.Expr,
+) (tree.Expr, int) {
+  switch op := op.(type) {
+  case tree.UnaryOperator:
+    return &tree.UnaryExpr{Operator: op, Expr: expr}, 0
+  case tree.BinaryOperator:
+    // We have some binary operators which have the same symbol as the unary
+    // operator, so adjust accordingly.
+    switch op {
+    case tree.Plus:
+      return expr, 0
+    case tree.Minus:
+      return unaryNegation(expr), 0
+    }
+  case tree.ComparisonOperator:
+    switch op {
+    case tree.RegMatch:
+      return &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: expr}, 0
+    }
+  }
+  sqllex.Error(fmt.Sprintf("unknown unary operator %s", op))
+  return nil, 1
+}
 
 %}
 
@@ -10273,14 +10299,6 @@ a_expr:
   {
     $$.val = &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: $2.expr()}
   }
-| SQRT a_expr
-  {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnarySqrt, Expr: $2.expr()}
-  }
-| CBRT a_expr
-  {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryCbrt, Expr: $2.expr()}
-  }
 | a_expr '+' a_expr
   {
     $$.val = &tree.BinaryExpr{Operator: tree.Plus, Left: $1.expr(), Right: $3.expr()}
@@ -10365,7 +10383,14 @@ a_expr:
       return retCode
     }
   }
-
+| qual_op a_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processUnaryQualOp(sqllex, $1.op(), $2.expr())
+    if retCode != 0 {
+      return retCode
+    }
+  }
 | a_expr AND a_expr
   {
     $$.val = &tree.AndExpr{Left: $1.expr(), Right: $3.expr()}
@@ -10649,6 +10674,14 @@ b_expr:
   {
     var retCode int
     $$.val, retCode = processBinaryQualOp(sqllex, $2.op(), $1.expr(), $3.expr())
+    if retCode != 0 {
+      return retCode
+    }
+  }
+| qual_op b_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processUnaryQualOp(sqllex, $1.op(), $2.expr())
     if retCode != 0 {
       return retCode
     }
@@ -11485,6 +11518,8 @@ op:
 | REGIMATCH { $$.val = tree.RegIMatch }
 | NOT_REGIMATCH { $$.val = tree.NotRegIMatch }
 | AND_AND { $$.val = tree.Overlaps }
+| SQRT { $$.val = tree.UnarySqrt }
+| CBRT { $$.val = tree.UnaryCbrt }
 
 subquery_op:
   math_op

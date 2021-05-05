@@ -575,6 +575,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
 
 		{`SELECT 1 OPERATOR(public.+) 2`, 0, `user defined operator`, ``},
+		{`SELECT OPERATOR(public./) 2`, 0, `user defined operator`, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
