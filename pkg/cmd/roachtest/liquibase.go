@@ -12,8 +12,9 @@ package main
 
 import "context"
 
-// This test runs the Liquibase test harness against a single cockroach node.
+var supportedLiquibaseHarnessTag = "liquibase-test-harness-1.0.1"
 
+// This test runs the Liquibase test harness against a single cockroach node.
 func registerLiquibase(r *testRegistry) {
 	runLiquibase := func(
 		ctx context.Context,
@@ -74,7 +75,7 @@ func registerLiquibase(r *testRegistry) {
 			c,
 			"https://github.com/liquibase/liquibase-test-harness.git",
 			"/mnt/data1/liquibase-test-harness",
-			"main",
+			supportedLiquibaseHarnessTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -92,7 +93,7 @@ func registerLiquibase(r *testRegistry) {
 		// The dbVersion is set to 20.2 since that causes all known passing tests
 		// to be run.
 		if err = c.RunE(ctx, node,
-			`cd /mnt/data1/liquibase-test-harness/ && mvn test -DdbName=cockroachdb -DdbVersion=20.2`,
+			`cd /mnt/data1/liquibase-test-harness/ && mvn test -Dtest=LiquibaseHarnessSuiteTest -DdbName=cockroachdb -DdbVersion=20.2`,
 		); err != nil {
 			t.Fatal(err)
 		}
