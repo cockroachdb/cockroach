@@ -460,7 +460,7 @@ func (jr *joinReader) Spilled() bool {
 // neededRightCols returns the set of column indices which need to be fetched
 // from the right side of the join (jr.desc).
 func (jr *joinReader) neededRightCols() util.FastIntSet {
-	neededCols := jr.Out.NeededColumns()
+	neededCols := jr.OutputHelper.NeededColumns()
 
 	if jr.readerType == indexJoinReaderType {
 		// For index joins, all columns from the left side are not output, so no
@@ -743,7 +743,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVTime:         fis.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx)),
 		},
-		Output: jr.Out.Stats(),
+		Output: jr.OutputHelper.Stats(),
 	}
 }
 

@@ -285,7 +285,7 @@ func (m *mergeJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem: optional.MakeUint(uint64(m.MemMonitor.MaximumBytes())),
 		},
-		Output: m.Out.Stats(),
+		Output: m.OutputHelper.Stats(),
 	}
 }
 

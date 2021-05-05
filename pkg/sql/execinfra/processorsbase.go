@@ -329,101 +329,6 @@ type ProcessorConstructor func(
 // facilities for dealing with filtering and projection (through a
 // ProcOutputHelper) and for implementing the RowSource interface (draining,
 // trailing metadata).
-//
-// If a Processor implements the RowSource interface, it's implementation is
-// expected to look something like this:
-//
-//   // concatProcessor concatenates rows from two sources (first returns rows
-//   // from the left, then from the right).
-//   type concatProcessor struct {
-//     ProcessorBase
-//     l, r RowSource
-//
-//     // leftConsumed is set once we've exhausted the left input; once set, we start
-//     // consuming the right input.
-//     leftConsumed bool
-//   }
-//
-//   func newConcatProcessor(
-//     FlowCtx *FlowCtx, l RowSource, r RowSource, post *PostProcessSpec, output RowReceiver,
-//   ) (*concatProcessor, error) {
-//     p := &concatProcessor{l: l, r: r}
-//     if err := p.Init(
-//       post, l.OutputTypes(), FlowCtx, output,
-//       // We pass the inputs to the helper, to be consumed by DrainHelper() later.
-//       ProcStateOpts{
-//         InputsToDrain: []RowSource{l, r},
-//         // If the proc needed to return any metadata at the end other than the
-//         // tracing info, or if it needed to cleanup any resources other than those
-//         // handled by InternalClose() (say, close some memory account), it'd pass
-//         // a TrailingMetaCallback here.
-//       },
-//     ); err != nil {
-//       return nil, err
-//     }
-//     return p, nil
-//   }
-//
-//   // Start is part of the RowSource interface.
-//   func (p *concatProcessor) Start(ctx context.Context) {
-//     p.l.Start(ctx)
-//     p.r.Start(ctx)
-//     return p.StartInternal(ctx, concatProcName)
-//   }
-//
-//   // Next is part of the RowSource interface.
-//   func (p *concatProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-//     // Loop while we haven't produced a row or a metadata record. We loop around
-//     // in several cases, including when the filtering rejected a row coming.
-//     for p.State == StateRunning {
-//       var row rowenc.EncDatumRow
-//       var meta *ProducerMetadata
-//       if !p.leftConsumed {
-//         row, meta = p.l.Next()
-//       } else {
-//         row, meta = p.r.Next()
-//       }
-//
-//       if meta != nil {
-//         // If we got an error, we need to forward it along and remember that we're
-//         // draining.
-//         if meta.Err != nil {
-//           p.MoveToDraining(nil /* err */)
-//         }
-//         return nil, meta
-//       }
-//       if row == nil {
-//         if !p.leftConsumed {
-//           p.leftConsumed = true
-//         } else {
-//           // In this case we know that both inputs are consumed, so we could
-//           // transition directly to StateTrailingMeta, but implementations are
-//           // encouraged to just use MoveToDraining() for uniformity; DrainHelper()
-//           // will transition to StateTrailingMeta() quickly.
-//           p.MoveToDraining(nil /* err */)
-//           break
-//         }
-//         continue
-//       }
-//
-//       if outRow := p.ProcessRowHelper(row); outRow != nil {
-//         return outRow, nil
-//       }
-//     }
-//     return nil, p.DrainHelper()
-//   }
-//
-//   // ConsumerDone is part of the RowSource interface.
-//   func (p *concatProcessor) ConsumerDone() {
-//     p.MoveToDraining(nil /* err */)
-//   }
-//
-//   // ConsumerClosed is part of the RowSource interface.
-//   func (p *concatProcessor) ConsumerClosed() {
-//     // The consumer is done, Next() will not be called again.
-//     p.InternalClose()
-//   }
-//
 type ProcessorBase struct {
 	self RowSource
 
@@ -433,9 +338,9 @@ type ProcessorBase struct {
 	// Output is nil, one can invoke ProcessRow to obtain the post-processed row
 	// directly.
 	Output RowReceiver
-	// Out is used to handle the post-processing spec.
-	Out     ProcOutputHelper
-	FlowCtx *FlowCtx
+	// OutputHelper is used to handle the post-processing spec.
+	OutputHelper ProcOutputHelper
+	FlowCtx      *FlowCtx
 
 	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
 	EvalCtx *tree.EvalContext
@@ -506,7 +411,7 @@ func (pb *ProcessorBase) MustBeStreaming() bool {
 
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
 func (pb *ProcessorBase) Reset() {
-	pb.Out.Reset()
+	pb.OutputHelper.Reset()
 	// Deeply reset the slices so that we don't hold onto the old objects.
 	for i := range pb.trailingMeta {
 		pb.trailingMeta[i] = execinfrapb.ProducerMetadata{}
@@ -515,7 +420,7 @@ func (pb *ProcessorBase) Reset() {
 		pb.inputsToDrain[i] = nil
 	}
 	*pb = ProcessorBase{
-		Out:           pb.Out,
+		OutputHelper:  pb.OutputHelper,
 		trailingMeta:  pb.trailingMeta[:0],
 		inputsToDrain: pb.inputsToDrain[:0],
 	}
@@ -763,7 +668,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 // should continue processing other rows, with the awareness that the processor
 // might have been transitioned to the draining phase.
 func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatumRow {
-	outRow, ok, err := pb.Out.ProcessRow(pb.Ctx, row)
+	outRow, ok, err := pb.OutputHelper.ProcessRow(pb.Ctx, row)
 	if err != nil {
 		pb.MoveToDraining(err)
 		return nil
@@ -786,7 +691,7 @@ func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatu
 
 // OutputTypes is part of the Processor interface.
 func (pb *ProcessorBase) OutputTypes() []*types.T {
-	return pb.Out.OutputTypes
+	return pb.OutputHelper.OutputTypes
 }
 
 // Run is part of the Processor interface.
@@ -868,7 +773,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.SemaCtx = tree.MakeSemaContext()
 	pb.SemaCtx.TypeResolver = resolver
 
-	return pb.Out.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
+	return pb.OutputHelper.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
 }
 
 // AddInputToDrain adds an input to drain when moving the processor to a
@@ -957,7 +862,7 @@ func (pb *ProcessorBase) InternalClose() bool {
 		pb.EvalCtx.Context = pb.origCtx
 
 		// This prevents Next() from returning more rows.
-		pb.Out.consumerClosed()
+		pb.OutputHelper.consumerClosed()
 	}
 	return closing
 }
