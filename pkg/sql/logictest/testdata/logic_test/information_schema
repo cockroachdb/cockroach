@@ -388,15 +388,19 @@ pg_catalog          pg_hba_file_rules
 pg_catalog          pg_index
 pg_catalog          pg_indexes
 pg_catalog          pg_inherits
+pg_catalog          pg_init_privs
 pg_catalog          pg_language
 pg_catalog          pg_largeobject
+pg_catalog          pg_largeobject_metadata
 pg_catalog          pg_locks
 pg_catalog          pg_matviews
 pg_catalog          pg_namespace
 pg_catalog          pg_opclass
 pg_catalog          pg_operator
 pg_catalog          pg_opfamily
+pg_catalog          pg_partitioned_table
 pg_catalog          pg_policies
+pg_catalog          pg_policy
 pg_catalog          pg_prepared_statements
 pg_catalog          pg_prepared_xacts
 pg_catalog          pg_proc
@@ -405,12 +409,15 @@ pg_catalog          pg_publication_rel
 pg_catalog          pg_publication_tables
 pg_catalog          pg_range
 pg_catalog          pg_replication_origin
+pg_catalog          pg_replication_origin_status
+pg_catalog          pg_replication_slots
 pg_catalog          pg_rewrite
 pg_catalog          pg_roles
 pg_catalog          pg_rules
 pg_catalog          pg_seclabel
 pg_catalog          pg_seclabels
 pg_catalog          pg_sequence
+pg_catalog          pg_sequences
 pg_catalog          pg_settings
 pg_catalog          pg_shadow
 pg_catalog          pg_shdepend
@@ -420,6 +427,7 @@ pg_catalog          pg_shseclabel
 pg_catalog          pg_stat_activity
 pg_catalog          pg_statistic_ext
 pg_catalog          pg_subscription
+pg_catalog          pg_subscription_rel
 pg_catalog          pg_tables
 pg_catalog          pg_tablespace
 pg_catalog          pg_timezone_abbrevs
@@ -584,15 +592,19 @@ pg_hba_file_rules
 pg_index
 pg_indexes
 pg_inherits
+pg_init_privs
 pg_language
 pg_largeobject
+pg_largeobject_metadata
 pg_locks
 pg_matviews
 pg_namespace
 pg_opclass
 pg_operator
 pg_opfamily
+pg_partitioned_table
 pg_policies
+pg_policy
 pg_prepared_statements
 pg_prepared_xacts
 pg_proc
@@ -601,12 +613,15 @@ pg_publication_rel
 pg_publication_tables
 pg_range
 pg_replication_origin
+pg_replication_origin_status
+pg_replication_slots
 pg_rewrite
 pg_roles
 pg_rules
 pg_seclabel
 pg_seclabels
 pg_sequence
+pg_sequences
 pg_settings
 pg_shadow
 pg_shdepend
@@ -616,6 +631,7 @@ pg_shseclabel
 pg_stat_activity
 pg_statistic_ext
 pg_subscription
+pg_subscription_rel
 pg_tables
 pg_tablespace
 pg_timezone_abbrevs
@@ -799,15 +815,19 @@ system         pg_catalog          pg_hba_file_rules                      SYSTEM
 system         pg_catalog          pg_index                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_indexes                             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_inherits                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_init_privs                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_language                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_largeobject                         SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_largeobject_metadata                SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_locks                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_matviews                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_namespace                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_opclass                             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_operator                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_opfamily                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_partitioned_table                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_policies                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_policy                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_prepared_statements                 SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_prepared_xacts                      SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_proc                                SYSTEM VIEW  NO                  1
@@ -816,12 +836,15 @@ system         pg_catalog          pg_publication_rel                     SYSTEM
 system         pg_catalog          pg_publication_tables                  SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_range                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_replication_origin                  SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_replication_origin_status           SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_replication_slots                   SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_rewrite                             SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_roles                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_rules                               SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_seclabel                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_seclabels                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_sequence                            SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_sequences                           SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_settings                            SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shadow                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_shdepend                            SYSTEM VIEW  NO                  1
@@ -831,6 +854,7 @@ system         pg_catalog          pg_shseclabel                          SYSTEM
 system         pg_catalog          pg_stat_activity                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_statistic_ext                       SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_subscription                        SYSTEM VIEW  NO                  1
+system         pg_catalog          pg_subscription_rel                    SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_tables                              SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_tablespace                          SYSTEM VIEW  NO                  1
 system         pg_catalog          pg_timezone_abbrevs                    SYSTEM VIEW  NO                  1
@@ -2108,15 +2132,19 @@ NULL     public   system         pg_catalog          pg_hba_file_rules          
 NULL     public   system         pg_catalog          pg_index                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_indexes                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_inherits                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_init_privs                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_language                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_largeobject                         SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_largeobject_metadata                SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_locks                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opclass                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opfamily                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_partitioned_table                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_policies                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_policy                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_statements                 SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_xacts                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_proc                                SELECT          NULL          YES
@@ -2125,12 +2153,15 @@ NULL     public   system         pg_catalog          pg_publication_rel         
 NULL     public   system         pg_catalog          pg_publication_tables                  SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_range                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_replication_origin                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_origin_status           SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_slots                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rewrite                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_roles                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rules                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabel                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabels                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_sequence                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_sequences                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_settings                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shadow                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shdepend                            SELECT          NULL          YES
@@ -2140,6 +2171,7 @@ NULL     public   system         pg_catalog          pg_shseclabel              
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tables                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tablespace                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_timezone_abbrevs                    SELECT          NULL          YES
@@ -2549,15 +2581,19 @@ NULL     public   system         pg_catalog          pg_hba_file_rules          
 NULL     public   system         pg_catalog          pg_index                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_indexes                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_inherits                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_init_privs                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_language                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_largeobject                         SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_largeobject_metadata                SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_locks                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_matviews                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_namespace                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opclass                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_operator                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_opfamily                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_partitioned_table                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_policies                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_policy                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_statements                 SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_prepared_xacts                      SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_proc                                SELECT          NULL          YES
@@ -2566,12 +2602,15 @@ NULL     public   system         pg_catalog          pg_publication_rel         
 NULL     public   system         pg_catalog          pg_publication_tables                  SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_range                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_replication_origin                  SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_origin_status           SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_replication_slots                   SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rewrite                             SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_roles                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_rules                               SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabel                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_seclabels                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_sequence                            SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_sequences                           SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_settings                            SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shadow                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_shdepend                            SELECT          NULL          YES
@@ -2581,6 +2620,7 @@ NULL     public   system         pg_catalog          pg_shseclabel              
 NULL     public   system         pg_catalog          pg_stat_activity                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_statistic_ext                       SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_subscription                        SELECT          NULL          YES
+NULL     public   system         pg_catalog          pg_subscription_rel                    SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tables                              SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_tablespace                          SELECT          NULL          YES
 NULL     public   system         pg_catalog          pg_timezone_abbrevs                    SELECT          NULL          YES

@@ -187,6 +187,7 @@ CREATE TABLE pg_catalog.pg_class (
 	relrewrite OID,
 	relrowsecurity BOOL,
 	relpartbound STRING,
+	relminmxid INT,
   INDEX (oid)
 )`
 
@@ -239,6 +240,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
 	-- style string, for use by pg_get_constraintdef().
 	condef STRING,
+	conparentid OID,
   INDEX (conrelid)
 )`
 
@@ -1270,4 +1272,101 @@ CREATE TABLE pg_catalog.pg_amop (
 	amopfamily OID,
 	amopsortfamily OID,
 	amopstrategy INT2
+)`
+
+//PgCatalogLargeobjectMetadata is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogLargeobjectMetadata = `
+CREATE TABLE pg_catalog.pg_largeobject_metadata (
+	oid OID,
+	lomacl STRING[],
+	lomowner OID
+)`
+
+//PgCatalogPartitionedTable is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogPartitionedTable = `
+CREATE TABLE pg_catalog.pg_partitioned_table (
+	partrelid OID,
+	partstrat "char",
+	partattrs INT2VECTOR,
+	partclass OIDVECTOR,
+	partcollation OIDVECTOR,
+	partdefid OID,
+	partexprs STRING,
+	partnatts INT2
+)`
+
+//PgCatalogReplicationOriginStatus is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogReplicationOriginStatus = `
+CREATE TABLE pg_catalog.pg_replication_origin_status (
+	local_lsn STRING,
+	remote_lsn STRING,
+	external_id STRING,
+	local_id OID
+)`
+
+//PgCatalogReplicationSlots is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogReplicationSlots = `
+CREATE TABLE pg_catalog.pg_replication_slots (
+	safe_wal_size INT,
+	wal_status STRING,
+	plugin NAME,
+	restart_lsn STRING,
+	xmin INT,
+	confirmed_flush_lsn STRING,
+	database NAME,
+	datoid OID,
+	active BOOL,
+	catalog_xmin INT,
+	slot_name NAME,
+	active_pid INT4,
+	slot_type STRING,
+	temporary BOOL
+)`
+
+//PgCatalogInitPrivs is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogInitPrivs = `
+CREATE TABLE pg_catalog.pg_init_privs (
+	classoid OID,
+	initprivs STRING[],
+	objoid OID,
+	objsubid INT4,
+	privtype "char"
+)`
+
+//PgCatalogPolicy is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogPolicy = `
+CREATE TABLE pg_catalog.pg_policy (
+	polrelid OID,
+	polroles OID[],
+	polwithcheck STRING,
+	oid OID,
+	polcmd "char",
+	polname NAME,
+	polpermissive BOOL,
+	polqual STRING
+)`
+
+//PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogSequences = `
+CREATE TABLE pg_catalog.pg_sequences (
+	cache_size INT,
+	cycle BOOL,
+	data_type REGTYPE,
+	max_value INT,
+	sequenceowner NAME,
+	start_value INT,
+	increment_by INT,
+	last_value INT,
+	min_value INT,
+	schemaname NAME,
+	sequencename NAME
+)`
+
+//PgCatalogSubscriptionRel is an empty table in the pg_catalog that is not implemented yet
+const PgCatalogSubscriptionRel = `
+CREATE TABLE pg_catalog.pg_subscription_rel (
+	srrelid OID,
+	srsubid OID,
+	srsublsn STRING,
+	srsubstate "char"
 )`
