@@ -437,10 +437,14 @@ func (rf *cFetcher) Init(
 	var err error
 
 	var neededCols util.FastIntSet
-	// Scan through the entire columns map to see which columns are
-	// required.
-	if numNeededCols := tableArgs.ValNeededForCol.Len(); cap(table.neededColsList) < numNeededCols {
+	numNeededCols := tableArgs.ValNeededForCol.Len()
+	// Scan through the entire columns map to see which columns are required and
+	// which columns are not needed (the latter will be set to all null values).
+	if cap(table.neededColsList) < numNeededCols {
 		table.neededColsList = make([]int, 0, numNeededCols)
+	}
+	if cap(table.notNeededColOrdinals) < len(colDescriptors)-numNeededCols {
+		table.notNeededColOrdinals = make([]int, 0, len(colDescriptors)-numNeededCols)
 	}
 	for i := range colDescriptors {
 		//gcassert:bce
@@ -458,20 +462,12 @@ func (rf *cFetcher) Init(
 			case descpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 			}
+		} else {
+			table.notNeededColOrdinals = append(table.notNeededColOrdinals, idx)
 		}
 	}
 	sort.Ints(table.neededColsList)
-
-	// Find the set of columns for which vectors will **not** be properly
-	// populated.
-	if numNeededCols := tableArgs.ValNeededForCol.Len(); cap(table.notNeededColOrdinals) < len(rf.typs)-numNeededCols {
-		table.notNeededColOrdinals = make([]int, 0, len(rf.typs)-numNeededCols)
-	}
-	for i := 0; i < len(rf.typs); i++ {
-		if !tableArgs.ValNeededForCol.Contains(i) {
-			table.notNeededColOrdinals = append(table.notNeededColOrdinals, i)
-		}
-	}
+	sort.Ints(table.notNeededColOrdinals)
 
 	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
 
@@ -1114,14 +1110,12 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			if emitBatch {
 				rf.pushState(stateResetBatch)
 				rf.finalizeBatch()
-				rf.machine.rowIdx = 0
 				return rf.machine.batch, nil
 			}
 
 		case stateEmitLastBatch:
 			rf.machine.state[0] = stateFinished
-			rf.machine.batch.SetLength(rf.machine.rowIdx)
-			rf.machine.rowIdx = 0
+			rf.finalizeBatch()
 			return rf.machine.batch, nil
 
 		case stateFinished:
@@ -1500,9 +1494,10 @@ func (rf *cFetcher) finalizeBatch() {
 	// batch is materialized (i.e. values are converted to datums), the
 	// conversion of unset values might encounter an error.
 	for _, notNeededIdx := range rf.table.notNeededColOrdinals {
-		rf.machine.batch.ColVec(notNeededIdx).Nulls().SetNulls()
+		rf.machine.colvecs[notNeededIdx].Nulls().SetNulls()
 	}
 	rf.machine.batch.SetLength(rf.machine.rowIdx)
+	rf.machine.rowIdx = 0
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
