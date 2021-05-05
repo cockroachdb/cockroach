@@ -12,11 +12,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	gohex "encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +54,56 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type key struct {
+	rawByte []byte
+	typ     string
+}
+
+func (k *key) String() string {
+	return string(k.rawByte)
+}
+
+func (k *key) Type() string {
+	return k.typ
+}
+
+func (k *key) setType(v string) (string, error) {
+	i := strings.IndexByte(v, ':')
+	if i == -1 {
+		return "", errors.Newf("no format specified in start key %s", v)
+	}
+	k.typ = v[:i]
+	return v[i+1:], nil
+}
+
+func (k *key) Set(v string) error {
+	v, err := k.setType(v)
+	if err != nil {
+		return err
+	}
+	switch k.typ {
+	case "hex":
+		b, err := gohex.DecodeString(v)
+		if err != nil {
+			return err
+		}
+		k.rawByte = b
+	case "raw":
+		s, err := strconv.Unquote(`"` + v + `"`)
+		if err != nil {
+			return errors.Wrapf(err, "invalid argument %q", v)
+		}
+		k.rawByte = []byte(s)
+	case "bytekey":
+		s, err := strconv.Unquote(`"` + v + `"`)
+		if err != nil {
+			return errors.Wrapf(err, "invalid argument %q", v)
+		}
+		k.rawByte = []byte(s)
+	}
+	return nil
+}
+
 // debugBackupArgs captures the parameters of the `debug backup` command.
 var debugBackupArgs struct {
 	externalIODir string
@@ -61,6 +113,25 @@ var debugBackupArgs struct {
 	destination     string
 	format          string
 	nullas          string
+	maxRows         int
+	startKey        key
+
+	rowCount int
+}
+
+// setDebugBackupArgsDefault set the default values in debugBackupArgs.
+// This function is called in every test that exercises debug backup
+// command-line parsing.
+func setDebugContextDefault() {
+	debugBackupArgs.externalIODir = ""
+	debugBackupArgs.exportTableName = ""
+	debugBackupArgs.readTime = ""
+	debugBackupArgs.destination = ""
+	debugBackupArgs.format = "csv"
+	debugBackupArgs.nullas = "null"
+	debugBackupArgs.maxRows = 0
+	debugBackupArgs.startKey = key{}
+	debugBackupArgs.rowCount = 0
 }
 
 func init() {
@@ -149,6 +220,17 @@ func init() {
 		cliflags.ExportCSVNullas.Shorthand,
 		"null", /*value*/
 		cliflags.ExportCSVNullas.Usage())
+
+	exportDataCmd.Flags().IntVar(
+		&debugBackupArgs.maxRows,
+		cliflags.MaxRows.Name,
+		0,
+		cliflags.MaxRows.Usage())
+
+	exportDataCmd.Flags().Var(
+		&debugBackupArgs.startKey,
+		cliflags.StartKey.Name,
+		cliflags.StartKey.Usage())
 
 	cli.DebugCmd.AddCommand(backupCmds)
 
@@ -305,7 +387,6 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 }
 
 func runExportDataCmd(cmd *cobra.Command, args []string) error {
-
 	if debugBackupArgs.exportTableName == "" {
 		return errors.New("export data requires table name specified by --table flag")
 	}
@@ -390,6 +471,9 @@ func showData(
 	for _, files := range entry.Files {
 		if err := processEntryFiles(ctx, rf, files, entry.Span, endTime, writer); err != nil {
 			return err
+		}
+		if debugBackupArgs.maxRows != 0 && debugBackupArgs.rowCount >= debugBackupArgs.maxRows {
+			break
 		}
 	}
 
@@ -501,6 +585,13 @@ func processEntryFiles(
 	defer iter.Close()
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: span.Key}, storage.MVCCKey{Key: span.EndKey}
+	if len(debugBackupArgs.startKey.rawByte) != 0 {
+		if debugBackupArgs.startKey.typ == "bytekey" {
+			startKeyMVCC.Key = append(startKeyMVCC.Key, debugBackupArgs.startKey.rawByte...)
+		} else {
+			startKeyMVCC.Key = roachpb.Key(debugBackupArgs.startKey.rawByte)
+		}
+	}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
 
 	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
@@ -527,6 +618,13 @@ func processEntryFiles(
 			return err
 		}
 		writer.Flush()
+
+		if debugBackupArgs.maxRows != 0 {
+			debugBackupArgs.rowCount++
+			if debugBackupArgs.rowCount >= debugBackupArgs.maxRows {
+				break
+			}
+		}
 	}
 	return nil
 }
