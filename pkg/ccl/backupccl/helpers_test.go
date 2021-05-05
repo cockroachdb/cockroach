@@ -65,6 +65,14 @@ func backupRestoreTestSetupWithParams(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
+	if len(params.ServerArgsPerNode) > 0 {
+		for i := range params.ServerArgsPerNode {
+			param := params.ServerArgsPerNode[i]
+			param.ExternalIODir = dir
+			param.UseDatabase = "data"
+			params.ServerArgsPerNode[i] = param
+		}
+	}
 
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
@@ -240,6 +248,13 @@ func backupRestoreTestSetupEmptyWithParams(
 	ctx = context.Background()
 
 	params.ServerArgs.ExternalIODir = dir
+	if len(params.ServerArgsPerNode) > 0 {
+		for i := range params.ServerArgsPerNode {
+			param := params.ServerArgsPerNode[i]
+			param.ExternalIODir = dir
+			params.ServerArgsPerNode[i] = param
+		}
+	}
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
 

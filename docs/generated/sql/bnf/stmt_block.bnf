@@ -1071,6 +1071,7 @@ unreserved_keyword ::=
 	| 'SHOW'
 	| 'SIMPLE'
 	| 'SKIP'
+	| 'SKIP_LOCALITIES_CHECK'
 	| 'SKIP_MISSING_FOREIGN_KEYS'
 	| 'SKIP_MISSING_SEQUENCES'
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
@@ -2025,6 +2026,7 @@ restore_options ::=
 	| 'SKIP_MISSING_SEQUENCE_OWNERS'
 	| 'SKIP_MISSING_VIEWS'
 	| 'DETACHED'
+	| 'SKIP_LOCALITIES_CHECK'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*

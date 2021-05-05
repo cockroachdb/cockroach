@@ -1,0 +1,54 @@
+new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+query-sql
+SELECT region FROM [SHOW REGIONS FROM DATABASE d];
+----
+eu-central-1
+us-east-1
+us-west-1
+
+exec-sql
+BACKUP DATABASE d TO 'nodelocal://1/database_backup/';
+----
+
+exec-sql
+BACKUP TO 'nodelocal://1/full_cluster_backup/';
+----
+
+# A new cluster with the same locality settings.
+new-server name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+----
+
+exec-sql
+DROP DATABASE d;
+----
+
+exec-sql
+RESTORE DATABASE d FROM 'nodelocal://0/database_backup/';
+----
+
+
+# A new cluster with different localities settings.
+new-server name=s3 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
+----
+
+exec-sql
+RESTORE DATABASE d FROM 'nodelocal://0/database_backup/';
+----
+pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
+
+exec-sql
+RESTORE FROM 'nodelocal://0/full_cluster_backup/';
+----
+pq: detected a mismatch in regions between the restore cluster and the backup cluster, missing regions detected: us-east-1, us-west-1.
