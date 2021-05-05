@@ -64,8 +64,6 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: c},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 	m.Start(ctx)
 
@@ -143,8 +141,6 @@ func BenchmarkMaterializer(b *testing.B) {
 							0, /* processorID */
 							colexecargs.OpWithMetaInfo{Root: input},
 							typs,
-							nil, /* output */
-							nil, /* cancelFlow */
 						)
 						m.Start(ctx)
 
@@ -195,8 +191,6 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 			MetadataSources: colexecop.MetadataSources{metadataSource},
 		},
 		nil, /* typ */
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 
 	m.Start(ctx)
@@ -238,8 +232,6 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			1, /* processorID */
 			colexecargs.OpWithMetaInfo{Root: c},
 			types,
-			nil, /* output */
-			nil, /* cancelFlow */
 		)
 		m.Start(ctx)
 

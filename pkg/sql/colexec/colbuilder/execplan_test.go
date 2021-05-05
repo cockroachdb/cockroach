@@ -124,8 +124,6 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		0, /* processorID */
 		r.OpWithMetaInfo,
 		[]*types.T{types.Int},
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 
 	m.Start(ctx)

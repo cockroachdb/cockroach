@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -60,8 +59,6 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 			},
 		}},
 		nil, /* typs */
-		&distsqlutils.RowBuffer{},
-		nil, /* cancelFlow */
 	)
 
 	ctx, _, err := base.Setup(ctx, nil, flowinfra.FuseAggressively)

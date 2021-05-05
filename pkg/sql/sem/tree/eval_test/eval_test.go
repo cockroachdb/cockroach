@@ -202,8 +202,6 @@ func TestEval(t *testing.T) {
 				0, /* processorID */
 				result.OpWithMetaInfo,
 				[]*types.T{typedExpr.ResolvedType()},
-				nil, /* output */
-				nil, /* cancelFlow */
 			)
 
 			var (

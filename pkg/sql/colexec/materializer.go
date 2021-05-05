@@ -56,13 +56,6 @@ type Materializer struct {
 	// adapter.
 	outputRow rowenc.EncDatumRow
 
-	// cancelFlow will return a function to cancel the context of the flow. It is
-	// a function in order to be lazily evaluated, since the context cancellation
-	// function is only available when Starting. This function differs from
-	// ctxCancel in that it will cancel all components of the Materializer's flow,
-	// including those started asynchronously.
-	cancelFlow func() context.CancelFunc
-
 	// closers is a slice of Closers that should be Closed on termination.
 	closers colexecop.Closers
 }
@@ -174,19 +167,10 @@ var materializerPool = sync.Pool{
 // - typs is the output types schema. Typs are assumed to have been hydrated.
 // - getStats (when tracing is enabled) returns all of the execution statistics
 // of operators which the materializer is responsible for.
-// - cancelFlow should return the context cancellation function that cancels
-// the context of the flow (i.e. it is Flow.ctxCancel). It should only be
-// non-nil in case of a root Materializer (i.e. not when we're wrapping a row
-// source).
 // NOTE: the constructor does *not* take in an execinfrapb.PostProcessSpec
 // because we expect input to handle that for us.
 func NewMaterializer(
-	flowCtx *execinfra.FlowCtx,
-	processorID int32,
-	input colexecargs.OpWithMetaInfo,
-	typs []*types.T,
-	output execinfra.RowReceiver,
-	cancelFlow func() context.CancelFunc,
+	flowCtx *execinfra.FlowCtx, processorID int32, input colexecargs.OpWithMetaInfo, typs []*types.T,
 ) *Materializer {
 	m := materializerPool.Get().(*Materializer)
 	*m = Materializer{
@@ -206,7 +190,7 @@ func NewMaterializer(
 		// the one from the flow context.
 		flowCtx.EvalCtx,
 		processorID,
-		output,
+		nil, /* output */
 		execinfra.ProcStateOpts{
 			// We append drainHelper to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled materializer.
@@ -219,7 +203,6 @@ func NewMaterializer(
 		},
 	)
 	m.AddInputToDrain(m.drainHelper)
-	m.cancelFlow = cancelFlow
 	return m
 }
 
@@ -320,9 +303,6 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 
 func (m *Materializer) close() {
 	if m.InternalClose() {
-		if m.cancelFlow != nil {
-			m.cancelFlow()()
-		}
 		if m.Ctx == nil {
 			// In some edge cases (like when Init of an operator above this
 			// materializer encounters a panic), the materializer might never be

@@ -421,9 +421,9 @@ type flowCreatorHelper interface {
 	// accumulateAsyncComponent stores a component (either a router or an outbox)
 	// to be run asynchronously.
 	accumulateAsyncComponent(runFn)
-	// addMaterializer adds a root materializer to the flow. This is only done
-	// on the gateway node.
-	addMaterializer(*colexec.Materializer)
+	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
+	// done on the gateway node.
+	addFlowCoordinator(coordinator *FlowCoordinator)
 	// getCancelFlowFn returns a flow cancellation function.
 	getCancelFlowFn() context.CancelFunc
 }
@@ -696,7 +696,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 		// When the last Outbox on this node exits, we want to make sure that
 		// everything is shutdown; namely, we need to call cancelFn if:
 		// - it is the last Outbox
-		// - the node is not the gateway (there is a root materializer on the
+		// - the node is not the gateway (there is a flow coordinator on the
 		// gateway that will take care of the cancellation itself)
 		// - cancelFn is non-nil (it can be nil in tests).
 		// Calling cancelFn will cancel the context that all infrastructure on this
@@ -985,18 +985,35 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// it as an input on this node.
 		s.opChains = append(s.opChains, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
-		// Make the materializer, which will write to the given receiver.
-		proc := colexec.NewMaterializer(
+		// Check whether the root of the chain is a columnarizer - if so, we can
+		// avoid creating the materializer.
+		input := colbuilder.MaybeRemoveRootColumnarizer(opWithMetaInfo)
+		if input != nil {
+			// We successfully removed the columnarizer.
+			if util.CrdbTestBuild {
+				// That columnarizer was added as a closer, so we need to
+				// decrement the number of expected closers.
+				s.numClosers--
+			}
+		} else {
+			input = colexec.NewMaterializer(
+				flowCtx,
+				pspec.ProcessorID,
+				opWithMetaInfo,
+				opOutputTypes,
+			)
+		}
+		// Make the FlowCoordinator, which will write to the given receiver.
+		f := NewFlowCoordinator(
 			flowCtx,
 			pspec.ProcessorID,
-			opWithMetaInfo,
-			opOutputTypes,
+			input,
 			s.syncFlowConsumer,
 			s.getCancelFlowFn,
 		)
-		// A materializer is a root of its operator chain.
-		s.opChains = append(s.opChains, proc)
-		s.addMaterializer(proc)
+		// The flow coordinator is a root of its operator chain.
+		s.opChains = append(s.opChains, f)
+		s.addFlowCoordinator(f)
 	default:
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
 	}
@@ -1244,8 +1261,8 @@ func (r *vectorizedFlowCreatorHelper) accumulateAsyncComponent(run runFn) {
 		}))
 }
 
-func (r *vectorizedFlowCreatorHelper) addMaterializer(m *colexec.Materializer) {
-	r.processors = append(r.processors, m)
+func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
+	r.processors = append(r.processors, f)
 	r.f.SetProcessors(r.processors)
 }
 
@@ -1255,9 +1272,9 @@ func (r *vectorizedFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 
 func (r *vectorizedFlowCreatorHelper) Release() {
 	// Note that processors here can only be of 0 or 1 length, but always of
-	// 1 capacity (only the root materializer can be appended to this
-	// slice). Unset the slot so that we don't keep the reference to the old
-	// materializer.
+	// 1 capacity (only the flow coordinator can be appended to this slice).
+	// Unset the slot so that we don't keep the reference to the old flow
+	// coordinator.
 	if len(r.processors) == 1 {
 		r.processors[0] = nil
 	}
@@ -1302,7 +1319,7 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
-func (r *noopFlowCreatorHelper) addMaterializer(*colexec.Materializer) {}
+func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
 
 func (r *noopFlowCreatorHelper) getCancelFlowFn() context.CancelFunc {
 	return nil

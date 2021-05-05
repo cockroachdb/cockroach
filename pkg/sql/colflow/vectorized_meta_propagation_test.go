@@ -78,8 +78,6 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 			MetadataSources: colexecop.MetadataSources{col},
 		},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 
 	mtr, err := execinfra.NewMetadataTestReceiver(
