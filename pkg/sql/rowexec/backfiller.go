@@ -92,14 +92,14 @@ func (b *backfiller) Run(ctx context.Context) {
 	defer span.Finish()
 	meta := b.doRun(ctx)
 	execinfra.SendTraceData(ctx, b.output)
-	if emitHelper(ctx, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
+	if emitHelper(ctx, b.output, &b.out, nil /* row */, meta, func(ctx context.Context) {}) {
 		b.output.ProducerDone()
 	}
 }
 
 func (b *backfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	semaCtx := tree.MakeSemaContext()
-	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx(), b.output); err != nil {
+	if err := b.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, b.flowCtx.NewEvalCtx()); err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}
 	}
 	finishedSpans, err := b.mainLoop(ctx)

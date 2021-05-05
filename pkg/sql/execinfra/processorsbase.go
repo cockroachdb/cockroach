@@ -60,12 +60,7 @@ type DoesNotUseTxn interface {
 // the output of a processor.
 type ProcOutputHelper struct {
 	numInternalCols int
-	// output can be optionally passed in for use with EmitRow and
-	// rowexec.emitHelper.
-	// If output is nil, one can invoke ProcessRow to obtain the
-	// post-processed row directly.
-	output   RowReceiver
-	RowAlloc rowenc.EncDatumRowAlloc
+	RowAlloc        rowenc.EncDatumRowAlloc
 	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
 	// and outputCols can be set.
 	renderExprs []execinfrapb.ExprHelper
@@ -113,7 +108,6 @@ func (h *ProcOutputHelper) Init(
 	coreOutputTypes []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -121,7 +115,6 @@ func (h *ProcOutputHelper) Init(
 	if post.Projection && len(post.RenderExprs) > 0 {
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
-	h.output = output
 	h.numInternalCols = len(coreOutputTypes)
 	if post.Projection {
 		for _, col := range post.OutputColumns {
@@ -222,10 +215,10 @@ func (h *ProcOutputHelper) NeededColumns() (colIdxs util.FastIntSet) {
 //
 // Note: check out rowexec.emitHelper() for a useful wrapper.
 func (h *ProcOutputHelper) EmitRow(
-	ctx context.Context, row rowenc.EncDatumRow,
+	ctx context.Context, row rowenc.EncDatumRow, output RowReceiver,
 ) (ConsumerStatus, error) {
-	if h.output == nil {
-		panic("output RowReceiver not initialized for emitting rows")
+	if output == nil {
+		panic("output RowReceiver is not set for emitting rows")
 	}
 
 	outRow, ok, err := h.ProcessRow(ctx, row)
@@ -243,7 +236,7 @@ func (h *ProcOutputHelper) EmitRow(
 	if log.V(3) {
 		log.InfofDepth(ctx, 1, "pushing row %s", outRow.String(h.OutputTypes))
 	}
-	if r := h.output.Push(outRow, nil); r != NeedMoreRows {
+	if r := output.Push(outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
 			r == DrainRequested)
 		return r, nil
@@ -303,16 +296,6 @@ func (h *ProcOutputHelper) ProcessRow(
 
 	// If this row satisfies the limit, the caller is told to drain.
 	return h.outputRow, h.rowIdx < h.maxRowIdx, nil
-}
-
-// Output returns the output of the ProcOutputHelper.
-func (h *ProcOutputHelper) Output() RowReceiver {
-	return h.output
-}
-
-// Close signals to the output that there will be no more rows.
-func (h *ProcOutputHelper) Close() {
-	h.output.ProducerDone()
 }
 
 // consumerClosed stops output of additional rows from ProcessRow.
@@ -446,6 +429,11 @@ type ProcessorBase struct {
 
 	ProcessorID int32
 
+	// Output is the consumer of the rows produced by this ProcessorBase. If
+	// Output is nil, one can invoke ProcessRow to obtain the post-processed row
+	// directly.
+	Output RowReceiver
+	// Out is used to handle the post-processing spec.
 	Out     ProcOutputHelper
 	FlowCtx *FlowCtx
 
@@ -796,18 +784,18 @@ func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatu
 	return outRow
 }
 
-// OutputTypes is part of the processor interface.
+// OutputTypes is part of the Processor interface.
 func (pb *ProcessorBase) OutputTypes() []*types.T {
 	return pb.Out.OutputTypes
 }
 
-// Run is part of the processor interface.
+// Run is part of the Processor interface.
 func (pb *ProcessorBase) Run(ctx context.Context) {
-	if pb.Out.output == nil {
-		panic("processor output not initialized for emitting rows")
+	if pb.Output == nil {
+		panic("processor output is not set for emitting rows")
 	}
 	pb.self.Start(ctx)
-	Run(pb.Ctx, pb.self, pb.Out.output)
+	Run(pb.Ctx, pb.self, pb.Output)
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions
@@ -861,6 +849,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.FlowCtx = flowCtx
 	pb.EvalCtx = evalCtx
 	pb.ProcessorID = processorID
+	pb.Output = output
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	if opts.InputsToDrain != nil {
@@ -879,7 +868,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.SemaCtx = tree.MakeSemaContext()
 	pb.SemaCtx.TypeResolver = resolver
 
-	return pb.Out.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx, output)
+	return pb.Out.Init(post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
 }
 
 // AddInputToDrain adds an input to drain when moving the processor to a
