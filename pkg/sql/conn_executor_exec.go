@@ -1042,8 +1042,13 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
+		// Create a separate memory account for the results of the subqueries.
+		// Note that we intentionally defer the closure of the account until we
+		// return from this method (after the main query is executed).
+		subqueryResultMemAcc := planner.EvalContext().Mon.MakeBoundAccount()
+		defer subqueryResultMemAcc.Close(ctx)
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv,
+			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 		) {
 			return recv.stats, recv.commErr
 		}
