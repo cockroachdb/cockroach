@@ -61,7 +61,7 @@ go_library(
         "operators.go",
         "overload.go",
         "parse_array.go",
-        "parse_string.go",
+        "parse_string.go",  # keep
         "persistence.go",
         "pgwire_encode.go",
         "placeholders.go",
