@@ -80,7 +80,7 @@ func (c callbackCloser) Close(_ context.Context) error {
 // Hash Router -> output -> Outbox -> | -> Inbox -> |
 //            |                       |
 //             -> output -> Outbox -> | -> Inbox -> |
-//                                    |              -> Synchronizer -> materializer
+//                                    |              -> Synchronizer -> materializer -> FlowCoordinator
 //                          Outbox -> | -> Inbox -> |
 //                                    |
 //                          Outbox -> | -> Inbox -> |
@@ -98,7 +98,7 @@ func (c callbackCloser) Close(_ context.Context) error {
 // Hash Router -> output -> Outbox -> | -> Inbox ->                                |
 //            |                       |             |                              |
 //             -> output -> Outbox -> | -> Inbox ->                                |
-//                                    |             | -> Synchronizer -> Outbox -> | -> Inbox -> materializer
+//                                    |             | -> Synchronizer -> Outbox -> | -> Inbox -> materializer -> FlowCoordinator
 //                          Outbox -> | -> Inbox ->                                |
 //                                    |             |                              |
 //                          Outbox -> | -> Inbox ->                                |
@@ -358,23 +358,28 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						}}},
 					},
 					typs,
+				)
+				coordinator := colflow.NewFlowCoordinator(
+					flowCtx,
+					1, /* processorID */
+					materializer,
 					nil, /* output */
 					func() context.CancelFunc { return cancelLocal },
 				)
-				materializer.Start(ctxLocal)
+				coordinator.Start(ctxLocal)
 
 				for i := 0; i < 10; i++ {
-					row, meta := materializer.Next()
+					row, meta := coordinator.Next()
 					require.NotNil(t, row)
 					require.Nil(t, meta)
 				}
 				switch shutdownOperation {
 				case consumerDone:
-					materializer.ConsumerDone()
+					coordinator.ConsumerDone()
 					receivedMetaFromID := make([]bool, streamID)
 					metaCount := 0
 					for {
-						row, meta := materializer.Next()
+						row, meta := coordinator.Next()
 						require.Nil(t, row)
 						if meta == nil {
 							break
@@ -389,12 +394,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						require.True(t, received, "did not receive metadata from Outbox %d", id)
 					}
 				case consumerClosed:
-					materializer.ConsumerClosed()
+					coordinator.ConsumerClosed()
 				}
 
 				// When Outboxes are setup through vectorizedFlowCreator, the latter
 				// keeps track of how many outboxes are on the node. When the last one
-				// exits (and if there is no materializer on that node),
+				// exits (and if there is no FlowCoordinator on that node),
 				// vectorizedFlowCreator will cancel the flow context of the node. To
 				// simulate this, we manually cancel contexts of both remote nodes.
 				cancelRemote()

@@ -4,6 +4,7 @@ go_library(
     name = "colflow",
     srcs = [
         "explain_vec.go",
+        "flow_coordinator.go",
         "panic_injector.go",
         "routers.go",
         "stats.go",
@@ -31,6 +32,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
+        "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
@@ -90,7 +92,6 @@ go_test(
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
-        "//pkg/sql/colfetcher",
         "//pkg/sql/colflow/colrpc",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
