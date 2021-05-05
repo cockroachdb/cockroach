@@ -223,6 +223,17 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 			serverArgs = tc.clusterArgs.ServerArgs
 		}
 
+		if len(serverArgs.StoreSpecs) == 0 {
+			serverArgs.StoreSpecs = []base.StoreSpec{base.DefaultTestStoreSpec}
+		}
+		if knobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs); ok && knobs.StickyEngineRegistry != nil {
+			for j := range serverArgs.StoreSpecs {
+				if serverArgs.StoreSpecs[j].StickyInMemoryEngineID == "" {
+					serverArgs.StoreSpecs[j].StickyInMemoryEngineID = fmt.Sprintf("auto-node%d-store%d", i+1, j+1)
+				}
+			}
+		}
+
 		// If no localities are specified in the args, we'll generate some
 		// automatically.
 		if noLocalities {
