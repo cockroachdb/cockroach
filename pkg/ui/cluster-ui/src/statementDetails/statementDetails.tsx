@@ -145,6 +145,7 @@ export interface StatementDetailsStateProps {
   statement: SingleStatementStatistics;
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
+  nodeRegions: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
 }
