@@ -82,7 +82,7 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			toWrapInput, err := colexec.NewMaterializer(
+			toWrapInput := colexec.NewMaterializer(
 				flowCtx,
 				processorID,
 				inputs[i],
@@ -90,9 +90,6 @@ func wrapRowSources(
 				nil, /* output */
 				nil, /* cancelFlow */
 			)
-			if err != nil {
-				return nil, releasables, err
-			}
 			// We passed the ownership over the meta components to the
 			// materializer.
 			// TODO(yuzefovich): possibly set the length to 0 in order to be
@@ -118,15 +115,15 @@ func wrapRowSources(
 	}
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c, err = colexec.NewStreamingColumnarizer(
+		c = colexec.NewStreamingColumnarizer(
 			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
 		)
 	} else {
-		c, err = colexec.NewBufferingColumnarizer(
+		c = colexec.NewBufferingColumnarizer(
 			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
 		)
 	}
-	return c, releasables, err
+	return c, releasables, nil
 }
 
 type opResult struct {

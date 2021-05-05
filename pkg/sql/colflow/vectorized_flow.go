@@ -986,7 +986,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		s.opChains = append(s.opChains, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Make the materializer, which will write to the given receiver.
-		proc, err := colexec.NewMaterializer(
+		proc := colexec.NewMaterializer(
 			flowCtx,
 			pspec.ProcessorID,
 			opWithMetaInfo,
@@ -994,9 +994,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 			s.syncFlowConsumer,
 			s.getCancelFlowFn,
 		)
-		if err != nil {
-			return err
-		}
 		// A materializer is a root of its operator chain.
 		s.opChains = append(s.opChains, proc)
 		s.addMaterializer(proc)

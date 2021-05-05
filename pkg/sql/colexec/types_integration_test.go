@@ -78,8 +78,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)
 
-			columnarizer, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, source)
-			require.NoError(t, err)
+			columnarizer := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, source)
 
 			c, err := colserde.NewArrowBatchConverter(typs)
 			require.NoError(t, err)
@@ -88,7 +87,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
 
 			output := distsqlutils.NewRowBuffer(typs, nil /* rows */, distsqlutils.RowBufferArgs{})
-			materializer, err := NewMaterializer(
+			materializer := NewMaterializer(
 				flowCtx,
 				1, /* processorID */
 				colexecargs.OpWithMetaInfo{Root: arrowOp},
@@ -96,7 +95,6 @@ func TestSQLTypesIntegration(t *testing.T) {
 				output,
 				nil, /* cancelFlow */
 			)
-			require.NoError(t, err)
 
 			materializer.Start(ctx)
 			materializer.Run(ctx)

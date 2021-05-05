@@ -51,7 +51,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	)
 	flow := colflow.NewVectorizedFlow(base)
 
-	mat, err := colexec.NewMaterializer(
+	mat := colexec.NewMaterializer(
 		&flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: &colexecop.CallbackOperator{
@@ -63,11 +63,8 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		&distsqlutils.RowBuffer{},
 		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
-	ctx, _, err = base.Setup(ctx, nil, flowinfra.FuseAggressively)
+	ctx, _, err := base.Setup(ctx, nil, flowinfra.FuseAggressively)
 	require.NoError(t, err)
 
 	base.SetProcessors([]execinfra.Processor{mat})

@@ -159,7 +159,7 @@ func BenchmarkValues(b *testing.B) {
 					}
 					return NewBufferingColumnarizer(
 						testAllocator, &flowCtx, 0, proc.(execinfra.RowSource),
-					)
+					), nil
 				})
 		}
 	}

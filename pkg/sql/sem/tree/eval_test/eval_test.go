@@ -197,7 +197,7 @@ func TestEval(t *testing.T) {
 			result, err := colbuilder.NewColOperator(ctx, flowCtx, args)
 			require.NoError(t, err)
 
-			mat, err := colexec.NewMaterializer(
+			mat := colexec.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
 				result.OpWithMetaInfo,
@@ -205,7 +205,6 @@ func TestEval(t *testing.T) {
 				nil, /* output */
 				nil, /* cancelFlow */
 			)
-			require.NoError(t, err)
 
 			var (
 				row  rowenc.EncDatumRow
