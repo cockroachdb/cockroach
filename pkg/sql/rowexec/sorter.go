@@ -136,7 +136,7 @@ func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem:  optional.MakeUint(uint64(s.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(s.diskMonitor.MaximumBytes())),
 		},
-		Output: s.Out.Stats(),
+		Output: s.OutputHelper.Stats(),
 	}
 }
 

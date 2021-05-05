@@ -447,7 +447,7 @@ func (z *zigzagJoiner) setupInfo(
 
 	// Add the outputted columns.
 	neededCols := util.MakeFastIntSet()
-	outCols := z.Out.NeededColumns()
+	outCols := z.OutputHelper.NeededColumns()
 	maxCol := colOffset + len(info.table.PublicColumns())
 	for i, ok := outCols.Next(colOffset); ok && i < maxCol; i, ok = outCols.Next(i + 1) {
 		neededCols.Add(i - colOffset)
@@ -1004,7 +1004,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		KV:     kvStats,
-		Output: z.Out.Stats(),
+		Output: z.OutputHelper.Stats(),
 	}
 }
 
