@@ -41,7 +41,7 @@ var UnitTestFormatter = IssueFormatter{
 		r.Escaped(`:
 
 `)
-		if fop := data.CondensedMessage.FatalOrPanic(50); fop != (FatalOrPanic{}) {
+		if fop, ok := data.CondensedMessage.FatalOrPanic(50); ok {
 			if fop.Error != "" {
 				r.Escaped("Fatal error:")
 				r.CodeBlock("", fop.Error)
@@ -54,6 +54,15 @@ var UnitTestFormatter = IssueFormatter{
 			r.Collapsed("Log preceding fatal error", func() {
 				r.CodeBlock("", fop.LastLines)
 			})
+		} else if rsgCrash, ok := data.CondensedMessage.RSGCrash(100); ok {
+			r.Escaped("Random syntax error:")
+			r.CodeBlock("", rsgCrash.Error)
+			r.Escaped("Query:")
+			r.CodeBlock("", rsgCrash.Query)
+			if rsgCrash.Schema != "" {
+				r.Escaped("Schema:")
+				r.CodeBlock("", rsgCrash.Schema)
+			}
 		} else {
 			r.CodeBlock("", data.CondensedMessage.Digest(50))
 		}
