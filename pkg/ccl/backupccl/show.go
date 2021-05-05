@@ -130,10 +130,6 @@ func showBackupPlanHook(
 			return err
 		}
 
-		if err := checkShowBackupURIPrivileges(ctx, p, str); err != nil {
-			return err
-		}
-
 		if inColFn != nil {
 			collection, err := inColFn()
 			if err != nil {
@@ -145,6 +141,10 @@ func showBackupPlanHook(
 			}
 			parsed.Path = path.Join(parsed.Path, str)
 			str = parsed.String()
+		}
+
+		if err := checkShowBackupURIPrivileges(ctx, p, str); err != nil {
+			return err
 		}
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str, p.User())
