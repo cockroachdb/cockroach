@@ -32,6 +32,7 @@ type InvariantsChecker struct {
 }
 
 var _ colexecop.DrainableOperator = &InvariantsChecker{}
+var _ colexecop.ClosableOperator = &InvariantsChecker{}
 
 // NewInvariantsChecker creates a new InvariantsChecker.
 func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
@@ -108,4 +109,13 @@ func (i *InvariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 		return nil
 	}
 	return i.metadataSource.DrainMeta()
+}
+
+// Close is part of the colexecop.ClosableOperator interface.
+func (i *InvariantsChecker) Close(ctx context.Context) error {
+	c, ok := i.Input.(colexecop.Closer)
+	if !ok {
+		return nil
+	}
+	return c.Close(ctx)
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -86,26 +85,25 @@ func TestSQLTypesIntegration(t *testing.T) {
 			require.NoError(t, err)
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
 
-			output := distsqlutils.NewRowBuffer(typs, nil /* rows */, distsqlutils.RowBufferArgs{})
 			materializer := NewMaterializer(
 				flowCtx,
 				1, /* processorID */
 				colexecargs.OpWithMetaInfo{Root: arrowOp},
 				typs,
-				output,
-				nil, /* cancelFlow */
 			)
 
 			materializer.Start(ctx)
-			materializer.Run(ctx)
-			actualRows := output.GetRowsNoMeta(t)
-			require.Equal(t, len(rows), len(actualRows))
-			for rowIdx, expectedRow := range rows {
-				require.Equal(t, len(expectedRow), len(actualRows[rowIdx]))
-				cmp, err := expectedRow[0].Compare(typ, &da, &evalCtx, &actualRows[rowIdx][0])
+			numActualRows := 0
+			for _, expectedRow := range rows {
+				actualRow, meta := materializer.Next()
+				require.Nil(t, meta)
+				numActualRows++
+				require.Equal(t, len(expectedRow), len(actualRow))
+				cmp, err := expectedRow[0].Compare(typ, &da, &evalCtx, &actualRow[0])
 				require.NoError(t, err)
 				require.Equal(t, 0, cmp)
 			}
+			require.Equal(t, len(rows), numActualRows)
 		}
 	}
 }
