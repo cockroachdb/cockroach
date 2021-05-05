@@ -187,7 +187,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, err
 	}
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
+		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
 	}
 
 	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
@@ -674,7 +674,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(multitenancyZoneCfgIssueNo)
+			ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
 			if err != nil {
 				return err
 			}
@@ -940,7 +940,8 @@ func validateZoneAttrsAndLocalities(
 	return nil
 }
 
-const multitenancyZoneCfgIssueNo = 49854
+// MultitenancyZoneCfgIssueNo points to the multitenancy zone config issue number
+const MultitenancyZoneCfgIssueNo = 49854
 
 func writeZoneConfig(
 	ctx context.Context,
@@ -952,7 +953,7 @@ func writeZoneConfig(
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
 	if !execCfg.Codec.ForSystemTenant() {
-		return 0, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
+		return 0, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
 	}
 	if len(zone.Subzones) > 0 {
 		st := execCfg.Settings

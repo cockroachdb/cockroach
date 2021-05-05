@@ -671,33 +671,33 @@ RESTORE TABLE abc.xzy FROM '_' WITH into_db = '_', skip_missing_foreign_keys -- 
 RESTORE TABLE _._ FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys -- identifiers removed
 
 parse
-RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check
 ----
-RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys
-RESTORE FROM ('a') WITH into_db = ('foo'), skip_missing_foreign_keys -- fully parenthetized
-RESTORE FROM _ WITH into_db = _, skip_missing_foreign_keys -- literals removed
-RESTORE FROM '_' WITH into_db = '_', skip_missing_foreign_keys -- UNEXPECTED REPARSED AST WITHOUT LITERALS
-RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys -- identifiers removed
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check
+RESTORE FROM ('a') WITH into_db = ('foo'), skip_missing_foreign_keys, skip_localities_check -- fully parenthetized
+RESTORE FROM _ WITH into_db = _, skip_missing_foreign_keys, skip_localities_check -- literals removed
+RESTORE FROM '_' WITH into_db = '_', skip_missing_foreign_keys, skip_localities_check -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE FROM 'a' WITH into_db = 'foo', skip_missing_foreign_keys, skip_localities_check -- identifiers removed
 
 parse
 RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz',
-skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached)
+skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached, skip_localities_check)
 ----
-RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached -- fully parenthetized
-RESTORE TABLE foo FROM _ WITH encryption_passphrase = _, into_db = _, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached -- literals removed
-RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached -- UNEXPECTED REPARSED AST WITHOUT LITERALS
-RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- fully parenthetized
+RESTORE TABLE foo FROM _ WITH encryption_passphrase = _, into_db = _, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- literals removed
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- identifiers removed
 
 parse
 RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz,
-SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS
+SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS, SKIP_LOCALITIES_CHECK
 ----
-RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views -- fully parenthetized
-RESTORE TABLE foo FROM _ WITH encryption_passphrase = _, into_db = _, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views -- literals removed
-RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views -- UNEXPECTED REPARSED AST WITHOUT LITERALS
-RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- fully parenthetized
+RESTORE TABLE foo FROM _ WITH encryption_passphrase = _, into_db = _, skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- literals removed
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- identifiers removed
 
 
 parse

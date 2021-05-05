@@ -10,20 +10,25 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"go/constant"
 	"net/url"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -65,6 +70,7 @@ const (
 	restoreOptSkipMissingSequences      = "skip_missing_sequences"
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
+	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -1631,6 +1637,90 @@ func checkPrivilegesForRestore(
 	return nil
 }
 
+func findNodeOfRegion(nodes []statuspb.NodeStatus, region descpb.RegionName) bool {
+	constraint := zonepb.Constraint{
+		Type:  zonepb.Constraint_REQUIRED,
+		Key:   "region",
+		Value: string(region),
+	}
+	for _, n := range nodes {
+		for _, store := range n.StoreStatuses {
+			if zonepb.StoreMatchesConstraint(store.Desc, constraint) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func checkClusterRegions(
+	ctx context.Context,
+	typesByID map[descpb.ID]*typedesc.Mutable,
+	ss serverpb.OptionalNodesStatusServer,
+	skipLocalitiesCheck bool,
+	codec keys.SQLCodec,
+) error {
+
+	if skipLocalitiesCheck {
+		return nil
+	}
+
+	regionSet := make(map[descpb.RegionName]struct{})
+	for _, typ := range typesByID {
+		typeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType()
+		if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			regionNames, err := typeDesc.RegionNames()
+			if err != nil {
+				return err
+			}
+			for _, region := range regionNames {
+				if _, ok := regionSet[region]; !ok {
+					regionSet[region] = struct{}{}
+				}
+			}
+		}
+	}
+
+	if len(regionSet) == 0 {
+		return nil
+	}
+
+	var nodeStatusServer serverpb.NodesStatusServer
+	var err error
+	if nodeStatusServer, err = ss.OptionalNodesStatusServer(sql.MultitenancyZoneCfgIssueNo); err != nil {
+		if !codec.ForSystemTenant() {
+			hintMsg := fmt.Sprintf("only the system tenant supports localities check for restore, otherwise option %q is required", restoreOptSkipLocalitiesCheck)
+			return errors.WithHint(err, hintMsg)
+		}
+		return err
+	}
+
+	var nodesResponse *serverpb.NodesResponse
+	nodesResponse, err = nodeStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+
+	missingRegion := make([]string, 0)
+	for region := range regionSet {
+		if nodeFound := findNodeOfRegion(nodesResponse.Nodes, region); !nodeFound {
+			missingRegion = append(missingRegion, string(region))
+		}
+	}
+
+	if len(missingRegion) > 0 {
+		mismatchErr := errors.Newf("detected a mismatch in regions between the restore cluster and the backup cluster, "+
+			"missing regions detected: %s.", strings.Join(missingRegion, ", "))
+		hintsMsg := fmt.Sprintf("there are two ways you can resolve this issue: "+
+			"1) update the cluster to which you're restoring to ensure that the regions present on the nodes' "+
+			"--locality flags match those present in the backup image, or "+
+			"2) restore with the %q option", restoreOptSkipLocalitiesCheck)
+		return errors.WithHint(mismatchErr, hintsMsg)
+	}
+
+	return nil
+}
+
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
@@ -1820,6 +1910,9 @@ func doRestorePlan(
 		case *typedesc.Mutable:
 			typesByID[desc.ID] = desc
 		}
+	}
+	if err := checkClusterRegions(ctx, typesByID, p.ExecCfg().NodesStatusServer, restoreStmt.Options.SkipLocalitiesCheck, p.ExecCfg().Codec); err != nil {
+		return err
 	}
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
