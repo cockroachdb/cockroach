@@ -88,6 +88,33 @@ func processBinaryQualOp(
     }
 }
 
+func processUnaryQualOp(
+  sqllex sqlLexer,
+  op tree.Operator,
+  expr tree.Expr,
+) (tree.Expr, int) {
+  switch op := op.(type) {
+  case tree.UnaryOperator:
+    return &tree.UnaryExpr{Operator: op, Expr: expr}, 0
+  case tree.BinaryOperator:
+    // We have some binary operators which have the same symbol as the unary
+    // operator, so adjust accordingly.
+    switch op {
+    case tree.Plus:
+      return expr, 0
+    case tree.Minus:
+      return unaryNegation(expr), 0
+    }
+  case tree.ComparisonOperator:
+    switch op {
+    case tree.RegMatch:
+      return &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: expr}, 0
+    }
+  }
+  sqllex.Error(fmt.Sprintf("unknown unary operator %s", op))
+  return nil, 1
+}
+
 %}
 
 %{
@@ -10405,6 +10432,14 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NE, Left: $1.expr(), Right: $3.expr()}
   }
+| qual_op a_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processUnaryQualOp(sqllex, $1.op(), $2.expr())
+    if retCode != 0 {
+      return retCode
+    }
+  }
 | a_expr qual_op a_expr %prec CBRT
   {
     {
@@ -10713,6 +10748,14 @@ b_expr:
 | b_expr NOT_EQUALS b_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NE, Left: $1.expr(), Right: $3.expr()}
+  }
+| qual_op b_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processUnaryQualOp(sqllex, $1.op(), $2.expr())
+    if retCode != 0 {
+      return retCode
+    }
   }
 | b_expr qual_op b_expr %prec CBRT
   {
@@ -11535,6 +11578,9 @@ all_op:
 | REGIMATCH { $$.val = tree.RegIMatch }
 | NOT_REGIMATCH { $$.val = tree.NotRegIMatch }
 | AND_AND { $$.val = tree.Overlaps }
+| '~' { $$.val = tree.UnaryComplement }
+| SQRT { $$.val = tree.UnarySqrt }
+| CBRT { $$.val = tree.UnaryCbrt }
 
 operator_op:
   all_op

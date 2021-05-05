@@ -1631,3 +1631,11 @@ SELECT 1 << 2, 1 << 2 -- normalized!
 SELECT ((1) << (2)), ((1) << (2)) -- fully parenthetized
 SELECT _ << _, _ << _ -- literals removed
 SELECT 1 << 2, 1 << 2 -- identifiers removed
+
+parse
+SELECT OPERATOR(+) 1, OPERATOR(-) 1, OPERATOR(~) 1, OPERATOR(|/) 1, OPERATOR(||/) 1
+----
+SELECT 1, -1, ~1, |/1, ||/1 -- normalized!
+SELECT (1), (-1), (~(1)), (|/(1)), (||/(1)) -- fully parenthetized
+SELECT _, _, ~_, |/_, ||/_ -- literals removed
+SELECT 1, -1, ~1, |/1, ||/1 -- identifiers removed
