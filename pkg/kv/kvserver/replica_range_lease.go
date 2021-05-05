@@ -63,7 +63,11 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 )
 
-var leaseStatusLogLimiter = log.Every(5 * time.Second)
+var leaseStatusLogLimiter = func() *log.EveryN {
+	e := log.Every(15 * time.Second)
+	e.ShouldLog() // waste the first shot
+	return &e
+}()
 
 // leaseRequestHandle is a handle to an asynchronous lease request.
 type leaseRequestHandle struct {
@@ -609,7 +613,7 @@ func (r *Replica) leaseStatus(
 			// use the lease nor do we want to attempt to acquire it.
 			var msg redact.StringBuilder
 			if !ok {
-				msg.Printf("can't determine lease status of %s due to node liveness error: %+v",
+				msg.Printf("can't determine lease status of %s due to node liveness error: %v",
 					lease.Replica, liveness.ErrRecordCacheMiss)
 			} else {
 				msg.Printf("can't determine lease status of %s because node liveness info for n%d is stale. lease: %s, liveness: %s",

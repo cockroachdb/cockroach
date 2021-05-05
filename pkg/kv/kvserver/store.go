@@ -1661,6 +1661,9 @@ func (s *Store) startGossip() {
 		},
 	}
 
+	cannotGossipEvery := log.Every(time.Minute)
+	cannotGossipEvery.ShouldLog() // only log next time after waiting out the delay
+
 	// Periodic updates run in a goroutine and signal a WaitGroup upon completion
 	// of their first iteration.
 	s.initComplete.Add(len(gossipFns))
@@ -1680,7 +1683,9 @@ func (s *Store) startGossip() {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
-							log.Warningf(annotatedCtx, "could not gossip %s: %+v", gossipFn.description, err)
+							if cannotGossipEvery.ShouldLog() {
+								log.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
+							}
 							if !errors.Is(err, errPeriodicGossipsDisabled) {
 								continue
 							}
