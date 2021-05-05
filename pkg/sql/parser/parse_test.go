@@ -573,6 +573,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+
+		{`SELECT 1 OPERATOR(public.+) 2`, 0, `user defined operator`, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {
