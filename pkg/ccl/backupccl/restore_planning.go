@@ -577,8 +577,8 @@ func allocateDescriptorRewrites(
 						return err
 					}
 					descriptorRewrites[sc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   desc.ParentID,
-						ID:         desc.ID,
+						ParentID:   desc.GetParentID(),
+						ID:         desc.GetID(),
 						ToExisting: true,
 					}
 				}
@@ -733,7 +733,7 @@ func allocateDescriptorRewrites(
 					// this type to the type existing in the cluster.
 
 					// If the collided object isn't a type, then error out.
-					existingType, isType := desc.(*typedesc.Immutable)
+					existingType, isType := desc.(catalog.TypeDescriptor)
 					if !isType {
 						return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 					}
@@ -743,21 +743,21 @@ func allocateDescriptorRewrites(
 						return errors.Wrapf(
 							err,
 							"%q is not compatible with type %q existing in cluster",
-							existingType.Name,
-							existingType.Name,
+							existingType.GetName(),
+							existingType.GetName(),
 						)
 					}
 
 					// Remap both the type and its array type since they are compatible
 					// with the type existing in the cluster.
 					descriptorRewrites[typ.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   existingType.ParentID,
-						ID:         existingType.ID,
+						ParentID:   existingType.GetParentID(),
+						ID:         existingType.GetID(),
 						ToExisting: true,
 					}
 					descriptorRewrites[typ.ArrayTypeID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   existingType.ParentID,
-						ID:         existingType.ArrayTypeID,
+						ParentID:   existingType.GetParentID(),
+						ID:         existingType.GetArrayTypeID(),
 						ToExisting: true,
 					}
 				}
@@ -1616,16 +1616,15 @@ func checkPrivilegesForRestore(
 	// Check that none of the sources rely on implicit access.
 	for i := range from {
 		for j := range from[i] {
-			uri := from[i][j]
-			hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(from[i][j], p.User())
 			if err != nil {
 				return err
 			}
-			if !hasExplicitAuth {
+			if !conf.AccessIsWithExplicitAuth() {
 				return pgerror.Newf(
 					pgcode.InsufficientPrivilege,
 					"only users with the admin role are allowed to RESTORE from the specified %s URI",
-					uriScheme)
+					conf.Provider.String())
 			}
 		}
 	}
@@ -1731,11 +1730,56 @@ func doRestorePlan(
 		)
 	}
 
+	// wasOffline tracks which tables were in an offline or adding state at some
+	// point in the incremental chain, meaning their spans would be seeing
+	// non-transactional bulk-writes. If that backup exported those spans, then it
+	// can't be trusted for that table/index since those bulk-writes can fail to
+	// be caught by backups.
+	wasOffline := make(map[tableAndIndex]hlc.Timestamp)
+
+	for _, m := range mainBackupManifests {
+		spans := roachpb.Spans(m.Spans)
+		for i := range m.Descriptors {
+			table, _, _, _ := descpb.FromDescriptor(&m.Descriptors[i])
+			if table == nil {
+				continue
+			}
+			if err := catalog.ForEachNonDropIndex(
+				tabledesc.NewBuilder(table).BuildImmutable().(catalog.TableDescriptor),
+				func(index catalog.Index) error {
+					if index.Adding() && spans.ContainsKey(keys.TODOSQLCodec.IndexPrefix(uint32(table.ID), uint32(index.GetID()))) {
+						k := tableAndIndex{tableID: table.ID, indexID: index.GetID()}
+						if _, ok := wasOffline[k]; !ok {
+							wasOffline[k] = m.EndTime
+						}
+					}
+					return nil
+				}); err != nil {
+				return err
+			}
+		}
+	}
+
 	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
 				"use SHOW BACKUP to find correct targets")
+	}
+
+	var revalidateIndexes []jobspb.RestoreDetails_RevalidateIndex
+	for _, desc := range sqlDescs {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		for _, idx := range tbl.ActiveIndexes() {
+			if _, ok := wasOffline[tableAndIndex{tableID: desc.GetID(), indexID: idx.GetID()}]; ok {
+				revalidateIndexes = append(revalidateIndexes, jobspb.RestoreDetails_RevalidateIndex{
+					TableID: desc.GetID(), IndexID: idx.GetID(),
+				})
+			}
+		}
 	}
 
 	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
@@ -1837,6 +1881,9 @@ func doRestorePlan(
 	if err := rewriteTypeDescs(types, descriptorRewrites); err != nil {
 		return err
 	}
+	for i := range revalidateIndexes {
+		revalidateIndexes[i].TableID = descriptorRewrites[revalidateIndexes[i].TableID].ID
+	}
 
 	// Collect telemetry.
 	collectTelemetry := func() {
@@ -1869,6 +1916,7 @@ func doRestorePlan(
 			OverrideDB:         intoDB,
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
+			RevalidateIndexes:  revalidateIndexes,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
@@ -1887,16 +1935,33 @@ func doRestorePlan(
 		return nil
 	}
 
+	// We create the job record in the planner's transaction to ensure that
+	// the job record creation happens transactionally.
+	plannerTxn := p.ExtendedEvalContext().Txn
+
+	// Construct the job and commit the transaction. Perform this work in a
+	// closure to ensure that the job is cleaned up if an error occurs.
 	var sj *jobs.StartableJob
-	jobID := p.ExecCfg().JobRegistry.MakeJobID()
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		return p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
-	}); err != nil {
-		if sj != nil {
-			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+	if err := func() (err error) {
+		defer func() {
+			if err == nil || sj == nil {
+				return
 			}
+			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+			}
+		}()
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+		if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
+			return err
 		}
+
+		// We commit the transaction here so that the job can be started. This is
+		// safe because we're in an implicit transaction. If we were in an explicit
+		// transaction the job would have to be created with the detached option and
+		// would have been handled above.
+		return plannerTxn.Commit(ctx)
+	}(); err != nil {
 		return err
 	}
 

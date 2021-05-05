@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,7 +38,7 @@ func TestProject(t *testing.T) {
 
 	input := &testexpr.Instance{
 		Rel: &props.Relational{
-			OutputCols: opt.MakeColSet(1, 2, 3, 4),
+			OutputCols: opt.MakeColSet(1, 2, 3, 4, 6),
 			FuncDeps:   fds,
 		},
 	}
@@ -73,9 +72,17 @@ func TestProject(t *testing.T) {
 			req: "+5",
 			exp: "no",
 		},
+		{
+			// Regression test for #64399. projectCanProvideOrdering should not
+			// return true when the columns remaining in the ordering after
+			// simplification cannot be provided. This causes
+			// projectBuildChildReqOrdering to panic.
+			req: "+(5|6)",
+			exp: "no",
+		},
 	}
 	for _, tc := range testCases {
-		req := physical.ParseOrderingChoice(tc.req)
+		req := props.ParseOrderingChoice(tc.req)
 		project := f.Memo().MemoizeProject(input, nil /* projections */, opt.MakeColSet(1, 2, 3, 4))
 
 		res := "no"

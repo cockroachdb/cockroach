@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/col/coldata",
         "//pkg/sql/colcontainer",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
@@ -18,6 +19,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/mon",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_marusama_semaphore//:semaphore",
     ],
 )

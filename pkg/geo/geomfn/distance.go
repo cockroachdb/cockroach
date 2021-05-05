@@ -635,7 +635,7 @@ func findPointSideOfLinearRing(point geodist.Point, linearRing geodist.LinearRin
 	// See also: https://en.wikipedia.org/wiki/Nonzero-rule
 	windingNumber := 0
 	p := point.GeomPoint
-	for edgeIdx := 0; edgeIdx < linearRing.NumEdges(); edgeIdx++ {
+	for edgeIdx, numEdges := 0, linearRing.NumEdges(); edgeIdx < numEdges; edgeIdx++ {
 		e := linearRing.Edge(edgeIdx)
 		eV0 := e.V0.GeomPoint
 		eV1 := e.V1.GeomPoint
@@ -836,138 +836,71 @@ func verifyDensifyFrac(f float64) error {
 	return nil
 }
 
-// PointPolygonRelationType defines a relationship type between
-// a (multi)point and a (multi)polygon.
-type PointPolygonRelationType int
-
-const (
-	// PointPolygonIntersects is the relationship where a (multi)point
-	// intersects a (multi)polygon.
-	PointPolygonIntersects PointPolygonRelationType = iota + 1
-	// PointPolygonCoveredBy is the relationship where a (multi)point
-	// is covered by a (multi)polygon.
-	PointPolygonCoveredBy
-)
-
-// PointKindRelatesToPolygonKind returns whether a (multi)point and
-// a (multi)polygon have the given relationship.
-func PointKindRelatesToPolygonKind(
-	pointKind geo.Geometry, polygonKind geo.Geometry, relationType PointPolygonRelationType,
-) (bool, error) {
-	pointKindBaseT, err := pointKind.AsGeomT()
-	if err != nil {
-		return false, err
-	}
-	polygonKindBaseT, err := polygonKind.AsGeomT()
-	if err != nil {
-		return false, err
-	}
-	pointKindIterator := geo.NewGeomTIterator(pointKindBaseT, geo.EmptyBehaviorOmit)
-	polygonKindIterator := geo.NewGeomTIterator(polygonKindBaseT, geo.EmptyBehaviorOmit)
-
-	// Check whether each point intersects with at least one polygon.
-	// For Intersects, at least one point must intersect with at least one polygon.
-	// For CoveredBy, every point must intersect with at least one polygon.
-	intersectsOnce := false
-pointOuterLoop:
-	for {
-		point, hasPoint, err := pointKindIterator.Next()
-		if err != nil {
-			return false, err
-		}
-		if !hasPoint {
-			break
-		}
-		// Reset the polygon iterator on each iteration of the point iterator.
-		polygonKindIterator.Reset()
-		for {
-			polygon, hasPolygon, err := polygonKindIterator.Next()
-			if err != nil {
-				return false, err
-			}
-			if !hasPolygon {
-				break
-			}
-			intersects, err := pointIntersectsPolygon(point, polygon)
-			if err != nil {
-				return false, err
-			}
-			if intersects {
-				intersectsOnce = true
-				switch relationType {
-				case PointPolygonIntersects:
-					// A single intersection is sufficient.
-					return true, nil
-				case PointPolygonCoveredBy:
-					// If the current point intersects, check the next point.
-					continue pointOuterLoop
-				default:
-					return false, errors.Newf("unknown PointPolygonRelationType")
-				}
-			}
-		}
-		// Case where a point in the (multi)point does not intersect
-		// a polygon in the (multi)polygon.
-		switch relationType {
-		case PointPolygonCoveredBy:
-			// Each point in a (multi)point must intersect a polygon in the
-			// (multi)point to be covered by it.
-			return false, nil
-		}
-	}
-	return intersectsOnce, nil
-}
-
-// pointIntersectsPolygon returns whether a point intersects with a polygon.
-func pointIntersectsPolygon(point geom.T, polygon geom.T) (bool, error) {
+// findPointSideOfPolygon returns whether a point intersects with a polygon.
+func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error) {
 	// Convert point from a geom.T to a *geodist.Point.
 	_, ok := point.(*geom.Point)
 	if !ok {
-		return false, errors.Newf("first geometry passed to PointIntersectsPolygon must be a point")
+		return outsideLinearRing, errors.Newf("first geometry passed to findPointSideOfPolygon must be a point")
 	}
 	pointGeodistShape, err := geomToGeodist(point)
 	if err != nil {
-		return false, err
+		return outsideLinearRing, err
 	}
 	pointGeodistPoint, ok := pointGeodistShape.(*geodist.Point)
 	if !ok {
-		return false, errors.Newf("geomToGeodist failed to convert a *geom.Point to a *geodist.Point")
+		return outsideLinearRing, errors.Newf("geomToGeodist failed to convert a *geom.Point to a *geodist.Point")
 	}
 
 	// Convert polygon from a geom.T to a geodist.Polygon.
 	_, ok = polygon.(*geom.Polygon)
 	if !ok {
-		return false, errors.Newf("second geometry passed to PointIntersectsPolygon must be a polygon")
+		return outsideLinearRing, errors.Newf("second geometry passed to findPointSideOfPolygon must be a polygon")
 	}
 	polygonGeodistShape, err := geomToGeodist(polygon)
 	if err != nil {
-		return false, err
+		return outsideLinearRing, err
 	}
 	polygonGeodistPolygon, ok := polygonGeodistShape.(geodist.Polygon)
 	if !ok {
-		return false, errors.Newf("geomToGeodist failed to convert a *geom.Polygon to a geodist.Polygon")
+		return outsideLinearRing, errors.Newf("geomToGeodist failed to convert a *geom.Polygon to a geodist.Polygon")
 	}
 
 	// Point cannot be inside an empty polygon.
 	if polygonGeodistPolygon.NumLinearRings() == 0 {
-		return false, nil
+		return outsideLinearRing, nil
 	}
 
-	// Check if point is inside main outer boundary of polygon.
-	// If it isn't, then it's not inside the polygon.
+	// Find which side the point is relative to the main outer boundary of
+	// the polygon. If it outside or on the boundary, we can conclude
+	// that the point is on that side of the overall polygon as well.
 	mainRing := polygonGeodistPolygon.LinearRing(0)
-	if findPointSideOfLinearRing(*pointGeodistPoint, mainRing) == outsideLinearRing {
-		return false, nil
+	switch pointSide := findPointSideOfLinearRing(*pointGeodistPoint, mainRing); pointSide {
+	case insideLinearRing:
+	case outsideLinearRing, onLinearRing:
+		return pointSide, nil
+	default:
+		return outsideLinearRing, errors.Newf("unknown linearRingSide %d", pointSide)
 	}
 
-	// If the point is indeed inside the main outer boundary of the polygon,
-	// it must also not be in the interior of any holes to be inside the polygon.
+	// If the point is inside the main outer boundary of the polygon, we must
+	// determine which side it is relative to every hole in the polygon.
+	// If it is inside any hole, it is outside the polygon. If it is on the
+	// ring of any hole, it is on the boundary of the polygon. Otherwise,
+	// it is inside the polygon.
 	for ringNum := 1; ringNum < polygonGeodistPolygon.NumLinearRings(); ringNum++ {
 		polygonHole := polygonGeodistPolygon.LinearRing(ringNum)
-		if findPointSideOfLinearRing(*pointGeodistPoint, polygonHole) == insideLinearRing {
-			return false, nil
+		switch pointSide := findPointSideOfLinearRing(*pointGeodistPoint, polygonHole); pointSide {
+		case insideLinearRing:
+			return outsideLinearRing, nil
+		case onLinearRing:
+			return onLinearRing, nil
+		case outsideLinearRing:
+			continue
+		default:
+			return outsideLinearRing, errors.Newf("unknown linearRingSide %d", pointSide)
 		}
 	}
 
-	return true, nil
+	return insideLinearRing, nil
 }

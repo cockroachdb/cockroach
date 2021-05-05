@@ -91,12 +91,14 @@ func (lt *mockLockTable) TransactionIsFinalized(txn *roachpb.Transaction) {
 	lt.txnFinalizedFn(txn)
 }
 
+var lockTableWaiterTestClock = hlc.Timestamp{WallTime: 12}
+
 func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *mockLockTableGuard) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
 	LockTableLivenessPushDelay.Override(&st.SV, 0)
 	LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
-	manual := hlc.NewManualClock(123)
+	manual := hlc.NewManualClock(lockTableWaiterTestClock.WallTime)
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),
 	}
@@ -121,68 +123,88 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	uncertaintyLimit := hlc.Timestamp{WallTime: 15}
-	makeReq := func() Request {
-		txn := makeTxnProto("request")
-		txn.GlobalUncertaintyLimit = uncertaintyLimit
-		return Request{
-			Txn:       &txn,
-			Timestamp: txn.ReadTimestamp,
+	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
+		uncertaintyLimit := hlc.Timestamp{WallTime: 15}
+		makeReq := func() Request {
+			txn := makeTxnProto("request")
+			txn.GlobalUncertaintyLimit = uncertaintyLimit
+			if synthetic {
+				txn.ReadTimestamp = txn.ReadTimestamp.WithSynthetic(true)
+			}
+			return Request{
+				Txn:       &txn,
+				Timestamp: txn.ReadTimestamp,
+			}
 		}
-	}
 
-	t.Run("state", func(t *testing.T) {
-		t.Run("waitFor", func(t *testing.T) {
-			testWaitPush(t, waitFor, makeReq, uncertaintyLimit)
+		expPushTS := func() hlc.Timestamp {
+			// If the waiter has a synthetic timestamp, it pushes all the way up to
+			// its global uncertainty limit, because it won't be able to use a local
+			// uncertainty limit to ignore a synthetic intent. If the waiter does not
+			// have a synthetic timestamp, it uses the local clock to bound its push
+			// timestamp, with the assumption that it will be able to use its local
+			// uncertainty limit to ignore a non-synthetic intent. For more, see
+			// lockTableWaiterImpl.pushHeader.
+			if synthetic {
+				return uncertaintyLimit.WithSynthetic(true)
+			}
+			// NOTE: lockTableWaiterTestClock < uncertaintyLimit
+			return lockTableWaiterTestClock
+		}
+
+		t.Run("state", func(t *testing.T) {
+			t.Run("waitFor", func(t *testing.T) {
+				testWaitPush(t, waitFor, makeReq, expPushTS())
+			})
+
+			t.Run("waitForDistinguished", func(t *testing.T) {
+				testWaitPush(t, waitForDistinguished, makeReq, expPushTS())
+			})
+
+			t.Run("waitElsewhere", func(t *testing.T) {
+				testWaitPush(t, waitElsewhere, makeReq, expPushTS())
+			})
+
+			t.Run("waitSelf", func(t *testing.T) {
+				testWaitNoopUntilDone(t, waitSelf, makeReq)
+			})
+
+			t.Run("doneWaiting", func(t *testing.T) {
+				w, _, g := setupLockTableWaiterTest()
+				defer w.stopper.Stop(ctx)
+
+				g.state = waitingState{kind: doneWaiting}
+				g.notify()
+
+				err := w.WaitOn(ctx, makeReq(), g)
+				require.Nil(t, err)
+			})
 		})
 
-		t.Run("waitForDistinguished", func(t *testing.T) {
-			testWaitPush(t, waitForDistinguished, makeReq, uncertaintyLimit)
-		})
-
-		t.Run("waitElsewhere", func(t *testing.T) {
-			testWaitPush(t, waitElsewhere, makeReq, uncertaintyLimit)
-		})
-
-		t.Run("waitSelf", func(t *testing.T) {
-			testWaitNoopUntilDone(t, waitSelf, makeReq)
-		})
-
-		t.Run("doneWaiting", func(t *testing.T) {
+		t.Run("ctx done", func(t *testing.T) {
 			w, _, g := setupLockTableWaiterTest()
 			defer w.stopper.Stop(ctx)
 
-			g.state = waitingState{kind: doneWaiting}
-			g.notify()
+			ctxWithCancel, cancel := context.WithCancel(ctx)
+			go cancel()
+
+			err := w.WaitOn(ctxWithCancel, makeReq(), g)
+			require.NotNil(t, err)
+			require.Equal(t, context.Canceled.Error(), err.GoError().Error())
+		})
+
+		t.Run("stopper quiesce", func(t *testing.T) {
+			w, _, g := setupLockTableWaiterTest()
+			defer w.stopper.Stop(ctx)
+
+			go func() {
+				w.stopper.Quiesce(ctx)
+			}()
 
 			err := w.WaitOn(ctx, makeReq(), g)
-			require.Nil(t, err)
+			require.NotNil(t, err)
+			require.IsType(t, &roachpb.NodeUnavailableError{}, err.GetDetail())
 		})
-	})
-
-	t.Run("ctx done", func(t *testing.T) {
-		w, _, g := setupLockTableWaiterTest()
-		defer w.stopper.Stop(ctx)
-
-		ctxWithCancel, cancel := context.WithCancel(ctx)
-		go cancel()
-
-		err := w.WaitOn(ctxWithCancel, makeReq(), g)
-		require.NotNil(t, err)
-		require.Equal(t, context.Canceled.Error(), err.GoError().Error())
-	})
-
-	t.Run("stopper quiesce", func(t *testing.T) {
-		w, _, g := setupLockTableWaiterTest()
-		defer w.stopper.Stop(ctx)
-
-		go func() {
-			w.stopper.Quiesce(ctx)
-		}()
-
-		err := w.WaitOn(ctx, makeReq(), g)
-		require.NotNil(t, err)
-		require.IsType(t, &roachpb.NodeUnavailableError{}, err.GetDetail())
 	})
 }
 
@@ -392,17 +414,20 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 		}
 	}
 
+	// NOTE: lockTableWaiterTestClock < uncertaintyLimit
+	expPushTS := lockTableWaiterTestClock
+
 	t.Run("state", func(t *testing.T) {
 		t.Run("waitFor", func(t *testing.T) {
-			testErrorWaitPush(t, waitFor, makeReq, uncertaintyLimit)
+			testErrorWaitPush(t, waitFor, makeReq, expPushTS)
 		})
 
 		t.Run("waitForDistinguished", func(t *testing.T) {
-			testErrorWaitPush(t, waitForDistinguished, makeReq, uncertaintyLimit)
+			testErrorWaitPush(t, waitForDistinguished, makeReq, expPushTS)
 		})
 
 		t.Run("waitElsewhere", func(t *testing.T) {
-			testErrorWaitPush(t, waitElsewhere, makeReq, uncertaintyLimit)
+			testErrorWaitPush(t, waitElsewhere, makeReq, expPushTS)
 		})
 
 		t.Run("waitSelf", func(t *testing.T) {

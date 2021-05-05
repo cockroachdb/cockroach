@@ -67,38 +67,35 @@ func TestExternalDistinct(t *testing.T) {
 		for tcIdx, tc := range distinctTestCases {
 			log.Infof(context.Background(), "spillForced=%t/%d", spillForced, tcIdx)
 			var semsToCheck []semaphore.Semaphore
+			var outputOrdering execinfrapb.Ordering
+			verifier := colexectestutils.UnorderedVerifier
+			// Check that the external distinct and the disk-backed sort
+			// were added as Closers.
+			numExpectedClosers := 2
+			if tc.isOrderedOnDistinctCols {
+				outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
+				verifier = colexectestutils.OrderedVerifier
+				// The final disk-backed sort must also be added as a
+				// Closer.
+				numExpectedClosers++
+			}
 			colexectestutils.RunTestsWithTyps(
 				t,
 				testAllocator,
 				[]colexectestutils.Tuples{tc.tuples},
 				[][]*types.T{tc.typs},
 				tc.expected,
-				// We're using an unordered verifier because the in-memory
-				// unordered distinct is free to change the order of the tuples
-				// when exporting them into an external distinct.
-				colexectestutils.UnorderedVerifier,
+				verifier,
 				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					// A sorter should never exceed ExternalSorterMinPartitions, even
 					// during repartitioning. A panic will happen if a sorter requests
 					// more than this number of file descriptors.
 					sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
-					var outputOrdering execinfrapb.Ordering
-					if tc.isOrderedOnDistinctCols {
-						outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
-					}
 					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
 						ctx, flowCtx, input, tc.typs, tc.distinctCols, outputOrdering,
 						queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
 					)
-					// Check that the external distinct and the disk-backed sort
-					// were added as Closers.
-					numExpectedClosers := 2
-					if len(outputOrdering.Columns) > 0 {
-						// The final disk-backed sort must also be added as a
-						// Closer.
-						numExpectedClosers++
-					}
 					require.Equal(t, numExpectedClosers, len(closers))
 					accounts = append(accounts, newAccounts...)
 					monitors = append(monitors, newMonitors...)
@@ -355,7 +352,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 func createExternalDistinct(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecop.Operator,
+	sources []colexecop.Operator,
 	typs []*types.T,
 	distinctCols []uint32,
 	outputOrdering execinfrapb.Ordering,
@@ -378,16 +375,13 @@ func createExternalDistinct(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              input,
+		Inputs:              colexectestutils.MakeInputs(sources),
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
-	// External sorter relies on different memory accounts to
-	// understand when to start a new partition, so we will not use
-	// the streaming memory account.
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

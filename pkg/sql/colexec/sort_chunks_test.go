@@ -238,6 +238,7 @@ func TestSortChunksRandomized(t *testing.T) {
 }
 
 func BenchmarkSortChunks(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
@@ -299,8 +300,8 @@ func BenchmarkSortChunks(b *testing.B) {
 										b.Fatal(err)
 									}
 
-									sorter.Init()
-									for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
+									sorter.Init(ctx)
+									for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 									}
 								}
 								b.StopTimer()

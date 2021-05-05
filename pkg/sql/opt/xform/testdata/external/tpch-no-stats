@@ -1807,7 +1807,7 @@ project
  │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:18!null p_brand:21!null p_container:24!null
  │    │    │    │    │    │    │    │    │    ├── key: (18)
  │    │    │    │    │    │    │    │    │    ├── fd: (18)-->(21,24)
- │    │    │    │    │    │    │    │    │    └── ordering: +18 opt(21,24) [actual: +18]
+ │    │    │    │    │    │    │    │    │    └── ordering: +18
  │    │    │    │    │    │    │    │    └── filters
  │    │    │    │    │    │    │    │         ├── p_brand:21 = 'Brand#23' [outer=(21), constraints=(/21: [/'Brand#23' - /'Brand#23']; tight), fd=()-->(21)]
  │    │    │    │    │    │    │    │         └── p_container:24 = 'MED BOX' [outer=(24), constraints=(/24: [/'MED BOX' - /'MED BOX']; tight), fd=()-->(24)]

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -583,9 +584,9 @@ func (o *Optimizer) enforceProps(
 
 		// Try Sort enforcer that requires a partial ordering from its input.
 		longestCommonPrefix := deriveInterestingOrderingPrefix(member, required.Ordering)
-		if len(longestCommonPrefix) > 0 && len(longestCommonPrefix) < len(required.Ordering.Columns) {
+		if !longestCommonPrefix.Implies(&required.Ordering) {
 			enforcer := &memo.SortExpr{Input: state.best}
-			enforcer.InputOrdering.FromOrdering(longestCommonPrefix)
+			enforcer.InputOrdering = longestCommonPrefix
 			memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
 			if o.optimizeEnforcer(state, enforcer, required, member, memberProps) {
 				fullyOptimized = true
@@ -601,25 +602,16 @@ func (o *Optimizer) enforceProps(
 // deriveInterestingOrderingPrefix finds the longest prefix of the required ordering
 // that is "interesting" as defined in Relational.Rule.InterestingOrderings.
 func deriveInterestingOrderingPrefix(
-	member memo.RelExpr, requiredOrdering physical.OrderingChoice,
-) opt.Ordering {
+	member memo.RelExpr, requiredOrdering props.OrderingChoice,
+) props.OrderingChoice {
 	// Find the interesting orderings of the member expression.
-	interestingOrderings := DeriveInterestingOrderings(member)
+	interestingOrderings := ordering.DeriveInterestingOrderings(member)
 
 	// Find the longest interesting ordering that is a prefix of the required ordering.
-	var longestCommonPrefix opt.Ordering
+	var longestCommonPrefix props.OrderingChoice
 	for _, ordering := range interestingOrderings {
-		var commonPrefix opt.Ordering
-		for i, orderingCol := range ordering {
-			if i < len(requiredOrdering.Columns) &&
-				requiredOrdering.Columns[i].Group.Contains(orderingCol.ID()) &&
-				requiredOrdering.Columns[i].Descending == orderingCol.Descending() {
-				commonPrefix = append(commonPrefix, orderingCol)
-			} else {
-				break
-			}
-		}
-		if len(commonPrefix) > len(longestCommonPrefix) {
+		commonPrefix := ordering.CommonPrefix(&requiredOrdering)
+		if commonPrefix.ColSet().Len() > longestCommonPrefix.ColSet().Len() {
 			longestCommonPrefix = commonPrefix
 		}
 	}

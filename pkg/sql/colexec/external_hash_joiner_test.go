@@ -179,12 +179,12 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 		}
 	}()
 	require.NoError(t, err)
-	hj.Init()
+	hj.Init(ctx)
 	// We have a full cross-product, so we should get the number of tuples
 	// squared in the output.
 	expectedTuplesCount := nBatches * nBatches * coldata.BatchSize() * coldata.BatchSize()
 	actualTuplesCount := 0
-	for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+	for b := hj.Next(); b.Length() > 0; b = hj.Next() {
 		actualTuplesCount += b.Length()
 	}
 	require.True(t, spilled)
@@ -207,6 +207,7 @@ func newIntColumns(nCols int, length int) []coldata.Vec {
 }
 
 func BenchmarkExternalHashJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -269,8 +270,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
 						require.NoError(b, err)
-						hj.Init()
-						for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+						hj.Init(ctx)
+						for b := hj.Next(); b.Length() > 0; b = hj.Next() {
 						}
 					}
 				})
@@ -294,7 +295,7 @@ func createDiskBackedHashJoiner(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ProcessorSpec,
-	inputs []colexecop.Operator,
+	sources []colexecop.Operator,
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	numForcedRepartitions int,
@@ -303,7 +304,7 @@ func createDiskBackedHashJoiner(
 ) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              inputs,
+		Inputs:              colexectestutils.MakeInputs(sources),
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
@@ -315,5 +316,5 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

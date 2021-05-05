@@ -110,6 +110,17 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
+func parsePositiveDuration(arg string) (time.Duration, error) {
+	duration, err := time.ParseDuration(arg)
+	if err != nil {
+		return 0, err
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("illegal val: %v <= 0", duration)
+	}
+	return duration, nil
+}
+
 // OpenEngineOptions tunes the behavior of OpenEngine.
 type OpenEngineOptions struct {
 	ReadOnly  bool
@@ -220,7 +231,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+	iterFunc := func(kv storage.MVCCKeyValue) error {
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -233,7 +244,27 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			return iterutil.StopIteration()
 		}
 		return nil
-	})
+	}
+	endKey := debugCtx.endKey.Key
+	splitScan := false
+	// If the startKey is local and the endKey is global, split into two parts
+	// to do the scan. This is because MVCCKeyAndIntentsIterKind cannot span
+	// across the two key kinds.
+	if (len(debugCtx.startKey.Key) == 0 || keys.IsLocal(debugCtx.startKey.Key)) && !(keys.IsLocal(endKey) || bytes.Equal(endKey, keys.LocalMax)) {
+		splitScan = true
+		endKey = keys.LocalMax
+	}
+	if err := db.MVCCIterate(
+		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
+		return err
+	}
+	if splitScan {
+		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
+			iterFunc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -554,7 +585,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds]",
+	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds] [intent-age-as-duration]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -563,9 +594,10 @@ work would be done (assuming all intent resolution and pushes succeed).
 Without a RangeID specified on the command line, runs the analysis for all
 ranges individually.
 
-Uses a configurable GC policy, with a default 24 hour TTL, for old versions.
+Uses a configurable GC policy, with a default 24 hour TTL, for old versions and
+2 hour intent resolution threshold.
 `,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.RangeArgs(1, 4),
 	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
 }
 
@@ -575,17 +607,21 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var rangeID roachpb.RangeID
 	gcTTLInSeconds := int64((24 * time.Hour).Seconds())
-	switch len(args) {
-	case 3:
+	intentAgeThreshold := gc.IntentAgeThreshold.Default()
+
+	if len(args) > 3 {
 		var err error
-		if rangeID, err = parseRangeID(args[1]); err != nil {
-			return errors.Wrapf(err, "unable to parse %v as range ID", args[1])
+		if intentAgeThreshold, err = parsePositiveDuration(args[3]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as intent age threshold", args[3])
 		}
+	}
+	if len(args) > 2 {
+		var err error
 		if gcTTLInSeconds, err = parsePositiveInt(args[2]); err != nil {
 			return errors.Wrapf(err, "unable to parse %v as TTL", args[2])
 		}
-
-	case 2:
+	}
+	if len(args) > 1 {
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
@@ -639,7 +675,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		info, err := gc.Run(
 			context.Background(),
 			&desc, snap,
-			now, thresh, policy,
+			now, thresh, intentAgeThreshold, policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
@@ -1143,13 +1179,13 @@ var debugMergeLogsCommand = &cobra.Command{
 	Short: "merge multiple log files from different machines into a single stream",
 	Long: `
 Takes a list of glob patterns (not left exclusively to the shell because of
-MAX_ARG_STRLEN, usually 128kB) pointing to log files and merges them into a
-single stream printed to stdout. Files not matching the log file name pattern
-are ignored. If log lines appear out of order within a file (which happens), the
-timestamp is ratcheted to the highest value seen so far. The command supports
-efficient time filtering as well as multiline regexp pattern matching via flags.
-If the filter regexp contains captures, such as '^abc(hello)def(world)', only
-the captured parts will be printed.
+MAX_ARG_STRLEN, usually 128kB) which will be walked and whose contained log
+files and merged them into a single stream printed to stdout. Files not matching
+the log file name pattern are ignored. If log lines appear out of order within
+a file (which happens), the timestamp is ratcheted to the highest value seen so far.
+The command supports efficient time filtering as well as multiline regexp pattern
+matching via flags. If the filter regexp contains captures, such as
+'^abc(hello)def(world)', only the captured parts will be printed.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runDebugMergeLogs,
@@ -1167,7 +1203,7 @@ var debugMergeLogsOpts = struct {
 	keepRedactable bool
 	redactInput    bool
 }{
-	program:        regexp.MustCompile("^cockroach.*$"),
+	program:        nil, // match everything
 	file:           regexp.MustCompile(log.FilePattern),
 	keepRedactable: true,
 	redactInput:    false,
@@ -1214,6 +1250,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugListFilesCmd,
 	debugResetQuorumCmd,
 )
 
@@ -1282,7 +1319,9 @@ func init() {
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
-	debugDoctorCmd.AddCommand(debugDoctorCmds...)
+	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
+	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
+	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
 	f := debugSyncBenchCmd.Flags()

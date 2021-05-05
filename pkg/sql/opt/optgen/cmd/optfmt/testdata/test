@@ -71,6 +71,23 @@ define FiltersItem {
 )
 =>
 (False)
+
+[TestLet]
+(Select
+	$input:*
+	$filters:* &
+	    (Let ($a):(Foo $input) $a) &
+	    (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $filtersD $filtersE $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($a $b $c $ok):(SplitFilters $input $filters $long $arg $list) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $ok):(SplitFilters $input $filters $long $arg $list $longer) $ok) &
+	    (IsValid (Let ($filtersX $filtersY):(SplitFilters $input $filters) $filtersX)) &
+	    (OuterFunc (InnerFunc (Let ($foo $bar):(SplitFilters $input $filters) $foo))) &
+	    (Let ($foo $bar $baz):(Split (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)) $foo)
+)
+=>
+(False)
+
 ----
 ----
 #
@@ -152,6 +169,71 @@ define FiltersItem {
 )
 =>
 (False)
+
+[TestLet]
+(Select
+    $input:*
+    $filters:* &
+        (Let ($a):(Foo $input) $a) &
+        (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
+        (Let
+            (
+                $filtersA
+                $filtersB
+                $filtersC
+                $filtersD
+                $filtersE
+                $ok
+            ):(SplitFilters $input $filters)
+            $ok
+        ) &
+        (Let
+            ($a $b $c $ok):(SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+            )
+            $ok
+        ) &
+        (Let
+            ($filtersA $filtersB $filtersC $ok):(SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+                $longer
+            )
+            $ok
+        ) &
+        (IsValid
+            (Let
+                ($filtersX $filtersY):(SplitFilters
+                    $input
+                    $filters
+                )
+                $filtersX
+            )
+        ) &
+        (OuterFunc
+            (InnerFunc
+                (Let
+                    ($foo $bar):(SplitFilters $input $filters)
+                    $foo
+                )
+            )
+        ) &
+        (Let
+            ($foo $bar $baz):(Split
+                (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)
+            )
+            $foo
+        )
+)
+=>
+(False)
 ----
 ----
 
@@ -163,3 +245,29 @@ pretty
 (R)
 =>
 (O)
+
+# The closing ")" should not be printed on it's own line if the result, "$ok",
+# is not printed on it's own line.
+pretty
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result
+----
+[FoldBinary, Normalize]
+(Binary
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* &
+        (IsConstValueOrGroupOfConstValues $right) &
+        (Let
+            ($result $ok):(FoldBinary (OpName) $left $right) $ok
+        )
+)
+=>
+$result

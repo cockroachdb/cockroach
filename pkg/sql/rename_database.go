@@ -131,7 +131,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 	for _, schema := range schemas {
-		tbNames, err := p.Descriptors().GetObjectNames(
+		tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
 			ctx,
 			p.txn,
 			dbDesc,

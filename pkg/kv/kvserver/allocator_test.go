@@ -1350,6 +1350,94 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 }
 
+func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
+	defer stopper.Stop(context.Background())
+
+	// 6 stores with the following setup
+	// 1 | locality=dc=1 | lease_count=10
+	// 2 | locality=dc=0 | lease_count=0
+	// 3 | locality=dc=1 | lease_count=30
+	// 4 | locality=dc=0 | lease_count=0
+	// 5 | locality=dc=1 | lease_count=50
+	// 6 | locality=dc=0 | lease_count=0
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 6; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(i),
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(i),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "dc", Value: strconv.FormatInt(int64(i%2), 10)},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(100 * i * (i % 2))},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	existing := replicas(1, 3, 5)
+
+	constraint := func(value string) []zonepb.ConstraintsConjunction {
+		return []zonepb.ConstraintsConjunction{
+			{
+				Constraints: []zonepb.Constraint{
+					{Key: "dc", Value: value, Type: zonepb.Constraint_REQUIRED},
+				},
+			},
+		}
+	}
+
+	constraints := func(value string) *zonepb.ZoneConfig {
+		return &zonepb.ZoneConfig{
+			NumReplicas: proto.Int32(1),
+			Constraints: constraint(value),
+		}
+	}
+
+	voterConstraints := func(value string) *zonepb.ZoneConfig {
+		return &zonepb.ZoneConfig{
+			NumReplicas:      proto.Int32(1),
+			VoterConstraints: constraint(value),
+		}
+	}
+
+	testCases := []struct {
+		existing    []roachpb.ReplicaDescriptor
+		leaseholder roachpb.StoreID
+		expected    roachpb.StoreID
+		zone        *zonepb.ZoneConfig
+	}{
+		{existing: existing, leaseholder: 5, expected: 1, zone: constraints("1")},
+		{existing: existing, leaseholder: 5, expected: 1, zone: voterConstraints("1")},
+		{existing: existing, leaseholder: 5, expected: 0, zone: constraints("0")},
+		{existing: existing, leaseholder: 5, expected: 0, zone: voterConstraints("0")},
+		{existing: existing, leaseholder: 5, expected: 1, zone: zonepb.EmptyCompleteZoneConfig()},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			target := a.TransferLeaseTarget(
+				context.Background(),
+				c.zone,
+				c.existing,
+				c.leaseholder,
+				nil, /* replicaStats */
+				true,
+				true,  /* checkCandidateFullness */
+				false, /* alwaysAllowDecisionWithoutStats */
+			)
+			if c.expected != target.StoreID {
+				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
+			}
+		})
+	}
+}
+
 // TestAllocatorTransferLeaseTargetDraining verifies that the allocator will
 // not choose to transfer leases to a store that is draining.
 func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
@@ -1623,63 +1711,6 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			t.Errorf("%d: RebalanceVoter(%v) expected store in %v; got %v: %s",
 				i, tc.existing, tc.expected, result, details)
 		}
-	}
-}
-
-func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	stopper, g, _, a, _ := createTestAllocator(10, true /* deterministic */)
-	defer stopper.Stop(context.Background())
-
-	// 3 nodes and 6 stores where the lease count for the first store on each
-	// node is equal to 10x the node ID.
-	var stores []*roachpb.StoreDescriptor
-	for i := 1; i <= 6; i++ {
-		node := 1 + (i-1)/2
-		stores = append(stores, &roachpb.StoreDescriptor{
-			StoreID:  roachpb.StoreID(i),
-			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(node)},
-			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * node * (i % 2))},
-		})
-	}
-	sg := gossiputil.NewStoreGossiper(g)
-	sg.GossipStores(stores, t)
-
-	existing := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: 1},
-		{NodeID: 2, StoreID: 3},
-		{NodeID: 3, StoreID: 5},
-	}
-
-	testCases := []struct {
-		leaseholder roachpb.StoreID
-		check       bool
-		expected    roachpb.StoreID
-	}{
-		{leaseholder: 1, check: false, expected: 3},
-		{leaseholder: 1, check: true, expected: 0},
-		{leaseholder: 3, check: false, expected: 1},
-		{leaseholder: 3, check: true, expected: 0},
-		{leaseholder: 5, check: false, expected: 1},
-		{leaseholder: 5, check: true, expected: 1},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			target := a.TransferLeaseTarget(
-				context.Background(),
-				zonepb.EmptyCompleteZoneConfig(),
-				existing,
-				c.leaseholder,
-				nil, /* replicaStats */
-				c.check,
-				true,  /* checkCandidateFullness */
-				false, /* alwaysAllowDecisionWithoutStats */
-			)
-			if c.expected != target.StoreID {
-				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
-			}
-		})
 	}
 }
 
@@ -2655,7 +2686,6 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isNodeReadyForRoutineReplicaTransfer,
 				a.scorerOptions(),
-				voterTarget,
 			)
 
 			for i := range results {
@@ -4223,7 +4253,6 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.NodeID) bool { return true },
 			a.scorerOptions(),
-			voterTarget,
 		)
 		match := true
 		if len(tc.expected) != len(results) {

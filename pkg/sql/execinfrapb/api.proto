@@ -88,12 +88,10 @@ message ConsumerSignal {
   // stream.
   optional DrainRequest drain_request = 1;
 
-  // Used in the RunSyncFlow case; the first message on the client stream must
-  // contain this message.
-  optional SetupFlowRequest setup_flow_request = 2;
-
   // Consumer->Producer handshake messages. See message definition.
   optional ConsumerHandshake handshake = 3;
+
+  reserved 2;
 }
 
 message DrainRequest {
@@ -126,11 +124,6 @@ message ConsumerHandshake {
 }
 
 service DistSQL {
-  // RunSyncFlow instantiates a flow and streams back results of that flow.
-  // The request must contain one flow, and that flow must have a single mailbox
-  // of the special sync response type.
-  rpc RunSyncFlow(stream ConsumerSignal) returns (stream ProducerMessage) {}
-
   // SetupFlow instantiates a flow (subgraphs of a distributed SQL
   // computation) on the receiving node.
   rpc SetupFlow(SetupFlowRequest) returns (SimpleResponse) {}

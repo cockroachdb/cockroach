@@ -22,7 +22,7 @@ import (
 )
 
 type zeroOperator struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	colexecop.NonExplainable
 }
 
@@ -30,14 +30,10 @@ var _ colexecop.Operator = &zeroOperator{}
 
 // NewZeroOp creates a new operator which just returns an empty batch.
 func NewZeroOp(input colexecop.Operator) colexecop.Operator {
-	return &zeroOperator{OneInputNode: colexecop.NewOneInputNode(input)}
+	return &zeroOperator{OneInputHelper: colexecop.MakeOneInputHelper(input)}
 }
 
-func (s *zeroOperator) Init() {
-	s.Input.Init()
-}
-
-func (s *zeroOperator) Next(context.Context) coldata.Batch {
+func (s *zeroOperator) Next() coldata.Batch {
 	return coldata.ZeroBatch
 }
 
@@ -70,13 +66,13 @@ func NewFixedNumTuplesNoInputOp(
 	}
 }
 
-func (s *fixedNumTuplesNoInputOp) Init() {
+func (s *fixedNumTuplesNoInputOp) Init(ctx context.Context) {
 	if s.opToInitialize != nil {
-		s.opToInitialize.Init()
+		s.opToInitialize.Init(ctx)
 	}
 }
 
-func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
+func (s *fixedNumTuplesNoInputOp) Next() coldata.Batch {
 	if s.numTuplesLeft == 0 {
 		return coldata.ZeroBatch
 	}
@@ -115,7 +111,7 @@ func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
 //   ---------------------              in column at position of N+1)
 //
 type vectorTypeEnforcer struct {
-	colexecop.OneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
 
 	allocator *colmem.Allocator
@@ -130,19 +126,15 @@ func NewVectorTypeEnforcer(
 	allocator *colmem.Allocator, input colexecop.Operator, typ *types.T, idx int,
 ) colexecop.Operator {
 	return &vectorTypeEnforcer{
-		OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
-		allocator:            allocator,
-		typ:                  typ,
-		idx:                  idx,
+		OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+		allocator:                allocator,
+		typ:                      typ,
+		idx:                      idx,
 	}
 }
 
-func (e *vectorTypeEnforcer) Init() {
-	e.Input.Init()
-}
-
-func (e *vectorTypeEnforcer) Next(ctx context.Context) coldata.Batch {
-	b := e.Input.Next(ctx)
+func (e *vectorTypeEnforcer) Next() coldata.Batch {
+	b := e.Input.Next()
 	if b.Length() == 0 {
 		return b
 	}
@@ -170,7 +162,7 @@ func (e *vectorTypeEnforcer) Reset(ctx context.Context) {
 // NOTE: the type schema passed into BatchSchemaSubsetEnforcer *must* include
 // the output type of the Operator that the enforcer will be the input to.
 type BatchSchemaSubsetEnforcer struct {
-	colexecop.OneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
 
 	allocator                    *colmem.Allocator
@@ -191,25 +183,25 @@ func NewBatchSchemaSubsetEnforcer(
 	subsetStartIdx, subsetEndIdx int,
 ) *BatchSchemaSubsetEnforcer {
 	return &BatchSchemaSubsetEnforcer{
-		OneInputCloserHelper: colexecop.MakeOneInputCloserHelper(input),
-		allocator:            allocator,
-		typs:                 typs,
-		subsetStartIdx:       subsetStartIdx,
-		subsetEndIdx:         subsetEndIdx,
+		OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
+		allocator:                allocator,
+		typs:                     typs,
+		subsetStartIdx:           subsetStartIdx,
+		subsetEndIdx:             subsetEndIdx,
 	}
 }
 
 // Init implements the colexecop.Operator interface.
-func (e *BatchSchemaSubsetEnforcer) Init() {
-	e.Input.Init()
+func (e *BatchSchemaSubsetEnforcer) Init(ctx context.Context) {
 	if e.subsetStartIdx >= e.subsetEndIdx {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly subsetStartIdx is not less than subsetEndIdx"))
 	}
+	e.OneInputInitCloserHelper.Init(ctx)
 }
 
 // Next implements the colexecop.Operator interface.
-func (e *BatchSchemaSubsetEnforcer) Next(ctx context.Context) coldata.Batch {
-	b := e.Input.Next(ctx)
+func (e *BatchSchemaSubsetEnforcer) Next() coldata.Batch {
+	b := e.Input.Next()
 	if b.Length() == 0 {
 		return b
 	}

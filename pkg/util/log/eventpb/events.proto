@@ -42,7 +42,7 @@ message CommonSQLEventDetails {
 
   // The primary object descriptor affected by the operation. Set to zero for operations
   // that don't affect descriptors.
-  uint32 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID" , (gogoproto.jsontag) = ",omitempty"];
+  uint32 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID", (gogoproto.jsontag) = ",omitempty"];
 
   // The application name for the session where the event was emitted.
   // This is included in the event to ease filtering of logging output
@@ -51,5 +51,30 @@ message CommonSQLEventDetails {
 
   // The mapping of SQL placeholders to their values, for prepared statements.
   repeated string placeholder_values = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// CommonJobEventDetails contains the fields common to all job events.
+message CommonJobEventDetails {
+  // The ID of the job that triggered the event.
+  int64 job_id = 1 [(gogoproto.customname) = "JobID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The type of the job that triggered the event.
+  string job_type = 2 [(gogoproto.customname) = "JobType", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // A description of the job that triggered the event. Some jobs populate the
+  // description with an approximate representation of the SQL statement run to
+  // create the job.
+  string description = 3 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The user account that triggered the event.
+  string user = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The object descriptors affected by the job. Set to zero for operations
+  // that don't affect descriptors.
+  repeated uint32 descriptor_ids = 5 [(gogoproto.customname) = "DescriptorIDs", (gogoproto.jsontag) = ",omitempty"];
+
+  // The status of the job that triggered the event. This allows the job to
+  // indicate which phase execution it is in when the event is triggered.
+  string status = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 

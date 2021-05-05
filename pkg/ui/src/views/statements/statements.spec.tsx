@@ -65,7 +65,7 @@ describe("selectStatements", () => {
     assert.deepEqual(actualFingerprints, expectedFingerprints);
   });
 
-  it("returns the statements without Internal for default ALL filter", () => {
+  it("returns the statements with Internal for default ALL filter", () => {
     const stmtA = makeFingerprint(1);
     const stmtB = makeFingerprint(2, INTERNAL_STATEMENT_PREFIX);
     const stmtC = makeFingerprint(3, INTERNAL_STATEMENT_PREFIX);
@@ -75,7 +75,7 @@ describe("selectStatements", () => {
 
     const result = selectStatements(state, props);
 
-    assert.equal(result.length, 2);
+    assert.equal(result.length, 3);
   });
 
   it("coalesces statements from different apps", () => {
@@ -497,6 +497,11 @@ function makeStats(): Required<StatementStatistics> {
     rows_read: makeStat(),
     bytes_read: makeStat(),
     exec_stats: makeExecStats(),
+    sql_type: "DDL",
+    last_exec_timestamp: {
+      seconds: Long.fromInt(1599670292),
+      nanos: 111613000,
+    },
   };
 }
 

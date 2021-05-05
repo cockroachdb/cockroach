@@ -186,7 +186,7 @@ func decodeTableStatisticsKV(
 	dirs := []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC}
 	keyVals := make([]rowenc.EncDatum, 2)
 	_, matches, _, err := rowenc.DecodeIndexKey(
-		codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, keyVals, dirs, kv.Key,
+		codec, tbl, tbl.GetPrimaryIndex(), types, keyVals, dirs, kv.Key,
 	)
 	if err != nil {
 		return 0, err
@@ -503,7 +503,12 @@ func (sc *TableStatisticsCache) parseStats(
 			// will need to start writing a timestamp on the stats objects and request
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				collection := descs.NewCollection(sc.Settings, sc.LeaseMgr, nil /* hydratedTables */)
+				collection := descs.NewCollection(
+					sc.Settings,
+					sc.LeaseMgr,
+					nil, // hydratedTables
+					nil, // virtualSchemas
+				)
 				defer collection.ReleaseAll(ctx)
 				resolver := descs.NewDistSQLTypeResolver(collection, txn)
 				var err error

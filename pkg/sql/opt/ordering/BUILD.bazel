@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "doc.go",
         "group_by.go",
+        "interesting_orderings.go",
         "inverted_join.go",
         "limit.go",
         "lookup_join.go",
@@ -15,6 +16,7 @@ go_library(
         "row_number.go",
         "scan.go",
         "select.go",
+        "set.go",
         "sort.go",
         "statement.go",
     ],
@@ -22,9 +24,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/props",
-        "//pkg/sql/opt/props/physical",
         "//pkg/sql/sem/tree",
         "//pkg/util",
         "//pkg/util/log",

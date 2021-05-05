@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
@@ -39,7 +40,13 @@ var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 	"kv.range_split.by_load_merge_delay",
 	"the delay that range splits created due to load will wait before considering being merged away",
 	5*time.Minute,
-	settings.NonNegativeDuration,
+	func(v time.Duration) error {
+		const minDelay = 5 * time.Second
+		if v < minDelay {
+			return errors.Errorf("cannot be set to a value below %s", minDelay)
+		}
+		return nil
+	},
 )
 
 // SplitByLoadQPSThreshold returns the QPS request rate for a given replica.

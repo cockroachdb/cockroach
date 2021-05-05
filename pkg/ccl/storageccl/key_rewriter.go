@@ -241,7 +241,7 @@ func (kr *KeyRewriter) rewriteTableKey(key []byte, isFromSpan bool) ([]byte, boo
 	if !idx.Primary() {
 		return nil, false, errors.New("restoring interleaved secondary indexes not supported")
 	}
-	colIDs, _ := idx.IndexDesc().FullColumnIDs()
+	colIDs, _ := catalog.FullIndexColumnIDs(idx)
 	var skipCols int
 	for i := 0; i < idx.NumInterleaveAncestors(); i++ {
 		skipCols += int(idx.GetInterleaveAncestor(i).SharedPrefixLen)

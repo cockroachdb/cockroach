@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -48,9 +49,9 @@ func TestCloser(t *testing.T) {
 	limiter := factory.GetTenant(tenant, closer)
 	ctx := context.Background()
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, false, 1))
+	require.NoError(t, limiter.Wait(ctx, true, 1))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, false, 1<<30) }()
+	go func() { errCh <- limiter.Wait(ctx, true, 1<<30) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -77,6 +78,7 @@ type testState struct {
 	m           *metric.Registry
 	clock       *timeutil.ManualTime
 	settings    *cluster.Settings
+	config      tenantrate.Config
 }
 
 type launchState struct {
@@ -105,10 +107,11 @@ var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.Test
 	"metrics":         (*testState).metrics,
 	"get_tenants":     (*testState).getTenants,
 	"release_tenants": (*testState).releaseTenants,
+	"estimate_iops":   (*testState).estimateIOPS,
 }
 
 func (ts *testState) run(t *testing.T, d *datadriven.TestData) string {
-	if !ts.initialized && d.Cmd != "init" {
+	if !ts.initialized && d.Cmd != "init" && d.Cmd != "estimate_iops" {
 		d.Fatalf(t, "expected init as first command, got %q", d.Cmd)
 	}
 	if f, ok := testStateCommands[d.Cmd]; ok {
@@ -142,12 +145,14 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 	ts.tenants = make(map[roachpb.TenantID][]tenantrate.Limiter)
 	ts.clock = timeutil.NewManualTime(t0)
 	ts.settings = cluster.MakeTestingClusterSettings()
-	limits := tenantrate.LimitConfigsFromSettings(ts.settings)
-	parseLimits(t, d, &limits)
-	tenantrate.OverrideSettingsWithRateLimits(ts.settings, limits)
+	ts.config = tenantrate.DefaultConfig()
+
+	parseSettings(t, d, &ts.config)
+
 	ts.rl = tenantrate.NewLimiterFactory(ts.settings, &tenantrate.TestingKnobs{
 		TimeSource: ts.clock,
 	})
+	ts.rl.UpdateConfig(ts.config)
 	ts.m = metric.NewRegistry()
 	ts.m.AddMetricStruct(ts.rl.Metrics())
 	return ts.clock.Now().Format(timeFormat)
@@ -157,9 +162,8 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 // yaml object representing the limits and updates accordingly. It returns
 // the current time. See init for more details as the semantics are the same.
 func (ts *testState) updateSettings(t *testing.T, d *datadriven.TestData) string {
-	limits := tenantrate.LimitConfigsFromSettings(ts.settings)
-	parseLimits(t, d, &limits)
-	tenantrate.OverrideSettingsWithRateLimits(ts.settings, limits)
+	parseSettings(t, d, &ts.config)
+	ts.rl.UpdateConfig(ts.config)
 	return ts.formatTime()
 }
 
@@ -363,11 +367,11 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 	if err := testutils.SucceedsSoonError(func() error {
 		got := ts.getMetricsText(t, d)
 		if got != exp {
-			return errors.Errorf("got: %q, exp: %q", got, exp)
+			return errors.Errorf("got:\n%s\nexp:\n%s\n", got, exp)
 		}
 		return nil
 	}); err != nil {
-		d.Fatalf(t, "failed to find expected timers: %v", err)
+		d.Fatalf(t, "failed to find expected metrics: %v", err)
 	}
 	return d.Expected
 }
@@ -486,6 +490,69 @@ func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string
 	return ts.FormatTenants()
 }
 
+// estimateIOPS takes in the description of a workload and produces an estimate
+// of the IOPS for that workload (under the default settings).
+//
+// For example:
+//
+//  estimate_iops
+//  readpercentage: 50
+//  readsize: 4096
+//  writesize: 4096
+//  ----
+//  Mixed workload (50% reads; 4.0 KiB reads; 4.0 KiB writes): 256 sustained IOPS, 256 burst.
+//
+func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
+	var workload struct {
+		ReadPercentage int
+		ReadSize       int
+		WriteSize      int
+	}
+	if err := yaml.UnmarshalStrict([]byte(d.Input), &workload); err != nil {
+		d.Fatalf(t, "failed to parse workload information: %v", err)
+	}
+	if workload.ReadPercentage < 0 || workload.ReadPercentage > 100 {
+		d.Fatalf(t, "Invalid read percentage %d", workload.ReadPercentage)
+	}
+	config := tenantrate.DefaultConfig()
+
+	calculateIOPS := func(rate float64) float64 {
+		readCost := config.ReadRequestUnits + float64(workload.ReadSize)*config.ReadUnitsPerByte
+		writeCost := config.WriteRequestUnits + float64(workload.WriteSize)*config.WriteUnitsPerByte
+		readFraction := float64(workload.ReadPercentage) / 100.0
+		avgCost := readFraction*readCost + (1-readFraction)*writeCost
+		return rate / avgCost
+	}
+
+	sustained := calculateIOPS(config.Rate)
+	burst := calculateIOPS(config.Burst)
+	fmtFloat := func(val float64) string {
+		if val < 10 {
+			return fmt.Sprintf("%.1f", val)
+		}
+		return fmt.Sprintf("%.0f", val)
+	}
+	switch workload.ReadPercentage {
+	case 0:
+		return fmt.Sprintf(
+			"Write-only workload (%s writes): %s sustained IOPS, %s burst.",
+			humanize.IBytes(uint64(workload.WriteSize)), fmtFloat(sustained), fmtFloat(burst),
+		)
+	case 100:
+		return fmt.Sprintf(
+			"Read-only workload (%s reads): %s sustained IOPS, %s burst.",
+			humanize.IBytes(uint64(workload.ReadSize)), fmtFloat(sustained), fmtFloat(burst),
+		)
+	default:
+		return fmt.Sprintf(
+			"Mixed workload (%d%% reads; %s reads; %s writes): %s sustained IOPS, %s burst.",
+			workload.ReadPercentage,
+			humanize.IBytes(uint64(workload.ReadSize)), humanize.IBytes(uint64(workload.WriteSize)),
+			fmtFloat(sustained), fmtFloat(burst),
+		)
+	}
+}
+
 func (rs *testState) FormatRunning() string {
 	var states []string
 	for _, ls := range rs.running {
@@ -516,10 +583,40 @@ func parseTenantIDs(t *testing.T, d *datadriven.TestData) []uint64 {
 	return tenantIDs
 }
 
-func parseLimits(t *testing.T, d *datadriven.TestData, limits *tenantrate.LimitConfigs) {
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &limits); err != nil {
+// SettingValues is a struct that can be populated from test files, via YAML.
+type SettingValues struct {
+	Rate  float64
+	Burst float64
+
+	Read  Factors
+	Write Factors
+}
+
+// Factors for reads and writes.
+type Factors struct {
+	Base    float64
+	PerByte float64
+}
+
+// parseSettings parses a SettingValues yaml and updates the given config.
+// Missing (zero) values are ignored.
+func parseSettings(t *testing.T, d *datadriven.TestData, config *tenantrate.Config) {
+	var vals SettingValues
+	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
+
+	override := func(dest *float64, val float64) {
+		if val != 0 {
+			*dest = val
+		}
+	}
+	override(&config.Rate, vals.Rate)
+	override(&config.Burst, vals.Burst)
+	override(&config.ReadRequestUnits, vals.Read.Base)
+	override(&config.ReadUnitsPerByte, vals.Read.PerByte)
+	override(&config.WriteRequestUnits, vals.Write.Base)
+	override(&config.WriteUnitsPerByte, vals.Write.PerByte)
 }
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {

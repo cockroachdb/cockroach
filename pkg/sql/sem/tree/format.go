@@ -139,6 +139,10 @@ const (
 	fmtFormatByteLiterals
 )
 
+// PasswordSubstitution is the string that replaces
+// passwords unless FmtShowPasswords is specified.
+const PasswordSubstitution = "'*****'"
+
 // Composite/derived flag definitions follow.
 const (
 	// FmtPgwireText instructs the pretty-printer to use

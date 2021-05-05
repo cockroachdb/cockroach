@@ -93,6 +93,7 @@ func makeZoneConfig(options tree.KVOptions) *zonepb.ZoneConfig {
 				panic(err)
 			}
 			zone.VoterConstraints = constraintsList.Constraints
+			zone.NullVoterConstraintsIsEmpty = true
 
 		case "lease_preferences":
 			value := options[i].Value.(*tree.StrVal).RawString()

@@ -51,6 +51,13 @@ func (so *DummySequenceOperators) CurrentDatabaseRegionConfig(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+	_ context.Context,
+) error {
+	return errors.WithStack(errSequenceOperators)
+}
+
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
 func (so *DummySequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
@@ -139,10 +146,22 @@ func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) GetImmutableTableInterfaceByID(
+	ctx context.Context, id int,
+) (interface{}, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // UnsafeDeleteDescriptor is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	ctx context.Context, descID int64, force bool,
 ) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// ForceDeleteTableData is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) ForceDeleteTableData(ctx context.Context, descID int64) error {
 	return errors.WithStack(errEvalPlanner)
 }
 
@@ -156,13 +175,6 @@ func (ep *DummyEvalPlanner) UnsafeUpsertNamespaceEntry(
 // UnsafeDeleteNamespaceEntry is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
-) error {
-	return errors.WithStack(errEvalPlanner)
-}
-
-// CompactEngineSpan is part of the EvalPlanner interface.
-func (ep *DummyEvalPlanner) CompactEngineSpan(
-	ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
 ) error {
 	return errors.WithStack(errEvalPlanner)
 }
@@ -184,6 +196,13 @@ func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+	_ context.Context,
+) error {
+	return errors.WithStack(errEvalPlanner)
 }
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.

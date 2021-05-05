@@ -17,8 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,8 +62,8 @@ CREATE SCHEMA sc;
 		t.Fatal(err)
 	}
 
-	getDB := func() *dbdesc.Immutable {
-		var db *dbdesc.Immutable
+	getDB := func() catalog.DatabaseDescriptor {
+		var db catalog.DatabaseDescriptor
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			dbID, err := catalogkv.GetDatabaseID(ctx, txn, keys.SystemSQLCodec, "d", true /* required */)
 			if err != nil {
@@ -78,7 +79,7 @@ CREATE SCHEMA sc;
 
 	// Now get the database descriptor from disk.
 	db := getDB()
-	if _, ok := db.Schemas["sc"]; !ok {
+	if db.GetSchemaID("sc") == descpb.InvalidID {
 		t.Fatal("expected to find child schema sc in db")
 	}
 
@@ -88,10 +89,10 @@ CREATE SCHEMA sc;
 	}
 
 	db = getDB()
-	if _, ok := db.Schemas["sc2"]; !ok {
+	if db.GetSchemaID("sc2") == descpb.InvalidID {
 		t.Fatal("expected to find child schema sc2 in db")
 	}
-	if _, ok := db.Schemas["sc"]; ok {
+	if db.GetSchemaID("sc") != descpb.InvalidID {
 		t.Fatal("expected to not find schema sc in db")
 	}
 }

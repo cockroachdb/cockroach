@@ -13,7 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -111,7 +111,7 @@ func (c *CustomFuncs) HasNoGroupingCols(private *memo.GroupingPrivate) bool {
 }
 
 // GroupingInputOrdering returns the Ordering in the private.
-func (c *CustomFuncs) GroupingInputOrdering(private *memo.GroupingPrivate) physical.OrderingChoice {
+func (c *CustomFuncs) GroupingInputOrdering(private *memo.GroupingPrivate) props.OrderingChoice {
 	return private.Ordering
 }
 
@@ -278,6 +278,22 @@ func (c *CustomFuncs) areRowsDistinct(
 	}
 
 	return true
+}
+
+// SingleRegressionCountArgument checks if either arg is non-null and returns
+// the other one. If neither is non-null it returns ok=false.
+func (c *CustomFuncs) SingleRegressionCountArgument(
+	y, x opt.ScalarExpr, input memo.RelExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	notNullCols := c.NotNullCols(input)
+	if c.ExprIsNeverNull(y, notNullCols) {
+		return x, true
+	}
+	if c.ExprIsNeverNull(x, notNullCols) {
+		return y, true
+	}
+
+	return nil, false
 }
 
 // CanMergeAggs returns true if one of the following applies to each of the

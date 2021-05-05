@@ -20,8 +20,6 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -50,10 +48,10 @@ func newSubstringOperator(
 	startType := typs[argumentCols[1]]
 	lengthType := typs[argumentCols[2]]
 	base := substringFunctionBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		allocator:    allocator,
-		argumentCols: argumentCols,
-		outputIdx:    outputIdx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		allocator:      allocator,
+		argumentCols:   argumentCols,
+		outputIdx:      outputIdx,
 	}
 	if startType.Family() != types.IntFamily {
 		colexecerror.InternalError(errors.AssertionFailedf("non-int start argument type %s", startType))
@@ -78,14 +76,10 @@ func newSubstringOperator(
 }
 
 type substringFunctionBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator    *colmem.Allocator
 	argumentCols []int
 	outputIdx    int
-}
-
-func (s *substringFunctionBase) Init() {
-	s.Input.Init()
 }
 
 // {{range $startWidth, $lengthWidths := .}}
@@ -97,8 +91,8 @@ type substring_StartType_LengthTypeOperator struct {
 
 var _ colexecop.Operator = &substring_StartType_LengthTypeOperator{}
 
-func (s *substring_StartType_LengthTypeOperator) Next(ctx context.Context) coldata.Batch {
-	batch := s.Input.Next(ctx)
+func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
+	batch := s.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

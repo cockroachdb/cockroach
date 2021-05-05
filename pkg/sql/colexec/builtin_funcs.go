@@ -11,20 +11,19 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type defaultBuiltinFuncOperator struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator           *colmem.Allocator
 	evalCtx             *tree.EvalContext
 	funcExpr            *tree.FuncExpr
@@ -39,13 +38,10 @@ type defaultBuiltinFuncOperator struct {
 }
 
 var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
+var _ execinfra.Releasable = &defaultBuiltinFuncOperator{}
 
-func (b *defaultBuiltinFuncOperator) Init() {
-	b.Input.Init()
-}
-
-func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
-	batch := b.Input.Next(ctx)
+func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
+	batch := b.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -107,6 +103,11 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
+// Release is part of the execinfra.Releasable interface.
+func (b *defaultBuiltinFuncOperator) Release() {
+	b.toDatumConverter.Release()
+}
+
 // NewBuiltinFunctionOperator returns an operator that applies builtin functions.
 func NewBuiltinFunctionOperator(
 	allocator *colmem.Allocator,
@@ -127,14 +128,14 @@ func NewBuiltinFunctionOperator(
 		outputType := funcExpr.ResolvedType()
 		input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
-			OneInputNode:        colexecop.NewOneInputNode(input),
+			OneInputHelper:      colexecop.MakeOneInputHelper(input),
 			allocator:           allocator,
 			evalCtx:             evalCtx,
 			funcExpr:            funcExpr,
 			outputIdx:           outputIdx,
 			columnTypes:         columnTypes,
 			outputType:          outputType,
-			toDatumConverter:    colconv.NewVecToDatumConverter(len(columnTypes), argumentCols),
+			toDatumConverter:    colconv.NewVecToDatumConverter(len(columnTypes), argumentCols, true /* willRelease */),
 			datumToVecConverter: colconv.GetDatumToPhysicalFn(outputType),
 			row:                 make(tree.Datums, len(argumentCols)),
 			argumentCols:        argumentCols,

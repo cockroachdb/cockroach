@@ -91,10 +91,10 @@ var tpchMeta = workload.Meta{
 		g := &tpch{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`queries`:        {RuntimeOnly: true},
-			`dist-sql`:       {RuntimeOnly: true},
-			`disable-checks`: {RuntimeOnly: true},
-			`vectorize`:      {RuntimeOnly: true},
+			`queries`:       {RuntimeOnly: true},
+			`dist-sql`:      {RuntimeOnly: true},
+			`enable-checks`: {RuntimeOnly: true},
+			`vectorize`:     {RuntimeOnly: true},
 		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
@@ -103,9 +103,10 @@ var tpchMeta = workload.Meta{
 		g.flags.StringVar(&g.queriesRaw, `queries`,
 			`1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers`)
-		g.flags.BoolVar(&g.disableChecks, `disable-checks`, false,
-			"Disable checking the output against the expected rows (default false). "+
-				"Note that the checks are only supported for scale factor 1")
+		g.flags.BoolVar(&g.disableChecks, `enable-checks`, false,
+			"Enable checking the output against the expected rows (default false). "+
+				"Note that the checks are only supported for scale factor 1 of the backup "+
+				"stored at 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'")
 		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
 			`Set vectorize session variable`)
 		g.flags.BoolVar(&g.useClusterVectorizeSetting, `default-vectorize`, false,

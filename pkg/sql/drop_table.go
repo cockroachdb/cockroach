@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -307,7 +309,7 @@ func (p *planner) dropTableImpl(
 	// Remove interleave relationships.
 	for _, idx := range tableDesc.NonDropIndexes() {
 		if idx.NumInterleaveAncestors() > 0 {
-			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx.IndexDesc()); err != nil {
+			if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -320,15 +322,15 @@ func (p *planner) dropTableImpl(
 	}
 
 	// Remove sequence dependencies.
-	for i := range tableDesc.Columns {
-		if err := p.removeSequenceDependencies(ctx, tableDesc, &tableDesc.Columns[i]); err != nil {
+	for _, col := range tableDesc.PublicColumns() {
+		if err := p.removeSequenceDependencies(ctx, tableDesc, col); err != nil {
 			return droppedViews, err
 		}
 	}
 
 	// Drop sequences that the columns of the table own.
-	for _, col := range tableDesc.Columns {
-		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingParent, behavior); err != nil {
+	for _, col := range tableDesc.PublicColumns() {
+		if err := p.dropSequencesOwnedByCol(ctx, col, !droppingParent, behavior); err != nil {
 			return droppedViews, err
 		}
 	}
@@ -427,6 +429,16 @@ func (p *planner) initiateDropTable(
 		return errors.Errorf("table %q is already being dropped", tableDesc.Name)
 	}
 
+	// Exit early with an error if the table is undergoing a new-style schema
+	// change, before we try to get job IDs and update job statuses later. See
+	// createOrUpdateSchemaChangeJob.
+	if tableDesc.NewSchemaChangeJobID != 0 {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot perform a schema change on table %q while it is undergoing a new-style schema change",
+			tableDesc.GetName(),
+		)
+	}
+
 	// If the table is not interleaved , use the delayed GC mechanism to
 	// schedule usage of the more efficient ClearRange pathway. ClearRange will
 	// only work if the entire hierarchy of interleaved tables are dropped at
@@ -471,24 +483,29 @@ func (p *planner) initiateDropTable(
 	// Also, changes made here do not affect schema change jobs created in this
 	// transaction with no mutation ID; they remain in the cache, and will be
 	// updated when writing the job record to drop the table.
-	jobIDs := make(map[jobspb.JobID]struct{})
-	var id descpb.MutationID
-	for _, m := range tableDesc.Mutations {
-		if id != m.MutationID {
-			id = m.MutationID
-			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, id)
-			if err != nil {
-				return err
-			}
-			jobIDs[jobID] = struct{}{}
-		}
+	if err := p.markTableMutationJobsSuccessful(ctx, tableDesc); err != nil {
+		return err
 	}
-	for jobID := range jobIDs {
-		// Mark jobs as succeeded when possible, but be defensive about jobs that
-		// are already in a terminal state or nonexistent. This could happen for
-		// schema change jobs that couldn't be successfully reverted and ended up in
-		// a failed state. Such jobs could have already been GCed from the jobs
-		// table by the time this code runs.
+
+	// Initiate an immediate schema change. When dropping a table
+	// in a session, the data and the descriptor are not deleted.
+	// Instead, that is taken care of asynchronously by the schema
+	// change manager, which is notified via a system config gossip.
+	// The schema change manager will properly schedule deletion of
+	// the underlying data when the GC deadline expires.
+	return p.writeDropTable(ctx, tableDesc, queueJob, jobDesc)
+}
+
+// Mark jobs as succeeded when possible, but be defensive about jobs that
+// are already in a terminal state or nonexistent. This could happen for
+// schema change jobs that couldn't be successfully reverted and ended up in
+// a failed state. Such jobs could have already been GCed from the jobs
+// table by the time this code runs.
+func (p *planner) markTableMutationJobsSuccessful(
+	ctx context.Context, tableDesc *tabledesc.Mutable,
+) error {
+	for _, mj := range tableDesc.MutationJobs {
+		jobID := jobspb.JobID(mj.JobID)
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
@@ -519,14 +536,7 @@ func (p *planner) initiateDropTable(
 		}
 		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
-
-	// Initiate an immediate schema change. When dropping a table
-	// in a session, the data and the descriptor are not deleted.
-	// Instead, that is taken care of asynchronously by the schema
-	// change manager, which is notified via a system config gossip.
-	// The schema change manager will properly schedule deletion of
-	// the underlying data when the GC deadline expires.
-	return p.writeDropTable(ctx, tableDesc, queueJob, jobDesc)
+	return nil
 }
 
 func (p *planner) removeFKForBackReference(
@@ -641,12 +651,12 @@ func removeFKBackReferenceFromTable(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, idx *descpb.IndexDescriptor,
+	ctx context.Context, tableDesc *tabledesc.Mutable, idx catalog.Index,
 ) error {
-	if len(idx.Interleave.Ancestors) == 0 {
+	if idx.NumInterleaveAncestors() == 0 {
 		return nil
 	}
-	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
+	ancestor := idx.GetInterleaveAncestor(idx.NumInterleaveAncestors() - 1)
 	var t *tabledesc.Mutable
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
@@ -668,10 +678,10 @@ func (p *planner) removeInterleaveBackReference(
 	targetIdx := targetIdxI.IndexDesc()
 	foundAncestor := false
 	for k, ref := range targetIdx.InterleavedBy {
-		if ref.Table == tableDesc.ID && ref.Index == idx.ID {
+		if ref.Table == tableDesc.ID && ref.Index == idx.GetID() {
 			if foundAncestor {
 				return errors.AssertionFailedf(
-					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.Name)
+					"ancestor entry in %s for %s@%s found more than once", t.Name, tableDesc.Name, idx.GetName())
 			}
 			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
 			foundAncestor = true

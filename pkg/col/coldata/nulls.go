@@ -316,31 +316,22 @@ func (n *Nulls) NullBitmap() []byte {
 	return n.nulls
 }
 
-// SetNullBitmap sets the null bitmap. size corresponds to how many elements
-// this bitmap represents. The bits past the end of this size will be set to
-// valid.
+// SetNullBitmap sets the validity of first size elements in n according to bm.
+// The bits past the end of this size will be set to valid. It is assumed that
+// n has enough capacity to store size number of elements. If bm is zero length
+// or if size is 0, then all elements will be set to valid.
 func (n *Nulls) SetNullBitmap(bm []byte, size int) {
-	n.nulls = bm
-	n.maybeHasNulls = false
-	// Set all indices as valid past the last element.
-	if len(bm) > 0 && size != 0 {
-		// Set the last bits in the last element in which we want to preserve null
-		// information. mod, if non-zero, is the number of bits we don't want to
-		// overwrite (otherwise all bits are important). Note that we cast size to a
-		// uint64 to avoid extra instructions when modding.
-		mod := uint64(size) % 8
-		endIdx := size - 1
-		if mod != 0 {
-			bm[endIdx/8] |= onesMask << mod
-		}
-		// Fill the rest of the bitmap.
-		for i := (endIdx / 8) + 1; i < len(bm); {
-			i += copy(bm[i:], filledNulls[:])
-		}
+	if len(bm) == 0 || size == 0 {
+		n.UnsetNulls()
+		return
 	}
-
-	for i := 0; i < len(bm); i++ {
-		if bm[i] != onesMask {
+	numBytesToCopy := (size-1)/8 + 1
+	copy(n.nulls, bm[:numBytesToCopy])
+	n.UnsetNullsAfter(size)
+	// Compute precisely whether we have any invalid values or not.
+	n.maybeHasNulls = false
+	for i := 0; i < numBytesToCopy; i++ {
+		if n.nulls[i] != onesMask {
 			n.maybeHasNulls = true
 			return
 		}
@@ -354,22 +345,29 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 	if len(n.nulls) > len(n2.nulls) {
 		n, n2 = n2, n
 	}
-	nulls := make([]byte, len(n2.nulls))
+	res := &Nulls{
+		maybeHasNulls: n.maybeHasNulls || n2.maybeHasNulls,
+		nulls:         make([]byte, len(n2.nulls)),
+	}
 	if n.maybeHasNulls && n2.maybeHasNulls {
 		for i := 0; i < len(n.nulls); i++ {
-			nulls[i] = n.nulls[i] & n2.nulls[i]
+			res.nulls[i] = n.nulls[i] & n2.nulls[i]
 		}
 		// If n2 is longer, we can just copy the remainder.
-		copy(nulls[len(n.nulls):], n2.nulls[len(n.nulls):])
+		copy(res.nulls[len(n.nulls):], n2.nulls[len(n.nulls):])
 	} else if n.maybeHasNulls {
-		copy(nulls, n.nulls)
+		copy(res.nulls, n.nulls)
+		// We need to set all positions after len(n.nulls) to valid.
+		res.UnsetNullsAfter(8 * len(n.nulls))
 	} else if n2.maybeHasNulls {
-		copy(nulls, n2.nulls)
+		// Since n2 is not of a smaller length, we can copy its bitmap without
+		// having to do anything extra.
+		copy(res.nulls, n2.nulls)
+	} else {
+		// We need to set the whole bitmap to valid.
+		res.UnsetNulls()
 	}
-	return &Nulls{
-		maybeHasNulls: n.maybeHasNulls || n2.maybeHasNulls,
-		nulls:         nulls,
-	}
+	return res
 }
 
 // makeCopy returns a copy of n which can be modified independently.

@@ -21,10 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -89,11 +88,11 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		NeededColumns: []uint32{0},
 	}
 	var err error
-	tr.Spans[0].Span.Key, err = rowenc.TestingMakePrimaryIndexKey(desc, 0)
+	tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(desc, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.Spans[0].Span.EndKey, err = rowenc.TestingMakePrimaryIndexKey(desc, numRows+1)
+	tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(desc, numRows+1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +113,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 			Post:        execinfrapb.PostProcessSpec{RenderExprs: []execinfrapb.Expression{{Expr: "@1 - 1"}}},
 			ResultTypes: []*types.T{types.Int},
 		},
-		Inputs:              []colexecop.Operator{r.Op},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: r.Root}},
 		StreamingMemAccount: &streamingMemAcc,
 	}
 	r, err = NewColOperator(ctx, flowCtx, args)
@@ -123,12 +122,9 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	m, err := colexec.NewMaterializer(
 		flowCtx,
 		0, /* processorID */
-		r.Op,
+		r.OpWithMetaInfo,
 		[]*types.T{types.Int},
 		nil, /* output */
-		nil, /* getStats */
-		nil, /* metadataSources */
-		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)

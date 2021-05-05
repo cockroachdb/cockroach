@@ -41,6 +41,7 @@ default_transaction_use_follower_reads                off
 disable_partially_distributed_plans                   off
 disallow_full_table_scans                             off
 distsql                                               off
+distsql_workmem                                       64 MiB
 enable_drop_enum_value                                off
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
@@ -199,6 +200,7 @@ SELECT * FROM [SHOW TABLES FROM system]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality
 public       namespace                        table  NULL   0                    NULL
+public       join_tokens                      table  NULL   0                    NULL
 public       migrations                       table  NULL   0                    NULL
 public       sqlliveness                      table  NULL   0                    NULL
 public       scheduled_jobs                   table  NULL   0                    NULL
@@ -234,6 +236,7 @@ SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality  comment
 public       namespace                        table  NULL   0                    NULL      ·
+public       join_tokens                      table  NULL   0                    NULL      ·
 public       migrations                       table  NULL   0                    NULL      ·
 public       sqlliveness                      table  NULL   0                    NULL      ·
 public       scheduled_jobs                   table  NULL   0                    NULL      ·

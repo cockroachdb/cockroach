@@ -23,8 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -76,6 +79,13 @@ type Config struct {
 	// Should there be another function to decide whether to update the
 	// lease manager?
 	LeaseManager *lease.Manager
+
+	// InternalExecutor is required to properly resolve descriptors using the
+	// descs API.
+	InternalExecutor sqlutil.InternalExecutor
+
+	// Metrics tracks schemafeed related metrics
+	Metrics *Metrics
 }
 
 // SchemaFeed tracks changes to a set of tables and exports them as a queue of
@@ -95,7 +105,10 @@ type SchemaFeed struct {
 	settings *cluster.Settings
 	targets  jobspb.ChangefeedTargets
 	leaseMgr *lease.Manager
-	mu       struct {
+	ie       sqlutil.InternalExecutor
+	metrics  *Metrics
+
+	mu struct {
 		syncutil.Mutex
 
 		started bool
@@ -197,6 +210,8 @@ func New(cfg Config) *SchemaFeed {
 		settings: cfg.Settings,
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
+		ie:       cfg.InternalExecutor,
+		metrics:  cfg.Metrics,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = cfg.InitialHighWater
@@ -247,12 +262,16 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescTs := tf.mu.highWater
 	tf.mu.Unlock()
 	var initialDescs []catalog.Descriptor
-	initialTableDescsFn := func(ctx context.Context, txn *kv.Txn) error {
+	initialTableDescsFn := func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
 		initialDescs = initialDescs[:0]
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range tf.targets {
-			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, tf.leaseMgr.Codec(), tableID)
+			flags := tree.ObjectLookupFlagsWithRequired()
+			flags.AvoidCached = true
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
 			if err != nil {
 				return err
 			}
@@ -260,7 +279,9 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := tf.db.Txn(ctx, initialTableDescsFn); err != nil {
+	if err := descs.Txn(
+		ctx, tf.settings, tf.leaseMgr, tf.ie, tf.db, initialTableDescsFn,
+	); err != nil {
 		return err
 	}
 
@@ -387,6 +408,9 @@ func (tf *SchemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 		if log.V(1) {
 			log.Infof(ctx, "waited %s for %s highwater: %v", timeutil.Since(start), ts, err)
 		}
+		if tf.metrics != nil {
+			tf.metrics.TableMetadataNanos.Inc(timeutil.Since(start).Nanoseconds())
+		}
 		return err
 	}
 }
@@ -479,13 +503,13 @@ func (tf *SchemaFeed) validateDescriptor(
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 	switch desc := desc.(type) {
-	case *typedesc.Immutable:
+	case catalog.TypeDescriptor:
 		if !tf.mu.typeDeps.containsType(desc.GetID()) {
 			return nil
 		}
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
-		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID)
+		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
 		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 			return err

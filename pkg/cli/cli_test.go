@@ -1018,7 +1018,7 @@ func TestRenderHTML(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			err := render(&tc.reporter, &buf,
-				cols, newRowSliceIter(rows, align),
+				cols, NewRowSliceIter(rows, align),
 				nil /* completedHook */, nil /* noRowsHook */)
 			if err != nil {
 				t.Fatal(err)
@@ -1549,6 +1549,7 @@ func TestGenAutocomplete(t *testing.T) {
 	}{
 		{shell: ""},
 		{shell: "bash"},
+		{shell: "fish"},
 		{shell: "zsh"},
 		{shell: "bad", expErr: `invalid argument "bad" for "cockroach gen autocomplete"`},
 	} {

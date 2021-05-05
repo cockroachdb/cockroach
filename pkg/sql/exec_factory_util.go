@@ -225,10 +225,10 @@ func constructVirtualScan(
 	if !canQueryVirtualTable(p.EvalContext(), virtual) {
 		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
 	}
-	indexDesc := index.(*optVirtualIndex).desc
+	idx := index.(*optVirtualIndex).idx
 	columns, constructor := virtual.getPlanInfo(
 		table.(*optVirtualTable).desc,
-		indexDesc, params.IndexConstraint, p.execCfg.DistSQLPlanner.stopper)
+		idx, params.IndexConstraint, p.execCfg.DistSQLPlanner.stopper)
 
 	n, err := delayedNodeCallback(&delayedNode{
 		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),

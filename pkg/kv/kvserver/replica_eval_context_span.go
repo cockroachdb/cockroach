@@ -149,9 +149,16 @@ func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
 	return rec.i.GetMVCCStats()
 }
 
-// GetSplitQPS returns the Replica's queries/s rate for splitting purposes.
-func (rec SpanSetReplicaEvalContext) GetSplitQPS() float64 {
-	return rec.i.GetSplitQPS()
+// GetMaxSplitQPS returns the Replica's maximum queries/s rate for splitting and
+// merging purposes.
+func (rec SpanSetReplicaEvalContext) GetMaxSplitQPS() (float64, bool) {
+	return rec.i.GetMaxSplitQPS()
+}
+
+// GetLastSplitQPS returns the Replica's most recent queries/s rate for
+// splitting and merging purposes.
+func (rec SpanSetReplicaEvalContext) GetLastSplitQPS() float64 {
+	return rec.i.GetLastSplitQPS()
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created
@@ -212,7 +219,9 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
+func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(
+	ctx context.Context,
+) (rspb.ReadSummary, hlc.Timestamp) {
 	// To capture a read summary over the range, all keys must be latched for
 	// writing to prevent any concurrent reads or writes.
 	desc := rec.i.Desc()
@@ -224,7 +233,7 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() (rspb.ReadSummary,
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
 	})
-	return rec.i.GetCurrentReadSummary()
+	return rec.i.GetCurrentReadSummary(ctx)
 }
 
 // GetLimiters returns the per-store limiters.

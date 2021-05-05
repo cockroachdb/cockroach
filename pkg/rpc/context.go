@@ -43,11 +43,9 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -902,6 +900,8 @@ func (d delayingConn) Write(b []byte) (n int, err error) {
 	return n, err
 }
 
+var errMagicNotFound = errors.New("didn't get expected magic bytes header")
+
 func (d *delayingConn) Read(b []byte) (n int, err error) {
 	if d.readBuf.Len() == 0 {
 		var hdr delayingHeader
@@ -910,17 +910,17 @@ func (d *delayingConn) Read(b []byte) (n int, err error) {
 		}
 		// If we somehow don't get our expected magic, throw an error.
 		if hdr.Magic != magic {
-			panic(errors.New("didn't get expected magic bytes header"))
-		} else {
-			// Once we receive our first packet, we set our delay to the expected
-			// delay that was sent on the write side.
-			d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
-			defer func() {
-				time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
-			}()
-			if _, err := io.CopyN(d.readBuf, d.Conn, int64(hdr.Sz)); err != nil {
-				return 0, err
-			}
+			return 0, errors.WithStack(errMagicNotFound)
+		}
+
+		// Once we receive our first packet, we set our delay to the expected
+		// delay that was sent on the write side.
+		d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
+		defer func() {
+			time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
+		}()
+		if _, err := io.CopyN(d.readBuf, d.Conn, int64(hdr.Sz)); err != nil {
+			return 0, err
 		}
 	}
 	return d.readBuf.Read(b)
@@ -1059,7 +1059,7 @@ func (ctx *Context) grpcDialNodeInternal(
 			if err := ctx.Stopper.RunAsyncTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					err := ctx.runHeartbeat(conn, target, redialChan)
-					if err != nil && !grpcutil.IsClosedConnection(err) {
+					if err != nil && !grpcutil.IsClosedConnection(err) && !grpcutil.IsAuthError(err) {
 						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 					}
 					ctx.removeConn(conn, thisConnKeys...)
@@ -1175,7 +1175,7 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
-			if s, ok := grpcstatus.FromError(errors.UnwrapAll(err)); ok && s.Code() == codes.PermissionDenied {
+			if grpcutil.IsAuthError(err) {
 				returnErr = true
 			}
 

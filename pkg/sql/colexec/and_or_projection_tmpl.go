@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -81,6 +82,8 @@ func New_OPERATIONProjOp(
 // {{range .Overloads}}
 
 type _OP_LOWERProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -118,7 +121,6 @@ func new_OP_TITLEProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -141,11 +143,15 @@ func (o *_OP_LOWERProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *_OP_LOWERProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *_OP_LOWERProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(o.Ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -155,15 +161,16 @@ func (o *_OP_LOWERProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *_OP_LOWERProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
@@ -171,7 +178,7 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -244,7 +251,7 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.SetBatch(batch)
-		batch = o.rightProjOpChain.Next(ctx)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}

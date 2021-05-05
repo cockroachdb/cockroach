@@ -339,6 +339,18 @@ exec
 ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
 ----
 
+exec
+USE survive_region;
+CREATE TABLE t7 (a INT);
+INSERT INTO t7 VALUES (1),(2),(3);
+EXPORT INTO CSV 'nodelocal://0/t7' FROM TABLE t7;
+----
+
+feature-counters
+IMPORT INTO t7 CSV DATA ('nodelocal://0/t7/export*.csv')
+----
+sql.multiregion.import  1
+
 # Test for locality optimized search counter.
 feature-allowlist
 sql.plan.opt.locality-optimized-search
@@ -346,10 +358,11 @@ sql.plan.opt.locality-optimized-search
 
 exec
 USE survive_region;
-CREATE TABLE t7 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+CREATE TABLE t8 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
 ----
 
 feature-usage
-SELECT * FROM t7 WHERE a = 1
+SELECT * FROM t8 WHERE a = 1
 ----
 sql.plan.opt.locality-optimized-search
+

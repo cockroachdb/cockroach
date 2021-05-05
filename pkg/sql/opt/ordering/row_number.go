@@ -13,10 +13,10 @@ package ordering
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
-func ordinalityCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+func ordinalityCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
 	r := expr.(*memo.OrdinalityExpr)
 	prefix := ordinalityOrdPrefix(r, required)
 	if prefix < len(required.Columns) {
@@ -43,7 +43,7 @@ func ordinalityCanProvideOrdering(expr memo.RelExpr, required *physical.Ordering
 // the ordering required of this operator to take into account that the
 // ordinality column is a key, so there will not be ordering columns after the
 // ordinality column in that case.
-func ordinalityOrdPrefix(r *memo.OrdinalityExpr, required *physical.OrderingChoice) int {
+func ordinalityOrdPrefix(r *memo.OrdinalityExpr, required *props.OrderingChoice) int {
 	ordCol := opt.MakeOrderingColumn(r.ColID, false /* descending */)
 	for i := range required.Columns {
 		if required.MatchesAt(i, ordCol) {
@@ -54,16 +54,16 @@ func ordinalityOrdPrefix(r *memo.OrdinalityExpr, required *physical.OrderingChoi
 }
 
 func ordinalityBuildChildReqOrdering(
-	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
-) physical.OrderingChoice {
+	parent memo.RelExpr, required *props.OrderingChoice, childIdx int,
+) props.OrderingChoice {
 	if childIdx != 0 {
-		return physical.OrderingChoice{}
+		return props.OrderingChoice{}
 	}
 	// RowNumber always requires its internal ordering.
 	return parent.(*memo.OrdinalityExpr).Ordering
 }
 
-func ordinalityBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+func ordinalityBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
 	r := expr.(*memo.OrdinalityExpr)
 	childProvided := r.Input.ProvidedPhysical().Ordering
 	prefix := ordinalityOrdPrefix(r, required)

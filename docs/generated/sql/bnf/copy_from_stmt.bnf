@@ -1,0 +1,4 @@
+copy_from_stmt ::=
+	'COPY' table_name opt_column_list 'FROM' 'STDIN' 'WITH' copy_options ( ( copy_options ) )* 
+	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  copy_options ( ( copy_options ) )* 
+	| 'COPY' table_name opt_column_list 'FROM' 'STDIN'  

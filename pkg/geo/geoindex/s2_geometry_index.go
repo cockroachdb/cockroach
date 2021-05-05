@@ -83,9 +83,9 @@ func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
 	if srid == 0 {
 		return DefaultGeometryIndexConfig(), nil
 	}
-	p, exists := geoprojbase.Projection(srid)
-	if !exists {
-		return nil, errors.Newf("expected definition for SRID %d", srid)
+	p, err := geoprojbase.Projection(srid)
+	if err != nil {
+		return nil, err
 	}
 	b := p.Bounds
 	minX, maxX, minY, maxY := b.MinX, b.MaxX, b.MinY, b.MaxY
@@ -286,6 +286,11 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool
 	}
 	clipped := false
 	if s.geomExceedsBounds(gt) {
+		// TODO(#63126): Replace workaround for bug in geos.ClipByRect.
+		g, err = geomfn.ForceLayout(g, geom.XY)
+		if err != nil {
+			return nil, false, err
+		}
 		clipped = true
 		clippedEWKB, err :=
 			geos.ClipByRect(g.EWKB(), s.minX+s.deltaX, s.minY+s.deltaY, s.maxX-s.deltaX, s.maxY-s.deltaY)

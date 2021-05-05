@@ -45,20 +45,23 @@ const (
 // reading the input in chunks of size coldata.BatchSize() and converting each
 // chunk into a coldata.Batch column by column.
 type Columnarizer struct {
+	// Note that we consciously don't embed a colexecop.InitHelper here because
+	// we currently rely on the ProcessorBase to provide the same (and more)
+	// functionality.
+	// TODO(yuzefovich): consider whether embedding ProcessorBase into the
+	// columnarizers makes sense.
 	execinfra.ProcessorBase
 	colexecop.NonExplainable
 
-	mode       columnarizerMode
-	allocator  *colmem.Allocator
-	input      execinfra.RowSource
-	da         rowenc.DatumAlloc
-	initStatus colexecop.OperatorInitStatus
+	mode      columnarizerMode
+	allocator *colmem.Allocator
+	input     execinfra.RowSource
+	da        rowenc.DatumAlloc
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
 	maxBatchMemSize int64
 	accumulatedMeta []execinfrapb.ProducerMetadata
-	ctx             context.Context
 	typs            []*types.T
 
 	// removedFromFlow marks this Columnarizer as having been removed from the
@@ -68,34 +71,32 @@ type Columnarizer struct {
 }
 
 var _ colexecop.Operator = &Columnarizer{}
+var _ colexecop.VectorizedStatsCollector = &Columnarizer{}
 
 // NewBufferingColumnarizer returns a new Columnarizer that will be buffering up
 // rows before emitting them as output batches.
 func NewBufferingColumnarizer(
-	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 ) (*Columnarizer, error) {
-	return newColumnarizer(ctx, allocator, flowCtx, processorID, input, columnarizerBufferingMode)
+	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerBufferingMode)
 }
 
 // NewStreamingColumnarizer returns a new Columnarizer that emits every input
 // row as a separate batch.
 func NewStreamingColumnarizer(
-	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 ) (*Columnarizer, error) {
-	return newColumnarizer(ctx, allocator, flowCtx, processorID, input, columnarizerStreamingMode)
+	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerStreamingMode)
 }
 
 // newColumnarizer returns a new Columnarizer.
 func newColumnarizer(
-	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -111,8 +112,7 @@ func newColumnarizer(
 	c := &Columnarizer{
 		allocator:       allocator,
 		input:           input,
-		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx.Cfg),
-		ctx:             ctx,
+		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx),
 		mode:            mode,
 	}
 	if err = c.ProcessorBase.Init(
@@ -143,23 +143,51 @@ func newColumnarizer(
 }
 
 // Init is part of the Operator interface.
-func (c *Columnarizer) Init() {
+func (c *Columnarizer) Init(ctx context.Context) {
 	if c.removedFromFlow {
 		return
 	}
-	// We don't want to call Start on the input to columnarizer and allocating
-	// internal objects several times if Init method is called more than once, so
-	// we have this check in place.
-	if c.initStatus == colexecop.OperatorNotInitialized {
-		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
-		c.ctx = c.StartInternalNoSpan(c.ctx)
-		c.input.Start(c.ctx)
-		c.initStatus = colexecop.OperatorInitialized
+	if c.Ctx != nil {
+		// Init has already been called.
+		return
+	}
+	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
+	ctx = c.StartInternalNoSpan(ctx)
+	c.input.Start(ctx)
+	if execStatsHijacker, ok := c.input.(execinfra.ExecStatsForTraceHijacker); ok {
+		// The columnarizer is now responsible for propagating the execution
+		// stats of the wrapped processor.
+		//
+		// Note that this columnarizer cannot be removed from the flow because
+		// it will have a vectorized stats collector planned on top, so the
+		// optimization of wrapRowSources() in execplan.go will never trigger.
+		// We check this assumption with an assertion below in the test setting.
+		//
+		// Still, just to be safe, we delay the hijacking until Init so that in
+		// case the assumption is wrong, we still get the stats from the wrapped
+		// processor.
+		c.ExecStatsForTrace = execStatsHijacker.HijackExecStatsForTrace()
 	}
 }
 
+// GetStats is part of the colexecop.VectorizedStatsCollector interface.
+func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
+	if c.removedFromFlow && util.CrdbTestBuild {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"unexpectedly the columnarizer was removed from the flow when stats are being collected",
+		))
+	}
+	componentID := c.FlowCtx.ProcessorComponentID(c.ProcessorID)
+	if c.removedFromFlow || c.ExecStatsForTrace == nil {
+		return &execinfrapb.ComponentStats{Component: componentID}
+	}
+	s := c.ExecStatsForTrace()
+	s.Component = componentID
+	return s
+}
+
 // Next is part of the Operator interface.
-func (c *Columnarizer) Next(context.Context) coldata.Batch {
+func (c *Columnarizer) Next() coldata.Batch {
 	if c.removedFromFlow {
 		return coldata.ZeroBatch
 	}
@@ -239,15 +267,21 @@ func (c *Columnarizer) Run(context.Context) {
 }
 
 var (
-	_ colexecop.Operator         = &Columnarizer{}
-	_ execinfrapb.MetadataSource = &Columnarizer{}
-	_ colexecop.Closer           = &Columnarizer{}
+	_ colexecop.DrainableOperator = &Columnarizer{}
+	_ colexecop.Closer            = &Columnarizer{}
 )
 
-// DrainMeta is part of the MetadataSource interface.
-func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+// DrainMeta is part of the colexecop.MetadataSource interface.
+func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	if c.removedFromFlow {
 		return nil
+	}
+	if c.Ctx == nil {
+		// The columnarizer wasn't initialized, so the wrapped processors might
+		// not have been started leaving them in an unsafe to drain state, so
+		// we skip the draining. Mostly likely this happened because a panic was
+		// encountered in Init.
+		return c.accumulatedMeta
 	}
 	c.MoveToDraining(nil /* err */)
 	for {

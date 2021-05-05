@@ -174,7 +174,17 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			}(),
 		},
 		{
-			name:                "transaction restart after write prevented",
+			name:                "transaction restart (pending) after write prevented",
+			implicitlyCommitted: false,
+			changedTxn: func() roachpb.Transaction {
+				txnCopy := txn
+				txnCopy.BumpEpoch()
+				txnCopy.Status = roachpb.PENDING
+				return txnCopy
+			}(),
+		},
+		{
+			name:                "transaction restart (staging) after write prevented",
 			implicitlyCommitted: false,
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn
@@ -183,7 +193,19 @@ func TestRecoverTxnRecordChanged(t *testing.T) {
 			}(),
 		},
 		{
-			name:                "transaction timestamp increase after write prevented",
+			name:                "transaction timestamp increase (pending) after write prevented",
+			implicitlyCommitted: false,
+			expError:            "cannot recover PENDING transaction in same epoch",
+			changedTxn: func() roachpb.Transaction {
+				txnCopy := txn
+				txnCopy.Status = roachpb.PENDING
+				txnCopy.InFlightWrites = nil
+				txnCopy.WriteTimestamp = txnCopy.WriteTimestamp.Add(1, 0)
+				return txnCopy
+			}(),
+		},
+		{
+			name:                "transaction timestamp increase (staging) after write prevented",
 			implicitlyCommitted: false,
 			changedTxn: func() roachpb.Transaction {
 				txnCopy := txn

@@ -364,7 +364,7 @@ GenerateMergeJoins
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters
@@ -398,7 +398,7 @@ GenerateLookupJoins
          │    │    ├── columns: k:1!null i:2 s:4
          │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    │    └── ordering: +1
   +      │    │    └── fd: (1)-->(2,4)
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
@@ -431,7 +431,7 @@ GenerateMergeJoins (higher cost)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      ├── scan xy
@@ -470,7 +470,7 @@ GenerateMergeJoins (higher cost)
          │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
-  +      │    │    └── ordering: +1 opt(2) [actual: +1]
+  +      │    │    └── ordering: +1
          │    └── filters
          │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          └── filters (true)
@@ -501,7 +501,7 @@ GenerateLookupJoinsWithFilter (higher cost)
   -      │    │    ├── columns: k:1!null i:2 s:4
   -      │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
-  -      │    │    └── ordering: +1 opt(2) [actual: +1]
+  -      │    │    └── ordering: +1
   -      │    └── filters
   -      │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      └── filters (true)
@@ -531,6 +531,12 @@ Final best expression
         │    └── filters
         │         └── i:2 = 9 [outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
         └── filters (true)
+
+# Use optstepsweb.
+optstepsweb
+SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
+----
+https://raduberinde.github.io/optsteps.html?eJzsWl9v4kYQf--nmPJkCztg4I7gylLaNJFyoiRN2qfjFDlgmk3sNbJNC1f1dLrPwGM_XT5JZWOMYXex1_9CmuQpeNazOzs7v9_MeP-u3fzar6m1m7P-2elv4ML59eUvoMPFYHB2DR8uLwYwX8DlAPSjR22-OJrDj4OfAdUVTWnWpNrAdqwxmkxqak2WZdAbFxh5SDeHuF6vw93m58kJyArUFUnpwcnJENenjv1gjLwhrsPT8t-n5den5VcY2ebMwq4KrtrZliDLmnn6nWmsHi_XjzE2HPnBRhiEkWO7rujLgz-K1kdV-R7PTBOQ2oKJ2vangQf1HehHI2d8d4uwZzhYN2-tP0ejWw9Zhuvp1lR9D3O1u3pzoR7DfLF_eI-yhq3178gejYUKgiJ1aYufjH2ZKMvDWbPZNoSW_F6UQGhLHfHLl_CZIrWkd1LwvLsZeSz1aArdkY5Bjwm-Fb1bbN2hpSI5YpnBXJZx80UK6zJ7lGpSN8kktl-iYcj0DMeNJDti4VFVQPOXLQYhKAi-W-qgiKCB0hThoz3zDEcLdqcrSpsTJ8HIxq7n6Ah7riY0FBWExuD3fh9k-PQDNLrx3-KnIV5Fsh_auok-G6fW9Mqcuae-knVcM4RBlPshvgl0iAKd6oYg0BmBAgmBLh9ioFPXsPqn1IXAHsQhZHHEIYR5EYdQuEYcKBFxWLo3iLM7Ihvi0I3zESfRusweZSLOXpPYfiEQR35uxEkJef78GghKE2RQxBwLaKWDwHPbHP-EsO4s1rgXf7IFdt3UYCdnAzvi4D0X0BComxZoiBcLT20ChTF9_lsx_W2q_jcYe2UwVh2KcMFaj1xJ4vQfGz2QodEjZ5dgMta2YiFCtRtkTU00WXywET6Pks4A3qiiEOe6nEmdnFim0eX3unt_0HiXjGlFQRABcNbM9NDURCPkLVQwjYknO_ZfrvDZcGzZdmQbG6IEDvrjniJgVp7surMYQ4I3NU3ormSatg1kb_j6f8TXCuBsG14ju9fLic2fPDttOuLQMiE9NDmasUXMt22d50foPoy-mrn3KwC-wJ7tw3HfmETVN0saz0hbHa7y-yUgMbGQnHBIHh0yZCqDQ4JJ1nAolwiHZP_MMMOmLMek_K5PA8S7dufsEH4ryJ9slazGagX91dRt1kL3ktW5DAeUh5GvgF2rYTM6oxfoKTpdlmzUikGdGTbW1Hhqm1GNQxGseLPVCXjzuCjeTNeeroA3eXrU_iIOmJfLrLfS8nJIkVy8nIUieUuyTmqbCM2xj7HcRoWhwEvnBRAxSyUrcyqBiBOmYJufi4iZqdEOl5ROxBmzq86eZIKegZaDpAmzsNKooiAoQS89n-SIzyL2ImVmyTiPOdJLYBxtyqjyzjfdJy880aTvWmU52U0Q4ERGFn8c5mPHxeZjPChy4GkQLwalTw0IzbF954AertSANSIFi7Bigp6kpfd_gSzCtz9Ul5MJBJ_7M1MQtwdocElkYhznqAQKo8_DdkXKlI5-DgtgwCSNEtMLLOR_484XyJ1nJrIQ1j3jKqrVAvIkn2-x57N8BXi17Ek0C8jCereNwAVTVdEqq8DMS6vhxYA9LxdDeKQNNCzKRUxsU4olDIlpS5qqf2doBaV_rq8g4bX_vW9m_7gh7es7vH3EeNn8GLX1r_0tpzb8Y5Ktjn_7OTr-WTgyayP_oFv0OdrWaTSnunl0yFzMepV1XSprucOx-gwlSbpqpGKgTfyEk_muIBNo995qYF8ATFogm9coGH8QqF3757v_AgAA__8LZehF
 
 # Exploration patterns with varying costs.
 optsteps

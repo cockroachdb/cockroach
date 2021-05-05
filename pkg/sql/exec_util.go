@@ -45,9 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -63,6 +60,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -76,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -368,7 +368,6 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	false,
 )
 
-// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_new_schema_changer.enabled",
 	"default value for experimental_use_new_schema_changer session setting;"+
@@ -393,6 +392,14 @@ var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
 	`default value for stub_catalog_tables session setting`,
 	true,
 )
+
+// settingWorkMemBytes is a cluster setting that determines the maximum amount
+// of RAM that a processor can use.
+var settingWorkMemBytes = settings.RegisterByteSizeSetting(
+	"sql.distsql.temp_storage.workmem",
+	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
+	execinfra.DefaultMemoryLimit, /* 64MiB */
+).WithPublic()
 
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
@@ -422,8 +429,9 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondatapb.VectorizeOff): "off",
-		int64(sessiondatapb.VectorizeOn):  "on",
+		int64(sessiondatapb.VectorizeOff):                "off",
+		int64(sessiondatapb.VectorizeOn):                 "on",
+		int64(sessiondatapb.VectorizeExperimentalAlways): "experimental_always",
 	},
 )
 
@@ -808,6 +816,7 @@ type ExecutorConfig struct {
 	TestingKnobs                  ExecutorTestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
 	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
+	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
 	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
 	GCJobTestingKnobs             *GCJobTestingKnobs
 	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
@@ -842,15 +851,10 @@ type ExecutorConfig struct {
 
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
-	// that allow us to eventually remove legacy code. It will only be populated
-	// on the system tenant.
-	//
-	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
-	VersionUpgradeHook func(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
+	// that allow us to eventually remove legacy code.
+	VersionUpgradeHook VersionUpgradeHook
 
 	// MigrationJobDeps is used to drive migrations.
-	//
-	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
 	MigrationJobDeps migration.JobDeps
 
 	// IndexBackfiller is used to backfill indexes. It is another rather circular
@@ -860,7 +864,23 @@ type ExecutorConfig struct {
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry
+
+	// RootMemoryMonitor is the root memory monitor of the entire server. Do not
+	// use this for normal purposes. It is to be used to establish any new
+	// root-level memory accounts that are not related to a user sessions.
+	RootMemoryMonitor *mon.BytesMonitor
+
+	// CompactEngineSpanFunc is used to inform a storage engine of the need to
+	// perform compaction over a key span.
+	CompactEngineSpanFunc tree.CompactEngineSpanFunc
 }
+
+// VersionUpgradeHook is used to run migrations starting in v21.1.
+type VersionUpgradeHook func(
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+) error
 
 // Organization returns the value of cluster.organization.
 func (cfg *ExecutorConfig) Organization() string {
@@ -955,7 +975,7 @@ type ExecutorTestingKnobs struct {
 	// query (i.e. no subqueries). The physical plan is only safe for use for the
 	// lifetime of this function. Note that returning a nil function is
 	// unsupported and will lead to a panic.
-	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
+	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error
 
 	// DeterministicExplain, if set, will result in overriding fields in EXPLAIN
 	// and EXPLAIN ANALYZE that can vary between runs (like elapsed times).
@@ -971,6 +991,12 @@ type ExecutorTestingKnobs struct {
 	// ForceRealTracingSpans, if set, forces the use of real (i.e. not no-op)
 	// tracing spans for every statement.
 	ForceRealTracingSpans bool
+
+	// DistSQLReceiverPushCallbackFactory, if set, will be called every time a
+	// DistSQLReceiver is created for a new query execution, and it should
+	// return, possibly nil, a callback that will be called every time
+	// DistSQLReceiver.Push is called.
+	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1490,10 +1516,6 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	}
 
 	return response
-}
-
-func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
-	return &schemaInterface{logical: accessors.NewLogicalAccessor(descsCol, vs)}
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
@@ -2211,6 +2233,10 @@ func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
 
+func (m *sessionDataMutator) SetDistSQLWorkMem(val int64) {
+	m.data.WorkMemLimit = val
+}
+
 func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 	m.data.ForceSavepointRestart = val
 }
@@ -2426,11 +2452,12 @@ func (s *sqlStatsCollector) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
+	planner *planner,
 ) roachpb.StmtID {
 	return s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
-		ovhLat, stats,
+		ovhLat, stats, planner,
 	)
 }
 

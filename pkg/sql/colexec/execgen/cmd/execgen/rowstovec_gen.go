@@ -97,6 +97,7 @@ var rowsToVecConversionTmpls = map[familyWidthPair]string{
 	{types.FloatFamily, anyWidth}:                    `float64(*%[1]s.(*tree.DFloat))`,
 	{types.StringFamily, anyWidth}:                   `encoding.UnsafeConvertStringToBytes(string(*%[1]s.(*tree.DString)))`,
 	{types.DecimalFamily, anyWidth}:                  `%[1]s.(*tree.DDecimal).Decimal`,
+	{types.JsonFamily, anyWidth}:                     `%[1]s.(*tree.DJSON).JSON`,
 	{types.UuidFamily, anyWidth}:                     `%[1]s.(*tree.DUuid).UUID.GetBytesMut()`,
 	{types.TimestampFamily, anyWidth}:                `%[1]s.(*tree.DTimestamp).Time`,
 	{types.TimestampTZFamily, anyWidth}:              `%[1]s.(*tree.DTimestampTZ).Time`,

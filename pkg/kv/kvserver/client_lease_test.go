@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -469,4 +470,96 @@ func TestStoreLeaseTransferTimestampCacheTxnRecord(t *testing.T) {
 
 	err = txn.Commit(ctx)
 	require.Regexp(t, `TransactionAbortedError\(ABORT_REASON_NEW_LEASE_PREVENTS_TXN\)`, err)
+}
+
+// This test verifies that when a lease is moved to a node that does not match the
+// lease preferences the replication queue moves it eagerly back, without considering the
+// kv.allocator.min_lease_transfer_interval.
+func TestLeasePreferencesRebalance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	// set min lease transfer high, so we know it does affect the lease movement.
+	kvserver.MinLeaseTransferInterval.Override(sv, 24*time.Hour)
+	// Place all the leases in us-west.
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+			},
+		},
+	}
+	numNodes := 3
+	serverArgs := make(map[int]base.TestServerArgs)
+	locality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("us-west"),
+		locality("us-east"),
+		locality("eu"),
+	}
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &zcfg,
+				},
+			},
+			Settings: settings,
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	key := keys.UserTableDataMin
+	tc.SplitRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
+	desc := tc.LookupRangeOrFatal(t, key)
+	leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
+	require.NoError(t, err)
+	require.Equal(t, tc.Target(0), leaseHolder)
+
+	// Manually move lease out of preference.
+	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+
+	testutils.SucceedsSoon(t, func() error {
+		lh, err := tc.FindRangeLeaseHolder(desc, nil)
+		if err != nil {
+			return err
+		}
+		if !lh.Equal(tc.Target(1)) {
+			return errors.Errorf("Expected leaseholder to be %s but was %s", tc.Target(1), lh)
+		}
+		return nil
+	})
+
+	tc.GetFirstStoreFromServer(t, 1).SetReplicateQueueActive(true)
+	require.NoError(t, tc.GetFirstStoreFromServer(t, 1).ForceReplicationScanAndProcess())
+
+	// The lease should be moved back by the rebalance queue to us-west.
+	testutils.SucceedsSoon(t, func() error {
+		lh, err := tc.FindRangeLeaseHolder(desc, nil)
+		if err != nil {
+			return err
+		}
+		if !lh.Equal(tc.Target(0)) {
+			return errors.Errorf("Expected leaseholder to be %s but was %s", tc.Target(0), lh)
+		}
+		return nil
+	})
 }

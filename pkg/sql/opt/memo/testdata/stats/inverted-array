@@ -155,7 +155,7 @@ select
  │         │                <--- '\x43' --- '\x44'
  │         └── key: (1)
  └── filters
-      └── ARRAY[] @> a:2 [type=bool, outer=(2), immutable]
+      └── a:2 <@ ARRAY[] [type=bool, outer=(2), immutable]
 
 # The inverted index is used when checking if an array column is contained by a
 # constant. An additional filter is required.
@@ -194,7 +194,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      └── ARRAY[2] @> a:2 [type=bool, outer=(2), immutable]
+      └── a:2 <@ ARRAY[2] [type=bool, outer=(2), immutable]
 
 # A disjunction requires scanning all entries that match either the left or the
 # right. An additional filter is required.
@@ -233,7 +233,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      └── (ARRAY[2] @> a:2) OR (ARRAY[3] @> a:2) [type=bool, outer=(2), immutable]
+      └── (a:2 <@ ARRAY[2]) OR (a:2 <@ ARRAY[3]) [type=bool, outer=(2), immutable]
 
 
 # A conjunction requires scanning all entries that match both the left and
@@ -278,5 +278,5 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      ├── ARRAY[2] @> a:2 [type=bool, outer=(2), immutable]
-      └── ARRAY[3] @> a:2 [type=bool, outer=(2), immutable]
+      ├── a:2 <@ ARRAY[2] [type=bool, outer=(2), immutable]
+      └── a:2 <@ ARRAY[3] [type=bool, outer=(2), immutable]

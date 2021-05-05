@@ -292,12 +292,12 @@ SET statement_timeout = '0ms'
 # Test that statement_timeout can be set with an interval string, defaulting to
 # milliseconds as a unit.
 statement ok
-SET statement_timeout = '100'
+SET statement_timeout = '10000'
 
 query T
 SHOW statement_timeout
 ----
-100
+10000
 
 # Set the statement timeout to something absurdly small, so that no query would
 # presumably be able to go through. It should still be possible to get out of

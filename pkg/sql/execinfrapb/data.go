@@ -25,7 +25,7 @@ import (
 )
 
 // ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
-// to a sqlbase.ColumnOrdering type.
+// to a colinfo.ColumnOrdering type.
 func ConvertToColumnOrdering(specOrdering Ordering) colinfo.ColumnOrdering {
 	ordering := make(colinfo.ColumnOrdering, len(specOrdering.Columns))
 	for i, c := range specOrdering.Columns {
@@ -39,13 +39,13 @@ func ConvertToColumnOrdering(specOrdering Ordering) colinfo.ColumnOrdering {
 	return ordering
 }
 
-// ConvertToSpecOrdering converts a sqlbase.ColumnOrdering type
+// ConvertToSpecOrdering converts a colinfo.ColumnOrdering type
 // to an Ordering type (as defined in data.proto).
 func ConvertToSpecOrdering(columnOrdering colinfo.ColumnOrdering) Ordering {
 	return ConvertToMappedSpecOrdering(columnOrdering, nil)
 }
 
-// ConvertToMappedSpecOrdering converts a sqlbase.ColumnOrdering type
+// ConvertToMappedSpecOrdering converts a colinfo.ColumnOrdering type
 // to an Ordering type (as defined in data.proto), using the column
 // indices contained in planToStreamColMap.
 func ConvertToMappedSpecOrdering(
@@ -317,30 +317,4 @@ func LocalMetaToRemoteProducerMeta(
 		panic("unhandled field in local meta or all fields are nil")
 	}
 	return rpm
-}
-
-// MetadataSource is an interface implemented by processors and columnar
-// operators that can produce metadata.
-type MetadataSource interface {
-	// DrainMeta returns all the metadata produced by the processor or operator.
-	// It will be called exactly once, usually, when the processor or operator
-	// has finished doing its computations. This is a signal that the output
-	// requires no more rows to be returned.
-	// Implementers can choose what to do on subsequent calls (if such occur).
-	// TODO(yuzefovich): modify the contract to require returning nil on all
-	// calls after the first one.
-	DrainMeta(context.Context) []ProducerMetadata
-}
-
-// MetadataSources is a slice of MetadataSource.
-type MetadataSources []MetadataSource
-
-// DrainMeta calls DrainMeta on all MetadataSources and returns a single slice
-// with all the accumulated metadata.
-func (s MetadataSources) DrainMeta(ctx context.Context) []ProducerMetadata {
-	var result []ProducerMetadata
-	for _, src := range s {
-		result = append(result, src.DrainMeta(ctx)...)
-	}
-	return result
 }

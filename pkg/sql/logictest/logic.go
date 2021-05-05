@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"runtime/trace"
 	"sort"
@@ -48,15 +49,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -472,6 +474,63 @@ type testClusterConfig struct {
 
 const threeNodeTenantConfigName = "3node-tenant"
 
+var multiregion9node3region3azsLocalities = map[int]roachpb.Locality{
+	1: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az1"},
+		},
+	},
+	2: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az2"},
+		},
+	},
+	3: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ap-southeast-2"},
+			{Key: "availability-zone", Value: "ap-az3"},
+		},
+	},
+	4: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az1"},
+		},
+	},
+	5: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az2"},
+		},
+	},
+	6: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "ca-central-1"},
+			{Key: "availability-zone", Value: "ca-az3"},
+		},
+	},
+	7: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az1"},
+		},
+	},
+	8: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az2"},
+		},
+	},
+	9: {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-az3"},
+		},
+	},
+}
+
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
 //   # LogicTest: default distsql
@@ -632,62 +691,14 @@ var logicTestConfigs = []testClusterConfig{
 		name:              "multiregion-9node-3region-3azs",
 		numNodes:          9,
 		overrideAutoStats: "false",
-		localities: map[int]roachpb.Locality{
-			1: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ap-southeast-2"},
-					{Key: "availability-zone", Value: "ap-az1"},
-				},
-			},
-			2: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ap-southeast-2"},
-					{Key: "availability-zone", Value: "ap-az2"},
-				},
-			},
-			3: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ap-southeast-2"},
-					{Key: "availability-zone", Value: "ap-az3"},
-				},
-			},
-			4: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ca-central-1"},
-					{Key: "availability-zone", Value: "ca-az1"},
-				},
-			},
-			5: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ca-central-1"},
-					{Key: "availability-zone", Value: "ca-az2"},
-				},
-			},
-			6: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "ca-central-1"},
-					{Key: "availability-zone", Value: "ca-az3"},
-				},
-			},
-			7: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "us-east-1"},
-					{Key: "availability-zone", Value: "us-az1"},
-				},
-			},
-			8: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "us-east-1"},
-					{Key: "availability-zone", Value: "us-az2"},
-				},
-			},
-			9: {
-				Tiers: []roachpb.Tier{
-					{Key: "region", Value: "us-east-1"},
-					{Key: "availability-zone", Value: "us-az3"},
-				},
-			},
-		},
+		localities:        multiregion9node3region3azsLocalities,
+	},
+	{
+		name:              "multiregion-9node-3region-3azs-vec-off",
+		numNodes:          9,
+		overrideAutoStats: "false",
+		localities:        multiregion9node3region3azsLocalities,
+		overrideVectorize: "off",
 	},
 }
 
@@ -1345,8 +1356,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	}
 
 	distSQLKnobs := &execinfra.TestingKnobs{
-		MetadataTestLevel:                    execinfra.Off,
-		CheckVectorizedFlowIsClosedCorrectly: true,
+		MetadataTestLevel: execinfra.Off,
 	}
 	cfg := t.cfg
 	if cfg.sqlExecUseDisk {
@@ -1448,7 +1458,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 		// Prevent a logging assertion that the server ID is initialized multiple times.
 		log.TestingClearServerIdentifiers()
 
-		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(tenantArgs)
+		tenant, err := t.cluster.Server(t.nodeIdx).StartTenant(context.Background(), tenantArgs)
 		if err != nil {
 			t.rootT.Fatalf("%+v", err)
 		}
@@ -1470,29 +1480,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 		// Increase tenant rate limits for faster tests.
 		conn := t.cluster.ServerConn(0)
-		for _, settingName := range []string{
-			"kv.tenant_rate_limiter.read_requests.rate_limit",
-			"kv.tenant_rate_limiter.read_requests.burst_limit",
-			"kv.tenant_rate_limiter.write_requests.rate_limit",
-			"kv.tenant_rate_limiter.write_requests.burst_limit",
-		} {
-			if _, err := conn.Exec(
-				fmt.Sprintf("SET CLUSTER SETTING %s = %d", settingName, 100000),
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, settingName := range []string{
-			"kv.tenant_rate_limiter.read_bytes.rate_limit",
-			"kv.tenant_rate_limiter.read_bytes.burst_limit",
-			"kv.tenant_rate_limiter.write_bytes.rate_limit",
-			"kv.tenant_rate_limiter.write_bytes.burst_limit",
-		} {
-			if _, err := conn.Exec(
-				fmt.Sprintf("SET CLUSTER SETTING %s = '1GB'", settingName),
-			); err != nil {
-				t.Fatal(err)
-			}
+		if _, err := conn.Exec("SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 100000"); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -2554,7 +2543,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := mutations.ApplyString(t.rng, stmt.sql, mutations.ColumnFamilyMutator)
+	execSQL, changed := randgen.ApplyString(t.rng, stmt.sql, randgen.ColumnFamilyMutator)
 	if changed {
 		log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
 		if *showSQL {
@@ -2832,9 +2821,16 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			// To find the coltype for the given result, mod the result number
 			// by the number of coltypes.
 			colT := query.colTypes[i%len(query.colTypes)]
-			if !resultMatches && colT == 'F' {
+			if !resultMatches {
 				var err error
-				resultMatches, err = floatsMatch(expected, actual)
+				// On s390x, check that values for both float ('F') and decimal
+				// ('R') coltypes are approximately equal to take into account
+				// platform differences in floating point calculations.
+				if runtime.GOARCH == "s390x" && (colT == 'F' || colT == 'R') {
+					resultMatches, err = floatsMatchApprox(expected, actual)
+				} else if colT == 'F' {
+					resultMatches, err = floatsMatch(expected, actual)
+				}
 				if err != nil {
 					return errors.CombineErrors(makeError(), err)
 				}
@@ -2892,17 +2888,37 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	return nil
 }
 
+// parseExpectedAndActualFloats converts the strings expectedString and
+// actualString to float64 values.
+func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
+	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing expected")
+	}
+	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing actual")
+	}
+	return expected, actual, nil
+}
+
+// floatsMatchApprox returns whether two floating point represented as
+// strings are equal within a tolerance.
+func floatsMatchApprox(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	return floatcmp.EqualApprox(expected, actual, floatcmp.CloseFraction, floatcmp.CloseMargin), nil
+}
+
 // floatsMatch returns whether two floating point numbers represented as
 // strings have matching 15 significant decimal digits (this is the precision
 // that Postgres supports for 'double precision' type).
 func floatsMatch(expectedString, actualString string) (bool, error) {
-	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
 	if err != nil {
-		return false, errors.Wrap(err, "when parsing expected")
-	}
-	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
-	if err != nil {
-		return false, errors.Wrap(err, "when parsing actual")
+		return false, err
 	}
 	// Check special values - NaN, +Inf, -Inf, 0.
 	if math.IsNaN(expected) || math.IsNaN(actual) {

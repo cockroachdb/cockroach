@@ -3,9 +3,12 @@
 
 package descpb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	math "math"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -16,7 +19,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // DatumEncoding identifies the encoding used for an EncDatum.
 type DatumEncoding int32
@@ -37,6 +40,7 @@ var DatumEncoding_name = map[int32]string{
 	1: "DESCENDING_KEY",
 	2: "VALUE",
 }
+
 var DatumEncoding_value = map[string]int32{
 	"ASCENDING_KEY":  0,
 	"DESCENDING_KEY": 1,
@@ -48,9 +52,11 @@ func (x DatumEncoding) Enum() *DatumEncoding {
 	*p = x
 	return p
 }
+
 func (x DatumEncoding) String() string {
 	return proto.EnumName(DatumEncoding_name, int32(x))
 }
+
 func (x *DatumEncoding) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(DatumEncoding_value, data, "DatumEncoding")
 	if err != nil {
@@ -59,8 +65,9 @@ func (x *DatumEncoding) UnmarshalJSON(data []byte) error {
 	*x = DatumEncoding(value)
 	return nil
 }
+
 func (DatumEncoding) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_encoded_datum_0472e76a601f5c7c, []int{0}
+	return fileDescriptor_efe5a7af8eada883, []int{0}
 }
 
 func init() {
@@ -68,10 +75,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/encoded_datum.proto", fileDescriptor_encoded_datum_0472e76a601f5c7c)
+	proto.RegisterFile("sql/catalog/descpb/encoded_datum.proto", fileDescriptor_efe5a7af8eada883)
 }
 
-var fileDescriptor_encoded_datum_0472e76a601f5c7c = []byte{
+var fileDescriptor_efe5a7af8eada883 = []byte{
 	// 190 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2b, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0x4f,

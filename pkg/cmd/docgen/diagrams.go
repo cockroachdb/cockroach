@@ -375,8 +375,9 @@ var specs = []stmtSpec{
 		unlink: []string{"name", "password"},
 	},
 	{
-		name:    "alter_sequence_options_stmt",
-		inline:  []string{"sequence_option_list", "sequence_option_elem"},
+		name:    "alter_sequence",
+		stmt:    "alter_sequence_stmt",
+		inline:  []string{"alter_rename_sequence_stmt", "alter_sequence_options_stmt", "alter_sequence_set_schema_stmt", "alter_sequence_owner_stmt", "sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer", "column_path": "column_name"},
 		unlink:  []string{"integer", "sequence_name", "column_path"},
 		nosplit: true,
@@ -401,8 +402,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_view",
-		stmt:    "alter_rename_view_stmt",
-		inline:  []string{"opt_transaction"},
+		stmt:    "alter_view_stmt",
+		inline:  []string{"alter_rename_view_stmt", "alter_view_set_schema_stmt", "alter_view_owner_stmt", "opt_transaction"},
 		replace: map[string]string{"relation_expr": "view_name", "qualified_name": "name"}, unlink: []string{"view_name", "name"},
 	},
 	{
@@ -441,21 +442,17 @@ var specs = []stmtSpec{
 	{
 		name:   "backup",
 		stmt:   "backup_stmt",
-		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options", "as_of_clause", "opt_with_backup_options"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
+		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
-			"opt_backup_":                                     "",
-			"non_reserved_word_or_sconst":                     "destination",
-			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr":                "'AS OF SYSTEM TIME' timestamp",
-			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
-			"'WITH' 'OPTIONS' '(' kv_option_list ')'":         "",
-			"targets":                        "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder_opt_list": "destination",
-			"scont_or_placeholder":           "destination",
+			"targets":                        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
 			"sconst_or_placeholder":          "subdirectory",
+			"a_expr":                         "timestamp",
 		},
-		unlink:  []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location", "destination"},
-		exclude: []*regexp.Regexp{regexp.MustCompile("'INTO'")},
+		unlink:  []string{"targets", "subdirectory", "destination", "timestamp", "partitioned_backup_location"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
 		name: "begin_transaction",
@@ -519,6 +516,11 @@ var specs = []stmtSpec{
 		stmt:   "commit_stmt",
 		inline: []string{"opt_transaction"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
+	},
+	{
+		name:    "copy_from_stmt",
+		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
 		name:    "cancel_job",
@@ -811,7 +813,7 @@ var specs = []stmtSpec{
 		stmt:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'DISTSQL' | 'DEBUG' )",
+			"explain_option_name": "( 'PLAN' | 'DISTSQL' | 'DEBUG' )",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
@@ -1034,14 +1036,18 @@ var specs = []stmtSpec{
 		name:   "restore",
 		stmt:   "restore_stmt",
 		inline: []string{"opt_as_of_clause", "as_of_clause", "opt_with_restore_options"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'FROM'")},
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"targets":                                "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"targets":                                "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"string_or_placeholder":                  "subdirectory",
-			"list_of_string_or_placeholder_opt_list": "full_backup_location ( | partitioned_backup_location ( ',' partitioned_backup_location )*)",
+			"list_of_string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
 		},
-		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
+		unlink: []string{"subdirectory", "timestamp", "destination", "partitioned_backup_location"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
+		},
 	},
 	{
 		name:    "resume_job",
@@ -1263,13 +1269,20 @@ var specs = []stmtSpec{
 		unlink:  []string{"job_id"},
 	},
 	{
-		name:   "show_grants_stmt",
-		inline: []string{"name_list", "opt_on_targets_roles", "for_grantee_clause", "name_list"},
-		replace: map[string]string{
-			"targets_roles":                "( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*",
+		name: "show_grants_stmt",
+		inline: []string{
+			"opt_on_targets_roles",
+			"for_grantee_clause",
+			"targets_roles",
+			"name_list",
+			"schema_name_list",
+			"type_name_list",
 		},
-		unlink: []string{"role_name", "table_name", "database_name", "user_name"},
+		replace: map[string]string{
+			"targets":                 "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"qualifiable_schema_name": "schema_name",
+		},
+		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
 		name:   "show_indexes",
@@ -1296,6 +1309,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "show_partitions_stmt",
+	},
+	{
+		name: "show_regions",
+		stmt: "show_regions_stmt",
 	},
 	{
 		name:   "show_statements",

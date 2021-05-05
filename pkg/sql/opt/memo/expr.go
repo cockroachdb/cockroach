@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -667,6 +668,18 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 	return *p.(*FiltersExpr)
 }
 
+// SetConstraint sets the constraint in the ScanPrivate and caches the exact
+// prefix. This function should always be used instead of modifying the
+// constraint directly.
+func (s *ScanPrivate) SetConstraint(evalCtx *tree.EvalContext, c *constraint.Constraint) {
+	s.Constraint = c
+	if c == nil {
+		s.ExactPrefix = 0
+	} else {
+		s.ExactPrefix = c.ExactPrefix(evalCtx)
+	}
+}
+
 // UsesPartialIndex returns true if the LookupJoinPrivate looks-up via a
 // partial index.
 func (lj *LookupJoinPrivate) UsesPartialIndex(md *opt.Metadata) bool {
@@ -699,10 +712,20 @@ func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	return m.ReturnCols[ord]
 }
 
-// MapToInputCols maps the given set of table columns to a corresponding set of
-// input columns using the MapToInputID function.
-func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
+// MapToInputCols maps the given set of columns to a corresponding set of
+// input columns using the PassthroughCols list and MapToInputID function.
+func (m *MutationPrivate) MapToInputCols(cols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
+
+	// First see if any of the columns come from the passthrough columns.
+	for _, c := range m.PassthroughCols {
+		if cols.Contains(c) {
+			inCols.Add(c)
+		}
+	}
+
+	// The remaining columns must come from the table.
+	tabCols := cols.Difference(inCols)
 	tabCols.ForEach(func(t opt.ColumnID) {
 		id := m.MapToInputID(t)
 		if id == 0 {
@@ -710,6 +733,7 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 		}
 		inCols.Add(id)
 	})
+
 	return inCols
 }
 
@@ -849,7 +873,7 @@ func ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 
 	case *AndExpr, *OrExpr, *GeExpr, *GtExpr, *NeExpr, *EqExpr, *LeExpr, *LtExpr, *LikeExpr,
 		*NotLikeExpr, *ILikeExpr, *NotILikeExpr, *SimilarToExpr, *NotSimilarToExpr, *RegMatchExpr,
-		*NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr, *ContainsExpr, *JsonExistsExpr,
+		*NotRegMatchExpr, *RegIMatchExpr, *NotRegIMatchExpr, *ContainsExpr, *ContainedByExpr, *JsonExistsExpr,
 		*JsonAllExistsExpr, *JsonSomeExistsExpr, *AnyScalarExpr, *BitandExpr, *BitorExpr, *BitxorExpr,
 		*PlusExpr, *MinusExpr, *MultExpr, *DivExpr, *FloorDivExpr, *ModExpr, *PowExpr, *ConcatExpr,
 		*LShiftExpr, *RShiftExpr, *WhenExpr:

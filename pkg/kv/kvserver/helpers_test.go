@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -390,6 +392,12 @@ func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	return r.mu.largestPreviousMaxRangeSizeBytes
 }
 
+// LoadBasedSplitter returns the replica's split.Decider, which is used to
+// assist load-based split (and merge) decisions.
+func (r *Replica) LoadBasedSplitter() *split.Decider {
+	return &r.loadBasedSplitter
+}
+
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeIngestionSSTWriter(sstFile)
@@ -545,4 +553,12 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
+}
+
+// AcquireLease is redirectOnOrAcquireLease exposed for tests.
+func (r *Replica) AcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
+	ctx = r.AnnotateCtx(ctx)
+	ctx = logtags.AddTag(ctx, "lease-acq", nil)
+	l, pErr := r.redirectOnOrAcquireLease(ctx)
+	return l, pErr.GoError()
 }

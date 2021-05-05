@@ -126,6 +126,9 @@ export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.s
 export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
 export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
+export type ResetSQLStatsRequestMessage = protos.cockroach.server.serverpb.ResetSQLStatsRequest;
+export type ResetSQLStatsResponseMessage = protos.cockroach.server.serverpb.ResetSQLStatsResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -727,6 +730,18 @@ export function getAllMetricMetadata(
     serverpb.MetricMetadataResponse,
     `${API_PREFIX}/metricmetadata`,
     null,
+    timeout,
+  );
+}
+
+export function resetSQLStats(
+  req: ResetSQLStatsRequestMessage,
+  timeout?: moment.Duration,
+): Promise<ResetSQLStatsResponseMessage> {
+  return timeoutFetch(
+    serverpb.ResetSQLStatsResponse,
+    `${STATUS_PREFIX}/resetsqlstats`,
+    req as any,
     timeout,
   );
 }

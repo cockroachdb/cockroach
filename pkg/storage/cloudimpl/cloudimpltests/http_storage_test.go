@@ -247,7 +247,8 @@ func TestHttpGet(t *testing.T) {
 				return nil
 			})
 
-			store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
+			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
+			store, err := cloudimpl.MakeHTTPStorage(ctx, cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -282,7 +283,8 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer s.Close()
 
-	store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
+	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
+	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -302,7 +304,7 @@ func TestCanDisableHttp(t *testing.T) {
 	}
 	s, err := cloudimpl.MakeExternalStorage(
 		context.Background(),
-		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_Http},
+		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_http},
 		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
 	require.Nil(t, s)
 	require.Error(t, err)
@@ -314,10 +316,10 @@ func TestCanDisableOutbound(t *testing.T) {
 		DisableOutbound: true,
 	}
 	for _, provider := range []roachpb.ExternalStorageProvider{
-		roachpb.ExternalStorageProvider_Http,
-		roachpb.ExternalStorageProvider_S3,
-		roachpb.ExternalStorageProvider_GoogleCloud,
-		roachpb.ExternalStorageProvider_LocalFile,
+		roachpb.ExternalStorageProvider_http,
+		roachpb.ExternalStorageProvider_s3,
+		roachpb.ExternalStorageProvider_gs,
+		roachpb.ExternalStorageProvider_nodelocal,
 	} {
 		s, err := cloudimpl.MakeExternalStorage(
 			context.Background(),
@@ -397,8 +399,8 @@ func TestExhaustRetries(t *testing.T) {
 	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
 	cloudimpl.HTTPRetryOptions.MaxRetries = 10
 
-	store, err := cloudimpl.MakeHTTPStorage(
-		"http://does.not.matter", testSettings, base.ExternalIODirConfig{})
+	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
+	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())

@@ -71,7 +71,7 @@ type SetTransaction struct {
 // Format implements the NodeFormatter interface.
 func (node *SetTransaction) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET TRANSACTION")
-	node.Modes.Format(ctx)
+	ctx.FormatNode(&node.Modes)
 }
 
 // SetSessionAuthorizationDefault represents a SET SESSION AUTHORIZATION DEFAULT
@@ -92,7 +92,7 @@ type SetSessionCharacteristics struct {
 // Format implements the NodeFormatter interface.
 func (node *SetSessionCharacteristics) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
-	node.Modes.Format(ctx)
+	ctx.FormatNode(&node.Modes)
 }
 
 // SetTracing represents a SET TRACING statement.

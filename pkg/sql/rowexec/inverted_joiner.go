@@ -66,7 +66,7 @@ type invertedJoiner struct {
 	desc         catalog.TableDescriptor
 	// The map from ColumnIDs in the table to the column position.
 	colIdxMap catalog.TableColMap
-	index     *descpb.IndexDescriptor
+	index     catalog.Index
 	// The ColumnID of the inverted column. Confusingly, this is also the id of
 	// the table column that was indexed.
 	invertedColID descpb.ColumnID
@@ -163,7 +163,6 @@ type invertedJoiner struct {
 
 var _ execinfra.Processor = &invertedJoiner{}
 var _ execinfra.RowSource = &invertedJoiner{}
-var _ execinfrapb.MetadataSource = &invertedJoiner{}
 var _ execinfra.OpNode = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
@@ -201,12 +200,12 @@ func newInvertedJoiner(
 	if indexIdx >= len(ij.desc.ActiveIndexes()) {
 		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	ij.index = ij.desc.ActiveIndexes()[indexIdx].IndexDesc()
+	ij.index = ij.desc.ActiveIndexes()[indexIdx]
 	ij.invertedColID = ij.index.InvertedColumnID()
 
 	// Initialize tableRow, indexRow, indexRowTypes, and indexRowToTableRowMap,
 	// a mapping from indexRow column ordinal to tableRow column ordinals.
-	indexColumnIDs, _ := ij.index.FullColumnIDs()
+	indexColumnIDs, _ := catalog.FullIndexColumnIDs(ij.index)
 	// Inverted joins are not used for mutations.
 	ij.tableRow = make(rowenc.EncDatumRow, len(ij.desc.PublicColumns()))
 	ij.indexRow = make(rowenc.EncDatumRow, len(indexColumnIDs)-1)
@@ -251,7 +250,7 @@ func newInvertedJoiner(
 				// We need to generate metadata before closing the processor
 				// because InternalClose() updates ij.Ctx to the "original"
 				// context.
-				trailingMeta := ij.generateMeta(ij.Ctx)
+				trailingMeta := ij.generateMeta()
 				ij.close()
 				return trailingMeta
 			},
@@ -327,7 +326,7 @@ func newInvertedJoiner(
 
 	// Initialize memory monitors and row container for index rows.
 	ctx := flowCtx.EvalCtx.Ctx()
-	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "invertedjoiner-limited")
+	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "invertedjoiner-limited")
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
@@ -447,7 +446,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
 					ij.indexRow[:len(ij.prefixEqualityCols)],
 					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-					ij.index.ColumnDirections,
+					ij.index.IndexDesc().ColumnDirections,
 					ij.desc,
 					ij.index,
 					&ij.alloc,
@@ -541,7 +540,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
 				ij.indexRow[:len(ij.prefixEqualityCols)],
 				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-				ij.index.ColumnDirections,
+				ij.index.IndexDesc().ColumnDirections,
 				ij.desc,
 				ij.index,
 				&ij.alloc,
@@ -787,21 +786,16 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (ij *invertedJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = ij.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = ij.rowsRead
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx, ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (ij *invertedJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return ij.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

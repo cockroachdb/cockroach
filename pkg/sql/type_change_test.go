@@ -107,7 +107,7 @@ CREATE TYPE d.t AS ENUM();
 	desc := catalogkv.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
 	delTypeDesc = func() {
 		// Delete the descriptor.
-		if err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.ID)); err != nil {
+		if err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID())); err != nil {
 			t.Error(err)
 		}
 	}
@@ -528,9 +528,10 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			finishedSchemaChange.Add(1)
 
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
-				RunBeforeEnumMemberPromotion: func() {
+				RunBeforeEnumMemberPromotion: func() error {
 					typeSchemaChangeStarted.Done()
 					blockTypeSchemaChange.Wait()
+					return nil
 				},
 			}
 

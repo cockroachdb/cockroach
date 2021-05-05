@@ -73,13 +73,18 @@ type backfiller struct {
 	processorID int32
 }
 
-// OutputTypes is part of the processor interface.
+// OutputTypes is part of the execinfra.Processor interface.
 func (*backfiller) OutputTypes() []*types.T {
 	// No output types.
 	return nil
 }
 
-// Run is part of the Processor interface.
+// MustBeStreaming is part of the execinfra.Processor interface.
+func (*backfiller) MustBeStreaming() bool {
+	return false
+}
+
+// Run is part of the execinfra.Processor interface.
 func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))

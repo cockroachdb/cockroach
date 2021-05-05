@@ -47,7 +47,7 @@ import (
 type TestServerInterface interface {
 	Stopper() *stop.Stopper
 
-	Start() error
+	Start(context.Context) error
 
 	// Node returns the server.Node as an interface{}.
 	Node() interface{}
@@ -218,7 +218,7 @@ type TestServerInterface interface {
 	DiagnosticsReporter() interface{}
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
-	StartTenant(params base.TestTenantArgs) (TestTenantInterface, error)
+	StartTenant(ctx context.Context, params base.TestTenantArgs) (TestTenantInterface, error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
@@ -260,7 +260,7 @@ func StartServer(
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
-	if err := server.Start(); err != nil {
+	if err := server.Start(context.Background()); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(
@@ -328,7 +328,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := server.Start(); err != nil {
+	if err := server.Start(context.Background()); err != nil {
 		return nil, err
 	}
 	return server, nil
@@ -340,7 +340,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 func StartTenant(
 	t testing.TB, ts TestServerInterface, params base.TestTenantArgs,
 ) (TestTenantInterface, *gosql.DB) {
-	tenant, err := ts.StartTenant(params)
+	tenant, err := ts.StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatal(err)
 	}

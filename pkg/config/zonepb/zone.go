@@ -78,30 +78,6 @@ var MultiRegionZoneConfigFieldsSet = func() map[tree.Name]struct{} {
 	return ret
 }()
 
-// IsAnyMultiRegionFieldSet returns true if any of the multi-region fields are
-// set on the given zone config, and false if none of them are set.
-func (z *ZoneConfig) IsAnyMultiRegionFieldSet() (bool, string) {
-	if z.GlobalReads != nil {
-		return true, "global_reads"
-	}
-	if z.NumVoters != nil {
-		return true, "num_voters"
-	}
-	if z.NumReplicas != nil {
-		return true, "num_replicas"
-	}
-	if len(z.Constraints) != 0 {
-		return true, "constraints"
-	}
-	if len(z.LeasePreferences) != 0 {
-		return true, "lease_preferences"
-	}
-	if len(z.VoterConstraints) != 0 {
-		return true, "voter_constraints"
-	}
-	return false, ""
-}
-
 // ZoneSpecifierFromID creates a tree.ZoneSpecifier for the zone with the
 // given ID.
 func ZoneSpecifierFromID(
@@ -224,7 +200,6 @@ func (c *Constraint) FromString(short string) error {
 func NewZoneConfig() *ZoneConfig {
 	return &ZoneConfig{
 		InheritedConstraints:      true,
-		InheritedVoterConstraints: true,
 		InheritedLeasePreferences: true,
 	}
 }
@@ -239,7 +214,6 @@ func EmptyCompleteZoneConfig() *ZoneConfig {
 		RangeMaxBytes:             proto.Int64(0),
 		GC:                        &GCPolicy{TTLSeconds: 0},
 		InheritedConstraints:      true,
-		InheritedVoterConstraints: true,
 		InheritedLeasePreferences: true,
 	}
 }
@@ -262,6 +236,8 @@ func DefaultZoneConfig() ZoneConfig {
 			// understand how to change these settings if needed.
 			TTLSeconds: 25 * 60 * 60,
 		},
+		// The default zone is supposed to have empty VoterConstraints.
+		NullVoterConstraintsIsEmpty: true,
 	}
 }
 
@@ -292,8 +268,14 @@ func DefaultSystemZoneConfigRef() *ZoneConfig {
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
-		(!z.InheritedVoterConstraints) && (!z.InheritedConstraints) &&
+		(!z.InheritedVoterConstraints()) && (!z.InheritedConstraints) &&
 		(!z.InheritedLeasePreferences))
+}
+
+// InheritedVoterConstraints determines whether the `VoterConstraints` field is
+// explicitly set on this zone or if it is to be inherited from its parent.
+func (z *ZoneConfig) InheritedVoterConstraints() bool {
+	return len(z.VoterConstraints) == 0 && !z.NullVoterConstraintsIsEmpty
 }
 
 // ValidateTandemFields returns an error if the ZoneConfig to be written
@@ -325,7 +307,7 @@ func (z *ZoneConfig) ValidateTandemFields() error {
 		return fmt.Errorf("range_min_bytes and range_max_bytes must be set together")
 	}
 	if numVotersExplicit {
-		if !z.InheritedLeasePreferences && z.InheritedVoterConstraints {
+		if !z.InheritedLeasePreferences && z.InheritedVoterConstraints() {
 			return fmt.Errorf("lease preferences can not be set unless the voter_constraints are explicitly set as well")
 		}
 	} else if !z.InheritedLeasePreferences && z.InheritedConstraints {
@@ -563,10 +545,10 @@ func (z *ZoneConfig) InheritFromParent(parent *ZoneConfig) {
 			z.InheritedConstraints = false
 		}
 	}
-	if z.InheritedVoterConstraints {
-		if !parent.InheritedVoterConstraints {
+	if z.InheritedVoterConstraints() {
+		if !parent.InheritedVoterConstraints() {
 			z.VoterConstraints = parent.VoterConstraints
-			z.InheritedVoterConstraints = false
+			z.NullVoterConstraintsIsEmpty = parent.NullVoterConstraintsIsEmpty
 		}
 	}
 	if z.InheritedLeasePreferences {
@@ -617,7 +599,7 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 			z.InheritedConstraints = other.InheritedConstraints
 		case "voter_constraints":
 			z.VoterConstraints = other.VoterConstraints
-			z.InheritedVoterConstraints = other.InheritedVoterConstraints
+			z.NullVoterConstraintsIsEmpty = other.NullVoterConstraintsIsEmpty
 		case "lease_preferences":
 			z.LeasePreferences = other.LeasePreferences
 			z.InheritedLeasePreferences = other.InheritedLeasePreferences
@@ -625,10 +607,32 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 	}
 }
 
+// DiffWithZoneMismatch indicates a mismatch between zone configurations.
+type DiffWithZoneMismatch struct {
+	// NOTE: the below fields are only set if there is a subzone in the
+	// zone configuration which is mismatching.
+
+	// IndexID represents a subzone with a mismatching index ID.
+	IndexID uint32
+	// PartitionName represents a subzone with a mismatching partitionName.
+	PartitionName string
+
+	// IsMissingSubzone indicates a subzone is missing.
+	IsMissingSubzone bool
+	// IsExtraSubzone indicates we have an extraneous subzone.
+	IsExtraSubzone bool
+	// Field indicates the field which is wrong.
+	Field string
+}
+
 // DiffWithZone diffs all specified fields of the supplied ZoneConfig, with the
 // receiver ZoneConfig. Returns true if all are equal, and false if there is a
-// difference (along with a string which represents the first difference found).
-func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool, string, error) {
+// difference (along with a DiffWithZoneMismatch which represents the first
+// difference found).
+func (z *ZoneConfig) DiffWithZone(
+	other ZoneConfig, fieldList []tree.Name,
+) (bool, DiffWithZoneMismatch, error) {
+	mismatchingNumReplicas := false
 	for _, fieldName := range fieldList {
 		switch fieldName {
 		case "num_replicas":
@@ -637,7 +641,16 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 			}
 			if z.NumReplicas == nil || other.NumReplicas == nil ||
 				*z.NumReplicas != *other.NumReplicas {
-				return false, "num_replicas", nil
+				// In cases where one of the zone configs are placeholders,
+				// defer the error reporting to below so that we can correctly
+				// report on a subzone difference, should one exist.
+				if z.IsSubzonePlaceholder() || other.IsSubzonePlaceholder() {
+					mismatchingNumReplicas = true
+					continue
+				}
+				return false, DiffWithZoneMismatch{
+					Field: "num_replicas",
+				}, nil
 			}
 		case "num_voters":
 			if other.NumVoters == nil && z.NumVoters == nil {
@@ -645,7 +658,9 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 			}
 			if z.NumVoters == nil || other.NumVoters == nil ||
 				*z.NumVoters != *other.NumVoters {
-				return false, "num_voters", nil
+				return false, DiffWithZoneMismatch{
+					Field: "num_voters",
+				}, nil
 			}
 		case "range_min_bytes":
 			if other.RangeMinBytes == nil && z.RangeMinBytes == nil {
@@ -653,7 +668,9 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 			}
 			if z.RangeMinBytes == nil || other.RangeMinBytes == nil ||
 				*z.RangeMinBytes != *other.RangeMinBytes {
-				return false, "range_min_bytes", nil
+				return false, DiffWithZoneMismatch{
+					Field: "range_min_bytes",
+				}, nil
 			}
 		case "range_max_bytes":
 			if other.RangeMaxBytes == nil && z.RangeMaxBytes == nil {
@@ -661,7 +678,9 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 			}
 			if z.RangeMaxBytes == nil || other.RangeMaxBytes == nil ||
 				*z.RangeMaxBytes != *other.RangeMaxBytes {
-				return false, "range_max_bytes", nil
+				return false, DiffWithZoneMismatch{
+					Field: "range_max_bytes",
+				}, nil
 			}
 		case "global_reads":
 			if other.GlobalReads == nil && z.GlobalReads == nil {
@@ -669,28 +688,36 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 			}
 			if z.GlobalReads == nil || other.GlobalReads == nil ||
 				*z.GlobalReads != *other.GlobalReads {
-				return false, "global_reads", nil
+				return false, DiffWithZoneMismatch{
+					Field: "global_reads",
+				}, nil
 			}
 		case "gc.ttlseconds":
 			if other.GC == nil && z.GC == nil {
 				continue
 			}
 			if z.GC == nil || other.GC == nil || *z.GC != *other.GC {
-				return false, "gc.ttlseconds", nil
+				return false, DiffWithZoneMismatch{
+					Field: "gc.ttlseconds",
+				}, nil
 			}
 		case "constraints":
 			if other.Constraints == nil && z.Constraints == nil {
 				continue
 			}
 			if z.Constraints == nil || other.Constraints == nil {
-				return false, "constraints", nil
+				return false, DiffWithZoneMismatch{
+					Field: "constraints",
+				}, nil
 			}
 			for i, c := range z.Constraints {
 				for j, constraint := range c.Constraints {
 					if len(other.Constraints) <= i ||
 						len(other.Constraints[i].Constraints) <= j ||
 						constraint != other.Constraints[i].Constraints[j] {
-						return false, "constraints", nil
+						return false, DiffWithZoneMismatch{
+							Field: "constraints",
+						}, nil
 					}
 				}
 			}
@@ -699,14 +726,18 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 				continue
 			}
 			if z.VoterConstraints == nil || other.VoterConstraints == nil {
-				return false, "voter_constraints", nil
+				return false, DiffWithZoneMismatch{
+					Field: "voter_constraints",
+				}, nil
 			}
 			for i, c := range z.VoterConstraints {
 				for j, constraint := range c.Constraints {
 					if len(other.VoterConstraints) <= i ||
 						len(other.VoterConstraints[i].Constraints) <= j ||
 						constraint != other.VoterConstraints[i].Constraints[j] {
-						return false, "voter_constraints", nil
+						return false, DiffWithZoneMismatch{
+							Field: "voter_constraints",
+						}, nil
 					}
 				}
 			}
@@ -715,40 +746,124 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 				continue
 			}
 			if z.LeasePreferences == nil || other.LeasePreferences == nil {
-				return false, "voter_constraints", nil
+				return false, DiffWithZoneMismatch{
+					Field: "voter_constraints",
+				}, nil
 			}
 			for i, c := range z.LeasePreferences {
 				for j, constraint := range c.Constraints {
 					if len(other.LeasePreferences) <= i ||
 						len(other.LeasePreferences[i].Constraints) <= j ||
 						constraint != other.LeasePreferences[i].Constraints[j] {
-						return false, "lease_preferences", nil
+						return false, DiffWithZoneMismatch{
+							Field: "lease_preferences",
+						}, nil
 					}
 				}
 			}
 		default:
-			return false, "", errors.AssertionFailedf("unknown zone configuration field %q", fieldName)
+			return false, DiffWithZoneMismatch{}, errors.AssertionFailedf("unknown zone configuration field %q", fieldName)
 		}
 	}
 
 	// Look into all subzones and ensure they're equal across both zone
 	// configs.
-	if len(z.Subzones) != len(other.Subzones) {
-		return false, "subzones", nil
+	// These need to be read in as a map as subzones can be added out-of-order.
+	type subzoneKey struct {
+		indexID       uint32
+		partitionName string
 	}
-	for i, s := range z.Subzones {
-		o := other.Subzones[i]
-		if s.IndexID != o.IndexID {
-			return false, "subzone_index_id", nil
+	otherSubzonesBySubzoneKey := make(map[subzoneKey]Subzone, len(other.Subzones))
+	for _, o := range other.Subzones {
+		k := subzoneKey{indexID: o.IndexID, partitionName: o.PartitionName}
+		otherSubzonesBySubzoneKey[k] = o
+	}
+	for _, s := range z.Subzones {
+		k := subzoneKey{indexID: s.IndexID, partitionName: s.PartitionName}
+		o, found := otherSubzonesBySubzoneKey[k]
+		if !found {
+			// There can be an extra zone config defined so long as
+			// it doesn't have any fields in the fieldList set.
+			if b, subzoneMismatch, err := s.Config.DiffWithZone(
+				*NewZoneConfig(),
+				fieldList,
+			); err != nil {
+				return b, subzoneMismatch, err
+			} else if !b {
+				return false, DiffWithZoneMismatch{
+					IndexID:        s.IndexID,
+					PartitionName:  s.PartitionName,
+					IsExtraSubzone: true,
+					Field:          subzoneMismatch.Field,
+				}, nil
+			}
+			continue
 		}
-		if s.PartitionName != o.PartitionName {
-			return false, "subzone_partition_name", nil
+		if b, subzoneMismatch, err := s.Config.DiffWithZone(
+			o.Config,
+			fieldList,
+		); err != nil {
+			return b, subzoneMismatch, err
+		} else if !b {
+			// We should never have subzones nested within subzones.
+			if subzoneMismatch.IndexID > 0 {
+				return false, DiffWithZoneMismatch{}, errors.AssertionFailedf(
+					"unexpected subzone index id %d",
+					subzoneMismatch.IndexID,
+				)
+			}
+			return b, DiffWithZoneMismatch{
+				IndexID:       o.IndexID,
+				PartitionName: o.PartitionName,
+				Field:         subzoneMismatch.Field,
+			}, nil
 		}
-		if b, str, err := s.Config.DiffWithZone(o.Config, fieldList); !b {
-			return b, str, err
+		delete(otherSubzonesBySubzoneKey, k)
+	}
+
+	// Anything remaining in the map can be presumed to be missing.
+	// This is permitted provided that everything in the field list
+	// still matches on an empty zone configuration.
+	for _, o := range otherSubzonesBySubzoneKey {
+		if b, subzoneMismatch, err := NewZoneConfig().DiffWithZone(
+			o.Config,
+			fieldList,
+		); err != nil {
+			return b, subzoneMismatch, err
+		} else if !b {
+			return false, DiffWithZoneMismatch{
+				IndexID:          o.IndexID,
+				PartitionName:    o.PartitionName,
+				IsMissingSubzone: true,
+				Field:            subzoneMismatch.Field,
+			}, nil
 		}
 	}
-	return true, "", nil
+	// If we've got a mismatch in the num_replicas field and we haven't found
+	// any other mismatch, report on num_replicas.
+	if mismatchingNumReplicas {
+		return false, DiffWithZoneMismatch{
+			Field: "num_replicas",
+		}, nil
+	}
+	return true, DiffWithZoneMismatch{}, nil
+}
+
+// ClearFieldsOfAllSubzones uses the supplied fieldList and clears those fields
+// from all of the zone config's subzones.
+func (z *ZoneConfig) ClearFieldsOfAllSubzones(fieldList []tree.Name) {
+	newSubzones := z.Subzones[:0]
+	emptyZone := NewZoneConfig()
+	for _, sz := range z.Subzones {
+		// By copying from an empty zone, we'll end up clearing out all of the
+		// fields in the fieldList.
+		sz.Config.CopyFromZone(*emptyZone, fieldList)
+		// If we haven't emptied out the subzone, append it to the new slice.
+		if !sz.Config.Equal(emptyZone) {
+			newSubzones = append(newSubzones, sz)
+		}
+	}
+	z.Subzones = newSubzones
 }
 
 // StoreSatisfiesConstraint checks whether a store satisfies the given constraint.

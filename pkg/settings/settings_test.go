@@ -69,6 +69,15 @@ func (d *dummyVersion) MarshalTo(data []byte) (int, error) {
 	return copy(data, encoded), nil
 }
 
+// MarshalToSizedBuffer is part of the protoutil.Message interface.
+func (d *dummyVersion) MarshalToSizedBuffer(data []byte) (int, error) {
+	encoded, err := d.Marshal()
+	if err != nil {
+		return 0, err
+	}
+	return copy(data, encoded), nil
+}
+
 // Size is part of the protoutil.Message interface.
 func (d *dummyVersion) Size() int {
 	encoded, _ := d.Marshal()

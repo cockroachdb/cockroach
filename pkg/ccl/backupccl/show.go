@@ -42,13 +42,11 @@ import (
 )
 
 func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri string) error {
-	// Check if the user issuing the SHOW BACKUP needs to be of the admin role
-	// depending on the URI destination.
-	hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
 	if err != nil {
 		return err
 	}
-	if hasExplicitAuth {
+	if conf.AccessIsWithExplicitAuth() {
 		return nil
 	}
 	hasAdmin, err := p.HasAdminRole(ctx)
@@ -59,7 +57,7 @@ func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri 
 		return pgerror.Newf(
 			pgcode.InsufficientPrivilege,
 			"only users with the admin role are allowed to SHOW BACKUP from the specified %s URI",
-			uriScheme)
+			conf.Provider.String())
 	}
 	return nil
 }
@@ -131,10 +129,6 @@ func showBackupPlanHook(
 			return err
 		}
 
-		if err := checkShowBackupURIPrivileges(ctx, p, str); err != nil {
-			return err
-		}
-
 		if inColFn != nil {
 			collection, err := inColFn()
 			if err != nil {
@@ -146,6 +140,10 @@ func showBackupPlanHook(
 			}
 			parsed.Path = path.Join(parsed.Path, str)
 			str = parsed.String()
+		}
+
+		if err := checkShowBackupURIPrivileges(ctx, p, str); err != nil {
+			return err
 		}
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str, p.User())
@@ -182,7 +180,7 @@ func showBackupPlanHook(
 
 		incPaths, err := findPriorBackupNames(ctx, store)
 		if err != nil {
-			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
+			if errors.Is(err, cloud.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
 				// and show the specified base.
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", store)
@@ -244,6 +242,7 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 		{Name: "parent_schema_name", Typ: types.String},
 		{Name: "object_name", Typ: types.String},
 		{Name: "object_type", Typ: types.String},
+		{Name: "backup_type", Typ: types.String},
 		{Name: "start_time", Typ: types.Timestamp},
 		{Name: "end_time", Typ: types.Timestamp},
 		{Name: "size_bytes", Typ: types.Int},
@@ -298,6 +297,10 @@ func backupShowerDefault(
 					s := descSizes[descpb.ID(tableID)]
 					s.add(file.EntryCounts)
 					descSizes[descpb.ID(tableID)] = s
+				}
+				backupType := tree.NewDString("full")
+				if manifest.isIncremental() {
+					backupType = tree.NewDString("incremental")
 				}
 				start := tree.DNull
 				end, err := tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond)
@@ -364,6 +367,7 @@ func backupShowerDefault(
 						nullIfEmpty(parentSchemaName),
 						tree.NewDString(descriptorName),
 						tree.NewDString(descriptorType),
+						backupType,
 						start,
 						end,
 						dataSizeDatum,
@@ -386,6 +390,7 @@ func backupShowerDefault(
 						tree.DNull, // Schema
 						tree.NewDString(roachpb.MakeTenantID(t.ID).String()), // Object Name
 						tree.NewDString("TENANT"),                            // Object Type
+						backupType,
 						start,
 						end,
 						tree.DNull, // DataSize

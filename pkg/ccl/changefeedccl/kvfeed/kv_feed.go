@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,12 +43,12 @@ type Config struct {
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
-	LeaseMgr           *lease.Manager
 	Metrics            *Metrics
 	MM                 *mon.BytesMonitor
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
 	SchemaChangePolicy changefeedbase.SchemaChangePolicy
+	SchemaFeed         SchemaFeed
 
 	// If true, the feed will begin with a dump of data at exactly the
 	// InitialHighWater. This is a peculiar behavior. In general the
@@ -65,18 +64,6 @@ type Config struct {
 // Run will run the kvfeed. The feed runs synchronously and returns an
 // error when it finishes.
 func Run(ctx context.Context, cfg Config) error {
-	g := ctxgroup.WithContext(ctx)
-	var sf schemaFeed
-
-	if cfg.SchemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
-		sf = &doNothingSchemaFeed{}
-	} else {
-		rawSF := schemafeed.New(makeTablefeedConfig(cfg))
-		// Start polling the schemafeed, which must be done concurrently with
-		// the individual rangefeed routines.
-		g.GoCtx(rawSF.Run)
-		sf = rawSF
-	}
 
 	var sc kvScanner
 	{
@@ -95,13 +82,18 @@ func Run(ctx context.Context, cfg Config) error {
 	bf := func() EventBuffer {
 		return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
 	}
+
 	f := newKVFeed(
 		cfg.Sink, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
 		cfg.Codec,
-		sf, sc, pff, bf)
+		cfg.SchemaFeed,
+		sc, pff, bf)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
 	err := g.Wait()
 	// NB: The higher layers of the changefeed should detect the boundary and the
@@ -124,30 +116,29 @@ type schemaChangeDetectedError struct {
 }
 
 func (e schemaChangeDetectedError) Error() string {
-	return fmt.Sprintf("schema change deteceted at %v", e.ts)
+	return fmt.Sprintf("schema change detected at %v", e.ts)
 }
 
-type schemaFeed interface {
+type unsupportedSchemaChangeDetected struct {
+	desc string
+	ts   hlc.Timestamp
+}
+
+func (e unsupportedSchemaChangeDetected) Error() string {
+	return fmt.Sprintf("unsupported schema change %s detected at %s", e.desc, e.ts.AsOfSystemTime())
+}
+
+// SchemaFeed is a stream of events corresponding the relevant set of
+// descriptors.
+type SchemaFeed interface {
+	// Run synchronously runs the SchemaFeed. It should be invoked before any
+	// calls to Peek or Pop.
+	Run(ctx context.Context) error
+
+	// Peek returns events occurring up to atOrBefore.
 	Peek(ctx context.Context, atOrBefore hlc.Timestamp) (events []schemafeed.TableEvent, err error)
+	// Pop returns events occurring up to atOrBefore and removes them from the feed.
 	Pop(ctx context.Context, atOrBefore hlc.Timestamp) (events []schemafeed.TableEvent, err error)
-}
-
-type doNothingSchemaFeed struct{}
-
-var _ schemaFeed = &doNothingSchemaFeed{}
-
-// Peek implements schemaFeed
-func (f *doNothingSchemaFeed) Peek(
-	ctx context.Context, atOrBefore hlc.Timestamp,
-) (events []schemafeed.TableEvent, err error) {
-	return nil, nil
-}
-
-// Pop implements schemaFeed
-func (f *doNothingSchemaFeed) Pop(
-	ctx context.Context, atOrBefore hlc.Timestamp,
-) (events []schemafeed.TableEvent, err error) {
-	return nil, nil
 }
 
 type kvFeed struct {
@@ -163,7 +154,7 @@ type kvFeed struct {
 
 	// These dependencies are made available for test injection.
 	bufferFactory func() EventBuffer
-	tableFeed     schemaFeed
+	tableFeed     SchemaFeed
 	scanner       kvScanner
 	physicalFeed  physicalFeedFactory
 }
@@ -176,7 +167,7 @@ func newKVFeed(
 	withInitialBackfill, withDiff bool,
 	initialHighWater hlc.Timestamp,
 	codec keys.SQLCodec,
-	tf schemaFeed,
+	tf SchemaFeed,
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() EventBuffer,
@@ -214,7 +205,17 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		boundaryType := jobspb.ResolvedSpan_BACKFILL
 		if f.schemaChangePolicy == changefeedbase.OptSchemaChangePolicyStop {
 			boundaryType = jobspb.ResolvedSpan_EXIT
-		} else if events, err := f.tableFeed.Peek(ctx, highWater.Next()); err == nil && isPrimaryKeyChange(events) {
+		} else if events, err := f.tableFeed.Peek(ctx, highWater.Next()); err == nil && isRegionalByRowChange(events) {
+			// NOTE(ssd): The user is unlikely to see this
+			// error. The schemafeed will fail with an
+			// non-retriable error, meaning we likely
+			// return right after runUntilTableEvent
+			// above.
+			return unsupportedSchemaChangeDetected{
+				desc: "SET REGIONAL BY ROW",
+				ts:   highWater.Next(),
+			}
+		} else if err == nil && isPrimaryKeyChange(events) {
 			boundaryType = jobspb.ResolvedSpan_RESTART
 		} else if err != nil {
 			return err
@@ -239,6 +240,15 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 func isPrimaryKeyChange(events []schemafeed.TableEvent) bool {
 	for _, ev := range events {
 		if schemafeed.IsPrimaryIndexChange(ev) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRegionalByRowChange(events []schemafeed.TableEvent) bool {
+	for _, ev := range events {
+		if schemafeed.IsRegionalByRowChange(ev) {
 			return true
 		}
 	}
@@ -274,7 +284,7 @@ func (f *kvFeed) scanIfShould(
 			// and returns early. This is important because a change to a primary
 			// index may occur in the same transaction as a change requiring a
 			// backfill.
-			if schemafeed.IsPrimaryIndexChange(ev) {
+			if schemafeed.IsOnlyPrimaryIndexChange(ev) {
 				continue
 			}
 			tablePrefix := f.codec.TablePrefix(uint32(ev.After.GetID()))
@@ -365,7 +375,7 @@ func (e *errBoundaryReached) Error() string {
 }
 
 // copyFromSourceToSinkUntilTableEvents will pull read entries from source and
-// publish them to sink if there is no table event from the schemaFeed. If a
+// publish them to sink if there is no table event from the SchemaFeed. If a
 // tableEvent occurs then the function will return once all of the spans have
 // been resolved up to the event. The first such event will be returned as
 // *errBoundaryReached. A nil error will never be returned.
@@ -374,7 +384,7 @@ func copyFromSourceToSinkUntilTableEvent(
 	sink EventBufferWriter,
 	source EventBufferReader,
 	cfg physicalConfig,
-	tables schemaFeed,
+	tables SchemaFeed,
 ) error {
 	// Maintain a local spanfrontier to tell when all the component rangefeeds
 	// being watched have reached the Scan boundary.
@@ -458,17 +468,5 @@ func copyFromSourceToSinkUntilTableEvent(
 		if err := addEntry(e); err != nil {
 			return err
 		}
-	}
-}
-
-func makeTablefeedConfig(cfg Config) schemafeed.Config {
-	return schemafeed.Config{
-		DB:                 cfg.DB,
-		Clock:              cfg.Clock,
-		Settings:           cfg.Settings,
-		Targets:            cfg.Targets,
-		LeaseManager:       cfg.LeaseMgr,
-		SchemaChangeEvents: cfg.SchemaChangeEvents,
-		InitialHighWater:   cfg.InitialHighWater,
 	}
 }

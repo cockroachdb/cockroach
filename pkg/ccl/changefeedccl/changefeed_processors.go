@@ -11,12 +11,12 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,7 +49,6 @@ import (
 
 type changeAggregator struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeAggregatorSpec
@@ -189,6 +189,11 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
+// MustBeStreaming implements the execinfra.Processor interface.
+func (ca *changeAggregator) MustBeStreaming() bool {
+	return true
+}
+
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) {
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
@@ -202,11 +207,26 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	spans := ca.setupSpansAndFrontier()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: ca.spanFrontier, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
 
+	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		ca.knobs = *cfKnobs
+	}
+
+	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
+	// for all changefeeds to control memory allocated to all changefeeds.
+	pool := ca.flowCtx.Cfg.BackfillerMonitor
+	if ca.knobs.MemMonitor != nil {
+		pool = ca.knobs.MemMonitor
+	}
+	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
+	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
+	ca.kvFeedMemMon = kvFeedMemMon
+
 	var err error
 	ca.sink, err = getSink(
-		ctx, ca.spec.Feed.SinkURI, ca.flowCtx.EvalCtx.NodeID.SQLInstanceID(), ca.spec.Feed.Opts, ca.spec.Feed.Targets,
-		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User(),
-	)
+		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+		ca.spec.User(), kvFeedMemMon.MakeBoundAccount())
+
 	if err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -228,27 +248,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
-		ca.knobs = *cfKnobs
-	}
-
-	// It seems like we should also be able to use `ca.ProcessorBase.MemMonitor`
-	// for the poller, but there is a race between the flow's MemoryMonitor
-	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
-	// what to do about this yet.
-	kvFeedMemMonCapacity := kvfeed.MemBufferDefaultCapacity
-	if ca.knobs.MemBufferCapacity != 0 {
-		kvFeedMemMonCapacity = ca.knobs.MemBufferCapacity
-	}
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
-	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
-	ca.kvFeedMemMon = kvFeedMemMon
-
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
-	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
-	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
-		spans, withDiff, buf, ca.metrics)
+	schemaFeed := newSchemaFeed(ctx, ca.flowCtx.Cfg, ca.spec, ca.metrics)
+	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, ca.kvFeedMemMon, ca.spec,
+		spans, buf, ca.metrics, schemaFeed)
 	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
@@ -284,20 +287,71 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 	}
 }
 
+func newSchemaFeed(
+	ctx context.Context,
+	cfg *execinfra.ServerConfig,
+	spec execinfrapb.ChangeAggregatorSpec,
+	metrics *Metrics,
+) kvfeed.SchemaFeed {
+	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
+		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
+		return doNothingSchemaFeed{}
+	}
+	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
+		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
+	initialHighWater, _ := getKVFeedInitialParameters(spec)
+	return schemafeed.New(schemafeed.Config{
+		DB:                 cfg.DB,
+		Clock:              cfg.DB.Clock(),
+		Settings:           cfg.Settings,
+		Targets:            spec.Feed.Targets,
+		LeaseManager:       cfg.LeaseManager.(*lease.Manager),
+		InternalExecutor:   cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}),
+		SchemaChangeEvents: schemaChangeEvents,
+		InitialHighWater:   initialHighWater,
+		Metrics:            &metrics.SchemaFeedMetrics,
+	})
+}
+
+type doNothingSchemaFeed struct{}
+
+var _ kvfeed.SchemaFeed = doNothingSchemaFeed{}
+
+// Run does nothing until the context is canceled.
+func (f doNothingSchemaFeed) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Peek implements SchemaFeed
+func (f doNothingSchemaFeed) Peek(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return nil, nil
+}
+
+// Pop implements SchemaFeed
+func (f doNothingSchemaFeed) Pop(
+	ctx context.Context, atOrBefore hlc.Timestamp,
+) (events []schemafeed.TableEvent, err error) {
+	return nil, nil
+}
+
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
-	leaseMgr *lease.Manager,
 	mm *mon.BytesMonitor,
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
-	withDiff bool,
 	buf kvfeed.EventBuffer,
 	metrics *Metrics,
+	sf kvfeed.SchemaFeed,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
+	_, withDiff := spec.Feed.Opts[changefeedbase.OptDiff]
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
 	kvfeedCfg := kvfeed.Config{
 		Sink:               buf,
@@ -308,7 +362,6 @@ func makeKVFeedCfg(
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
 		Targets:            spec.Feed.Targets,
-		LeaseMgr:           leaseMgr,
 		Metrics:            &metrics.KVFeedMetrics,
 		MM:                 mm,
 		InitialHighWater:   initialHighWater,
@@ -316,6 +369,7 @@ func makeKVFeedCfg(
 		NeedsInitialScan:   needsInitialScan,
 		SchemaChangeEvents: schemaChangeEvents,
 		SchemaChangePolicy: schemaChangePolicy,
+		SchemaFeed:         sf,
 	}
 	return kvfeedCfg
 }
@@ -423,6 +477,10 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 // kvFeed, sends off this event to the event consumer, and flushes the sink
 // if necessary.
 func (ca *changeAggregator) tick() error {
+	// TODO(yevgeniy): Getting an event from producer decreases the amount of
+	//  memory tracked by kvFeedMonitor.  We should "transfer" that memory
+	//  to the consumer below, and keep track of changes to the memory usage when
+	//  we convert feed event to datums; and then when we encode those datums.
 	event, err := ca.eventProducer.GetEvent(ca.Ctx)
 	if err != nil {
 		return err
@@ -502,7 +560,7 @@ func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error 
 // ConsumerClosed is part of the RowSource interface.
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	ca.InternalClose()
+	ca.close()
 }
 
 type kvEventProducer interface {
@@ -782,7 +840,6 @@ const (
 
 type changeFrontier struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.ChangeFrontierSpec
@@ -805,8 +862,9 @@ type changeFrontier struct {
 	freqEmitResolved time.Duration
 	// lastEmitResolved is the last time a resolved timestamp was emitted.
 	lastEmitResolved time.Time
-	// lastSlowSpanLog is the last time a slow span from `sf` was logged.
-	lastSlowSpanLog time.Time
+
+	// slowLogEveryN rate-limits the logging of slow spans
+	slowLogEveryN log.EveryN
 
 	// schemaChangeBoundary represents an hlc timestamp at which a schema change
 	// event occurred to a target watched by this frontier. If the changefeed is
@@ -849,7 +907,10 @@ type changeFrontier struct {
 	metricsID int
 }
 
-const runStatusUpdateFrequency time.Duration = time.Minute
+const (
+	runStatusUpdateFrequency time.Duration = time.Minute
+	slowSpanMaxFrequency                   = 10 * time.Second
+)
 
 type jobState struct {
 	job                 *jobs.Job
@@ -870,11 +931,12 @@ func newChangeFrontierProcessor(
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	cf := &changeFrontier{
-		flowCtx: flowCtx,
-		spec:    spec,
-		memAcc:  memMonitor.MakeBoundAccount(),
-		input:   input,
-		sf:      span.MakeFrontier(spec.TrackedSpans...),
+		flowCtx:       flowCtx,
+		spec:          spec,
+		memAcc:        memMonitor.MakeBoundAccount(),
+		input:         input,
+		sf:            span.MakeFrontier(spec.TrackedSpans...),
+		slowLogEveryN: log.Every(slowSpanMaxFrequency),
 	}
 	if err := cf.Init(
 		cf,
@@ -915,6 +977,11 @@ func newChangeFrontierProcessor(
 	return cf, nil
 }
 
+// MustBeStreaming implements the execinfra.Processor interface.
+func (cf *changeFrontier) MustBeStreaming() bool {
+	return true
+}
+
 // Start is part of the RowSource interface.
 func (cf *changeFrontier) Start(ctx context.Context) {
 	// StartInternal called at the beginning of the function because there are
@@ -926,10 +993,11 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
+	// TODO(yevgeniy): Evaluate if we should introduce changefeed specific monitor.
+	mm := cf.flowCtx.Cfg.BackfillerMonitor
 	cf.sink, err = getSink(
-		ctx, cf.spec.Feed.SinkURI, cf.flowCtx.EvalCtx.NodeID.SQLInstanceID(), cf.spec.Feed.Opts, cf.spec.Feed.Targets,
-		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User(),
-	)
+		ctx, cf.flowCtx.Cfg, cf.spec.Feed, nilOracle, cf.spec.User(), mm.MakeBoundAccount())
+
 	if err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
@@ -1182,9 +1250,13 @@ func (cf *changeFrontier) handleFrontierChanged(isBehind bool) error {
 		cf.metrics.mu.resolved[cf.metricsID] = newResolved
 	}
 	cf.metrics.mu.Unlock()
+
+	checkpointStart := timeutil.Now()
 	if err := cf.checkpointResolvedTimestamp(newResolved, isBehind); err != nil {
 		return err
 	}
+	cf.metrics.CheckpointHistNanos.RecordValue(timeutil.Since(checkpointStart).Nanoseconds())
+
 	if err := cf.maybeEmitResolved(newResolved); err != nil {
 		return err
 	}
@@ -1339,22 +1411,14 @@ func (cf *changeFrontier) maybeEmitResolved(newResolved hlc.Timestamp) error {
 // returned boolean will be true if the resolved timestamp lags far behind the
 // present as defined by the current configuration.
 func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind bool) {
-	// These two cluster setting values represent the target responsiveness of
-	// poller and range feed. The cluster setting for switching between poller and
-	// rangefeed is only checked at changefeed start/resume, so instead of
-	// switching on it here, just add them. Also add 1 second in case both these
-	// settings are set really low (as they are in unit tests).
-	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
-	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
-	slownessThreshold := time.Second + 10*(pollInterval+closedtsInterval)
 	frontier := cf.sf.Frontier()
 	now := timeutil.Now()
 	resolvedBehind := now.Sub(frontier.GoTime())
-	if resolvedBehind <= slownessThreshold {
+	if resolvedBehind <= cf.slownessThreshold() {
 		return false
 	}
 
-	description := `sinkless feed`
+	description := "sinkless feed"
 	if !cf.isSinkless() {
 		description = fmt.Sprintf("job %d", cf.spec.JobID)
 	}
@@ -1362,19 +1426,37 @@ func (cf *changeFrontier) maybeLogBehindSpan(frontierChanged bool) (isBehind boo
 		log.Infof(cf.Ctx, "%s new resolved timestamp %s is behind by %s",
 			description, frontier, resolvedBehind)
 	}
-	const slowSpanMaxFrequency = 10 * time.Second
-	if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
-		cf.lastSlowSpanLog = now
+
+	if cf.slowLogEveryN.ShouldProcess(now) {
 		s := cf.sf.PeekFrontierSpan()
 		log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 	return true
 }
 
+func (cf *changeFrontier) slownessThreshold() time.Duration {
+	clusterThreshold := changefeedbase.SlowSpanLogThreshold.Get(&cf.flowCtx.Cfg.Settings.SV)
+	if clusterThreshold > 0 {
+		return clusterThreshold
+	}
+
+	// These two cluster setting values represent the target
+	// responsiveness of schemafeed and rangefeed.
+	//
+	// We add 1 second in case both these settings are set really
+	// low (as they are in unit tests).
+	//
+	// TODO(ssd): We should probably take into account the flush
+	// frequency here.
+	pollInterval := changefeedbase.TableDescriptorPollInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
+	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Cfg.Settings.SV)
+	return time.Second + 10*(pollInterval+closedtsInterval)
+}
+
 // ConsumerClosed is part of the RowSource interface.
 func (cf *changeFrontier) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	cf.InternalClose()
+	cf.close()
 }
 
 // isSinkless returns true if this changeFrontier is sinkless and thus does not

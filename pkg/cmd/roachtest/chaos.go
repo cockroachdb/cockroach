@@ -83,12 +83,12 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 
 			if ch.DrainAndQuit {
 				l.Printf("stopping and draining %v\n", target)
-				if err := c.StopE(ctx, target, stopArgs("--sig=15")); err != nil {
+				if err := c.StopE(ctx, target, stopArgs("--sig=15"), withWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			} else {
 				l.Printf("killing %v\n", target)
-				if err := c.StopE(ctx, target); err != nil {
+				if err := c.StopE(ctx, target, withWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not stop node %s", target)
 				}
 			}
@@ -98,7 +98,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 				// NB: the roachtest harness checks that at the end of the test,
 				// all nodes that have data also have a running process.
 				l.Printf("restarting %v (chaos is done)\n", target)
-				if err := c.StartE(ctx, target); err != nil {
+				if err := c.StartE(ctx, target, withWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return nil
@@ -110,7 +110,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 				// already canceled.
 				tCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				if err := c.StartE(tCtx, target); err != nil {
+				if err := c.StartE(tCtx, target, withWorkerAction()); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return ctx.Err()
@@ -118,7 +118,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			}
 			l.Printf("restarting %v after %s of downtime\n", target, downTime)
 			t.Reset(period)
-			if err := c.StartE(ctx, target); err != nil {
+			if err := c.StartE(ctx, target, withWorkerAction()); err != nil {
 				return errors.Wrapf(err, "could not restart node %s", target)
 			}
 		}

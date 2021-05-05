@@ -71,24 +71,21 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 12366000535951165621,
+		populatedSum: 6784975417727259950,
 	},
 	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
 		emptySum:     615555020845646359,
-		populatedSum: 3253881774919630461,
+		populatedSum: 17354515720541950025,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
-				Term                 uint64
-				Vote                 uint64
-				Commit               uint64
-				XXX_NoUnkeyedLiteral struct{}
-				XXX_unrecognized     []byte
-				XXX_sizecache        int32
+				Term   uint64
+				Vote   uint64
+				Commit uint64
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -96,10 +93,9 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 
 			n := r.Uint64()
 			return &raftpb.HardState{
-				Term:             n % 3,
-				Vote:             n % 7,
-				Commit:           n % 11,
-				XXX_unrecognized: nil,
+				Term:   n % 3,
+				Vote:   n % 7,
+				Commit: n % 11,
 			}
 		},
 		emptySum:     13621293256077144893,
@@ -124,7 +120,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
 		},
 		emptySum:     5531676819244041709,
-		populatedSum: 8911200268508796945,
+		populatedSum: 17471291891947207032,
 	},
 	reflect.TypeOf(&enginepb.MVCCMetadataSubsetForMergeSerialization{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -135,7 +131,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return m
 		},
 		emptySum:     14695981039346656037,
-		populatedSum: 6109178572734990978,
+		populatedSum: 1187861800212570275,
 	},
 }
 

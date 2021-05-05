@@ -56,9 +56,6 @@ go_library(
         "@io_bazel_rules_go//go/platform:linux": [
             "@org_golang_x_sys//unix",
         ],
-        "@io_bazel_rules_go//go/platform:nacl": [
-            "@org_golang_x_sys//unix",
-        ],
         "@io_bazel_rules_go//go/platform:netbsd": [
             "@org_golang_x_sys//unix",
         ],

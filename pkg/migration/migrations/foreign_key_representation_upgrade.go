@@ -30,7 +30,7 @@ import (
 // descriptor injection.
 
 func foreignKeyRepresentationUpgrade(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.SQLDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	var lastUpgradedID descpb.ID
 	for {
@@ -45,7 +45,7 @@ func foreignKeyRepresentationUpgrade(
 	}
 }
 
-func upgradeFKRepresentation(ctx context.Context, upgrade descpb.ID, d migration.SQLDeps) error {
+func upgradeFKRepresentation(ctx context.Context, upgrade descpb.ID, d migration.TenantDeps) error {
 	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {

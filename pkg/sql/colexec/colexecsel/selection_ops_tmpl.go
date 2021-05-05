@@ -20,8 +20,6 @@
 package colexecsel
 
 import (
-	"context"
-
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -34,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,6 +42,7 @@ var (
 	_ apd.Context
 	_ duration.Duration
 	_ coldataext.Datum
+	_ json.JSON
 )
 
 // {{/*
@@ -76,15 +76,15 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			arg := col.Get(i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -94,18 +94,18 @@ func _SEL_CONST_LOOP(_HAS_NULLS bool) { // */}}
 		sel := batch.Selection()
 		_ = col.Get(n - 1)
 		for i := 0; i < n; i++ {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			// {{if .Left.Sliceable}}
 			//gcassert:bce
 			// {{end}}
 			arg := col.Get(i)
 			_ASSIGN_CMP(cmp, arg, p.constArg, _, col, _)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -124,16 +124,16 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 	if sel := batch.Selection(); sel != nil {
 		sel = sel[:n]
 		for _, i := range sel {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			arg1 := col1.Get(i)
 			arg2 := col2.Get(i)
 			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -144,6 +144,11 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 		_ = col1.Get(n - 1)
 		_ = col2.Get(n - 1)
 		for i := 0; i < n; i++ {
+			// {{if _HAS_NULLS}}
+			if nulls.NullAt(i) {
+				continue
+			}
+			// {{end}}
 			var cmp bool
 			// {{if .Left.Sliceable}}
 			//gcassert:bce
@@ -154,12 +159,7 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 			// {{end}}
 			arg2 := col2.Get(i)
 			_ASSIGN_CMP(cmp, arg1, arg2, _, col1, col2)
-			// {{if _HAS_NULLS}}
-			isNull = nulls.NullAt(i)
-			// {{else}}
-			isNull = false
-			// {{end}}
-			if cmp && !isNull {
+			if cmp {
 				sel[idx] = i
 				idx++
 			}
@@ -173,14 +173,14 @@ func _SEL_LOOP(_HAS_NULLS bool) { // */}}
 // selConstOpBase contains all of the fields for binary selections with a
 // constant, except for the constant itself.
 type selConstOpBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	colIdx         int
 	overloadHelper execgen.OverloadHelper
 }
 
 // selOpBase contains all of the fields for non-constant binary selections.
 type selOpBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	col1Idx        int
 	col2Idx        int
 	overloadHelper execgen.OverloadHelper
@@ -192,16 +192,15 @@ type _OP_CONST_NAME struct {
 	constArg _R_GO_TYPE
 }
 
-func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
+func (p *_OP_CONST_NAME) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -223,10 +222,6 @@ func (p *_OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (p *_OP_CONST_NAME) Init() {
-	p.Input.Init()
-}
-
 // {{end}}
 
 // {{define "selOp"}}
@@ -234,16 +229,15 @@ type _OP_NAME struct {
 	selOpBase
 }
 
-func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
+func (p *_OP_NAME) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the selection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	var isNull bool
 	for {
-		batch := p.Input.Next(ctx)
+		batch := p.Input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -266,10 +260,6 @@ func (p *_OP_NAME) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 	}
-}
-
-func (p *_OP_NAME) Init() {
-	p.Input.Init()
 }
 
 // {{end}}
@@ -303,8 +293,8 @@ func GetSelectionConstOperator(
 	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		colIdx:       colIdx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		colIdx:         colIdx,
 	}
 	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
 		// Tuple comparison has special null-handling semantics, so we will
@@ -341,7 +331,7 @@ func GetSelectionConstOperator(
 		selConstOpBase:   selConstOpBase,
 		adapter:          colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
 		constArg:         constArg,
-		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
+		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}, true /* willRelease */),
 	}, nil
 }
 
@@ -358,9 +348,9 @@ func GetSelectionOperator(
 ) (colexecop.Operator, error) {
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		col1Idx:      col1Idx,
-		col2Idx:      col2Idx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		col1Idx:        col1Idx,
+		col2Idx:        col2Idx,
 	}
 	if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
 		// Tuple comparison has special null-handling semantics, so we will
@@ -396,6 +386,6 @@ func GetSelectionOperator(
 	return &defaultCmpSelOp{
 		selOpBase:        selOpBase,
 		adapter:          colexeccmp.NewComparisonExprAdapter(cmpExpr, evalCtx),
-		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}, true /* willRelease */),
 	}, nil
 }

@@ -74,6 +74,12 @@ type testSpec struct {
 	// still be run regularly.
 	NonReleaseBlocker bool
 
+	// RequiresLicense indicates that the test requires an
+	// enterprise license to run correctly. Use this to ensure
+	// tests will fail-early if COCKROACH_DEV_LICENSE is not set
+	// in the environment.
+	RequiresLicense bool
+
 	// Run is the test function.
 	Run func(ctx context.Context, t *test, c *cluster)
 }
@@ -121,7 +127,8 @@ type test struct {
 	// l is the logger that the test will use for its output.
 	l *logger
 
-	runner   string
+	runner string
+	// runnerID is the test's main goroutine ID.
 	runnerID int64
 	start    time.Time
 	end      time.Time
@@ -148,8 +155,11 @@ type test struct {
 			line int
 		}
 		failureMsg string
-		status     map[int64]testStatus
-		output     []byte
+		// status is a map from goroutine id to status set by that goroutine. A
+		// special goroutine is indicated by runnerID; that one provides the test's
+		// "main status".
+		status map[int64]testStatus
+		output []byte
 	}
 }
 

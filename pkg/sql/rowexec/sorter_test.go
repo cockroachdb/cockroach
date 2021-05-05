@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -39,7 +41,7 @@ func TestSorter(t *testing.T) {
 
 	v := [6]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.IntEncDatum(i)
+		v[i] = randgen.IntEncDatum(i)
 	}
 
 	asc := encoding.Ascending
@@ -64,7 +66,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			types: rowenc.ThreeIntCols,
+			types: types.ThreeIntCols,
 			input: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -95,7 +97,7 @@ func TestSorter(t *testing.T) {
 					}),
 			},
 			post:  execinfrapb.PostProcessSpec{Limit: 4},
-			types: rowenc.ThreeIntCols,
+			types: types.ThreeIntCols,
 			input: rowenc.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -123,7 +125,7 @@ func TestSorter(t *testing.T) {
 					}),
 			},
 			post:  execinfrapb.PostProcessSpec{Offset: 2, Limit: 2},
-			types: rowenc.ThreeIntCols,
+			types: types.ThreeIntCols,
 			input: rowenc.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -149,7 +151,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			types: rowenc.ThreeIntCols,
+			types: types.ThreeIntCols,
 			input: rowenc.EncDatumRows{
 				{v[0], v[1], v[2]},
 				{v[0], v[1], v[0]},
@@ -402,6 +404,7 @@ var twoColOrdering = execinfrapb.ConvertToSpecOrdering(colinfo.ColumnOrdering{
 
 // BenchmarkSortAll times how long it takes to sort an input of varying length.
 func BenchmarkSortAll(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()
@@ -424,7 +427,7 @@ func BenchmarkSortAll(b *testing.B) {
 
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rowenc.MakeRandIntRows(rng, numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(types.TwoIntCols, randgen.MakeRandIntRows(rng, numRows, numCols))
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -444,6 +447,7 @@ func BenchmarkSortAll(b *testing.B) {
 // BenchmarkSortLimit times how long it takes to sort a fixed size input with
 // varying limits.
 func BenchmarkSortLimit(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()
@@ -465,7 +469,7 @@ func BenchmarkSortLimit(b *testing.B) {
 
 	const numRows = 1 << 16
 	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-		input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rowenc.MakeRandIntRows(rng, numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(types.TwoIntCols, randgen.MakeRandIntRows(rng, numRows, numCols))
 		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			post := execinfrapb.PostProcessSpec{Limit: limit}
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
@@ -490,6 +494,7 @@ func BenchmarkSortLimit(b *testing.B) {
 // BenchmarkSortChunks times how long it takes to sort an input which is already
 // sorted on a prefix.
 func BenchmarkSortChunks(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()
@@ -516,11 +521,11 @@ func BenchmarkSortChunks(b *testing.B) {
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for chunkSize := 1; chunkSize <= numRows; chunkSize *= 4 {
 			b.Run(fmt.Sprintf("rows=%d,ChunkSize=%d", numRows, chunkSize), func(b *testing.B) {
-				rows := rowenc.MakeRandIntRows(rng, numRows, numCols)
+				rows := randgen.MakeRandIntRows(rng, numRows, numCols)
 				for i, row := range rows {
-					row[0] = rowenc.IntEncDatum(i / chunkSize)
+					row[0] = randgen.IntEncDatum(i / chunkSize)
 				}
-				input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rows)
+				input := execinfra.NewRepeatableRowSource(types.TwoIntCols, rows)
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

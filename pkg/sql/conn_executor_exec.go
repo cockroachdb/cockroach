@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -200,7 +202,7 @@ func (ex *connExecutor) execPortal(
 		// that it returns 0 rows).
 		// Note that here we deviate from Postgres which returns an error
 		// when attempting to execute an exhausted portal which has a
-		// StatementType() different from "Rows".
+		// StatementReturnType() different from "Rows".
 		if portal.exhausted {
 			return nil, nil, nil
 		}
@@ -249,6 +251,12 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var stmt Statement
 	queryID := ex.generateID()
+	// Update the deadline on the transaction based on the collections.
+	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if prepared != nil {
 		stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {
@@ -388,7 +396,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
-		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectExecutionStats,
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
 	)
 	if needFinish {
 		sql := stmt.SQL
@@ -397,6 +405,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ex.server.cfg,
 				ex.appStats,
 				&ex.extraTxnState.accumulatedStats,
+				ex.extraTxnState.shouldCollectTxnExecutionStats,
 				ex.statsCollector,
 				p,
 				ast,
@@ -853,7 +862,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var cols colinfo.ResultColumns
-	if stmt.AST.StatementType() == tree.Rows {
+	if stmt.AST.StatementReturnType() == tree.Rows {
 		cols = planner.curPlan.main.planColumns()
 	}
 	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
@@ -910,7 +919,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementType(), res, distributePlan.WillDistribute(), progAtomic,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
 	)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
@@ -980,11 +989,15 @@ type topLevelQueryStats struct {
 func (ex *connExecutor) execWithDistSQLEngine(
 	ctx context.Context,
 	planner *planner,
-	stmtType tree.StatementType,
+	stmtType tree.StatementReturnType,
 	res RestrictedCommandResult,
 	distribute bool,
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
+	var testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
+	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
+		testingPushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
+	}
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
@@ -992,6 +1005,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 		ex.server.cfg.ContentionRegistry,
+		testingPushCallback,
 	)
 	recv.progressAtomic = progressAtomic
 	defer recv.Release()
@@ -1028,8 +1042,13 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	}
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
+		// Create a separate memory account for the results of the subqueries.
+		// Note that we intentionally defer the closure of the account until we
+		// return from this method (after the main query is executed).
+		subqueryResultMemAcc := planner.EvalContext().Mon.MakeBoundAccount()
+		defer subqueryResultMemAcc.Close(ctx)
 		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv,
+			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 		) {
 			return recv.stats, recv.commErr
 		}
@@ -1485,12 +1504,12 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
-	ex.extraTxnState.shouldCollectExecutionStats = false
+	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
-	if execStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); execStatsSampleRate > 0 {
-		ex.extraTxnState.shouldCollectExecutionStats = execStatsSampleRate > ex.rng.Float64()
+	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
+		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
 
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
@@ -1504,7 +1523,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 		ex.extraTxnState.transactionStatementIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
-		// accumulatedStats are cleared, but shouldCollectExecutionStats is
+		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
 		// unchanged.
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 		ex.extraTxnState.rowsRead = 0
@@ -1534,7 +1553,7 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 		txnRetryLat,
 		commitLat,
 		ex.extraTxnState.numRows,
-		ex.extraTxnState.shouldCollectExecutionStats,
+		ex.extraTxnState.shouldCollectTxnExecutionStats,
 		ex.extraTxnState.accumulatedStats,
 		ex.extraTxnState.rowsRead,
 		ex.extraTxnState.bytesRead,

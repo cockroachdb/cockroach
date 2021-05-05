@@ -169,7 +169,6 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	// reused. Field reuse must be explicit.
 	*m = Memo{
 		metadata:                m.metadata,
-		interner:                m.interner,
 		reorderJoinsLimit:       evalCtx.SessionData.ReorderJoinsLimit,
 		zigzagJoinEnabled:       evalCtx.SessionData.ZigzagJoinEnabled,
 		useHistograms:           evalCtx.SessionData.OptimizerUseHistograms,
@@ -180,7 +179,6 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 		saveTablesPrefix:        evalCtx.SessionData.SaveTablesPrefix,
 	}
 	m.metadata.Init()
-	m.interner.Clear()
 	m.logPropsBuilder.init(evalCtx, m)
 }
 
@@ -235,7 +233,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	// the memory used by the interner.
 	if m.IsOptimized() {
 		m.logPropsBuilder.clear()
-		m.interner.Clear()
+		m.interner = interner{}
 	}
 }
 

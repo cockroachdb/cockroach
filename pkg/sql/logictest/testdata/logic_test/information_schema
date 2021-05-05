@@ -303,6 +303,7 @@ crdb_internal       jobs
 crdb_internal       kv_node_status
 crdb_internal       kv_store_status
 crdb_internal       leases
+crdb_internal       lost_descriptors_with_data
 crdb_internal       node_build_info
 crdb_internal       node_contention_events
 crdb_internal       node_inflight_trace_spans
@@ -498,6 +499,7 @@ jobs
 kv_node_status
 kv_store_status
 leases
+lost_descriptors_with_data
 node_build_info
 node_contention_events
 node_inflight_trace_spans
@@ -712,6 +714,7 @@ system         crdb_internal       jobs                                   SYSTEM
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_store_status                        SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                                 SYSTEM VIEW  NO                  1
+system         crdb_internal       lost_descriptors_with_data             SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                        SYSTEM VIEW  NO                  1
 system         crdb_internal       node_contention_events                 SYSTEM VIEW  NO                  1
 system         crdb_internal       node_inflight_trace_spans              SYSTEM VIEW  NO                  1
@@ -877,6 +880,7 @@ system         public              statement_diagnostics                  BASE T
 system         public              scheduled_jobs                         BASE TABLE   YES                 1
 system         public              sqlliveness                            BASE TABLE   YES                 1
 system         public              migrations                             BASE TABLE   YES                 1
+system         public              join_tokens                            BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -952,6 +956,10 @@ system              public             630200280_15_2_not_null   system         
 system              public             630200280_15_3_not_null   system         public        jobs                             CHECK            NO             NO
 system              public             630200280_15_4_not_null   system         public        jobs                             CHECK            NO             NO
 system              public             primary                   system         public        jobs                             PRIMARY KEY      NO             NO
+system              public             630200280_41_1_not_null   system         public        join_tokens                      CHECK            NO             NO
+system              public             630200280_41_2_not_null   system         public        join_tokens                      CHECK            NO             NO
+system              public             630200280_41_3_not_null   system         public        join_tokens                      CHECK            NO             NO
+system              public             primary                   system         public        join_tokens                      PRIMARY KEY      NO             NO
 system              public             630200280_11_1_not_null   system         public        lease                            CHECK            NO             NO
 system              public             630200280_11_2_not_null   system         public        lease                            CHECK            NO             NO
 system              public             630200280_11_3_not_null   system         public        lease                            CHECK            NO             NO
@@ -1203,6 +1211,9 @@ system              public             630200280_40_2_not_null   minor IS NOT NU
 system              public             630200280_40_3_not_null   patch IS NOT NULL
 system              public             630200280_40_4_not_null   internal IS NOT NULL
 system              public             630200280_40_5_not_null   completed_at IS NOT NULL
+system              public             630200280_41_1_not_null   id IS NOT NULL
+system              public             630200280_41_2_not_null   secret IS NOT NULL
+system              public             630200280_41_3_not_null   expiration IS NOT NULL
 system              public             630200280_4_1_not_null    username IS NOT NULL
 system              public             630200280_4_3_not_null    isRole IS NOT NULL
 system              public             630200280_5_1_not_null    id IS NOT NULL
@@ -1226,6 +1237,7 @@ system         public        descriptor                       id              sy
 system         public        eventlog                         timestamp       system              public             primary
 system         public        eventlog                         uniqueID        system              public             primary
 system         public        jobs                             id              system              public             primary
+system         public        join_tokens                      id              system              public             primary
 system         public        lease                            descID          system              public             primary
 system         public        lease                            expiration      system              public             primary
 system         public        lease                            nodeID          system              public             primary
@@ -1392,6 +1404,9 @@ system         public        jobs                             id                
 system         public        jobs                             payload                   4
 system         public        jobs                             progress                  5
 system         public        jobs                             status                    2
+system         public        join_tokens                      expiration                3
+system         public        join_tokens                      id                        1
+system         public        join_tokens                      secret                    2
 system         public        lease                            descID                    1
 system         public        lease                            expiration                4
 system         public        lease                            nodeID                    3
@@ -2008,6 +2023,7 @@ NULL     public   system         crdb_internal       jobs                       
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
@@ -2178,6 +2194,16 @@ NULL     root     system         public              jobs                       
 NULL     root     system         public              jobs                                   INSERT          NULL          NO
 NULL     root     system         public              jobs                                   SELECT          NULL          YES
 NULL     root     system         public              jobs                                   UPDATE          NULL          NO
+NULL     admin    system         public              join_tokens                            DELETE          NULL          NO
+NULL     admin    system         public              join_tokens                            GRANT           NULL          NO
+NULL     admin    system         public              join_tokens                            INSERT          NULL          NO
+NULL     admin    system         public              join_tokens                            SELECT          NULL          YES
+NULL     admin    system         public              join_tokens                            UPDATE          NULL          NO
+NULL     root     system         public              join_tokens                            DELETE          NULL          NO
+NULL     root     system         public              join_tokens                            GRANT           NULL          NO
+NULL     root     system         public              join_tokens                            INSERT          NULL          NO
+NULL     root     system         public              join_tokens                            SELECT          NULL          YES
+NULL     root     system         public              join_tokens                            UPDATE          NULL          NO
 NULL     admin    system         public              lease                                  DELETE          NULL          NO
 NULL     admin    system         public              lease                                  GRANT           NULL          NO
 NULL     admin    system         public              lease                                  INSERT          NULL          NO
@@ -2438,6 +2464,7 @@ NULL     public   system         crdb_internal       jobs                       
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_store_status                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       leases                                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       lost_descriptors_with_data             SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_build_info                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_contention_events                 SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_inflight_trace_spans              SELECT          NULL          YES
@@ -2838,6 +2865,16 @@ NULL     root     system         public              migrations                 
 NULL     root     system         public              migrations                             INSERT          NULL          NO
 NULL     root     system         public              migrations                             SELECT          NULL          YES
 NULL     root     system         public              migrations                             UPDATE          NULL          NO
+NULL     admin    system         public              join_tokens                            DELETE          NULL          NO
+NULL     admin    system         public              join_tokens                            GRANT           NULL          NO
+NULL     admin    system         public              join_tokens                            INSERT          NULL          NO
+NULL     admin    system         public              join_tokens                            SELECT          NULL          YES
+NULL     admin    system         public              join_tokens                            UPDATE          NULL          NO
+NULL     root     system         public              join_tokens                            DELETE          NULL          NO
+NULL     root     system         public              join_tokens                            GRANT           NULL          NO
+NULL     root     system         public              join_tokens                            INSERT          NULL          NO
+NULL     root     system         public              join_tokens                            SELECT          NULL          YES
+NULL     root     system         public              join_tokens                            UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)
@@ -3612,6 +3649,7 @@ default_transaction_read_only                         off
 default_transaction_use_follower_reads                off
 disable_partially_distributed_plans                   off
 disallow_full_table_scans                             off
+distsql_workmem                                       64 MiB
 enable_drop_enum_value                                off
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off

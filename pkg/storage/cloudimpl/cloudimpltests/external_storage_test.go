@@ -13,6 +13,7 @@ package cloudimpltests
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -33,18 +34,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
-	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/errors"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 )
@@ -125,7 +126,7 @@ func storeFromURI(
 	uri string,
 	clientFactory blobs.BlobClientFactory,
 	user security.SQLUsername,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) cloud.ExternalStorage {
 	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
@@ -146,7 +147,7 @@ func testExportStore(
 	storeURI string,
 	skipSingleFile bool,
 	user security.SQLUsername,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) {
 	testExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, user,
@@ -159,7 +160,7 @@ func testExportStoreWithExternalIOConfig(
 	storeURI string,
 	user security.SQLUsername,
 	skipSingleFile bool,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) {
 	ctx := context.Background()
@@ -352,7 +353,7 @@ func testExportStoreWithExternalIOConfig(
 		// Attempt to read a file which does not exist.
 		_, err = singleFile.ReadFile(ctx, "file_does_not_exist")
 		require.Error(t, err)
-		require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
 		require.NoError(t, s.Delete(ctx, testingFilename))
 	})
 }
@@ -360,7 +361,11 @@ func testExportStoreWithExternalIOConfig(
 // RunListFilesTest tests the ListFiles() interface method for the ExternalStorage
 // specified by storeURI.
 func testListFiles(
-	t *testing.T, storeURI string, user security.SQLUsername, ie *sql.InternalExecutor, kvDB *kv.DB,
+	t *testing.T,
+	storeURI string,
+	user security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	kvDB *kv.DB,
 ) {
 	ctx := context.Background()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
@@ -578,90 +583,6 @@ func TestPutGoogleCloud(t *testing.T) {
 	})
 }
 
-func TestWorkloadStorage(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	settings := cluster.MakeTestingClusterSettings()
-
-	rows, payloadBytes, ranges := 4, 12, 1
-	gen := bank.FromConfig(rows, rows, payloadBytes, ranges)
-	bankTable := gen.Tables()[0]
-	bankURL := func(extraParams ...map[string]string) *url.URL {
-		params := url.Values{`version`: []string{gen.Meta().Version}}
-		flags := gen.(workload.Flagser).Flags()
-		flags.VisitAll(func(f *pflag.Flag) {
-			if flags.Meta[f.Name].RuntimeOnly {
-				return
-			}
-			params[f.Name] = append(params[f.Name], f.Value.String())
-		})
-		for _, p := range extraParams {
-			for key, value := range p {
-				params.Add(key, value)
-			}
-		}
-		return &url.URL{
-			Scheme:   `workload`,
-			Path:     `/` + filepath.Join(`csv`, gen.Meta().Name, bankTable.Name),
-			RawQuery: params.Encode(),
-		}
-	}
-
-	ctx := context.Background()
-	user := security.RootUserName()
-
-	{
-		s, err := cloudimpl.ExternalStorageFromURI(ctx, bankURL().String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-		require.NoError(t, err)
-		r, err := s.ReadFile(ctx, ``)
-		require.NoError(t, err)
-		bytes, err := ioutil.ReadAll(r)
-		require.NoError(t, err)
-		require.Equal(t, strings.TrimSpace(`
-0,0,initial-dTqn
-1,0,initial-Pkyk
-2,0,initial-eJkM
-3,0,initial-TlNb
-		`), strings.TrimSpace(string(bytes)))
-	}
-
-	{
-		params := map[string]string{
-			`row-start`: `1`, `row-end`: `3`, `payload-bytes`: `14`, `batch-size`: `1`}
-		s, err := cloudimpl.ExternalStorageFromURI(ctx, bankURL(params).String(), base.ExternalIODirConfig{},
-			settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-		require.NoError(t, err)
-		r, err := s.ReadFile(ctx, ``)
-		require.NoError(t, err)
-		bytes, err := ioutil.ReadAll(r)
-		require.NoError(t, err)
-		require.Equal(t, strings.TrimSpace(`
-1,0,initial-vOpikz
-2,0,initial-qMvoPe
-		`), strings.TrimSpace(string(bytes)))
-	}
-
-	_, err := cloudimpl.ExternalStorageFromURI(ctx, `workload:///nope`, base.ExternalIODirConfig{}, settings,
-		blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `path must be of the form /<format>/<generator>/<table>: /nope`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///fmt/bank/bank?version=`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `unsupported format: fmt`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/nope/nope?version=`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `unknown generator: nope`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank`, base.ExternalIODirConfig{},
-		settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `parameter version is required`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `expected bank version "" but got "1.0.0"`)
-	_, err = cloudimpl.ExternalStorageFromURI(ctx, `workload:///csv/bank/bank?version=nope`,
-		base.ExternalIODirConfig{}, settings, blobs.TestEmptyBlobClientFactory, user, nil, nil)
-	require.EqualError(t, err, `expected bank version "nope" but got "1.0.0"`)
-}
-
 func uploadData(
 	t *testing.T, rnd *rand.Rand, dest roachpb.ExternalStorage, basename string,
 ) ([]byte, func()) {
@@ -717,4 +638,88 @@ func testAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage) {
 	read, err := ioutil.ReadAll(stream)
 	require.NoError(t, err)
 	require.Equal(t, data, read)
+}
+
+func makeUserfile(
+	ctx context.Context,
+	t *testing.T,
+	s serverutils.TestServerInterface,
+	sqlDB *gosql.DB,
+	kvDB *kv.DB,
+) cloud.ExternalStorage {
+	qualifiedTableName := "defaultdb.public.user_file_table_test"
+
+	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, "")
+	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+
+	// Create a user and grant them privileges on defaultdb.
+	user1 := security.MakeSQLUsernameFromPreNormalizedString("foo")
+	require.NoError(t, createUserGrantAllPrivieleges(user1, "defaultdb", sqlDB))
+
+	// Create a userfile connection as user1.
+	fileTableSystem, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB)
+	require.NoError(t, err)
+
+	return fileTableSystem
+}
+
+func makeNodelocal(ctx context.Context, t *testing.T, kvDB *kv.DB) cloud.ExternalStorage {
+	user := security.RootUserName()
+
+	// Setup a sink for the given args.
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	store := storeFromURI(ctx, t, "nodelocal://self/base", clientFactory,
+		user, nil /* ie */, kvDB)
+	return store
+}
+
+// TestFileExistence checks that the appropriate error is returned when trying
+// to read a file that doesn't exist.
+func TestFileExistence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	// Setup a server.
+	params, _ := tests.CreateTestServerParams()
+
+	tmp, cleanupTmp := testutils.TempDir(t)
+	defer cleanupTmp()
+	testSettings.ExternalIODir = tmp
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Create external storages to tests.
+	// TODO: Add more here (e.g. s3, azure, gcs).
+	uf := makeUserfile(ctx, t, s, sqlDB, kvDB)
+	defer uf.Close()
+	nl := makeNodelocal(ctx, t, kvDB)
+	defer nl.Close()
+
+	externalStorages := []cloud.ExternalStorage{uf, nl}
+
+	for _, es := range externalStorages {
+		// Try reading a file that doesn't exist and assert we get the error the
+		// interface claims it provides.
+		_, err := es.ReadFile(ctx, "this-doesnt-exist")
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			t.Fatalf("expected a file does not exist error, got %+v", err)
+		}
+
+		_, _, err = es.ReadFileAt(ctx, "this-doesnt-exist", 0 /* offset */)
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			t.Fatalf("expected a file does not exist error, got %+v", err)
+		}
+
+		// Create a file that exists and assert that we don't get the error.
+		filename := "exists"
+		require.NoError(t, es.WriteFile(ctx, filename, bytes.NewReader([]byte("data"))))
+
+		_, err = es.ReadFile(ctx, filename)
+		require.NoError(t, err)
+		_, _, err = es.ReadFileAt(ctx, filename, 0 /* offset */)
+		require.NoError(t, err)
+	}
 }

@@ -650,12 +650,17 @@ func opSpanExpressionAndDefault(
 
 // Intersects two SpanExpressions.
 func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
-	// Since we simply union into SpansToRead, we can end up with
-	// FactoredUnionSpans as a subset of SpanToRead *and* both children pruned.
-	// TODO(sumeer): tighten the SpansToRead for this case.
 	expr := &SpanExpression{
-		Tight:              left.Tight && right.Tight,
-		Unique:             left.Unique && right.Unique,
+		Tight:  left.Tight && right.Tight,
+		Unique: left.Unique && right.Unique,
+
+		// We calculate SpansToRead as the union of the left and right sides as a
+		// first approximation, but this may result in too many spans if either of
+		// the children are pruned below. SpansToRead will be recomputed in
+		// tryPruneChildren if needed. (It is important that SpansToRead be exactly
+		// what would be computed if a caller traversed the tree and explicitly
+		// unioned all the FactoredUnionSpans, and no looser, since the execution
+		// code path relies on this property.)
 		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
 		FactoredUnionSpans: intersectSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
 		Operator:           SetIntersection,
@@ -709,6 +714,19 @@ func tryPruneChildren(expr *SpanExpression, op SetOperator) {
 		expr.Operator = child.Operator
 		expr.Left = child.Left
 		expr.Right = child.Right
+
+		// If child.FactoredUnionSpans is non-empty, we need to recalculate
+		// SpansToRead since it may have contained some spans that were removed by
+		// discarding child.FactoredUnionSpans.
+		if child.FactoredUnionSpans != nil {
+			expr.SpansToRead = expr.FactoredUnionSpans
+			if expr.Left != nil {
+				expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.(*SpanExpression).SpansToRead)
+			}
+			if expr.Right != nil {
+				expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Right.(*SpanExpression).SpansToRead)
+			}
+		}
 	}
 	promoteLeft := expr.Left != nil && expr.Right == nil
 	promoteRight := expr.Left == nil && expr.Right != nil

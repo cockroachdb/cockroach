@@ -19,7 +19,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -79,26 +78,36 @@ func Main() {
 }
 
 func doMain(cmd *cobra.Command, cmdName string) error {
-	if cmd != nil && !cmdHasCustomLoggingSetup(cmd) {
-		// the customLoggingSetupCmds do their own calls to setupLogging().
-		//
-		// We use a PreRun function, to ensure setupLogging() is only
-		// called after the command line flags have been parsed.
-		//
-		// NB: we cannot use PersistentPreRunE,like in flags.go, because
-		// overriding that here will prevent the persistent pre-run from
-		// running on parent commands. (See the difference between PreRun
-		// and PersistentPreRun in `(*cobra.Command) execute()`.)
-		wrapped := cmd.PreRunE
-		cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-			if wrapped != nil {
-				if err := wrapped(cmd, args); err != nil {
-					return err
-				}
-			}
+	if cmd != nil {
+		// Apply the configuration defaults from environment variables.
+		// This must occur before the parameters are parsed by cobra, so
+		// that the command-line flags can override the defaults in
+		// environment variables.
+		if err := processEnvVarDefaults(cmd); err != nil {
+			return err
+		}
 
-			return setupLogging(context.Background(), cmd,
-				false /* isServerCmd */, true /* applyConfig */)
+		if !cmdHasCustomLoggingSetup(cmd) {
+			// the customLoggingSetupCmds do their own calls to setupLogging().
+			//
+			// We use a PreRun function, to ensure setupLogging() is only
+			// called after the command line flags have been parsed.
+			//
+			// NB: we cannot use PersistentPreRunE,like in flags.go, because
+			// overriding that here will prevent the persistent pre-run from
+			// running on parent commands. (See the difference between PreRun
+			// and PersistentPreRun in `(*cobra.Command) execute()`.)
+			wrapped := cmd.PreRunE
+			cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+				if wrapped != nil {
+					if err := wrapped(cmd, args); err != nil {
+						return err
+					}
+				}
+
+				return setupLogging(context.Background(), cmd,
+					false /* isServerCmd */, true /* applyConfig */)
+			}
 		}
 	}
 
@@ -298,11 +307,6 @@ func hasParentCmd(cmd, refParent *cobra.Command) bool {
 		}
 	})
 	return hasParent
-}
-
-// AddCmd adds a command to the cli.
-func AddCmd(c *cobra.Command) {
-	cockroachCmd.AddCommand(c)
 }
 
 // Run ...

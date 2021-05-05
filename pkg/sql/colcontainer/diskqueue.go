@@ -756,24 +756,6 @@ func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) 
 		// No data will be added.
 		b.SetLength(0)
 	} else {
-		if d.deserializerState.curBatch == 0 {
-			// It is possible that the caller has appended more columns to the
-			// batch than it provided types during diskQueue's creation. We
-			// will only be touching the prefix of the batch that we have been
-			// told about.
-			vecs := b.ColVecs()[:len(d.typs)]
-			for i := range vecs {
-				// When we deserialize a new memory region, we allocate a new null
-				// bitmap for the batch which deserializer will write to. If we naively
-				// allow the arrow batch converter to directly overwrite null bitmap of
-				// each column, it could lead to memory corruption. Doing this avoids
-				// reallocating a new scratchDecompressedReadBytes every time we perform
-				// a read from the file and constrains the downside to allocating a new
-				// null bitmap every couple of batches.
-				nulls := coldata.NewNulls(coldata.BatchSize())
-				vecs[i].SetNulls(&nulls)
-			}
-		}
 		if err := d.deserializerState.GetBatch(d.deserializerState.curBatch, b); err != nil {
 			return false, err
 		}

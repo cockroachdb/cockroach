@@ -138,12 +138,6 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	return nil, bp.DrainHelper()
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (bp *backupDataProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	bp.InternalClose()
-}
-
 type spanAndTime struct {
 	// spanIdx is a unique identifier of this object.
 	spanIdx    int
@@ -376,7 +370,11 @@ func runBackupProcessor(
 						return err
 					}
 					prog.ProgressDetails = *details
-					progCh <- prog
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case progCh <- prog:
+					}
 				} else {
 					// Update the partial progress as we still have a resumeSpan to
 					// process.

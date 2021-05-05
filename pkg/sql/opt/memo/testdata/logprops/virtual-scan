@@ -21,7 +21,7 @@ project
       │         ├── columns: information_schema.schemata.crdb_internal_vtable_pk:1(int!null) catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) crdb_is_user_defined:6(string)
       │         ├── fd: ()-->(3)
       │         ├── prune: (1,2,4-6)
-      │         ├── interesting orderings: (+1)
+      │         ├── interesting orderings: (+1 opt(3))
       │         ├── scan schemata
       │         │    ├── columns: information_schema.schemata.crdb_internal_vtable_pk:1(int!null) catalog_name:2(string!null) schema_name:3(string!null) default_character_set_name:4(string) sql_path:5(string) crdb_is_user_defined:6(string)
       │         │    ├── prune: (1-6)

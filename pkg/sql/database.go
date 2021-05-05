@@ -15,9 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -93,4 +95,31 @@ func (p *planner) writeDatabaseChangeToBatch(
 		desc,
 		b,
 	)
+}
+
+// forEachMutableTableInDatabase calls the given function on every table
+// descriptor inside the given database. Tables that have been
+// dropped are skipped.
+func (p *planner) forEachMutableTableInDatabase(
+	ctx context.Context,
+	dbDesc catalog.DatabaseDescriptor,
+	fn func(ctx context.Context, scName string, tbDesc *tabledesc.Mutable) error,
+) error {
+	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	if err != nil {
+		return err
+	}
+
+	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+	for _, tbID := range lCtx.tbIDs {
+		desc := lCtx.tbDescs[tbID]
+		if desc.Dropped() {
+			continue
+		}
+		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+		if err := fn(ctx, lCtx.schemaNames[desc.GetParentSchemaID()], mutable); err != nil {
+			return err
+		}
+	}
+	return nil
 }

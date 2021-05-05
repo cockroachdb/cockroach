@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -470,7 +471,7 @@ func testInternalExecutorAppNameInitialization(
 	}
 	select {
 	case err := <-errChan:
-		if !isClientsideQueryCanceledErr(err) {
+		if !sqltestutils.IsClientSideQueryCanceledErr(err) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second * 5):

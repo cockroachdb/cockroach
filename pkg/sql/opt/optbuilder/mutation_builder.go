@@ -837,8 +837,8 @@ func findRoundingFunction(
 }
 
 // addCheckConstraintCols synthesizes a boolean output column for each check
-// constraint defined on the target table. The mutation operator will report
-// a constraint violation error if the value of the column is false.
+// constraint defined on the target table. The mutation operator will report a
+// constraint violation error if the value of the column is false.
 func (mb *mutationBuilder) addCheckConstraintCols() {
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
@@ -859,6 +859,9 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 			// and instead use the constraints stored in the table metadata.
 			referencedCols := &opt.ColSet{}
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, referencedCols)
+
+			// Clear the column name so that it cannot be referenced.
+			scopeCol.clearName()
 
 			// Synthesized check columns are only necessary if the columns
 			// referenced in the check expression are being mutated. If they are
@@ -893,47 +896,23 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 // projectPartialIndexPutCols builds a Project that synthesizes boolean PUT
 // columns for each partial index defined on the target table. See
 // partialIndexPutColIDs for more info on these columns.
-//
-// putScope must contain the columns representing the values of each mutated row
-// AFTER the mutation is applied.
-func (mb *mutationBuilder) projectPartialIndexPutCols(putScope *scope) {
-	if putScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index PUT columns with nil scope"))
-	}
-	mb.projectPartialIndexColsImpl(putScope, nil /* delScope */)
+func (mb *mutationBuilder) projectPartialIndexPutCols() {
+	mb.projectPartialIndexColsImpl(mb.outScope, nil /* delScope */)
 }
 
 // projectPartialIndexDelCols builds a Project that synthesizes boolean PUT
 // columns for each partial index defined on the target table. See
 // partialIndexDelColIDs for more info on these columns.
-//
-// delScope must contain the columns representing the values of each mutated row
-// BEFORE the mutation is applied.
-func (mb *mutationBuilder) projectPartialIndexDelCols(delScope *scope) {
-	if delScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index DEL columns with nil scope"))
-	}
-	mb.projectPartialIndexColsImpl(nil /* putScope */, delScope)
+func (mb *mutationBuilder) projectPartialIndexDelCols() {
+	mb.projectPartialIndexColsImpl(nil /* putScope */, mb.fetchScope)
 }
 
-// projectPartialIndexPutAndDelCols builds a Project that synthesizes boolean PUT and
-// DEL columns for each partial index defined on the target table. See
+// projectPartialIndexPutAndDelCols builds a Project that synthesizes boolean
+// PUT and DEL columns for each partial index defined on the target table. See
 // partialIndexPutColIDs and partialIndexDelColIDs for more info on these
 // columns.
-//
-// putScope must contain the columns representing the values of each mutated row
-// AFTER the mutation is applied.
-//
-// delScope must contain the columns representing the values of each mutated row
-// BEFORE the mutation is applied.
-func (mb *mutationBuilder) projectPartialIndexPutAndDelCols(putScope, delScope *scope) {
-	if putScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index PUT columns with nil scope"))
-	}
-	if delScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index DEL columns with nil scope"))
-	}
-	mb.projectPartialIndexColsImpl(putScope, delScope)
+func (mb *mutationBuilder) projectPartialIndexPutAndDelCols() {
+	mb.projectPartialIndexColsImpl(mb.outScope, mb.fetchScope)
 }
 
 // projectPartialIndexColsImpl builds a Project that synthesizes boolean PUT and
@@ -967,6 +946,9 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 				mb.b.buildScalar(texpr, putScope, projectionScope, scopeCol, nil)
 				mb.partialIndexPutColIDs[ord] = scopeCol.id
+
+				// Clear the column name so that it cannot be referenced.
+				scopeCol.clearName()
 			}
 
 			// Build synthesized DEL columns.
@@ -977,6 +959,9 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 				mb.b.buildScalar(texpr, delScope, projectionScope, scopeCol, nil)
 				mb.partialIndexDelColIDs[ord] = scopeCol.id
+
+				// Clear the column name so that it cannot be referenced.
+				scopeCol.clearName()
 			}
 
 			ord++

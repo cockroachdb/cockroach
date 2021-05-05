@@ -196,12 +196,12 @@ func checkDemoConfiguration(
 
 	// Make sure the number of nodes is valid.
 	if demoCtx.nodes <= 0 {
-		return nil, errors.Newf("--nodes has invalid value (expected positive, got %d)", demoCtx.nodes)
+		return nil, errors.Newf("--%s has invalid value (expected positive, got %d)", cliflags.DemoNodes.Name, demoCtx.nodes)
 	}
 
 	// If artificial latencies were requested, then the user cannot supply their own localities.
 	if demoCtx.simulateLatency && demoCtx.localities != nil {
-		return nil, errors.New("--global cannot be used with --demo-locality")
+		return nil, errors.Newf("--%s cannot be used with --%s", cliflags.Global.Name, cliflags.DemoNodeLocality.Name)
 	}
 
 	demoCtx.disableTelemetry = cluster.TelemetryOptOut()
@@ -293,11 +293,21 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	checkInteractive(cmdIn)
 
 	if cliCtx.isInteractive {
-		fmt.Printf(`#
+		printfUnlessEmbedded(`#
 # Welcome to the CockroachDB demo database!
 #
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
 `, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
+
+		if demoCtx.simulateLatency {
+			printfUnlessEmbedded(
+				`# Communication between nodes will simulate real world latencies.
+#
+# WARNING: the use of --%s is experimental. Some features may not work as expected.
+`,
+				cliflags.Global.Name,
+			)
+		}
 
 		// Only print details about the telemetry configuration if the
 		// user has control over it.

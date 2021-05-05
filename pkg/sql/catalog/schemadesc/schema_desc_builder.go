@@ -22,7 +22,7 @@ import (
 // for schema descriptors.
 type SchemaDescriptorBuilder interface {
 	catalog.DescriptorBuilder
-	BuildImmutableSchema() *Immutable
+	BuildImmutableSchema() catalog.SchemaDescriptor
 	BuildExistingMutableSchema() *Mutable
 	BuildCreatedMutableSchema() *Mutable
 }
@@ -60,8 +60,8 @@ func (sdb *schemaDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 }
 
 // BuildImmutableSchema returns an immutable schema descriptor.
-func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() *Immutable {
-	return &Immutable{SchemaDescriptor: *sdb.original}
+func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescriptor {
+	return &immutable{SchemaDescriptor: *sdb.original}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -74,8 +74,8 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutable() catalog.MutableDescri
 func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
 	desc := protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
 	return &Mutable{
-		Immutable:      Immutable{SchemaDescriptor: *desc},
-		ClusterVersion: &Immutable{SchemaDescriptor: *sdb.original},
+		immutable:      immutable{SchemaDescriptor: *desc},
+		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
 	}
 }
 
@@ -87,5 +87,5 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescrip
 // BuildCreatedMutableSchema returns a mutable descriptor for a schema
 // which is in the process of being created.
 func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
-	return &Mutable{Immutable: Immutable{SchemaDescriptor: *sdb.original}}
+	return &Mutable{immutable: immutable{SchemaDescriptor: *sdb.original}}
 }

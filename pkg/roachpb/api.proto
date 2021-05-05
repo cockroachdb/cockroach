@@ -650,15 +650,6 @@ message EndTxnRequest {
   // reliably for these transactions - a TransactionStatusError might be
   // returned instead if 1PC execution fails.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
-  // DeprecatedCanCommitAtHigherTimestamp indicates that the batch this EndTxn
-  // is part of can be evaluated at a higher timestamp than the transaction's
-  // read timestamp. This is set by the client if the transaction has not
-  // performed any reads that must be refreshed prior to sending this current
-  // batch. When set, it allows the server to handle pushes and write too old
-  // conditions locally.
-  // TODO(nvanbenschoten): remove this in favor of can_forward_read_timestamp
-  // in v21.1. The flag is not read in v20.2.
-  bool deprecated_can_commit_at_higher_timestamp = 8;
   // True to indicate that lock spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
@@ -679,7 +670,7 @@ message EndTxnRequest {
   // WARNING: this flag was introduced in the v20.2 release. v20.1 nodes may not
   // set this properly so it should not be relied upon for correctness.
   bool txn_heartbeating = 10;
-  reserved 7;
+  reserved 7, 8;
 }
 
 // An EndTxnResponse is the return value from the EndTxn() method. The final
@@ -1195,7 +1186,9 @@ message TransferLeaseRequest {
 // LeaseInfoRequest is the argument to the LeaseInfo() method, for getting
 // information about a range's lease.
 // It's a point request, so it addresses one single range, and returns the lease
-// currently in effect for that range.
+// currently in effect for that range. This request is commonly set with
+// ReadConsistency=INCONSISTENT in order for the request to be served by the
+// node to whom the request was sent.
 message LeaseInfoRequest{
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
@@ -1205,6 +1198,19 @@ message LeaseInfoResponse{
   // The last lease known by the replica serving the request. It can also be the
   // tentative future lease, if a lease transfer is in progress.
   Lease lease = 2 [(gogoproto.nullable) = false];
+  // current_lease is set if `lease` represents a tentative future lease. In
+  // that case, current_lease represents the lease that's currently in effect.
+  Lease current_lease = 3;
+  // evaluated_by returns the store that evaluated this request. This
+  // corresponds to the leaseholder unless ReadConsistency=INCONSISTENT was
+  // used. The response reflects the evaluator's view of the lease. When the
+  // client cares to see a particular node's view, it can use this field to
+  // check whether the node it intended query (by sending the request to that
+  // node and using ReadConsistency=INCONSISTENT) indeed served it - it's
+  // possible that even if ReadConsistency=INCONSISTENT was used, the request is
+  // still not evaluated by the node it was sent to if that node's replica is a
+  // learner or the node doesn't have a replica at all.
+  int32 evaluated_by = 4 [(gogoproto.casttype) = "StoreID"];
 }
 
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
@@ -1253,13 +1259,14 @@ message ComputeChecksumResponse {
 
 enum ExternalStorageProvider {
   Unknown = 0;
-  LocalFile = 1;
-  Http = 2;
-  S3 = 3;
-  GoogleCloud = 4;
-  Azure = 5;
-  Workload = 6;
-  FileTable = 7;
+  nodelocal = 1;
+  http = 2;
+  s3 = 3;
+  gs = 4;
+  azure = 5;
+  reserved 6;
+  userfile = 7;
+  null = 8;
 }
 
 message ExternalStorage {
@@ -1303,15 +1310,6 @@ message ExternalStorage {
     string account_name = 3;
     string account_key = 4;
   }
-  message Workload {
-    string generator = 1;
-    string version = 2;
-    string table = 3;
-    repeated string flags = 4;
-    string format = 5;
-    int64 batch_begin = 6;
-    int64 batch_end = 7;
-  }
   message FileTable {
     // User interacting with the external storage. This is used to check access
     // privileges of the requested user scoped tables.
@@ -1331,7 +1329,7 @@ message ExternalStorage {
   GCS GoogleCloudConfig = 4;
   S3 S3Config = 5;
   Azure AzureConfig = 6;
-  Workload WorkloadConfig = 7;
+  reserved 7;
   FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
 }
 
@@ -1732,8 +1730,31 @@ message RangeStatsResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
-  // QueriesPerSecond is the rate of request/s or QPS for the range.
-  double queries_per_second = 3;
+  // DeprecatedLastQueriesPerSecond is the most recent rate of request/s or QPS
+  // for the range. The field is deprecated in favor of MaxQueriesPerSecond.
+  //
+  // TODO(nvanbenschoten): remove this field in v22.1 when all nodes in the
+  // cluster are guaranteed to return MaxQueriesPerSecond.
+  double deprecated_last_queries_per_second = 3;
+
+  // MaxQueriesPerSecond is the maximum rate of request/s or QPS that the range
+  // has served over a configured measurement period. Set to -1 if the replica
+  // serving the RangeStats request has not been the leaseholder long enough to
+  // have recorded request rates for at least a full measurement period. In such
+  // cases, the recipient should not consider the QPS value reliable enough to
+  // base important decisions off of.
+  double max_queries_per_second = 5;
+
+  // MaxQueriesPerSecondSet indicates that the MaxQueriesPerSecond field is set
+  // by the server. Used to distinguish 0 qps set by a new server from the field
+  // not being set at all by an old server.
+  //
+  // TODO(nvanbenschoten): stop consulting this field on the receiver in v22.1
+  // when all nodes in the cluster are guaranteed to return MaxQueriesPerSecond.
+  //
+  // TODO(nvanbenschoten): stop setting this field and remove it in v22.2 when
+  // no nodes in the cluster consult this field.
+  bool max_queries_per_second_set = 6;
 
   // range_info contains descriptor and lease information.
   RangeInfo range_info = 4 [(gogoproto.nullable) = false];
@@ -2016,10 +2037,6 @@ message Header {
   // has not performed any reads that must be refreshed prior to sending this
   // current batch. When set, it allows the server to handle pushes and write
   // too old conditions locally.
-  //
-  // NOTE: this flag is a generalization of EndTxn.CanCommitAtHigherTimestamp.
-  // That flag should be deprecated in favor of this one.
-  // TODO(nvanbenschoten): perform this migration.
   bool can_forward_read_timestamp = 16;
   reserved 7, 10, 12, 14;
 }

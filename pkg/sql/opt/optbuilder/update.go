@@ -329,11 +329,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
+	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
 	// Add the partial index predicate expressions to the table metadata.
@@ -342,7 +338,7 @@ func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
 	mb.b.addPartialIndexPredicatesForTable(mb.md.TableMeta(mb.tabID), nil /* scan */)
 
 	// Project partial index PUT and DEL boolean columns.
-	mb.projectPartialIndexPutAndDelCols(preCheckScope, mb.fetchScope)
+	mb.projectPartialIndexPutAndDelCols()
 
 	mb.buildUniqueChecksForUpdate()
 

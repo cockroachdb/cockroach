@@ -1324,3 +1324,199 @@ query T
 SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
 ----
 hi
+
+
+subtest enum_array_cast
+
+statement ok
+CREATE TYPE typ AS ENUM('a', 'b', 'c')
+
+statement ok
+CREATE TABLE arr_t (i STRING DEFAULT ('{a}'::_typ)[1]::STRING)
+
+statement ok
+INSERT INTO arr_t VALUES (default)
+
+query T
+SELECT * FROM arr_t
+----
+a
+
+statement ok
+CREATE TABLE arr_t2 (i typ DEFAULT ('{a, b, c}'::typ[])[2])
+
+statement ok
+INSERT INTO arr_t2 VALUES (default)
+
+query T
+SELECT * FROM arr_t2
+----
+b
+
+statement ok
+CREATE TABLE arr_t3 (i STRING DEFAULT ('{c}'::_typ:::_typ)[1]::STRING)
+
+statement ok
+INSERT INTO arr_t3 VALUES (default)
+
+query T
+SELECT * FROM arr_t3
+----
+c
+
+statement ok
+CREATE TABLE arr_t4 (i typ DEFAULT ARRAY['a'::typ][1], j typ DEFAULT ARRAY['a'::typ, 'b'::typ, 'c'::typ][2])
+
+statement ok
+INSERT INTO arr_t4 VALUES (default, default)
+
+query TT
+SELECT * from arr_t4
+----
+a  b
+
+statement ok
+CREATE TABLE arr_t5 (i typ[] default ARRAY['a'::typ, 'b'::typ])
+
+statement ok
+INSERT INTO arr_t5 VALUES (default)
+
+query T
+SELECT * from arr_t5
+----
+{a,b}
+
+
+# Test that if an enum value is being used by a default expression
+# or computed column, we disallow dropping it.
+subtest drop_used_enum_values
+
+statement ok
+SET enable_drop_enum_value = true
+
+statement ok
+CREATE TYPE default_abc AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TYPE default_abc2 AS ENUM('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v default_abc DEFAULT 'a')
+
+statement error pq: could not remove enum value "a" as it is being used in a default expresion of "t"
+ALTER TYPE default_abc DROP VALUE 'a'
+
+statement ok
+ALTER TYPE default_abc2 DROP VALUE 'a'
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY, v string DEFAULT 'b'::default_abc::string)
+
+statement error pq: could not remove enum value "b" as it is being used in a default expresion of "t2"
+ALTER TYPE default_abc DROP VALUE 'b'
+
+statement ok
+ALTER TYPE default_abc DROP VALUE 'c'
+
+statement ok
+CREATE TABLE t3 (
+  x _default_abc2 DEFAULT ARRAY['b'::default_abc2],
+  y string DEFAULT ARRAY['c':::default_abc2][1]::string)
+
+statement error could not remove enum value "b" as it is being used in a default expresion of "t3"
+ALTER TYPE default_abc2 DROP VALUE 'b'
+
+statement error could not remove enum value "c" as it is being used in a default expresion of "t3"
+ALTER TYPE default_abc2 DROP VALUE 'c'
+
+statement ok
+CREATE TYPE default_abc3 AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t4 (
+  x default_abc3[] DEFAULT '{a}'::default_abc3[],
+  y string DEFAULT '{b}'::_default_abc3::string,
+  z default_abc3 DEFAULT ('{a, b, c}'::default_abc3[])[3])
+
+statement error could not remove enum value "a" as it is being used in a default expresion of "t4"
+ALTER TYPE default_abc3 DROP VALUE 'a'
+
+statement error could not remove enum value "b" as it is being used in a default expresion of "t4"
+ALTER TYPE default_abc3 DROP VALUE 'b'
+
+statement error could not remove enum value "c" as it is being used in a default expresion of "t4"
+ALTER TYPE default_abc3 DROP VALUE 'c'
+
+statement ok
+CREATE TYPE computed_abc AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TYPE computed_abc2 AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t5 (k INT PRIMARY KEY, y computed_abc AS ('a') STORED)
+
+statement error pq: could not remove enum value "a" as it is being used in a computed column of "t5"
+ALTER TYPE computed_abc DROP VALUE 'a'
+
+statement ok
+CREATE TABLE t6 (k INT PRIMARY KEY, y string AS ('b'::computed_abc::string) STORED)
+
+statement error pq: could not remove enum value "b" as it is being used in a computed column of "t6"
+ALTER TYPE computed_abc DROP VALUE 'b'
+
+statement ok
+ALTER TYPE computed_abc DROP VALUE 'c'
+
+statement ok
+CREATE TABLE t7 (x _computed_abc2 AS (ARRAY['a'::computed_abc2]) STORED, y computed_abc2[] AS (ARRAY['b':::computed_abc2]) STORED)
+
+statement error could not remove enum value "a" as it is being used in a computed column of "t7"
+ALTER TYPE computed_abc2 DROP VALUE 'a'
+
+statement error could not remove enum value "b" as it is being used in a computed column of "t7"
+ALTER TYPE computed_abc2 DROP VALUE 'b'
+
+
+# Test that types used in arrays can be renamed.
+subtest rename_type_in_array
+
+statement ok
+CREATE TYPE arr_typ AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE arr_t6 (
+  i arr_typ[] DEFAULT ARRAY['a'::arr_typ],
+  j arr_typ DEFAULT ARRAY['b'::arr_typ][1],
+  k _arr_typ DEFAULT ARRAY['c'::arr_typ]::_arr_typ,
+  FAMILY (i, j, k))
+
+statement ok
+ALTER TYPE arr_typ RENAME TO arr_typ2
+
+statement ok
+INSERT INTO arr_t6 VALUES (default, default, default)
+
+query TT
+SHOW CREATE TABLE arr_t6
+----
+arr_t6  CREATE TABLE public.arr_t6 (
+        i public.arr_typ2[] NULL DEFAULT ARRAY['a':::public.arr_typ2]:::public.arr_typ2[],
+        j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
+        k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+        FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
+)
+
+
+subtest regression_63138
+
+statement ok
+CREATE TYPE typ2 AS ENUM ('a')
+
+statement ok
+CREATE TABLE tab (k typ2 PRIMARY KEY)
+
+statement ok
+CREATE INDEX foo ON tab(k) WHERE k = ANY (ARRAY['a', 'a']:::typ2[])

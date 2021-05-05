@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/errors"
 )
 
 // This file is for interfaces only and should not contain any implementation
@@ -51,6 +52,8 @@ type ExternalStorage interface {
 	Settings() *cluster.Settings
 
 	// ReadFile is shorthand for ReadFileAt with offset 0.
+	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
+	// This can be leveraged for an existence check.
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
 
 	// ReadFileAt returns a Reader for requested name reading at offset.
@@ -95,6 +98,10 @@ type SQLConnI interface {
 	driver.ExecerContext
 }
 
-// AccessIsWithExplicitAuth is used to check if the provided path has explicit
-// authentication.
-var AccessIsWithExplicitAuth func(path string) (bool, string, error)
+// ErrFileDoesNotExist is a sentinel error for indicating that a specified
+// bucket/object/key/file (depending on storage terminology) does not exist.
+// This error is raised by the ReadFile method.
+var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
+
+// ErrListingUnsupported is a marker for indicating listing is unsupported.
+var ErrListingUnsupported = errors.New("listing is not supported")

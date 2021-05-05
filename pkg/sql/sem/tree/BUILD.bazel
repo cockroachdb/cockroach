@@ -105,6 +105,7 @@ go_library(
         "with.go",
         "zone.go",
         ":gen-createtypevariety-stringer",  # keep
+        ":gen-statementreturntype-stringer",  # keep
         ":gen-statementtype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
@@ -217,7 +218,7 @@ go_test(
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -245,6 +246,12 @@ stringer(
     name = "gen-createtypevariety-stringer",
     src = "create.go",
     typ = "CreateTypeVariety",
+)
+
+stringer(
+    name = "gen-statementreturntype-stringer",
+    src = "stmt.go",
+    typ = "StatementReturnType",
 )
 
 stringer(

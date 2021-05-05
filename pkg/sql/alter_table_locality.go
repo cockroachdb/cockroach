@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -35,7 +35,7 @@ import (
 type alterTableSetLocalityNode struct {
 	n         tree.AlterTableLocality
 	tableDesc *tabledesc.Mutable
-	dbDesc    *dbdesc.Immutable
+	dbDesc    catalog.DatabaseDescriptor
 }
 
 // AlterTableLocality transforms a tree.AlterTableLocality into a plan node.
@@ -145,17 +145,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	return nil
 }
 
-func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
-	params runParams,
-) error {
-	const operation string = "alter table locality REGIONAL BY TABLE to GLOBAL"
-	if !n.tableDesc.IsLocalityRegionalByTable() {
-		return errors.AssertionFailedf(
-			"invalid call %q on incorrect table locality. %v",
-			operation,
-			n.tableDesc.LocalityConfig,
-		)
-	}
+func (n *alterTableSetLocalityNode) alterTableLocalityToGlobal(params runParams) error {
 	regionEnumID, err := n.dbDesc.MultiRegionEnumID()
 	if err != nil {
 		return err
@@ -250,9 +240,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		return interleaveOnRegionalByRowError()
 	}
 
-	for _, idx := range n.tableDesc.NonDropIndexes() {
+	for _, idx := range n.tableDesc.AllIndexes() {
 		if idx.IsSharded() {
-			return pgerror.New(pgcode.FeatureNotSupported, "cannot convert a table to REGIONAL BY ROW if table table contains hash sharded indexes")
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot convert %s to REGIONAL BY ROW as the table contains hash sharded indexes",
+				tree.Name(n.tableDesc.GetName()),
+			)
 		}
 	}
 
@@ -470,13 +464,11 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		),
 	)
 
-	toRegionalByRow := newLocality.LocalityLevel == tree.LocalityLevelRow
+	// We should check index zone configs if moving to REGIONAL BY ROW.
 	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		params.ctx,
 		n.dbDesc,
 		n.tableDesc,
-		toRegionalByRow,
-		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
 		return err
 	}
@@ -487,7 +479,9 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			return nil
+			if err := n.alterTableLocalityToGlobal(params); err != nil {
+				return err
+			}
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityToRegionalByRow(
 				params,
@@ -505,7 +499,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			if err := n.alterTableLocalityRegionalByTableToGlobal(params); err != nil {
+			if err := n.alterTableLocalityToGlobal(params); err != nil {
 				return err
 			}
 		case tree.LocalityLevelRow:
@@ -574,7 +568,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 // writeNewTableLocalityAndZoneConfig writes the table descriptor with the newly
 // updated LocalityConfig and writes a new zone configuration for the table.
 func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
-	params runParams, dbDesc *dbdesc.Immutable,
+	params runParams, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
@@ -586,7 +580,7 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.ID, params.p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
 	if err != nil {
 		return err
 	}

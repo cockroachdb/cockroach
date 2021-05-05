@@ -1,0 +1,17 @@
+new-server name=s1
+----
+
+# Regression test for #62738.
+# The latest version of this descriptor will have indexes 1 and 3 visible.
+# Since there is no data in index 2 and it is dropped it will merge these
+# indexes to backup the span /Table/55/{1-4}. The earlier revision of the
+# descriptor will add the span for index 2 /Table/55/{2-3}. These spans should
+# be allowed to overlap.
+exec-sql
+CREATE DATABASE d;
+CREATE TABLE d.t (a INT PRIMARY KEY, b INT, c INT);
+CREATE INDEX test_idx_2 ON d.t(b);
+CREATE INDEX test_idx_3 ON d.t(c);
+DROP INDEX d.test_idx_2;
+BACKUP DATABASE d INTO 'nodelocal://0/my_backups' WITH revision_history;
+----

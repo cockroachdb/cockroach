@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -23,6 +24,8 @@ import (
 )
 
 type caseOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	buffer    *bufferOp
 
@@ -94,20 +97,21 @@ func NewCaseOp(
 		thenIdxs:  thenIdxs,
 		outputIdx: outputIdx,
 		typ:       typ,
-		origSel:   make([]int, coldata.BatchSize()),
-		prevSel:   make([]int, coldata.BatchSize()),
 	}
 }
 
-func (c *caseOp) Init() {
+func (c *caseOp) Init(ctx context.Context) {
+	if !c.InitHelper.Init(ctx) {
+		return
+	}
 	for i := range c.caseOps {
-		c.caseOps[i].Init()
+		c.caseOps[i].Init(c.Ctx)
 	}
-	c.elseOp.Init()
+	c.elseOp.Init(c.Ctx)
 }
 
-func (c *caseOp) Next(ctx context.Context) coldata.Batch {
-	c.buffer.advance(ctx)
+func (c *caseOp) Next() coldata.Batch {
+	c.buffer.advance()
 	origLen := c.buffer.batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -115,6 +119,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	var origHasSel bool
 	if sel := c.buffer.batch.Selection(); sel != nil {
 		origHasSel = true
+		c.origSel = colexecutils.EnsureSelectionVectorLength(c.origSel, origLen)
 		copy(c.origSel, sel)
 	}
 
@@ -122,8 +127,8 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	prevHasSel := false
 	if sel := c.buffer.batch.Selection(); sel != nil {
 		prevHasSel = true
-		c.prevSel = c.prevSel[:origLen]
-		copy(c.prevSel[:origLen], sel[:origLen])
+		c.prevSel = colexecutils.EnsureSelectionVectorLength(c.prevSel, origLen)
+		copy(c.prevSel, sel)
 	}
 	outputCol := c.buffer.batch.ColVec(c.outputIdx)
 	if outputCol.MaybeHasNulls() {
@@ -140,7 +145,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 			// Run the next case operator chain. It will project its THEN expression
 			// for all tuples that matched its WHEN expression and that were not
 			// already matched.
-			batch := c.caseOps[i].Next(ctx)
+			batch := c.caseOps[i].Next()
 			// The batch's projection column now additionally contains results for all
 			// of the tuples that passed the ith WHEN clause. The batch's selection
 			// vector is set to the same selection of tuples.
@@ -199,8 +204,12 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 					// No selection vector means there have been no matches yet, and we were
 					// considering the entire batch of tuples for this case arm. Make a new
 					// selection vector with all of the tuples but the ones that just matched.
-					c.prevSel = c.prevSel[:cap(c.prevSel)]
+					c.prevSel = colexecutils.EnsureSelectionVectorLength(c.prevSel, origLen)
 					for i := 0; i < origLen; i++ {
+						// Note that here we rely on the assumption that
+						// toSubtract is an increasing sequence (because our
+						// selection vectors are such) to optimize the
+						// subtraction.
 						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
 							subtractIdx++
 							continue
@@ -233,7 +242,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 		// Finally, run the else operator, which will project into all tuples that
 		// are remaining in the selection vector (didn't match any case arms). Once
 		// that's done, restore the original selection vector and return the batch.
-		batch := c.elseOp.Next(ctx)
+		batch := c.elseOp.Next()
 		if batch.Length() > 0 {
 			inputCol := batch.ColVec(c.thenIdxs[len(c.thenIdxs)-1])
 			outputCol.Copy(

@@ -14,6 +14,7 @@ public  comments                         table  NULL  0  NULL
 public  descriptor                       table  NULL  0  NULL
 public  eventlog                         table  NULL  0  NULL
 public  jobs                             table  NULL  0  NULL
+public  join_tokens                      table  NULL  0  NULL
 public  lease                            table  NULL  0  NULL
 public  locations                        table  NULL  0  NULL
 public  migrations                       table  NULL  0  NULL
@@ -75,6 +76,7 @@ SELECT id FROM system.descriptor
 37
 39
 40
+41
 50
 51
 52
@@ -228,6 +230,16 @@ system  public  jobs                             root    GRANT
 system  public  jobs                             root    INSERT
 system  public  jobs                             root    SELECT
 system  public  jobs                             root    UPDATE
+system  public  join_tokens                      admin   DELETE
+system  public  join_tokens                      admin   GRANT
+system  public  join_tokens                      admin   INSERT
+system  public  join_tokens                      admin   SELECT
+system  public  join_tokens                      admin   UPDATE
+system  public  join_tokens                      root    DELETE
+system  public  join_tokens                      root    GRANT
+system  public  join_tokens                      root    INSERT
+system  public  join_tokens                      root    SELECT
+system  public  join_tokens                      root    UPDATE
 system  public  lease                            admin   DELETE
 system  public  lease                            admin   GRANT
 system  public  lease                            admin   INSERT

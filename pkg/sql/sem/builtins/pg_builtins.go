@@ -679,6 +679,21 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
 	),
 
+	// pg_get_partkeydef is only provided for compatibility and always returns
+	// NULL. It is supposed to return the PARTITION BY clause of a table's
+	// CREATE statement.
+	"pg_get_partkeydef": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// pg_get_function_result returns the types of the result of an builtin
 	// function. Multi-return builtins currently are returned as anyelement, which
 	// is a known incompatibility with Postgres.

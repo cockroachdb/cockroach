@@ -652,7 +652,7 @@ type StoreConfig struct {
 
 	ClosedTimestamp         *container.Container
 	ClosedTimestampSender   *sidetransport.Sender
-	ClosedTimestampReceiver *sidetransport.Receiver
+	ClosedTimestampReceiver sidetransportReceiver
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
@@ -2731,7 +2731,7 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeyS
 func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Recording, error) {
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, s.ClusterSettings().Tracer, "allocator dry run")
 	defer cancel()
-	canTransferLease := func() bool { return true }
+	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
 	_, err := s.replicateQueue.processOneChange(
 		ctx, repl, canTransferLease, true /* dryRun */)
 	if err != nil {
@@ -2811,12 +2811,11 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 	qp := quotapool.NewIntPool("purge-outdated-replicas", 50)
 	g := ctxgroup.WithContext(ctx)
 	s.VisitReplicas(func(repl *Replica) (wantMore bool) {
-		if (repl.Version() == roachpb.Version{}) {
-			// TODO(irfansharif,tbg): This is a stop gap for #58523.
-			return true
-		}
 		if !repl.Version().Less(version) {
-			// Nothing to do here.
+			// Nothing to do here. The less-than check also considers replicas
+			// with unset replica versions, which are only possible if they're
+			// left-over, GC-able replicas from before the first below-raft
+			// migration. We'll want to purge those.
 			return true
 		}
 

@@ -215,7 +215,7 @@ vectorized: true
                   columns: (a, b, c, d)
                   estimated row count: 1 (missing stats)
                   table: indexed@primary
-                  spans: /1-/1/#
+                  spans: /1/0
                   locking strength: for update
 
 query T
@@ -479,7 +479,7 @@ vectorized: true
               columns: (a, b)
               estimated row count: 1 (missing stats)
               table: table38627@primary
-              spans: /1-/1/#
+              spans: /1/0
 
 statement ok
 COMMIT

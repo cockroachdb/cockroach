@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -26,7 +25,7 @@ type unsplitNode struct {
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor
-	index     *descpb.IndexDescriptor
+	index     catalog.Index
 	run       unsplitRun
 	rows      planNode
 }
@@ -77,7 +76,7 @@ type unsplitAllNode struct {
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor
-	index     *descpb.IndexDescriptor
+	index     catalog.Index
 	run       unsplitAllRun
 }
 
@@ -104,8 +103,8 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 		return err
 	}
 	indexName := ""
-	if n.index.ID != n.tableDesc.GetPrimaryIndexID() {
-		indexName = n.index.Name
+	if n.index.GetID() != n.tableDesc.GetPrimaryIndexID() {
+		indexName = n.index.GetName()
 	}
 	it, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.InternalExecutorOverride{},

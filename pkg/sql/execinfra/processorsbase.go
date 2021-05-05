@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +35,11 @@ type Processor interface {
 	// OutputTypes returns the column types of the results (that are to be fed
 	// through an output router).
 	OutputTypes() []*types.T
+
+	// MustBeStreaming indicates whether this processor is of "streaming" nature
+	// and is expected to emit the output one row at a time (in both row-by-row
+	// and the vectorized engines).
+	MustBeStreaming() bool
 
 	// Run is the main loop of the processor.
 	Run(context.Context)
@@ -438,7 +444,7 @@ type ProcessorConstructor func(
 type ProcessorBase struct {
 	self RowSource
 
-	processorID int32
+	ProcessorID int32
 
 	Out     ProcOutputHelper
 	FlowCtx *FlowCtx
@@ -505,9 +511,21 @@ type ProcessorBase struct {
 	curInputToDrain int
 }
 
+// MustBeStreaming implements the Processor interface.
+func (pb *ProcessorBase) MustBeStreaming() bool {
+	return false
+}
+
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
 func (pb *ProcessorBase) Reset() {
 	pb.Out.Reset()
+	// Deeply reset the slices so that we don't hold onto the old objects.
+	for i := range pb.trailingMeta {
+		pb.trailingMeta[i] = execinfrapb.ProducerMetadata{}
+	}
+	for i := range pb.inputsToDrain {
+		pb.inputsToDrain[i] = nil
+	}
 	*pb = ProcessorBase{
 		Out:           pb.Out,
 		trailingMeta:  pb.trailingMeta[:0],
@@ -678,6 +696,24 @@ func (pb *ProcessorBase) popTrailingMeta() *execinfrapb.ProducerMetadata {
 	return nil
 }
 
+// ExecStatsForTraceHijacker is an interface that allows us to hijack
+// ExecStatsForTrace function from the ProcessorBase.
+type ExecStatsForTraceHijacker interface {
+	// HijackExecStatsForTrace returns ExecStatsForTrace function, if set, and
+	// sets it to nil. The caller becomes responsible for collecting and
+	// propagating the execution statistics.
+	HijackExecStatsForTrace() func() *execinfrapb.ComponentStats
+}
+
+var _ ExecStatsForTraceHijacker = &ProcessorBase{}
+
+// HijackExecStatsForTrace is a part of the ExecStatsForTraceHijacker interface.
+func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	execStatsForTrace := pb.ExecStatsForTrace
+	pb.ExecStatsForTrace = nil
+	return execStatsForTrace
+}
+
 // moveToTrailingMeta switches the processor to the "trailing meta" state: only
 // trailing metadata is returned from now on. For simplicity, processors are
 // encouraged to always use MoveToDraining() instead of this method, even when
@@ -703,7 +739,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.span != nil {
 		if pb.ExecStatsForTrace != nil {
 			if stats := pb.ExecStatsForTrace(); stats != nil {
-				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.processorID)
+				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.ProcessorID)
 				pb.span.RecordStructured(stats)
 			}
 		}
@@ -824,7 +860,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.self = self
 	pb.FlowCtx = flowCtx
 	pb.EvalCtx = evalCtx
-	pb.processorID = processorID
+	pb.ProcessorID = processorID
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	if opts.InputsToDrain != nil {
@@ -894,7 +930,7 @@ func (pb *ProcessorBase) startImpl(
 		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
-			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
+			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.ProcessorID)
 		}
 	} else {
 		pb.Ctx = ctx
@@ -958,16 +994,36 @@ func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon
 }
 
 // NewLimitedMonitor is a utility function used by processors to create a new
-// limited memory monitor with the given name and start it. The returned
-// monitor must be closed. The limit is determined by SettingWorkMemBytes but
-// overridden to 1 if config.TestingKnobs.ForceDiskSpill is set or
-// config.TestingKnobs.MemoryLimitBytes if not.
+// limited memory monitor with the given name and start it. The returned monitor
+// must be closed. The limit is determined by SessionData.WorkMemLimit (stored
+// inside of the flowCtx) but overridden to 1 if
+// ServerConfig.TestingKnobs.ForceDiskSpill is set or
+// ServerConfig.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, config *ServerConfig, name string,
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name string,
 ) *mon.BytesMonitor {
-	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(config), parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
 	return limitedMon
+}
+
+// NewLimitedMonitorNoFlowCtx is the same as NewLimitedMonitor and should be
+// used when the caller doesn't have an access to *FlowCtx.
+func NewLimitedMonitorNoFlowCtx(
+	ctx context.Context,
+	parent *mon.BytesMonitor,
+	config *ServerConfig,
+	sd *sessiondata.SessionData,
+	name string,
+) *mon.BytesMonitor {
+	// Create a fake FlowCtx populating only the required fields.
+	flowCtx := &FlowCtx{
+		Cfg: config,
+		EvalCtx: &tree.EvalContext{
+			SessionData: sd,
+		},
+	}
+	return NewLimitedMonitor(ctx, parent, flowCtx, name)
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with
@@ -975,18 +1031,10 @@ func NewLimitedMonitor(
 // these objects at creation time.
 type LocalProcessor interface {
 	RowSourcedProcessor
-	StreamingProcessor
 	// InitWithOutput initializes this processor.
 	InitWithOutput(flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
 	SetInput(ctx context.Context, input RowSource) error
-}
-
-// StreamingProcessor is a marker interface that indicates that the processor is
-// of "streaming" nature and is expected to emit the output one tuple at a time
-// (in both row-by-row and the vectorized engines).
-type StreamingProcessor interface {
-	mustBeStreaming()
 }

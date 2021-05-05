@@ -113,6 +113,7 @@ func StartDistChangefeed(
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
 		execCtx.ExecCfg().ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
@@ -158,7 +159,7 @@ func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) er
 		return nil
 	}
 }
-func (w *changefeedResultWriter) IncrementRowsAffected(n int) {
+func (w *changefeedResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	w.rowsAffected += n
 }
 func (w *changefeedResultWriter) SetError(err error) {

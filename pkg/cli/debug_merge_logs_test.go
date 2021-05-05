@@ -56,6 +56,12 @@ var cases = []testCase{
 		flags: []string{"--redact=false", "--redactable-output=false"},
 	},
 	{
+		// NB: the output here matches 2.multiple-files-from-node.
+		name:  "2.walk-directory",
+		args:  []string{"testdata/merge_logs/2"},
+		flags: []string{"--redact=false", "--redactable-output=false"},
+	},
+	{
 		name:  "2.skip-file",
 		args:  []string{"testdata/merge_logs/2/*/*"},
 		flags: []string{"--redact=false", "--redactable-output=false", "--from", "181130 22:15:07.525316"},

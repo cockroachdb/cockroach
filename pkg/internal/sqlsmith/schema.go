@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -141,6 +141,40 @@ func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, colRe
 	return s.getRandTableIndex(name, name)
 }
 
+func (s *Smither) getRandUserDefinedTypeLabel() (*tree.EnumValue, *tree.TypeName, bool) {
+	typName, ok := s.getRandUserDefinedType()
+	if !ok {
+		return nil, nil, false
+	}
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	udt := s.types.udts[*typName]
+	logicalRepresentations := udt.TypeMeta.EnumData.LogicalRepresentations
+	// There are no values in this enum.
+	if len(logicalRepresentations) == 0 {
+		return nil, nil, false
+	}
+	enumVal := tree.EnumValue(logicalRepresentations[s.rnd.Intn(len(logicalRepresentations))])
+	return &enumVal, typName, true
+}
+
+func (s *Smither) getRandUserDefinedType() (*tree.TypeName, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	if s.types == nil || len(s.types.udts) == 0 {
+		return nil, false
+	}
+	idx := s.rnd.Intn(len(s.types.udts))
+	count := 0
+	for typName := range s.types.udts {
+		if count == idx {
+			return &typName, true
+		}
+		count++
+	}
+	return nil, false
+}
+
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
@@ -154,7 +188,7 @@ FROM
 	defer rows.Close()
 
 	evalCtx := tree.EvalContext{}
-	udtMapping := make(map[types.UserDefinedTypeName]*types.T)
+	udtMapping := make(map[tree.TypeName]*types.T)
 
 	for rows.Next() {
 		// For each row, collect columns.
@@ -193,7 +227,8 @@ FROM
 					IsMemberReadOnly:        make([]bool, len(members)),
 				},
 			}
-			udtMapping[*typ.TypeMeta.Name] = typ
+			key := tree.MakeSchemaQualifiedTypeName(scName, name)
+			udtMapping[key] = typ
 		default:
 			return nil, errors.New("unsupported SQLSmith type kind")
 		}
@@ -208,7 +243,7 @@ FROM
 	return &typeInfo{
 		udts:        udtMapping,
 		scalarTypes: append(udts, types.Scalar...),
-		seedTypes:   append(udts, rowenc.SeedTypes...),
+		seedTypes:   append(udts, randgen.SeedTypes...),
 	}, nil
 }
 
@@ -277,9 +312,13 @@ ORDER BY
 		// All non virtual tables contain implicit system columns.
 		for i := range colinfo.AllSystemColumnDescs {
 			col := &colinfo.AllSystemColumnDescs[i]
+			if s.postgres && col.ID == colinfo.MVCCTimestampColumnID {
+				continue
+			}
 			currentCols = append(currentCols, &tree.ColumnTableDef{
-				Name: tree.Name(col.Name),
-				Type: col.Type,
+				Name:   tree.Name(col.Name),
+				Type:   col.Type,
+				Hidden: true,
 			})
 		}
 		tableName := tree.MakeTableNameWithSchema(lastCatalog, lastSchema, lastName)
@@ -442,7 +481,8 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			continue
 		}
 		if strings.Contains(def.Name, "crdb_internal.force_") ||
-			strings.Contains(def.Name, "crdb_internal.unsafe_") {
+			strings.Contains(def.Name, "crdb_internal.unsafe_") ||
+			strings.Contains(def.Name, "crdb_internal.create_join_token") {
 			continue
 		}
 		if _, ok := m[def.Class]; !ok {

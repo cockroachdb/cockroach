@@ -129,6 +129,18 @@ var fromStringTests = []fromStringTest{
 		input:   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8",
 		variant: "URNHashlike",
 	},
+	{
+		input:   "{6ba7-b8109dad11d180b400c04fd4-30c8}",
+		variant: "BracedExtraHyphens",
+	},
+	{
+		input:   "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8",
+		variant: "ExtraHyphens",
+	},
+	{
+		input:   "urn:uuid:6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8",
+		variant: "URNExtraHyphens",
+	},
 }
 
 var invalidFromStringInputs = []string{
@@ -159,10 +171,17 @@ var invalidFromStringInputs = []string{
 	"(6ba7b810-9dad-11d1-80b4-00c04fd430c8}",
 	"{6ba7b810-9dad-11d1-80b4-00c04fd430c8>",
 	"zba7b810-9dad-11d1-80b4-00c04fd430c8",
-	"6ba7b810-9dad11d180b400c04fd430c8",
-	"6ba7b8109dad-11d180b400c04fd430c8",
-	"6ba7b8109dad11d1-80b400c04fd430c8",
-	"6ba7b8109dad11d180b4-00c04fd430c8",
+	"6ba7b810-9dad11d180b400c04fd430-c8",
+	"6-ba7b810-9dad11d180b400c04fd430c8",
+	"6ba7b810-9dad11d180b400c04fd430c8-",
+	"-6ba7b810-9dad11d180b400c04fd430c8",
+	"uuid:urn:zba7b810-9dad-11d1-80b4-00c04fd430c8",
+	"{6ba7b810-9dad1-1d1-80b4-00c04fd430c8}",
+	"{-6ba7b810-9dad11d180b400c04fd430c8}",
+	"uuid:urn:6-ba7b810-9dad11d180b400c04fd430c8",
+	"6ba7-b810-9dad--11d1-80b4-00c0-4fd4-30c8",
+	"6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8--",
+	"6ba7-b810--9dad-11d180b4-00c04fd4-30c8-",
 }
 
 func TestFromString(t *testing.T) {
@@ -219,13 +238,12 @@ func TestMarshalText(t *testing.T) {
 	}
 }
 
-func TestDecodePlainWithWrongLength(t *testing.T) {
+func TestDecodeHyphenatedWithWrongLength(t *testing.T) {
 	arg := []byte{'4', '2'}
-
 	u := UUID{}
 
-	if u.decodePlain(arg) == nil {
-		t.Errorf("%v.decodePlain(%q): should return error, but it did not", u, arg)
+	if u.decodeHyphenated(arg) == nil {
+		t.Errorf("%v.decodeHyphenated(%q): should return error, but it did not", u, arg)
 	}
 }
 
@@ -257,6 +275,11 @@ func BenchmarkFromString(b *testing.B) {
 	b.Run("braced", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			Must(FromString("{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"))
+		}
+	})
+	b.Run("hyphenated", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			Must(FromString("6ba7-b810-9dad11d1-80b4-00c04fd430c8"))
 		}
 	})
 }

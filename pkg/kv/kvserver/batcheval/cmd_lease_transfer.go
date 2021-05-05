@@ -108,7 +108,7 @@ func TransferLease(
 	// incoming leaseholder. This is used to instruct the new leaseholder on how
 	// to update its timestamp cache to ensure that no future writes are allowed
 	// to invalidate prior reads.
-	priorReadSum, _ := cArgs.EvalCtx.GetCurrentReadSummary()
+	priorReadSum, _ := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
 	// For now, forward this summary to the proposed lease's start time. This
 	// may appear to undermine the benefit of the read summary, but it doesn't
 	// entirely. Until we ship higher-resolution read summaries, the read

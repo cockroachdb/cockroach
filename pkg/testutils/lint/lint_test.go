@@ -25,12 +25,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
 	"github.com/jordanlewis/gcassert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -428,7 +430,7 @@ func TestLint(t *testing.T) {
 					":!ccl/backupccl/backup_test.go",
 					":!storage/cloudimpl",
 					":!ccl/workloadccl/fixture_test.go",
-					":!internal/gopath/gopath.go",
+					":!internal/reporoot/reporoot.go",
 					":!cmd",
 					":!util/cgroups/cgroups.go",
 					":!nightly",
@@ -706,6 +708,7 @@ func TestLint(t *testing.T) {
 			":!util/tracing/span.go",
 			":!util/tracing/crdbspan.go",
 			":!util/tracing/tracer.go",
+			":!cmd/roachtest/gorm_helpers.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -815,6 +818,7 @@ func TestLint(t *testing.T) {
 			":!util/grpcutil/grpc_util_test.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
+			":!ccl/sqlproxyccl/tenant/test_directory_svr.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1661,6 +1665,9 @@ func TestLint(t *testing.T) {
 				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
 				// rpc/codec.go imports the same proto package that grpc-go imports (as of crdb@dd87d1145 and grpc-go@7b167fd6).
 				stream.GrepNot(`pkg/rpc/codec.go:.*package github.com/golang/protobuf/proto is deprecated: Use the "google.golang.org/protobuf/proto" package instead.`),
+				// goschedstats contains partial copies of go runtime structures, with
+				// many fields that we're not using.
+				stream.GrepNot(`pkg/util/goschedstats/runtime.*\.go:.*is unused`),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
@@ -1912,6 +1919,12 @@ func TestLint(t *testing.T) {
 			"../../sql/colconv",
 			"../../sql/colexec",
 			"../../sql/colexec/colexecagg",
+			"../../sql/colexec/colexecbase",
+			"../../sql/colexec/colexechash",
+			"../../sql/colexec/colexecjoin",
+			"../../sql/colexec/colexecproj",
+			"../../sql/colexec/colexecsel",
+			"../../sql/colexec/colexecwindow",
 			"../../sql/colfetcher",
 		); err != nil {
 			t.Fatal(err)
@@ -2072,5 +2085,13 @@ func TestLint(t *testing.T) {
 			[]string{"vet", "-vettool", vetToolPath, "-all", "-printf.funcs", printfuncs, pkgScope},
 			filters)
 
+	})
+
+	t.Run("CODEOWNERS", func(t *testing.T) {
+		co, err := codeowners.DefaultLoadCodeOwners()
+		require.NoError(t, err)
+		const verbose = false
+		repoRoot := filepath.Join("../../../")
+		codeowners.LintEverythingIsOwned(t, verbose, co, repoRoot, "pkg")
 	})
 }

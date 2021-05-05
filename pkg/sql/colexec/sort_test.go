@@ -258,8 +258,8 @@ func TestAllSpooler(t *testing.T) {
 	for _, tc := range tcs {
 		colexectestutils.RunTestsWithFn(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, nil, func(t *testing.T, input []colexecop.Operator) {
 			allSpooler := newAllSpooler(testAllocator, input[0], tc.typ)
-			allSpooler.init()
-			allSpooler.spool(context.Background())
+			allSpooler.init(context.Background())
+			allSpooler.spool()
 			if len(tc.tuples) != allSpooler.getNumTuples() {
 				t.Fatal(fmt.Sprintf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples()))
 			}
@@ -280,6 +280,7 @@ func TestAllSpooler(t *testing.T) {
 }
 
 func BenchmarkSort(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 	k := uint64(128)
@@ -321,8 +322,8 @@ func BenchmarkSort(b *testing.B) {
 								b.Fatal(err)
 							}
 						}
-						sorter.Init()
-						for out := sorter.Next(ctx); out.Length() != 0; out = sorter.Next(ctx) {
+						sorter.Init(ctx)
+						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 						}
 					}
 				})
@@ -332,6 +333,7 @@ func BenchmarkSort(b *testing.B) {
 }
 
 func BenchmarkAllSpooler(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
@@ -357,8 +359,8 @@ func BenchmarkAllSpooler(b *testing.B) {
 				for n := 0; n < b.N; n++ {
 					source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 					allSpooler := newAllSpooler(testAllocator, source, typs)
-					allSpooler.init()
-					allSpooler.spool(ctx)
+					allSpooler.init(ctx)
+					allSpooler.spool()
 				}
 			})
 		}

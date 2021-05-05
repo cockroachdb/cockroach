@@ -310,7 +310,8 @@ start_key                          start_pretty                   end_key       
 [173]                              /Table/37                      [174]                              /Table/38                      system         scheduled_jobs                   ·           {1}       1
 [174]                              /Table/38                      [175]                              /Table/39                      ·              ·                                ·           {1}       1
 [175]                              /Table/39                      [176]                              /Table/40                      system         sqlliveness                      ·           {1}       1
-[176]                              /Table/40                      [189 137]                          /Table/53/1                    system         migrations                       ·           {1}       1
+[176]                              /Table/40                      [177]                              /Table/41                      system         migrations                       ·           {1}       1
+[177]                              /Table/41                      [189 137]                          /Table/53/1                    system         join_tokens                      ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -369,7 +370,8 @@ start_key                          start_pretty                   end_key       
 [173]                              /Table/37                      [174]                              /Table/38                      system         scheduled_jobs                   ·           {1}       1
 [174]                              /Table/38                      [175]                              /Table/39                      ·              ·                                ·           {1}       1
 [175]                              /Table/39                      [176]                              /Table/40                      system         sqlliveness                      ·           {1}       1
-[176]                              /Table/40                      [189 137]                          /Table/53/1                    system         migrations                       ·           {1}       1
+[176]                              /Table/40                      [177]                              /Table/41                      system         migrations                       ·           {1}       1
+[177]                              /Table/41                      [189 137]                          /Table/53/1                    system         join_tokens                      ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -566,3 +568,21 @@ ALTER INDEX i59011 SPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::U
 
 statement error excessive number of values provided: expected 1, got 2
 ALTER INDEX i59011 UNSPLIT AT VALUES (2, '6cf22b39-a1eb-43ee-8edf-0da8543c5c38'::UUID);
+
+# Regression for #63646
+
+statement ok
+CREATE TYPE e63646 AS ENUM ('a', 'b');
+CREATE TABLE t63646 (e e63646 PRIMARY KEY);
+INSERT INTO t63646 VALUES ('a'), ('b');
+ALTER TABLE t63646 SPLIT AT VALUES ('a'), ('b')
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('a')]
+----
+/"@"  /"\x80"
+
+query TT
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('b')]
+----
+/"\x80"  NULL

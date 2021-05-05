@@ -76,7 +76,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	}
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
 	n.run.lines, err = colflow.ExplainVec(
-		params.ctx, flowCtx, flows, physPlan.LocalProcessors, verbose, willDistribute,
+		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
+		distSQLPlanner.gatewayNodeID, verbose, willDistribute,
 	)
 	if err != nil {
 		return err

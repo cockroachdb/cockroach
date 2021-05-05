@@ -261,12 +261,14 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 // OnlyNoDropDDLs causes the Smither to only emit DDLs, but won't ever drop
 // a table.
 var OnlyNoDropDDLs = simpleOption("only DDLs", func(s *Smither) {
-	s.stmtWeights = append([]statementWeight{
+	s.stmtWeights = append(append([]statementWeight{
 		{1, makeBegin},
 		{2, makeRollback},
 		{6, makeCommit},
 	},
 		altersExistingTable...,
+	),
+		altersExistingTypes...,
 	)
 })
 
@@ -366,8 +368,21 @@ var PostgresMode = multiOption(
 	// Some func impls differ from postgres, so skip them here.
 	// #41709
 	IgnoreFNs("^sha"),
+	IgnoreFNs("^isnan"),
+	IgnoreFNs("^crc32c"),
+	IgnoreFNs("^fnv32a"),
+	IgnoreFNs("^experimental_"),
+	IgnoreFNs("^json_set"),
+	IgnoreFNs("^concat_agg"),
+	IgnoreFNs("^to_english"),
+	IgnoreFNs("^substr$"),
 	// We use e'XX' instead of E'XX' for hex strings, so ignore these.
 	IgnoreFNs("^quote"),
 	// We have some differences here with empty string and "default"; skip until fixed.
 	IgnoreFNs("^pg_collation_for"),
+	// Postgres does not have the `.*_escape` functions.
+	IgnoreFNs("_escape$"),
+	// Some spatial functions are CockroachDB-specific.
+	IgnoreFNs("st_.*withinexclusive$"),
+	IgnoreFNs("^postgis_.*_build_date"),
 )

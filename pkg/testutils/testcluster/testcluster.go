@@ -462,7 +462,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 // actually starting the server.
 func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) error {
 	server := tc.Servers[idx]
-	if err := server.Start(); err != nil {
+	if err := server.Start(context.Background()); err != nil {
 		return err
 	}
 
@@ -696,7 +696,8 @@ func (tc *TestCluster) WaitForVoters(
 // startKey is start key of range.
 //
 // waitForVoter indicates that the method should wait until the targets are full
-// voters in the range.
+// voters in the range (and they also know that they're voters - i.e. the
+// respective replica has caught up with the config change).
 //
 // targets are replication target for change replica.
 func (tc *TestCluster) waitForNewReplicas(
@@ -847,6 +848,27 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	}
 }
 
+// RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
+func (tc *TestCluster) RemoveLeaseHolderOrFatal(
+	t testing.TB,
+	rangeDesc roachpb.RangeDescriptor,
+	src roachpb.ReplicationTarget,
+	dest roachpb.ReplicationTarget,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
+			return err
+		}
+		if _, err := tc.RemoveVoters(rangeDesc.StartKey.AsRawKey(), src); err != nil {
+			if strings.Contains(err.Error(), "to remove self (leaseholder)") {
+				return err
+			}
+			t.Fatal(err)
+		}
+		return nil
+	})
+}
+
 // MoveRangeLeaseNonCooperatively is part of the TestClusterInterface.
 func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget, manual *hlc.HybridManualClock,
@@ -932,29 +954,53 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
 // without verifying if the lease is still active. Instead, it returns a time-
 // stamp taken off the queried node's clock.
+//
+// DEPRECATED - use FindRangeLeaseEx instead.
 func (tc *TestCluster) FindRangeLease(
 	rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
 ) (_ roachpb.Lease, now hlc.ClockTimestamp, _ error) {
+	l, now, err := tc.FindRangeLeaseEx(context.TODO(), rangeDesc, hint)
+	if err != nil {
+		return roachpb.Lease{}, hlc.ClockTimestamp{}, err
+	}
+	return l.CurrentOrProspective(), now, err
+}
+
+// FindRangeLeaseEx returns information about a range's lease. As opposed to
+// FindRangeLeaseHolder, it doesn't check the validity of the lease; instead it
+// returns a timestamp from a node's clock.
+//
+// If hint is not nil, the respective node will be queried. If that node doesn't
+// have a replica able to serve a LeaseInfoRequest, an error will be returned.
+// If hint is nil, the first node is queried. In either case, if the returned
+// lease is not valid, it's possible that the returned lease information is
+// stale - i.e. there might be a newer lease unbeknownst to the queried node.
+func (tc *TestCluster) FindRangeLeaseEx(
+	ctx context.Context, rangeDesc roachpb.RangeDescriptor, hint *roachpb.ReplicationTarget,
+) (_ server.LeaseInfo, now hlc.ClockTimestamp, _ error) {
+	var queryPolicy server.LeaseInfoOpt
 	if hint != nil {
 		var ok bool
 		if _, ok = rangeDesc.GetReplicaDescriptor(hint.StoreID); !ok {
-			return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Errorf(
+			return server.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 				"bad hint: %+v; store doesn't have a replica of the range", hint)
 		}
+		queryPolicy = server.QueryLocalNodeOnly
 	} else {
 		hint = &roachpb.ReplicationTarget{
 			NodeID:  rangeDesc.Replicas().Descriptors()[0].NodeID,
 			StoreID: rangeDesc.Replicas().Descriptors()[0].StoreID}
+		queryPolicy = server.AllowQueryToBeForwardedToDifferentNode
 	}
 
 	// Find the server indicated by the hint and send a LeaseInfoRequest through
 	// it.
 	hintServer, err := tc.findMemberServer(hint.StoreID)
 	if err != nil {
-		return roachpb.Lease{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
+		return server.LeaseInfo{}, hlc.ClockTimestamp{}, errors.Wrapf(err, "bad hint: %+v; no such node", hint)
 	}
 
-	return hintServer.GetRangeLease(context.TODO(), rangeDesc.StartKey.AsRawKey())
+	return hintServer.GetRangeLease(ctx, rangeDesc.StartKey.AsRawKey(), queryPolicy)
 }
 
 // FindRangeLeaseHolder is part of TestClusterInterface.
@@ -1131,7 +1177,10 @@ func (tc *TestCluster) WaitForFullReplication() error {
 // store in the cluster.
 func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 	testutils.SucceedsSoon(t, func() error {
-		client := tc.GetStatusClient(context.Background(), t, 0)
+		client, err := tc.GetStatusClient(context.Background(), t, 0)
+		if err != nil {
+			return err
+		}
 		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
 		if err != nil {
 			return err
@@ -1306,17 +1355,22 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	s := srv.(*server.TestServer)
 
+	ctx := context.Background()
 	if err := func() error {
-		tc.mu.Lock()
-		defer tc.mu.Unlock()
-		tc.Servers[idx] = s
-		tc.mu.serverStoppers[idx] = s.Stopper()
+		func() {
+			// Only lock the assignment of the server and the stopper and the call to the inspect function.
+			// This ensures that the stopper's Stop() method can abort an async Start() call.
+			tc.mu.Lock()
+			defer tc.mu.Unlock()
+			tc.Servers[idx] = s
+			tc.mu.serverStoppers[idx] = s.Stopper()
 
-		if inspect != nil {
-			inspect(s)
-		}
+			if inspect != nil {
+				inspect(s)
+			}
+		}()
 
-		if err := srv.Start(); err != nil {
+		if err := srv.Start(ctx); err != nil {
 			return err
 		}
 
@@ -1336,7 +1390,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	// different port, and a cycle of gossip is necessary to make all other nodes
 	// aware.
 	return contextutil.RunWithTimeout(
-		context.Background(), "check-conn", 15*time.Second,
+		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {
 			r := retry.StartWithCtx(ctx, retry.Options{
 				InitialBackoff: 1 * time.Millisecond,
@@ -1423,25 +1477,25 @@ func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.R
 // GetAdminClient gets the severpb.AdminClient for the specified server.
 func (tc *TestCluster) GetAdminClient(
 	ctx context.Context, t testing.TB, serverIdx int,
-) serverpb.AdminClient {
+) (serverpb.AdminClient, error) {
 	srv := tc.Server(serverIdx)
 	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
 	if err != nil {
-		t.Fatalf("failed to create an admin client because of %s", err)
+		return nil, errors.Wrap(err, "failed to create an admin client")
 	}
-	return serverpb.NewAdminClient(cc)
+	return serverpb.NewAdminClient(cc), nil
 }
 
 // GetStatusClient gets the severpb.StatusClient for the specified server.
 func (tc *TestCluster) GetStatusClient(
 	ctx context.Context, t testing.TB, serverIdx int,
-) serverpb.StatusClient {
+) (serverpb.StatusClient, error) {
 	srv := tc.Server(serverIdx)
 	cc, err := srv.RPCContext().GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
 	if err != nil {
-		t.Fatalf("failed to create a status client because of %s", err)
+		return nil, errors.Wrap(err, "failed to create a status client")
 	}
-	return serverpb.NewStatusClient(cc)
+	return serverpb.NewStatusClient(cc), nil
 }
 
 type testClusterFactoryImpl struct{}

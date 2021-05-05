@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// Option is used to configure a QuotaPool.
+// Option is used to configure a quotapool.
 type Option interface {
 	apply(*config)
 }
@@ -34,6 +34,22 @@ type AcquisitionFunc func(
 func OnAcquisition(f AcquisitionFunc) Option {
 	return optionFunc(func(cfg *config) {
 		cfg.onAcquisition = f
+	})
+}
+
+// OnWaitFunc is the prototype for functions called to notify the start or
+// finish of a waiting period when a request is blocked.
+type OnWaitFunc func(
+	ctx context.Context, poolName string, r Request,
+)
+
+// OnWait creates an Option to configure two callbacks which are called when a
+// request blocks and has to wait for quota (at the start and end of the
+// wait).
+func OnWait(onStart, onFinish OnWaitFunc) Option {
+	return optionFunc(func(cfg *config) {
+		cfg.onWaitStart = onStart
+		cfg.onWaitFinish = onFinish
 	})
 }
 
@@ -77,7 +93,7 @@ func WithTimeSource(ts timeutil.TimeSource) Option {
 }
 
 // WithCloser allows the client to provide a channel which will lead to the
-// QuotaPool being closed.
+// AbstractPool being closed.
 func WithCloser(closer <-chan struct{}) Option {
 	return optionFunc(func(cfg *config) {
 		cfg.closer = closer
@@ -96,12 +112,13 @@ func WithMinimumWait(duration time.Duration) Option {
 }
 
 type config struct {
-	onAcquisition            AcquisitionFunc
-	onSlowAcquisition        SlowAcquisitionFunc
-	slowAcquisitionThreshold time.Duration
-	timeSource               timeutil.TimeSource
-	closer                   <-chan struct{}
-	minimumWait              time.Duration
+	onAcquisition             AcquisitionFunc
+	onSlowAcquisition         SlowAcquisitionFunc
+	onWaitStart, onWaitFinish OnWaitFunc
+	slowAcquisitionThreshold  time.Duration
+	timeSource                timeutil.TimeSource
+	closer                    <-chan struct{}
+	minimumWait               time.Duration
 }
 
 var defaultConfig = config{

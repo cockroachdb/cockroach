@@ -208,9 +208,12 @@ func TestPutS3Endpoint(t *testing.T) {
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
 	s3, err := cloudimpl.MakeS3Storage(context.Background(),
-		base.ExternalIODirConfig{DisableHTTP: true},
-		&roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}, nil,
+		cloudimpl.ExternalStorageContext{
+			IOConf: base.ExternalIODirConfig{DisableHTTP: true},
+		},
+		dest,
 	)
 	require.Nil(t, s3)
 	require.Error(t, err)
@@ -218,12 +221,14 @@ func TestS3DisallowCustomEndpoints(t *testing.T) {
 
 func TestS3DisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloudimpl.AuthParamImplicit}}
+
 	s3, err := cloudimpl.MakeS3Storage(context.Background(),
-		base.ExternalIODirConfig{DisableImplicitCredentials: true},
-		&roachpb.ExternalStorage_S3{
-			Endpoint: "http://do-not-go-there",
-			Auth:     cloudimpl.AuthParamImplicit,
-		}, testSettings,
+		cloudimpl.ExternalStorageContext{
+			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
+			Settings: testSettings,
+		},
+		dest,
 	)
 	require.Nil(t, s3)
 	require.Error(t, err)
@@ -282,7 +287,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	_, err = s.ReadFile(ctx, "")
 	require.Error(t, err, "")
-	require.True(t, errors.Is(err, cloudimpl.ErrFileDoesNotExist))
+	require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
 }
 
 func TestAntagonisticS3Read(t *testing.T) {

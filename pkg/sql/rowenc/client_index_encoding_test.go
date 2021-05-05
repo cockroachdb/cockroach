@@ -230,7 +230,7 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			codec := keys.SystemSQLCodec
 			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
-			actual, err := rowenc.AdjustStartKeyForInterleave(codec, tc.index.IndexDesc(), actual)
+			actual, err := rowenc.AdjustStartKeyForInterleave(codec, tc.index, actual)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -652,7 +652,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			codec := keys.SystemSQLCodec
 			actual := EncodeTestKey(t, kvDB, codec, ShortToLongKeyFmt(tc.input))
-			actual, err := rowenc.AdjustEndKeyForInterleave(codec, tc.table, tc.index.IndexDesc(), actual, tc.inclusive)
+			actual, err := rowenc.AdjustEndKeyForInterleave(codec, tc.table, tc.index, actual, tc.inclusive)
 			if err != nil {
 				t.Fatal(err)
 			}

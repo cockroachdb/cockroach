@@ -181,7 +181,8 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 	constraints = strings.TrimSpace(constraints)
 	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.VoterConstraints,
-		Inherited:   zone.InheritedVoterConstraints})
+		Inherited:   zone.InheritedVoterConstraints(),
+	})
 	if err != nil {
 		return "", err
 	}
@@ -232,7 +233,7 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		maybeWriteComma(f)
 		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
 	}
-	if !zone.InheritedVoterConstraints && zone.NumVoters != nil && *zone.NumVoters > 0 {
+	if !zone.InheritedVoterConstraints() && zone.NumVoters != nil && *zone.NumVoters > 0 {
 		maybeWriteComma(f)
 		f.Printf("\tvoter_constraints = %s", lex.EscapeSQLString(voterConstraints))
 	}

@@ -36,7 +36,8 @@ func TestSqlLiteLogic(t *testing.T) {
 	RunSQLLiteLogicTest(t, "" /* configOverride */)
 }
 
-// TestFloatsMatch is a unit test for floatsMatch() function.
+// TestFloatsMatch is a unit test for floatsMatch() and floatsMatchApprox()
+// functions.
 func TestFloatsMatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, tc := range []struct {
@@ -60,7 +61,15 @@ func TestFloatsMatch(t *testing.T) {
 			t.Fatal(err)
 		}
 		if match != tc.match {
-			t.Fatalf("wrong result on %v", tc)
+			t.Fatalf("floatsMatch: wrong result on %v", tc)
+		}
+
+		match, err = floatsMatchApprox(tc.f1, tc.f2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if match != tc.match {
+			t.Fatalf("floatsMatchApprox: wrong result on %v", tc)
 		}
 	}
 }

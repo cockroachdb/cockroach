@@ -85,7 +85,7 @@ genrule(
           $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
           $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
     """,
-    tools = [
+    exec_tools = [
         ":sql-gen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
         "@org_golang_x_tools//cmd/goyacc",
@@ -110,7 +110,7 @@ genrule(
       $(location :help-gen-test) < $< >$@.tmp
       mv -f $@.tmp $@
     """,
-    tools = [
+    exec_tools = [
         ":help-gen-test",
     ],
 )

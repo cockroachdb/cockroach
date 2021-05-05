@@ -18,7 +18,7 @@ network usage: 0 B (0 messages)
   columns: (oid int)
   estimated row count: 1 (missing stats)
   table: orders@primary
-  spans: /123-/123/#
+  spans: /123/0
 ----
 ----
 

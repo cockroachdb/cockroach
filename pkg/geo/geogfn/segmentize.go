@@ -25,6 +25,9 @@ import (
 // This works by dividing each segment by a power of 2 to find the
 // smallest power less than or equal to the segmentMaxLength.
 func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geography, error) {
+	if math.IsNaN(segmentMaxLength) || math.IsInf(segmentMaxLength, 1 /* sign */) {
+		return geography, nil
+	}
 	geometry, err := geography.AsGeomT()
 	if err != nil {
 		return geo.Geography{}, err
@@ -81,17 +84,14 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, segmentMaxAngle float64) ([]fl
 	// 2^n >= chordAngleBetweenPoints/segmentMaxLength > 2^(n-1).
 	// Then n = ceil(log2(chordAngleBetweenPoints/segmentMaxLength)).
 	// Hence numberOfSegmentsToCreate = 2^(ceil(log2(chordAngleBetweenPoints/segmentMaxLength))).
-	numberOfSegmentsToCreate := int(math.Pow(2, math.Ceil(math.Log2(chordAngleBetweenPoints/segmentMaxAngle))))
-	numPoints := len(a) * (1 + numberOfSegmentsToCreate)
-	if numPoints > geo.MaxAllowedSplitPoints {
-		return nil, errors.Newf(
-			"attempting to segmentize into too many coordinates; need %d points between %v and %v, max %d",
-			numPoints,
-			a,
-			b,
-			geo.MaxAllowedSplitPoints,
-		)
+	doubleNumberOfSegmentsToCreate := math.Pow(2, math.Ceil(math.Log2(chordAngleBetweenPoints/segmentMaxAngle)))
+	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
+	if err := geosegmentize.CheckSegmentizeTooManyPoints(doubleNumPoints, a, b); err != nil {
+		return nil, err
 	}
+	numberOfSegmentsToCreate := int(doubleNumberOfSegmentsToCreate)
+	numPoints := int(doubleNumPoints)
+
 	allSegmentizedCoordinates := make([]float64, 0, numPoints)
 	allSegmentizedCoordinates = append(allSegmentizedCoordinates, a.Clone()...)
 	segmentFraction := 1.0 / float64(numberOfSegmentsToCreate)

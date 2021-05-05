@@ -848,6 +848,50 @@ semi-join (hash)
  └── filters
       └── v:5 = s:11 [outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
 
+# Regression test for #63794. Inlining filters on virtual columns during
+# exploration should not violate the ordering choice that all columns in an
+# ordering column group should be equal according to the expression's FD.
+exec-ddl
+CREATE TABLE t63794_a (a INT)
+----
+
+exec-ddl
+CREATE TABLE t63794_bc (b INT, c INT AS (b % 2) VIRTUAL, INDEX (b))
+----
+
+opt format=hide-all
+SELECT a.a
+FROM t63794_a AS a
+  JOIN t63794_bc AS bc1
+    JOIN t63794_bc AS bc2 ON true
+  ON a.a = bc1.b AND
+    bc1.b = bc2.b AND
+    bc1.c = bc2.c
+  JOIN t63794_bc AS bc3 ON
+    bc1.b = bc3.b AND bc2.b = bc3.c
+----
+project
+ └── inner-join (hash)
+      ├── scan t63794_a [as=a]
+      ├── inner-join (merge)
+      │    ├── inner-join (merge)
+      │    │    ├── project
+      │    │    │    ├── scan t63794_bc@secondary
+      │    │    │    └── projections
+      │    │    │         └── b % 2
+      │    │    ├── project
+      │    │    │    ├── scan t63794_bc@secondary
+      │    │    │    └── projections
+      │    │    │         └── b % 2
+      │    │    └── filters (true)
+      │    ├── project
+      │    │    ├── scan t63794_bc@secondary
+      │    │    └── projections
+      │    │         └── b % 2
+      │    └── filters (true)
+      └── filters
+           └── a = b
+
 # --------------------------------------------------
 # InlineProjectInProject
 # --------------------------------------------------

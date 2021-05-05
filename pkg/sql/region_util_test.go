@@ -27,7 +27,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 	testCases := []struct {
 		desc         string
 		regionConfig multiregion.RegionConfig
-		expected     *zonepb.ZoneConfig
+		expected     zonepb.ZoneConfig
 	}{
 		{
 			desc: "one region, zone survival",
@@ -39,7 +39,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -57,6 +57,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						Constraints: []zonepb.Constraint{
@@ -77,7 +78,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -101,6 +102,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						Constraints: []zonepb.Constraint{
@@ -122,7 +124,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -152,6 +154,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						Constraints: []zonepb.Constraint{
@@ -173,7 +176,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -202,6 +205,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						NumReplicas: 2,
@@ -225,7 +229,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(6),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -261,6 +265,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						Constraints: []zonepb.Constraint{
@@ -283,7 +288,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -319,6 +324,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 						},
 					},
 				},
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						NumReplicas: 2,
@@ -375,7 +381,6 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				GlobalReads:               proto.Bool(true),
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: true,
-				InheritedVoterConstraints: true,
 			},
 		},
 		{
@@ -400,7 +405,6 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 				GlobalReads:               proto.Bool(true),
 				InheritedConstraints:      true,
 				InheritedLeasePreferences: true,
-				InheritedVoterConstraints: true,
 			},
 		},
 		{
@@ -517,7 +521,8 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 						},
 					},
 				},
-				InheritedConstraints: true,
+				InheritedConstraints:        true,
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						Constraints: []zonepb.Constraint{
@@ -557,7 +562,8 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 						},
 					},
 				},
-				InheritedConstraints: true,
+				InheritedConstraints:        true,
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						NumReplicas: 2,
@@ -602,9 +608,10 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				descpb.InvalidID,
 			),
 			expected: zonepb.ZoneConfig{
-				NumReplicas:          nil, // Set at the database level.
-				NumVoters:            proto.Int32(3),
-				InheritedConstraints: true,
+				NumReplicas:                 nil, // Set at the database level.
+				NumVoters:                   proto.Int32(3),
+				InheritedConstraints:        true,
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						Constraints: []zonepb.Constraint{
@@ -636,9 +643,10 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				descpb.InvalidID,
 			),
 			expected: zonepb.ZoneConfig{
-				NumReplicas:          nil, // Set at the database level.
-				NumVoters:            proto.Int32(5),
-				InheritedConstraints: true,
+				NumReplicas:                 nil, // Set at the database level.
+				NumVoters:                   proto.Int32(5),
+				InheritedConstraints:        true,
+				NullVoterConstraintsIsEmpty: true,
 				VoterConstraints: []zonepb.ConstraintsConjunction{
 					{
 						NumReplicas: 2,

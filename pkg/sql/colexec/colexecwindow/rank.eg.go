@@ -71,6 +71,7 @@ func NewRankOperator(
 
 type rankInitFields struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 
 	allocator       *colmem.Allocator
 	outputColIdx    int
@@ -90,8 +91,11 @@ type rankNoPartitionOp struct {
 
 var _ colexecop.Operator = &rankNoPartitionOp{}
 
-func (r *rankNoPartitionOp) Init() {
-	r.Input.Init()
+func (r *rankNoPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -99,8 +103,8 @@ func (r *rankNoPartitionOp) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *rankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input.Next(ctx)
+func (r *rankNoPartitionOp) Next() coldata.Batch {
+	batch := r.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -157,8 +161,11 @@ type rankWithPartitionOp struct {
 
 var _ colexecop.Operator = &rankWithPartitionOp{}
 
-func (r *rankWithPartitionOp) Init() {
-	r.Input.Init()
+func (r *rankWithPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -166,8 +173,8 @@ func (r *rankWithPartitionOp) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *rankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input.Next(ctx)
+func (r *rankWithPartitionOp) Next() coldata.Batch {
+	batch := r.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -243,8 +250,11 @@ type denseRankNoPartitionOp struct {
 
 var _ colexecop.Operator = &denseRankNoPartitionOp{}
 
-func (r *denseRankNoPartitionOp) Init() {
-	r.Input.Init()
+func (r *denseRankNoPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -252,8 +262,8 @@ func (r *denseRankNoPartitionOp) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *denseRankNoPartitionOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input.Next(ctx)
+func (r *denseRankNoPartitionOp) Next() coldata.Batch {
+	batch := r.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -308,8 +318,11 @@ type denseRankWithPartitionOp struct {
 
 var _ colexecop.Operator = &denseRankWithPartitionOp{}
 
-func (r *denseRankWithPartitionOp) Init() {
-	r.Input.Init()
+func (r *denseRankWithPartitionOp) Init(ctx context.Context) {
+	if !r.InitHelper.Init(ctx) {
+		return
+	}
+	r.Input.Init(r.Ctx)
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
 	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
@@ -317,8 +330,8 @@ func (r *denseRankWithPartitionOp) Init() {
 	r.rankIncrement = 1
 }
 
-func (r *denseRankWithPartitionOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input.Next(ctx)
+func (r *denseRankWithPartitionOp) Next() coldata.Batch {
+	batch := r.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,12 +47,24 @@ const BytesInitialAllocationFactor = 64
 // NewBytes returns a Bytes struct with enough capacity for n zero-length
 // []byte values. It is legal to call Set on the returned Bytes at this point,
 // but Get is undefined until at least one element is Set.
+// BytesInitialAllocationFactor number of bytes are allocated initially for each
+// []byte element.
 func NewBytes(n int) *Bytes {
+	return NewBytesWithAvgLength(n, BytesInitialAllocationFactor)
+}
+
+// NewBytesWithAvgLength returns a Bytes struct with enough capacity for n
+// []byte values with the average length of avgElementLength. It is legal to
+// call Set on the returned Bytes at this point, but Get is undefined until at
+// least one element is Set.
+// - avgElementLength determines the average length of a single []byte element
+// that will be added to this Bytes.
+func NewBytesWithAvgLength(n int, avgElementLength int) *Bytes {
 	return &Bytes{
 		// Given that the []byte slices are of variable length, we multiply the
 		// number of elements by some constant factor.
 		// TODO(asubiotto): Make this tunable.
-		data:    make([]byte, 0, n*BytesInitialAllocationFactor),
+		data:    make([]byte, 0, n*avgElementLength),
 		offsets: make([]int32, n+1),
 	}
 }
@@ -67,7 +81,7 @@ func (b *Bytes) AssertOffsetsAreNonDecreasing(n int) {
 
 // UpdateOffsetsToBeNonDecreasing makes sure that b.offsets[:n+1] are
 // non-decreasing which is an invariant that we need to maintain. It must be
-// called by the colexec.Operator that is modifying this Bytes before
+// called by the colexecop.Operator that is modifying this Bytes before
 // returning it as an output. A convenient place for this is Batch.SetLength()
 // method - we assume that *always*, before returning a batch, the length is
 // set on it.
@@ -110,13 +124,11 @@ func (b *Bytes) Get(i int) []byte {
 	return b.data[b.offsets[i]:b.offsets[i+1]]
 }
 
-// Set sets the ith []byte in Bytes. Overwriting a value that is not at the end
-// of the Bytes is not allowed since it complicates memory movement to make/take
-// away necessary space in the flat buffer. Note that a nil value will be
-// "converted" into an empty byte slice.
-func (b *Bytes) Set(i int, v []byte) {
+// getAppendTo returns a byte slice that ith []byte value should be appended to.
+// This method will panic if i is less than maximum previously Set index.
+func (b *Bytes) getAppendTo(i int) []byte {
 	if b.isWindow {
-		panic("Set is called on a window into Bytes")
+		panic("getAppendTo is called on a window into Bytes")
 	}
 	if i < b.maxSetIndex {
 		panic(
@@ -132,7 +144,16 @@ func (b *Bytes) Set(i int, v []byte) {
 	// NULL values that are stored separately. In order to maintain the
 	// assumption of non-decreasing offsets, we need to backfill them.
 	b.maybeBackfillOffsets(i)
-	b.data = append(b.data[:b.offsets[i]], v...)
+	return b.data[:b.offsets[i]]
+}
+
+// Set sets the ith []byte in Bytes. Overwriting a value that is not at the end
+// of the Bytes is not allowed since it complicates memory movement to make/take
+// away necessary space in the flat buffer. Note that a nil value will be
+// "converted" into an empty byte slice.
+func (b *Bytes) Set(i int, v []byte) {
+	appendTo := b.getAppendTo(i)
+	b.data = append(appendTo, v...)
 	b.offsets[i+1] = int32(len(b.data))
 	b.maxSetIndex = i
 }
@@ -431,4 +452,61 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	data := b.data[:serializeLength]
 	offsets := b.offsets[:n+1]
 	return data, offsets
+}
+
+// AssertOffsetsAreNonDecreasing calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
+func AssertOffsetsAreNonDecreasing(v Vec, n int) {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		v.Bytes().AssertOffsetsAreNonDecreasing(n)
+	case types.JsonFamily:
+		v.JSON().AssertOffsetsAreNonDecreasing(n)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
+}
+
+// UpdateOffsetsToBeNonDecreasing calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
+func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		v.Bytes().UpdateOffsetsToBeNonDecreasing(n)
+	case types.JsonFamily:
+		v.JSON().UpdateOffsetsToBeNonDecreasing(n)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
+}
+
+// ProportionalSize calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
+func ProportionalSize(v Vec, length int64) uintptr {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		return v.Bytes().ProportionalSize(length)
+	case types.JsonFamily:
+		return v.JSON().ProportionalSize(length)
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
+	return 0
+}
+
+// Reset calls the method of the same name on bytes-like
+// vectors, panicking if not bytes-like.
+func Reset(v Vec) {
+	family := v.CanonicalTypeFamily()
+	switch family {
+	case types.BytesFamily:
+		v.Bytes().Reset()
+	case types.JsonFamily:
+		v.JSON().Reset()
+	default:
+		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
+	}
 }

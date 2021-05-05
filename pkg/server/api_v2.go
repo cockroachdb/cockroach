@@ -42,6 +42,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -62,6 +63,13 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 		apiV2InternalError(ctx, err, w)
 	}
 	_, _ = w.Write(res)
+}
+
+// Returns a SQL username from the request context of a route requiring login.
+// Only use in routes that require login (requiresAuth = true in its route
+// definition).
+func getSQLUsername(ctx context.Context) security.SQLUsername {
+	return security.MakeSQLUsernameFromPreNormalizedString(ctx.Value(webSessionUserKey{}).(string))
 }
 
 // apiV2Server implements version 2 API endpoints, under apiV2Path. The
@@ -135,6 +143,13 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption},
 		{"health/", a.health, false, regularRole, noOption},
+		{"users/", a.listUsers, true, regularRole, noOption},
+		{"events/", a.listEvents, true, adminRole, noOption},
+		{"databases/", a.listDatabases, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)

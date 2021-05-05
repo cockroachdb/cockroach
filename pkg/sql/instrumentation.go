@@ -38,7 +38,7 @@ import (
 var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	"sql.txn_stats.sample_rate",
 	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
-	0.1,
+	0.01,
 	func(f float64) error {
 		if f < 0 || f > 1 {
 			return errors.New("value must be between 0 and 1 inclusive")
@@ -137,7 +137,7 @@ func (ih *instrumentationHelper) Setup(
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry,
 	fingerprint string,
 	implicitTxn bool,
-	collectExecStats bool,
+	collectTxnExecStats bool,
 ) (newCtx context.Context, needFinish bool) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
@@ -162,7 +162,12 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
-	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
+	// We don't know yet if we will hit an error, so we assume we don't. The
+	// worst that can happen is that for statements that always error out, we
+	// will always save the tree plan.
+	stats, _ := appStats.getStatsForStmt(fingerprint, implicitTxn, p.SessionData().Database, nil /* error */, false /* createIfNonexistent */)
+
+	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(stats)
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
@@ -178,7 +183,15 @@ func (ih *instrumentationHelper) Setup(
 		}
 	}
 
-	ih.collectExecStats = collectExecStats
+	ih.collectExecStats = collectTxnExecStats
+	if !collectTxnExecStats && stats == nil {
+		// We don't collect the execution stats for statements in this txn, but
+		// this is the first time we see this statement ever, so we'll collect
+		// its execution stats anyway (unless the user disabled txn stats
+		// collection entirely).
+		statsCollectionDisabled := collectTxnStatsSampleRate.Get(&cfg.Settings.SV) == 0
+		ih.collectExecStats = !statsCollectionDisabled
+	}
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
 		if ih.collectExecStats {
@@ -203,6 +216,7 @@ func (ih *instrumentationHelper) Finish(
 	cfg *ExecutorConfig,
 	appStats *appStats,
 	txnStats *execstats.QueryLevelStats,
+	collectTxnExecStats bool,
 	statsCollector *sqlStatsCollector,
 	p *planner,
 	ast tree.Statement,
@@ -247,10 +261,19 @@ func (ih *instrumentationHelper) Finish(
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
 		// TODO(radu): this should be unified with other stmt stats accesses.
-		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, retErr, false)
+		stmtStats, _ := appStats.getStatsForStmt(ih.fingerprint, ih.implicitTxn, p.SessionData().Database, retErr, false)
 		if stmtStats != nil {
 			stmtStats.recordExecStats(queryLevelStats)
-			txnStats.Accumulate(queryLevelStats)
+			if collectTxnExecStats || ih.implicitTxn {
+				// Only accumulate into the txn stats if we're collecting
+				// execution stats for all statements in the txn or the txn is
+				// implicit (indicating that it consists of a single statement).
+				//
+				// The goal is that we don't want to provide an incomplete
+				// picture for explicit txns for which we didn't decide to
+				// collect the execution stats on a txn level.
+				txnStats.Accumulate(queryLevelStats)
+			}
 		}
 	}
 
@@ -408,6 +431,7 @@ func (ih *instrumentationHelper) buildExplainAnalyzePlan(
 
 	ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 	ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
+	ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
 
 	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))

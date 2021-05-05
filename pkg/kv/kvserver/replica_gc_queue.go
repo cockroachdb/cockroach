@@ -31,7 +31,7 @@ const (
 
 	// ReplicaGCQueueInactivityThreshold is the inactivity duration after which
 	// a range will be considered for garbage collection. Exported for testing.
-	ReplicaGCQueueInactivityThreshold = 10 * 24 * time.Hour // 10 days
+	ReplicaGCQueueInactivityThreshold = 12 * time.Hour
 	// ReplicaGCQueueSuspectTimeout is the duration after which a Replica which
 	// is suspected to be removed should be processed by the queue.
 	// A Replica is suspected to have been removed if either it is in the

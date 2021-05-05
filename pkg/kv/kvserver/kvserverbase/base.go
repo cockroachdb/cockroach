@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/redact"
 )
 
 // MergeQueueEnabled is a setting that controls whether the merge queue is
@@ -39,8 +40,19 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 // larger than the heartbeat interval used by the coordinator.
 const TxnCleanupThreshold = time.Hour
 
-// CmdIDKey is a Raft command id.
+// CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string
+
+// SafeFormat implements redact.SafeFormatter.
+func (s CmdIDKey) SafeFormat(sp redact.SafePrinter, verb rune) {
+	sp.Printf("%q", redact.SafeString(s))
+}
+
+func (s CmdIDKey) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+var _ redact.SafeFormatter = CmdIDKey("")
 
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
 type FilterArgs struct {

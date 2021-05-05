@@ -241,6 +241,10 @@ func (n *createTableNode) startExec(params runParams) error {
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("relation %q already exists, skipping", n.n.Table.Table()),
+			)
 			return nil
 		}
 		return err
@@ -401,7 +405,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
 
-		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.ID, params.p.Descriptors())
+		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
 		if err != nil {
 			return err
 		}
@@ -470,7 +474,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.p.txn,
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
-				desc.Columns,
+				desc.PublicColumns(),
 				params.p.alloc)
 			if err != nil {
 				return err
@@ -1736,7 +1740,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
+				checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
 				if err != nil {
 					return nil, err
 				}
@@ -1821,7 +1825,7 @@ func NewTableDesc(
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		n.Table, colinfo.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
+		n.Table, colinfo.ResultColumnsFromColumns(desc.GetID(), desc.PublicColumns()),
 	)
 
 	for i := range desc.Columns {
@@ -1864,7 +1868,7 @@ func NewTableDesc(
 			if err != nil {
 				return nil, err
 			}
-			checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
+			checkConstraint, err := makeShardCheckConstraintDef(int(buckets), shardCol)
 			if err != nil {
 				return nil, err
 			}
@@ -1963,7 +1967,6 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
-				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := paramparse.ApplyStorageParameters(
 				ctx,
@@ -1985,6 +1988,11 @@ func NewTableDesc(
 			if d.WithoutIndex {
 				// We will add the unique constraint below.
 				break
+			}
+			// If the index is named, ensure that the name is unique.
+			// Unnamed indexes will be given a unique auto-generated name later on.
+			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
+				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
@@ -2055,7 +2063,6 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
-				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return nil, err
@@ -2319,6 +2326,18 @@ func NewTableDesc(
 					telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 				}
 			}
+			if idx.IsPartial() {
+				telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
+			}
+			if idx.NumColumns() > 1 {
+				telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
+			}
+			if idx.GetPartitioning().NumColumns != 0 {
+				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+			}
+		}
+		if idx.IsPartial() {
+			telemetry.Inc(sqltelemetry.PartialIndexCounter)
 		}
 		return nil
 	}); err != nil {
@@ -2520,6 +2539,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			if c.ComputeExpr != nil {
 				if opts.Has(tree.LikeTableOptGenerated) {
 					def.Computed.Computed = true
+					def.Computed.Virtual = c.Virtual
 					def.Computed.Expr, err = parser.ParseExpr(*c.ComputeExpr)
 					if err != nil {
 						return nil, err
@@ -2700,7 +2720,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 }
 
 func makeShardCheckConstraintDef(
-	desc *tabledesc.Mutable, buckets int, shardCol *descpb.ColumnDescriptor,
+	buckets int, shardCol catalog.Column,
 ) (*tree.CheckConstraintTableDef, error) {
 	values := &tree.Tuple{}
 	for i := 0; i < buckets; i++ {
@@ -2714,7 +2734,7 @@ func makeShardCheckConstraintDef(
 		Expr: &tree.ComparisonExpr{
 			Operator: tree.In,
 			Left: &tree.ColumnItem{
-				ColumnName: tree.Name(shardCol.Name),
+				ColumnName: tree.Name(shardCol.GetName()),
 			},
 			Right: values,
 		},

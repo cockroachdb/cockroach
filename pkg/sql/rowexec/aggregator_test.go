@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type aggTestSpec struct {
@@ -72,7 +74,7 @@ func TestAggregator(t *testing.T) {
 			Name: "MinMaxCountAvgSumStddevGroupByNoneNoRows",
 			Input: ProcessorTestCaseRows{
 				Rows:  [][]interface{}{},
-				Types: rowenc.MakeIntCols(1),
+				Types: types.MakeIntCols(1),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -105,7 +107,7 @@ func TestAggregator(t *testing.T) {
 					{7, 2},
 					{8, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -113,7 +115,7 @@ func TestAggregator(t *testing.T) {
 					{4, 1},
 					{2, 3},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				Aggregator: &execinfrapb.AggregatorSpec{
@@ -136,14 +138,14 @@ func TestAggregator(t *testing.T) {
 					{7, 2},
 					{8, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{4, 2},
 					{2, 3},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				Aggregator: &execinfrapb.AggregatorSpec{
@@ -166,14 +168,14 @@ func TestAggregator(t *testing.T) {
 					{3, 4},
 					{8, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{2, 3},
 					{4, 2},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			DisableSort: true,
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
@@ -198,7 +200,7 @@ func TestAggregator(t *testing.T) {
 					{7, 2},
 					{8, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -228,7 +230,7 @@ func TestAggregator(t *testing.T) {
 					{8, 4},
 					{3, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -260,7 +262,7 @@ func TestAggregator(t *testing.T) {
 					{4, 2},
 					{5, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -288,13 +290,13 @@ func TestAggregator(t *testing.T) {
 					{2},
 					{4},
 				},
-				Types: rowenc.MakeIntCols(1),
+				Types: types.MakeIntCols(1),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{6},
 				},
-				Types: rowenc.MakeIntCols(1),
+				Types: types.MakeIntCols(1),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				Aggregator: &execinfrapb.AggregatorSpec{
@@ -313,13 +315,13 @@ func TestAggregator(t *testing.T) {
 					{1},
 					{1},
 				},
-				Types: rowenc.MakeIntCols(1),
+				Types: types.MakeIntCols(1),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{1},
 				},
-				Types: rowenc.MakeIntCols(1),
+				Types: types.MakeIntCols(1),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				Aggregator: &execinfrapb.AggregatorSpec{
@@ -339,13 +341,13 @@ func TestAggregator(t *testing.T) {
 					{4, 2},
 					{5, 4},
 				},
-				Types: rowenc.MakeIntCols(2),
+				Types: types.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{5, 2, 5, 2},
 				},
-				Types: rowenc.MakeIntCols(4),
+				Types: types.MakeIntCols(4),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				Aggregator: &execinfrapb.AggregatorSpec{
@@ -374,7 +376,7 @@ func TestAggregator(t *testing.T) {
 				Rows: [][]interface{}{
 					{2, 3, 3},
 				},
-				Types: rowenc.MakeIntCols(3),
+				Types: types.MakeIntCols(3),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				Aggregator: &execinfrapb.AggregatorSpec{
@@ -395,20 +397,21 @@ func TestAggregator(t *testing.T) {
 }
 
 func BenchmarkAggregation(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 1
 	const numRows = 1000
 
 	aggFuncs := []execinfrapb.AggregatorSpec_Func{
-		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-		execinfrapb.AggregatorSpec_AVG,
-		execinfrapb.AggregatorSpec_COUNT,
-		execinfrapb.AggregatorSpec_MAX,
-		execinfrapb.AggregatorSpec_MIN,
-		execinfrapb.AggregatorSpec_STDDEV,
-		execinfrapb.AggregatorSpec_SUM,
-		execinfrapb.AggregatorSpec_SUM_INT,
-		execinfrapb.AggregatorSpec_VARIANCE,
-		execinfrapb.AggregatorSpec_XOR_AGG,
+		execinfrapb.AnyNotNull,
+		execinfrapb.Avg,
+		execinfrapb.Count,
+		execinfrapb.Max,
+		execinfrapb.Min,
+		execinfrapb.Stddev,
+		execinfrapb.Sum,
+		execinfrapb.SumInt,
+		execinfrapb.Variance,
+		execinfrapb.XorAgg,
 	}
 
 	ctx := context.Background()
@@ -433,7 +436,7 @@ func BenchmarkAggregation(b *testing.B) {
 			}
 			post := &execinfrapb.PostProcessSpec{}
 			disposer := &rowDisposer{}
-			input := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeIntRows(numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
@@ -451,10 +454,11 @@ func BenchmarkAggregation(b *testing.B) {
 }
 
 func BenchmarkCountRows(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	spec := &execinfrapb.AggregatorSpec{
 		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 			{
-				Func: execinfrapb.AggregatorSpec_COUNT_ROWS,
+				Func: execinfrapb.CountRows,
 			},
 		},
 	}
@@ -462,7 +466,7 @@ func BenchmarkCountRows(b *testing.B) {
 	disposer := &rowDisposer{}
 	const numCols = 1
 	const numRows = 100000
-	input := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(numRows, numCols))
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -487,6 +491,7 @@ func BenchmarkCountRows(b *testing.B) {
 }
 
 func BenchmarkGrouping(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 1
 	const numRows = 1000
 
@@ -504,7 +509,7 @@ func BenchmarkGrouping(b *testing.B) {
 	}
 	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}
-	input := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(numRows, numCols))
 
 	b.SetBytes(int64(8 * numRows * numCols))
 	b.ResetTimer()
@@ -520,22 +525,23 @@ func BenchmarkGrouping(b *testing.B) {
 }
 
 func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
+	defer log.Scope(b).Close(b)
 	const numCols = 3
 	const groupSize = 10
 	var groupedCols = [2]int{0, 1}
 	var allOrderedGroupCols = [2]uint32{0, 1}
 
 	aggFuncs := []execinfrapb.AggregatorSpec_Func{
-		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-		execinfrapb.AggregatorSpec_AVG,
-		execinfrapb.AggregatorSpec_COUNT,
-		execinfrapb.AggregatorSpec_MAX,
-		execinfrapb.AggregatorSpec_MIN,
-		execinfrapb.AggregatorSpec_STDDEV,
-		execinfrapb.AggregatorSpec_SUM,
-		execinfrapb.AggregatorSpec_SUM_INT,
-		execinfrapb.AggregatorSpec_VARIANCE,
-		execinfrapb.AggregatorSpec_XOR_AGG,
+		execinfrapb.AnyNotNull,
+		execinfrapb.Avg,
+		execinfrapb.Count,
+		execinfrapb.Max,
+		execinfrapb.Min,
+		execinfrapb.Stddev,
+		execinfrapb.Sum,
+		execinfrapb.SumInt,
+		execinfrapb.Variance,
+		execinfrapb.XorAgg,
 	}
 
 	ctx := context.Background()
@@ -562,7 +568,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
 			post := &execinfrapb.PostProcessSpec{}
 			disposer := &rowDisposer{}
-			input := execinfra.NewRepeatableRowSource(rowenc.ThreeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
+			input := execinfra.NewRepeatableRowSource(types.ThreeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
 
 			b.SetBytes(int64(8 * intPow(groupSize, len(groupedCols)+1) * numCols))
 			b.ResetTimer()

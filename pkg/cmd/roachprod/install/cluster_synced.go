@@ -156,7 +156,13 @@ func (c *SyncedCluster) newSession(i int) (session, error) {
 	return newRemoteSession(c.user(i), c.host(i), c.DebugDir)
 }
 
-// Stop TODO(peter): document
+// Stop is used to stop cockroach on all nodes in the cluster.
+//
+// It sends a signal to all processes that have been started with ROACHPROD env
+// var and optionally waits until the processes stop.
+//
+// When running roachprod stop without other flags, the signal is 9 (SIGKILL)
+// and wait is true.
 func (c *SyncedCluster) Stop(sig int, wait bool) {
 	display := fmt.Sprintf("%s: stopping", c.Name)
 	if wait {
@@ -181,14 +187,15 @@ func (c *SyncedCluster) Stop(sig int, wait bool) {
       sleep 1
     done
     echo "${pid}: dead" >> %[1]s/roachprod.log
-  done
-`, c.Impl.LogDir(c, c.Nodes[i]))
+  done`,
+				c.Impl.LogDir(c, c.Nodes[i]), // [1]
+			)
 		}
 
 		// NB: the awkward-looking `awk` invocation serves to avoid having the
 		// awk process match its own output from `ps`.
 		cmd := fmt.Sprintf(`
-mkdir -p logs
+mkdir -p %[1]s
 echo ">>> roachprod stop: $(date)" >> %[1]s/roachprod.log
 ps axeww -o pid -o command >> %[1]s/roachprod.log
 pids=$(ps axeww -o pid -o command | \
@@ -197,8 +204,13 @@ pids=$(ps axeww -o pid -o command | \
 if [ -n "${pids}" ]; then
   kill -%[4]d ${pids}
 %[5]s
-fi
-`, c.Impl.LogDir(c, c.Nodes[i]), c.Nodes[i], c.escapedTag(), sig, waitCmd)
+fi`,
+			c.Impl.LogDir(c, c.Nodes[i]), // [1]
+			c.Nodes[i],                   // [2]
+			c.escapedTag(),               // [3]
+			sig,                          // [4]
+			waitCmd,                      // [5]
+		)
 		return sess.CombinedOutput(cmd)
 	})
 }
@@ -1218,7 +1230,8 @@ func (c *SyncedCluster) Logs(
 				"-o ControlMaster=auto "+
 				"-o ControlPath=~/.ssh/%r@%h:%p "+
 				"-o UserKnownHostsFile=/dev/null "+
-				"-o ControlPersist=2m")
+				"-o ControlPersist=2m "+
+				strings.Join(sshAuthArgs(), " "))
 			// Use rsync-path flag to sudo into user if different from sshUser.
 			if user != "" && user != sshUser {
 				rsyncArgs = append(rsyncArgs, "--rsync-path",
@@ -1623,23 +1636,53 @@ func (c *SyncedCluster) scp(src, dest string) error {
 	return nil
 }
 
-// Parallel TODO(peter): document
+// ParallelResult captures the result of a user-defined function
+// passed to Parallel or ParallelE.
+type ParallelResult struct {
+	Index int
+	Out   []byte
+	Err   error
+}
+
+// Parallel runs a user-defined function across the nodes in the
+// cluster. If any of the commands fail, Parallel will log an error
+// and exit the program.
+//
+// See ParallelE for more information.
 func (c *SyncedCluster) Parallel(
 	display string, count, concurrency int, fn func(i int) ([]byte, error),
 ) {
+	failed, err := c.ParallelE(display, count, concurrency, fn)
+	if err != nil {
+		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
+		for _, f := range failed {
+			fmt.Fprintf(os.Stderr, "%d: %+v: %s\n", f.Index, f.Err, f.Out)
+		}
+		log.Fatal("command failed")
+	}
+}
+
+// ParallelE runs the given function in parallel across the given
+// nodes, returning an error if function returns an error.
+//
+// ParallelE runs the user-defined functions on the first `count`
+// nodes in the cluster. It runs at most `concurrency` (or
+// `c.MaxConcurrency` if it is lower) in parallel. If `concurrency` is
+// 0, then it defaults to `count`.
+//
+// If err is non-nil, the slice of ParallelResults will contain the
+// results from any of the failed invocations.
+func (c *SyncedCluster) ParallelE(
+	display string, count, concurrency int, fn func(i int) ([]byte, error),
+) ([]ParallelResult, error) {
 	if concurrency == 0 || concurrency > count {
 		concurrency = count
 	}
 	if c.MaxConcurrency > 0 && concurrency > c.MaxConcurrency {
 		concurrency = c.MaxConcurrency
 	}
-	type result struct {
-		index int
-		out   []byte
-		err   error
-	}
 
-	results := make(chan result, count)
+	results := make(chan ParallelResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
 
@@ -1648,7 +1691,7 @@ func (c *SyncedCluster) Parallel(
 		go func(i int) {
 			defer wg.Done()
 			out, err := fn(i)
-			results <- result{i, out, err}
+			results <- ParallelResult{i, out, err}
 		}(index)
 		index++
 	}
@@ -1675,10 +1718,9 @@ func (c *SyncedCluster) Parallel(
 		ticker = time.NewTicker(1000 * time.Millisecond)
 		fmt.Fprintf(out, "%s", display)
 	}
-
 	defer ticker.Stop()
 	complete := make([]bool, count)
-	var failed []result
+	var failed []ParallelResult
 
 	var spinner = []string{"|", "/", "-", "\\"}
 	spinnerIdx := 0
@@ -1690,12 +1732,12 @@ func (c *SyncedCluster) Parallel(
 				fmt.Fprintf(out, ".")
 			}
 		case r, ok := <-results:
-			if r.err != nil {
+			if r.Err != nil {
 				failed = append(failed, r)
 			}
 			done = !ok
 			if ok {
-				complete[r.index] = true
+				complete[r.Index] = true
 			}
 			if index < count {
 				startNext()
@@ -1725,12 +1767,9 @@ func (c *SyncedCluster) Parallel(
 	}
 
 	if len(failed) > 0 {
-		sort.Slice(failed, func(i, j int) bool { return failed[i].index < failed[j].index })
-		for _, f := range failed {
-			fmt.Fprintf(os.Stderr, "%d: %+v: %s\n", f.index, f.err, f.out)
-		}
-		log.Fatal("command failed")
+		return failed, errors.New("one or more parallel execution failure")
 	}
+	return nil, nil
 }
 
 func (c *SyncedCluster) escapedTag() string {

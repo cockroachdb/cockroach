@@ -35,10 +35,9 @@ import (
 )
 
 const (
-	confluentSchemaContentType   = `application/vnd.schemaregistry.v1+json`
-	confluentSubjectSuffixKey    = `-key`
-	confluentSubjectSuffixValue  = `-value`
-	confluentAvroWireFormatMagic = byte(0)
+	confluentSchemaContentType  = `application/vnd.schemaregistry.v1+json`
+	confluentSubjectSuffixKey   = `-key`
+	confluentSubjectSuffixValue = `-value`
 )
 
 // encodeRow holds all the pieces necessary to encode a row change into a key or
@@ -360,7 +359,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 	if !ok {
 		var err error
 		tableName := e.rawTableName(row.tableDesc)
-		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex().IndexDesc(), tableName, e.schemaPrefix)
+		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -378,7 +377,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
-		confluentAvroWireFormatMagic,
+		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
@@ -444,7 +443,7 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
-		confluentAvroWireFormatMagic,
+		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
@@ -482,7 +481,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
-		confluentAvroWireFormatMagic,
+		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))

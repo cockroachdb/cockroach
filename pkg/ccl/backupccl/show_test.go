@@ -57,19 +57,19 @@ CREATE TABLE data.sc.t2 (a data.welcome);
 
 	res := sqlDB.QueryStr(t, `
 SELECT
-  database_name, parent_schema_name, object_name, object_type,
+  database_name, parent_schema_name, object_name, object_type, backup_type,
   start_time::string, end_time::string, rows, is_full_cluster
 FROM
 	[SHOW BACKUP $1]
 ORDER BY object_type, object_name`, full)
 	expectedObjects := [][]string{
-		{"NULL", "NULL", "data", "database", "NULL", beforeTS, "NULL", "false"},
-		{"data", "NULL", "sc", "schema", "NULL", beforeTS, "NULL", "false"},
-		{"data", "public", "bank", "table", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
-		{"data", "sc", "t1", "table", "NULL", beforeTS, strconv.Itoa(0), "false"},
-		{"data", "sc", "t2", "table", "NULL", beforeTS, strconv.Itoa(0), "false"},
-		{"data", "public", "_welcome", "type", "NULL", beforeTS, "NULL", "false"},
-		{"data", "public", "welcome", "type", "NULL", beforeTS, "NULL", "false"},
+		{"NULL", "NULL", "data", "database", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "NULL", "sc", "schema", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "public", "bank", "table", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"data", "sc", "t1", "table", "full", "NULL", beforeTS, strconv.Itoa(0), "false"},
+		{"data", "sc", "t2", "table", "full", "NULL", beforeTS, strconv.Itoa(0), "false"},
+		{"data", "public", "_welcome", "type", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "public", "welcome", "type", "full", "NULL", beforeTS, "NULL", "false"},
 	}
 	require.Equal(t, expectedObjects, res)
 
@@ -87,24 +87,24 @@ ORDER BY object_type, object_name`, full)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2`, incTS), inc, full)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT object_name, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP $1]`, full)
 	require.Equal(t, [][]string{
 		// Full.
-		{"data", "NULL", beforeTS, "NULL", "false"},
-		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
-		{"welcome", "NULL", beforeTS, "NULL", "false"},
-		{"_welcome", "NULL", beforeTS, "NULL", "false"},
-		{"sc", "NULL", beforeTS, "NULL", "false"},
-		{"t1", "NULL", beforeTS, "0", "false"},
-		{"t2", "NULL", beforeTS, "0", "false"},
+		{"data", "full", "NULL", beforeTS, "NULL", "false"},
+		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"welcome", "full", "NULL", beforeTS, "NULL", "false"},
+		{"_welcome", "full", "NULL", beforeTS, "NULL", "false"},
+		{"sc", "full", "NULL", beforeTS, "NULL", "false"},
+		{"t1", "full", "NULL", beforeTS, "0", "false"},
+		{"t2", "full", "NULL", beforeTS, "0", "false"},
 		// Incremental.
-		{"data", beforeTS, incTS, "NULL", "false"},
-		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
-		{"welcome", beforeTS, incTS, "NULL", "false"},
-		{"_welcome", beforeTS, incTS, "NULL", "false"},
-		{"sc", beforeTS, incTS, "NULL", "false"},
-		{"t1", beforeTS, incTS, "0", "false"},
-		{"t2", beforeTS, incTS, "0", "false"},
+		{"data", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"bank", "incremental", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
+		{"welcome", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"_welcome", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"sc", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"t1", "incremental", beforeTS, incTS, "0", "false"},
+		{"t2", "incremental", beforeTS, incTS, "0", "false"},
 	}, res)
 
 	// Check the separate inc backup.
@@ -125,19 +125,19 @@ ORDER BY object_type, object_name`, full)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2, $3`, inc2TS), inc2, full, inc)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT object_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1] WHERE object_type='table'`, full)
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP $1] WHERE object_type='table'`, full)
 	require.Equal(t, [][]string{
-		{"bank", "NULL", beforeTS, strconv.Itoa(numAccounts)},
-		{"t1", "NULL", beforeTS, "0"},
-		{"t2", "NULL", beforeTS, "0"},
-		{"bank", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
-		{"t1", beforeTS, incTS, "0"},
-		{"t2", beforeTS, incTS, "0"},
-		{"bank", incTS, inc2TS, "0"},
-		{"t1", incTS, inc2TS, "0"},
-		{"t2", incTS, inc2TS, "0"},
-		{"auth", incTS, inc2TS, "0"},
-		{"users", incTS, inc2TS, "3"},
+		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts)},
+		{"t1", "full", "NULL", beforeTS, "0"},
+		{"t2", "full", "NULL", beforeTS, "0"},
+		{"bank", "incremental", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+		{"t1", "incremental", beforeTS, incTS, "0"},
+		{"t2", "incremental", beforeTS, incTS, "0"},
+		{"bank", "incremental", incTS, inc2TS, "0"},
+		{"t1", "incremental", incTS, inc2TS, "0"},
+		{"t2", "incremental", incTS, inc2TS, "0"},
+		{"auth", "incremental", incTS, inc2TS, "0"},
+		{"users", "incremental", incTS, inc2TS, "3"},
 	}, res)
 
 	// Check the separate inc backup.

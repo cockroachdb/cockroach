@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -107,3 +108,20 @@ func (b *restorationDataBase) isEmpty() bool {
 
 // isMainBundle implements restorationData.
 func (restorationDataBase) isMainBundle() bool { return false }
+
+// checkForMigratedData checks to see if any of the system tables in the set of
+// data that is to be restored has already been restored. If this is the case,
+// it is not safe to try and restore the data again since the migration may have
+// written to the temporary system table.
+func checkForMigratedData(details jobspb.RestoreDetails, dataToRestore restorationData) bool {
+	for _, systemTable := range dataToRestore.getSystemTables() {
+		// We only need to check if _any_ of the system tables in this batch of
+		// data have been migrated. This is because the migration can only
+		// happen after all of the data in the batch has been restored.
+		if _, ok := details.SystemTablesMigrated[systemTable.GetName()]; ok {
+			return true
+		}
+	}
+
+	return false
+}

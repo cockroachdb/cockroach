@@ -33,7 +33,7 @@ import (
 // is not supported. Note that it does so by setting up the full flow without
 // running the components asynchronously, so it is pretty expensive.
 // It also returns a non-nil cleanup function that releases all
-// execinfra.Releasable objects which can *only* be performed once leaves are
+// execinfra.Releasable objects which can *only* be performed once opChains are
 // no longer needed.
 func convertToVecTree(
 	ctx context.Context,
@@ -41,7 +41,7 @@ func convertToVecTree(
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	isPlanLocal bool,
-) (leaves []execinfra.OpNode, cleanup func(), err error) {
+) (opChains execinfra.OpChains, cleanup func(), err error) {
 	if !isPlanLocal && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
@@ -70,8 +70,8 @@ func convertToVecTree(
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
-	return leaves, creator.Release, err
+	opChains, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
+	return opChains, creator.Release, err
 }
 
 type flowWithNode struct {
@@ -81,38 +81,44 @@ type flowWithNode struct {
 
 // ExplainVec converts the flows (that are assumed to be vectorizable) into the
 // corresponding string representation.
+// It also supports printing of already constructed operator chains which takes
+// priority if non-nil (flows are ignored). All operators in opChains are
+// assumed to be planned on the gateway.
 func ExplainVec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
+	opChains execinfra.OpChains,
+	gatewayNodeID roachpb.NodeID,
 	verbose bool,
 	distributed bool,
 ) ([]string, error) {
 	tp := treeprinter.NewWithStyle(treeprinter.CompactStyle)
+	root := tp.Child("│")
 	var conversionErr error
 	// It is possible that when iterating over execinfra.OpNodes we will hit a
 	// panic (an input that doesn't implement OpNode interface), so we're
 	// catching such errors.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		sortedFlows := make([]flowWithNode, 0, len(flows))
-		for nodeID, flow := range flows {
-			sortedFlows = append(sortedFlows, flowWithNode{nodeID: nodeID, flow: flow})
-		}
-		// Sort backward, since the first thing you add to a treeprinter will come
-		// last.
-		sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
-		root := tp.Child("│")
-		for _, flow := range sortedFlows {
-			node := root.Childf("Node %d", flow.nodeID)
-			opChains, cleanup, err := convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
-			defer cleanup()
-			if err != nil {
-				conversionErr = err
-				return
+		if opChains != nil {
+			formatChains(root, gatewayNodeID, opChains, verbose)
+		} else {
+			sortedFlows := make([]flowWithNode, 0, len(flows))
+			for nodeID, flow := range flows {
+				sortedFlows = append(sortedFlows, flowWithNode{nodeID: nodeID, flow: flow})
 			}
-			for _, op := range opChains {
-				formatOpChain(op, node, verbose)
+			// Sort backward, since the first thing you add to a treeprinter will come
+			// last.
+			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
+			for _, flow := range sortedFlows {
+				opChains, cleanup, err := convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
+				defer cleanup()
+				if err != nil {
+					conversionErr = err
+					return
+				}
+				formatChains(root, flow.nodeID, opChains, verbose)
 			}
 		}
 	}); err != nil {
@@ -122,6 +128,15 @@ func ExplainVec(
 		return nil, conversionErr
 	}
 	return tp.FormattedRows(), nil
+}
+
+func formatChains(
+	root treeprinter.Node, nodeID roachpb.NodeID, opChains execinfra.OpChains, verbose bool,
+) {
+	node := root.Childf("Node %d", nodeID)
+	for _, op := range opChains {
+		formatOpChain(op, node, verbose)
+	}
 }
 
 func shouldOutput(operator execinfra.OpNode, verbose bool) bool {

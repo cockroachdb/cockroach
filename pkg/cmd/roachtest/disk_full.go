@@ -41,7 +41,7 @@ func registerDiskFull(r *testRegistry) {
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./workload run kv --tolerate-errors --init --read-percent=0"+
-						" --concurrency=10 --duration=2m {pgurl:1-%d}",
+						" --concurrency=10 --duration=2m {pgurl:2-%d}",
 					nodes)
 				c.Run(ctx, c.Node(nodes+1), cmd)
 				return nil

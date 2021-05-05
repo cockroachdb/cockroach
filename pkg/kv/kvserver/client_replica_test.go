@@ -1424,10 +1424,11 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 // Test that a lease extension (a RequestLeaseRequest that doesn't change the
 // lease holder) is not blocked by ongoing reads. The test relies on the fact
 // that RequestLeaseRequest does not declare to touch the whole key span of the
-// range, and thus don't conflict through the command queue with other reads.
+// range, and thus don't conflict through latches with other reads.
 func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	readBlocked := make(chan struct{})
 	cmdFilter := func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if fArgs.Hdr.UserPriority == 42 {
@@ -1449,7 +1450,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 		})
 	s := srv.(*server.TestServer)
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	if err != nil {
@@ -1465,7 +1466,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				Key: key,
 			},
 		}
-		if _, pErr := kv.SendWrappedWith(context.Background(), s.DB().NonTransactionalSender(),
+		if _, pErr := kv.SendWrappedWith(ctx, s.DB().NonTransactionalSender(),
 			roachpb.Header{UserPriority: 42},
 			&getReq); pErr != nil {
 			errChan <- pErr.GoError()
@@ -1502,21 +1503,21 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		}
 
 		for {
-			curLease, _, err := s.GetRangeLease(context.Background(), key)
+			leaseInfo, _, err := s.GetRangeLease(ctx, key, server.AllowQueryToBeForwardedToDifferentNode)
 			if err != nil {
 				t.Fatal(err)
 			}
-			leaseReq.PrevLease = curLease
+			leaseReq.PrevLease = leaseInfo.CurrentOrProspective()
 
-			_, pErr := kv.SendWrapped(context.Background(), s.DB().NonTransactionalSender(), &leaseReq)
+			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
-				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				log.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if _, ok := pErr.GetDetail().(*roachpb.LeaseRejectedError); ok {
 				// Lease rejected? Try again. The extension should work because
 				// extending is idempotent (assuming the PrevLease matches).
-				log.Infof(context.Background(), "retrying lease after %s", pErr)
+				log.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if pErr != nil {
@@ -3210,7 +3211,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 					_, r := getFirstStoreReplica(t, s, tableKey)
 					if _, z := r.DescAndZone(); z.GC.TTLSeconds != int32(exp) {
 						_, sysCfg := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
-						require.NoError(t, sysCfg.MaybeGossipSystemConfig(ctx))
+						sysCfg.RaftLock()
+						require.NoError(t, sysCfg.MaybeGossipSystemConfigRaftMuLocked(ctx))
+						sysCfg.RaftUnlock()
 						return errors.Errorf("expected %d, got %d", exp, z.GC.TTLSeconds)
 					}
 				}
@@ -3224,7 +3227,9 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s, r := getFirstStoreReplica(t, tc.Server(i), keys.SystemConfigSpan.Key)
 					if kvserver.StrictGCEnforcement.Get(&s.ClusterSettings().SV) != val {
-						require.NoError(t, r.MaybeGossipSystemConfig(ctx))
+						r.RaftLock()
+						require.NoError(t, r.MaybeGossipSystemConfigRaftMuLocked(ctx))
+						r.RaftUnlock()
 						return errors.Errorf("expected %v, got %v", val, !val)
 					}
 				}
@@ -3341,7 +3346,7 @@ func TestProposalOverhead(t *testing.T) {
 		}
 		// Sometime the logical portion of the timestamp can be non-zero which makes
 		// the overhead non-deterministic.
-		args.Cmd.ReplicatedEvalResult.Timestamp.Logical = 0
+		args.Cmd.ReplicatedEvalResult.WriteTimestamp.Logical = 0
 		atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
 		// We don't want to print the WriteBatch because it's explicitly
 		// excluded from the size computation. Nil'ing it out does not
@@ -3604,14 +3609,14 @@ func TestTenantID(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), keys.UserTableDataMin)
-			ri := repl.State()
+			ri := repl.State(ctx)
 			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
 		tc.SplitRangeOrFatal(t, tenant2Prefix)
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
-			ri := repl.State()
+			ri := repl.State(ctx)
 			require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 		}
 	})
@@ -3665,18 +3670,18 @@ func TestTenantID(t *testing.T) {
 
 		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, repl.RangeID)
 		require.NoError(t, err)
-		ri := uninitializedRepl.State()
+		ri := uninitializedRepl.State(ctx)
 		require.Equal(t, uint64(0), ri.TenantID)
 		close(blockSnapshot)
 		require.NoError(t, <-addReplicaErr)
-		ri = uninitializedRepl.State() // now initialized
+		ri = uninitializedRepl.State(ctx) // now initialized
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID)
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
 		tc.AddAndStartServer(t, stickySpecTestServerArgs)
 		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
-		ri := repl.State()
+		ri := repl.State(ctx)
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
 	})
 

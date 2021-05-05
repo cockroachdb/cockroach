@@ -133,6 +133,9 @@ func TryDelegate(
 	case *tree.ControlJobsForSchedules:
 		return d.delegateJobControl(t)
 
+	case *tree.ShowFullTableScans:
+		return d.delegateShowFullTableScans()
+
 	case *tree.ShowLastQueryStatistics:
 		return nil, unimplemented.New(
 			"show last query statistics",

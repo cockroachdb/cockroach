@@ -963,7 +963,7 @@ func (node *Array) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtParsable) && node.typ != nil {
 		if node.typ.ArrayContents().Family() != types.UnknownFamily {
 			ctx.WriteString(":::")
-			ctx.Buffer.WriteString(node.typ.SQLString())
+			ctx.FormatTypeReference(node.typ)
 		}
 	}
 }
@@ -1624,7 +1624,23 @@ type IndirectionExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *IndirectionExpr) Format(ctx *FmtCtx) {
-	exprFmtWithParen(ctx, node.Expr)
+	// If the sub expression is a CastExpr or an Array that has a type,
+	// we need to wrap it in a ParenExpr, otherwise the indirection
+	// will get interpreted as part of the type.
+	// Ex. ('{a}'::_typ)[1] vs. '{a}'::_typ[1].
+	// Ex. (ARRAY['a'::typ]:::typ[])[1] vs. ARRAY['a'::typ]:::typ[][1].
+	var annotateArray bool
+	if arr, ok := node.Expr.(*Array); ctx.HasFlags(FmtParsable) && ok && arr.typ != nil {
+		if arr.typ.ArrayContents().Family() != types.UnknownFamily {
+			annotateArray = true
+		}
+	}
+	if _, isCast := node.Expr.(*CastExpr); isCast || annotateArray {
+		withParens := ParenExpr{Expr: node.Expr}
+		exprFmtWithParen(ctx, &withParens)
+	} else {
+		exprFmtWithParen(ctx, node.Expr)
+	}
 	ctx.FormatNode(&node.Indirection)
 }
 
@@ -1708,7 +1724,7 @@ type ColumnAccessExpr struct {
 
 	// ColName is the name of the column to access. Empty if ByIndex is
 	// set.
-	ColName string
+	ColName Name
 
 	// ColIndex indicates the index of the column in the tuple. This is
 	// either:
@@ -1724,7 +1740,7 @@ type ColumnAccessExpr struct {
 
 // NewTypedColumnAccessExpr creates a pre-typed ColumnAccessExpr.
 // A by-index ColumnAccessExpr can be specified by passing an empty string as colName.
-func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *ColumnAccessExpr {
+func NewTypedColumnAccessExpr(expr TypedExpr, colName Name, colIdx int) *ColumnAccessExpr {
 	return &ColumnAccessExpr{
 		Expr:           expr,
 		ColName:        colName,
@@ -1742,7 +1758,7 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	if node.ByIndex {
 		fmt.Fprintf(ctx, "@%d", node.ColIndex+1)
 	} else {
-		ctx.WriteString(node.ColName)
+		ctx.FormatNode(&node.ColName)
 	}
 }
 

@@ -40,10 +40,10 @@ INSERT INTO u VALUES (b'cafef00ddeadbee')
 statement error UUID must be exactly 16 bytes long, got 17 bytes
 INSERT INTO u VALUES (b'cafef00ddeadbeefs')
 
-statement error uuid: incorrect UUID length
+statement error uuid: incorrect UUID format
 INSERT INTO u VALUES ('63616665-6630-3064-6465-61646265656')
 
-statement error uuid: incorrect UUID length
+statement error uuid: incorrect UUID format
 INSERT INTO u VALUES ('63616665-6630-3064-6465-6164626565620')
 
 statement error unsupported comparison operator: <uuid> = <bytes>

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // Workaround for bazel auto-generated code. goimports does not automatically
@@ -35,6 +36,7 @@ var (
 	_ = typeconv.DatumVecCanonicalTypeFamily
 	_ apd.Context
 	_ duration.Duration
+	_ json.JSON
 )
 
 // {{/*
@@ -67,9 +69,9 @@ func (m *memColumn) Append(args SliceArgs) {
 				execgen.APPENDSLICE(toCol, fromCol, args.DestIdx, args.SrcStartIdx, args.SrcEndIdx)
 			} else {
 				sel := args.Sel[args.SrcStartIdx:args.SrcEndIdx]
-				// {{if eq .VecMethod "Bytes"}}
-				// We need to truncate toCol before appending to it, so in case of Bytes,
-				// we append an empty slice.
+				// {{if .IsBytesLike }}
+				// We need to truncate toCol before appending to it, so in case of
+				// bytes-like columns, we append an empty slice.
 				execgen.APPENDSLICE(toCol, toCol, args.DestIdx, 0, 0)
 				// {{else}}
 				// {{/* Here WINDOW means slicing which allows us to use APPENDVAL below. */}}
@@ -267,6 +269,9 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 // GetValueAt is an inefficient helper to get the value in a Vec when the type
 // is unknown.
 func GetValueAt(v Vec, rowIdx int) interface{} {
+	if v.Nulls().NullAt(rowIdx) {
+		return nil
+	}
 	t := v.Type()
 	switch v.CanonicalTypeFamily() {
 	// {{range .}}

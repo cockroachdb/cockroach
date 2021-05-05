@@ -183,7 +183,7 @@ func (sc *AbortSpan) CopyTo(
 			hlc.Timestamp{}, nil, &entry,
 		)
 	}); err != nil {
-		return roachpb.NewReplicaCorruptionError(errors.Wrap(err, "AbortSpan.CopyTo"))
+		return errors.Wrap(err, "AbortSpan.CopyTo")
 	}
 	log.Eventf(ctx, "abort span: copied %d entries, skipped %d", abortSpanCopyCount, abortSpanSkipCount)
 	return nil

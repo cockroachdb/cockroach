@@ -148,12 +148,12 @@ drop_stmt ::=
 	| drop_schedule_stmt
 
 explain_stmt ::=
-	'EXPLAIN' preparable_stmt
-	| 'EXPLAIN' '(' explain_option_list ')' preparable_stmt
-	| 'EXPLAIN' 'ANALYZE' preparable_stmt
-	| 'EXPLAIN' 'ANALYSE' preparable_stmt
-	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' preparable_stmt
-	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' preparable_stmt
+	'EXPLAIN' explainable_stmt
+	| 'EXPLAIN' '(' explain_option_list ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' explainable_stmt
+	| 'EXPLAIN' 'ANALYSE' '(' explain_option_list ')' explainable_stmt
 
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
@@ -491,6 +491,10 @@ drop_role_stmt ::=
 drop_schedule_stmt ::=
 	'DROP' 'SCHEDULE' a_expr
 	| 'DROP' 'SCHEDULES' select_stmt
+
+explainable_stmt ::=
+	preparable_stmt
+	| execute_stmt
 
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
@@ -898,6 +902,7 @@ unreserved_keyword ::=
 	| 'IMMEDIATE'
 	| 'IMPORT'
 	| 'INCLUDE'
+	| 'INCLUDE_DEPRECATED_INTERLEAVES'
 	| 'INCLUDING'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
@@ -968,6 +973,7 @@ unreserved_keyword ::=
 	| 'NOCONTROLJOB'
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
+	| 'NON_VOTERS'
 	| 'NOVIEWACTIVITY'
 	| 'NOWAIT'
 	| 'NULLS'
@@ -1046,6 +1052,7 @@ unreserved_keyword ::=
 	| 'SETTINGS'
 	| 'STATUS'
 	| 'SAVEPOINT'
+	| 'SCANS'
 	| 'SCATTER'
 	| 'SCHEMA'
 	| 'SCHEMAS'
@@ -1120,6 +1127,7 @@ unreserved_keyword ::=
 	| 'VARYING'
 	| 'VIEW'
 	| 'VIEWACTIVITY'
+	| 'VOTERS'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -1771,6 +1779,7 @@ backup_options ::=
 	| 'REVISION_HISTORY'
 	| 'DETACHED'
 	| 'KMS' '=' string_or_placeholder_opt_list
+	| 'INCLUDE_DEPRECATED_INTERLEAVES'
 
 c_expr ::=
 	d_expr
@@ -2384,7 +2393,7 @@ constraint_name ::=
 
 constraint_elem ::=
 	'CHECK' '(' a_expr ')'
-	| 'UNIQUE' opt_without_index '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
+	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
 	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_interleave
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 
@@ -2534,6 +2543,7 @@ alter_table_cmd ::=
 	| 'ADD' 'COLUMN' column_def
 	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def
 	| 'ALTER' opt_column column_name alter_column_default
+	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
@@ -2558,6 +2568,7 @@ sequence_option_elem ::=
 	'NO' 'CYCLE'
 	| 'OWNED' 'BY' 'NONE'
 	| 'OWNED' 'BY' column_path
+	| 'CACHE' signed_iconst64
 	| 'INCREMENT' signed_iconst64
 	| 'INCREMENT' 'BY' signed_iconst64
 	| 'MINVALUE' signed_iconst64
@@ -2674,10 +2685,6 @@ col_qualification ::=
 	| 'CREATE' 'FAMILY' family_name
 	| 'CREATE' 'FAMILY'
 	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
-
-opt_without_index ::=
-	'WITHOUT' 'INDEX'
-	| 
 
 key_match ::=
 	'MATCH' 'SIMPLE'
@@ -2809,6 +2816,10 @@ alter_column_default ::=
 	'SET' 'DEFAULT' a_expr
 	| 'DROP' 'DEFAULT'
 
+alter_column_visible ::=
+	'SET' 'VISIBLE'
+	| 'SET' 'NOT' 'VISIBLE'
+
 opt_set_data ::=
 	'SET' 'DATA'
 	| 
@@ -2923,7 +2934,7 @@ col_qualification_elem ::=
 	'NOT' 'NULL'
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
-	| 'UNIQUE' opt_without_index
+	| 'UNIQUE'
 	| 'PRIMARY' 'KEY'
 	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
 	| 'CHECK' '(' a_expr ')'

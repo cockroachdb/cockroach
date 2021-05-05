@@ -360,9 +360,11 @@ func TestShadowTracer(t *testing.T) {
 			str: zipTr,
 			check: func(t *testing.T, spi opentracing.Span) {
 				rs := zipRec.GetSpans()
-				require.Len(t, rs, 1)
-				require.Len(t, rs[0].Logs, 1)
-				require.Equal(t, log.String("event", "hello"), rs[0].Logs[0].Fields[0])
+				require.Len(t, rs, 2)
+				// The first span we opened is the second one to get recorded.
+				parentSpan := rs[1]
+				require.Len(t, parentSpan.Logs, 1)
+				require.Equal(t, log.String("event", "hello"), parentSpan.Logs[0].Fields[0])
 			},
 		},
 		{
@@ -415,6 +417,7 @@ func TestShadowTracer(t *testing.T) {
 			}
 
 			s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
+			defer s2.Finish()
 			s2Ctx := s2.i.ot.shadowSpan.Context()
 
 			// Verify that the baggage is correct in both the tracer context and in the

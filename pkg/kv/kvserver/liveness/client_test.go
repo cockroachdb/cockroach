@@ -220,7 +220,10 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	log.Infof(ctx, "checking status map")
 
 	// See what comes up in the status.
-	admin := tc.GetAdminClient(ctx, t, 0)
+	admin, err := tc.GetAdminClient(ctx, t, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	type testCase struct {
 		nodeID         roachpb.NodeID

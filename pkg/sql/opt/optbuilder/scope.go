@@ -108,19 +108,6 @@ type scope struct {
 	atRoot bool
 }
 
-// cteSource represents a CTE in the given query.
-type cteSource struct {
-	id           opt.WithID
-	name         tree.AliasClause
-	cols         physical.Presentation
-	originalExpr tree.Statement
-	expr         memo.RelExpr
-	mtr          tree.MaterializeClause
-	// If set, this function is called when a CTE is referenced. It can throw an
-	// error.
-	onRef func()
-}
-
 // exprKind is used to represent the kind of the current expression in the
 // SQL query.
 type exprKind int8
@@ -349,8 +336,8 @@ func (s *scope) makeColumnTypes() []*types.T {
 }
 
 // makeOrderingChoice returns an OrderingChoice that corresponds to s.ordering.
-func (s *scope) makeOrderingChoice() physical.OrderingChoice {
-	var oc physical.OrderingChoice
+func (s *scope) makeOrderingChoice() props.OrderingChoice {
+	var oc props.OrderingChoice
 	oc.FromOrdering(s.ordering)
 	return oc
 }

@@ -53,8 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +92,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = descpb.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
-	cfg := base.NewLeaseManagerConfig()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
 	require.NoError(t, err)
@@ -105,7 +106,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
-		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
@@ -1401,13 +1401,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
-		table, _, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
+		table, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
 		if err != nil {
 			t.Error(err)
 		}
-		if err := leaseMgr.Release(table); err != nil {
-			t.Error(err)
-		}
+		table.Release(ctx)
 	}
 
 	// Bulk insert.
@@ -4463,13 +4461,15 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
+	var gcAt hlc.Timestamp
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
 		}
+		gcAt = tc.Server(0).Clock().Now()
 		gcr := roachpb.GCRequest{
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
-			Threshold:     tc.Server(0).Clock().Now(),
+			Threshold:     gcAt,
 		}
 		_, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr)
 		if err != nil {
@@ -4500,12 +4500,22 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+	if _, err := db.Exec(`CREATE UNIQUE INDEX index_created_in_test ON t.test (v)`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, 2, 0); err != nil {
 		t.Fatal(err)
+	}
+
+	got := sqlDB.QueryStr(t, `
+		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
+		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM system.jobs)
+		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
+		gcAt.WallTime,
+	)[0]
+	if got[0] != "true" {
+		t.Fatalf("expected write-ts < gc time. details: %s", got[1])
 	}
 }
 
@@ -7398,4 +7408,39 @@ COMMIT;
 		}
 	})
 
+}
+
+// Ensures that errors coming from hlc due to clocks being out of sync are not
+// treated as permanent failures.
+func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc serverutils.TestClusterInterface
+	ctx := context.Background()
+	var updatedClock int64 // updated with atomics
+	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+						if atomic.AddInt64(&updatedClock, 1) > 1 {
+							return nil
+						}
+						clock := tc.Server(0).Clock()
+						now := clock.Now()
+						farInTheFuture := now.Add(time.Hour.Nanoseconds(), 0)
+
+						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY)`)
+	// Before the commit which added this test, the below command would fail
+	// due to a permanent error.
+	tdb.Exec(t, `ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
 }

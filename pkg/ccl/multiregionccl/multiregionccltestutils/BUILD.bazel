@@ -9,5 +9,6 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/testutils/serverutils",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )

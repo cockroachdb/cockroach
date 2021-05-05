@@ -24,7 +24,7 @@ import (
 // for database descriptors.
 type DatabaseDescriptorBuilder interface {
 	catalog.DescriptorBuilder
-	BuildImmutableDatabase() *Immutable
+	BuildImmutableDatabase() catalog.DatabaseDescriptor
 	BuildExistingMutableDatabase() *Mutable
 	BuildCreatedMutableDatabase() *Mutable
 }
@@ -68,12 +68,12 @@ func (ddb *databaseDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 }
 
 // BuildImmutableDatabase returns an immutable database descriptor.
-func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() *Immutable {
+func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() catalog.DatabaseDescriptor {
 	desc := ddb.maybeModified
 	if desc == nil {
 		desc = ddb.original
 	}
-	return &Immutable{DatabaseDescriptor: *desc}
+	return &immutable{DatabaseDescriptor: *desc}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -88,8 +88,8 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 		ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 	}
 	return &Mutable{
-		Immutable:      Immutable{DatabaseDescriptor: *ddb.maybeModified},
-		ClusterVersion: &Immutable{DatabaseDescriptor: *ddb.original},
+		immutable:      immutable{DatabaseDescriptor: *ddb.maybeModified},
+		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
 	}
 }
 
@@ -105,7 +105,7 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 	if desc == nil {
 		desc = ddb.original
 	}
-	return &Mutable{Immutable: Immutable{DatabaseDescriptor: *desc}}
+	return &Mutable{immutable: immutable{DatabaseDescriptor: *desc}}
 }
 
 // NewInitialOption is an optional argument for NewInitial.

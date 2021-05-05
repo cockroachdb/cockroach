@@ -101,6 +101,12 @@ func ClearTableData(
 
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+	return clearSpanData(ctx, db, distSender, tableSpan)
+}
+
+func clearSpanData(
+	ctx context.Context, db *kv.DB, distSender *kvcoord.DistSender, span roachpb.RSpan,
+) error {
 
 	// ClearRange requests lays down RocksDB range deletion tombstones that have
 	// serious performance implications (#24029). The logic below attempts to
@@ -126,20 +132,20 @@ func ClearTableData(
 	const waitTime = 500 * time.Millisecond
 
 	var n int
-	lastKey := tableSpan.Key
+	lastKey := span.Key
 	ri := kvcoord.NewRangeIterator(distSender)
 	timer := timeutil.NewTimer()
 	defer timer.Stop()
 
-	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
+	for ri.Seek(ctx, span.Key, kvcoord.Ascending); ; ri.Next(ctx) {
 		if !ri.Valid() {
 			return ri.Error()
 		}
 
-		if n++; n >= batchSize || !ri.NeedAnother(tableSpan) {
+		if n++; n >= batchSize || !ri.NeedAnother(span) {
 			endKey := ri.Desc().EndKey
-			if tableSpan.EndKey.Less(endKey) {
-				endKey = tableSpan.EndKey
+			if span.EndKey.Less(endKey) {
+				endKey = span.EndKey
 			}
 			var b kv.Batch
 			b.AddRawRequest(&roachpb.ClearRangeRequest{
@@ -163,7 +169,7 @@ func ClearTableData(
 			}
 		}
 
-		if !ri.NeedAnother(tableSpan) {
+		if !ri.NeedAnother(span) {
 			break
 		}
 	}

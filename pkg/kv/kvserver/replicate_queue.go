@@ -49,10 +49,10 @@ const (
 	newReplicaGracePeriod = 5 * time.Minute
 )
 
-// minLeaseTransferInterval controls how frequently leases can be transferred
+// MinLeaseTransferInterval controls how frequently leases can be transferred
 // for rebalancing. It does not prevent transferring leases in order to allow
 // a replica to be removed from a range.
-var minLeaseTransferInterval = settings.RegisterDurationSetting(
+var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 	"kv.allocator.min_lease_transfer_interval",
 	"controls how frequently leases can be transferred for rebalancing. "+
 		"It does not prevent transferring leases in order to allow a "+
@@ -285,7 +285,7 @@ func (rq *replicateQueue) shouldQueue(
 	// If the lease is valid, check to see if we should transfer it.
 	status := repl.LeaseStatusAt(ctx, now)
 	if status.IsValid() &&
-		rq.canTransferLease() &&
+		rq.canTransferLeaseFrom(ctx, repl) &&
 		rq.allocator.ShouldTransferLease(ctx, zone, voterReplicas, status.Lease.Replica.StoreID, repl.leaseholderStats) {
 
 		log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
@@ -310,7 +310,7 @@ func (rq *replicateQueue) process(
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
-			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */)
+			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLeaseFrom, false /* dryRun */)
 			if isSnapshotError(err) {
 				// If ChangeReplicas failed because the snapshot failed, we log the
 				// error but then return success indicating we should retry the
@@ -344,7 +344,10 @@ func (rq *replicateQueue) process(
 }
 
 func (rq *replicateQueue) processOneChange(
-	ctx context.Context, repl *Replica, canTransferLease func() bool, dryRun bool,
+	ctx context.Context,
+	repl *Replica,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
+	dryRun bool,
 ) (requeue bool, _ error) {
 	// Check lease and destroy status here. The queue does this higher up already, but
 	// adminScatter (and potential other future callers) also call this method and don't
@@ -481,7 +484,7 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorRemoveLearner:
 		return rq.removeLearner(ctx, repl, dryRun)
 	case AllocatorConsiderRebalance:
-		return rq.considerRebalance(ctx, repl, voterReplicas, nonVoterReplicas, canTransferLease, dryRun)
+		return rq.considerRebalance(ctx, repl, voterReplicas, nonVoterReplicas, canTransferLeaseFrom, dryRun)
 	case AllocatorFinalizeAtomicReplicationChange:
 		_, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.store, repl.Desc())
 		// Requeue because either we failed to transition out of a joint state
@@ -617,7 +620,6 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	} else {
 		ops = roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, newVoter)
 	}
-
 	if removeIdx < 0 {
 		log.VEventf(ctx, 1, "adding voter %+v: %s",
 			newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
@@ -806,12 +808,12 @@ func (rq *replicateQueue) maybeTransferLeaseAway(
 	repl *Replica,
 	removeStoreID roachpb.StoreID,
 	dryRun bool,
-	canTransferLease func() bool,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
 ) (done bool, _ error) {
 	if removeStoreID != repl.store.StoreID() {
 		return false, nil
 	}
-	if canTransferLease != nil && !canTransferLease() {
+	if canTransferLeaseFrom != nil && !canTransferLeaseFrom(ctx, repl) {
 		return false, errors.Errorf("cannot transfer lease")
 	}
 	desc, zone := repl.DescAndZone()
@@ -932,18 +934,15 @@ func (rq *replicateQueue) removeDecommissioning(
 ) (requeue bool, _ error) {
 	desc, _ := repl.DescAndZone()
 	var decommissioningReplicas []roachpb.ReplicaDescriptor
-	var removeOp roachpb.ReplicaChangeType
 	switch targetType {
 	case voterTarget:
 		decommissioningReplicas = rq.allocator.storePool.decommissioningReplicas(
 			desc.Replicas().VoterDescriptors(),
 		)
-		removeOp = roachpb.REMOVE_VOTER
 	case nonVoterTarget:
 		decommissioningReplicas = rq.allocator.storePool.decommissioningReplicas(
 			desc.Replicas().NonVoterDescriptors(),
 		)
-		removeOp = roachpb.REMOVE_NON_VOTER
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", targetType))
 	}
@@ -975,7 +974,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(removeOp, target),
+		roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
@@ -1011,15 +1010,6 @@ func (rq *replicateQueue) removeDead(
 		NodeID:  deadReplica.NodeID,
 		StoreID: deadReplica.StoreID,
 	}
-	var removeOp roachpb.ReplicaChangeType
-	switch targetType {
-	case voterTarget:
-		removeOp = roachpb.REMOVE_VOTER
-	case nonVoterTarget:
-		removeOp = roachpb.REMOVE_NON_VOTER
-	default:
-		panic(fmt.Sprintf("unknown targetReplicaType: %s", targetType))
-	}
 
 	// NB: When removing a dead voter, we don't check whether to transfer the
 	// lease away because if the removal target is dead, it's not the voter being
@@ -1028,7 +1018,7 @@ func (rq *replicateQueue) removeDead(
 	if err := rq.changeReplicas(
 		ctx,
 		repl,
-		roachpb.MakeReplicationChanges(removeOp, target),
+		roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDead,
@@ -1079,7 +1069,7 @@ func (rq *replicateQueue) considerRebalance(
 	ctx context.Context,
 	repl *Replica,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	canTransferLease func() bool,
+	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
 	dryRun bool,
 ) (requeue bool, _ error) {
 	desc, zone := repl.DescAndZone()
@@ -1114,7 +1104,7 @@ func (rq *replicateQueue) considerRebalance(
 		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target for non-voters")
 		} else if done, err := rq.maybeTransferLeaseAway(
-			ctx, repl, removeTarget.StoreID, dryRun, canTransferLease,
+			ctx, repl, removeTarget.StoreID, dryRun, canTransferLeaseFrom,
 		); err != nil {
 			log.VEventf(ctx, 1, "want to remove self, but failed to transfer lease away: %s", err)
 		} else if done {
@@ -1123,12 +1113,16 @@ func (rq *replicateQueue) considerRebalance(
 		} else {
 			// If we have a valid rebalance action (ok == true) and we haven't
 			// transferred our lease away, execute the rebalance.
-			chgs, err := rq.replicationChangesForRebalance(ctx, desc, len(existingVoters), addTarget,
+			chgs, performingSwap, err := replicationChangesForRebalance(ctx, desc, len(existingVoters), addTarget,
 				removeTarget, rebalanceTargetType)
 			if err != nil {
 				return false, err
 			}
 			rq.metrics.RebalanceReplicaCount.Inc(1)
+			if performingSwap {
+				rq.metrics.VoterDemotionsCount.Inc(1)
+				rq.metrics.NonVoterPromotionsCount.Inc(1)
+			}
 			log.VEventf(ctx,
 				1,
 				"rebalancing %s %+v to %+v: %s",
@@ -1153,7 +1147,7 @@ func (rq *replicateQueue) considerRebalance(
 		}
 	}
 
-	if !canTransferLease() {
+	if !canTransferLeaseFrom(ctx, repl) {
 		// No action was necessary and no rebalance target was found. Return
 		// without re-queuing this replica.
 		return false, nil
@@ -1178,14 +1172,17 @@ func (rq *replicateQueue) considerRebalance(
 
 // replicationChangesForRebalance returns a list of ReplicationChanges to
 // execute for a rebalancing decision made by the allocator.
-func (rq *replicateQueue) replicationChangesForRebalance(
+//
+// This function assumes that `addTarget` and `removeTarget` are produced by the
+// allocator (i.e. they satisfy replica `constraints` and potentially
+// `voter_constraints` if we're operating over voter targets).
+func replicationChangesForRebalance(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	numExistingVoters int,
-	addTarget roachpb.ReplicationTarget,
-	removeTarget roachpb.ReplicationTarget,
+	addTarget, removeTarget roachpb.ReplicationTarget,
 	rebalanceTargetType targetReplicaType,
-) (chgs []roachpb.ReplicationChange, err error) {
+) (chgs []roachpb.ReplicationChange, performingSwap bool, err error) {
 	if rebalanceTargetType == voterTarget && numExistingVoters == 1 {
 		// If there's only one replica, the removal target is the
 		// leaseholder and this is unsupported and will fail. However,
@@ -1212,7 +1209,7 @@ func (rq *replicateQueue) replicationChangesForRebalance(
 			{ChangeType: roachpb.ADD_VOTER, Target: addTarget},
 		}
 		log.VEventf(ctx, 1, "can't swap replica due to lease; falling back to add")
-		return chgs, err
+		return chgs, false, err
 	}
 
 	rdesc, found := desc.GetReplicaDescriptor(addTarget.StoreID)
@@ -1229,21 +1226,23 @@ func (rq *replicateQueue) replicationChangesForRebalance(
 			// the `voter_constraints`, it is copacetic to make this swap since:
 			//
 			// 1. `addTarget` must already be a valid target for a voting replica
-			// (i.e. it must already satisfy both *constraints fields) since
-			// `Allocator.RebalanceVoter` just handed it to us.
+			// (i.e. it must already satisfy both *constraints fields) since an
+			// allocator method (`allocateTarget..` or `Rebalance{Non}Voter`) just
+			// handed it to us.
 			// 2. `removeTarget` may or may not be a valid target for a non-voting
 			// replica, but `considerRebalance` takes care to `requeue` the current
 			// replica into the replicateQueue. So we expect the replicateQueue's next
 			// attempt at rebalancing this range to rebalance the non-voter if it ends
 			// up being in violation of the range's constraints.
-			rq.metrics.NonVoterPromotionsCount.Inc(1)
-			rq.metrics.VoterDemotionsCount.Inc(1)
 			promo := roachpb.ReplicationChangesForPromotion(addTarget)
 			demo := roachpb.ReplicationChangesForDemotion(removeTarget)
 			chgs = append(promo, demo...)
+			performingSwap = true
 		} else if found {
-			return nil, errors.AssertionFailedf("programming error:"+
-				" store being rebalanced to(%s) already has a voting replica", addTarget.StoreID)
+			return nil, false, errors.AssertionFailedf(
+				"programming error:"+
+					" store being rebalanced to(%s) already has a voting replica", addTarget.StoreID,
+			)
 		} else {
 			// We have a replica to remove and one we can add, so let's swap them out.
 			chgs = []roachpb.ReplicationChange{
@@ -1256,15 +1255,17 @@ func (rq *replicateQueue) replicationChangesForRebalance(
 			// Non-voters should not consider any of the range's existing stores as
 			// valid candidates. If we get here, we must have raced with another
 			// rebalancing decision.
-			return nil, errors.AssertionFailedf("invalid rebalancing decision: trying to"+
-				" move non-voter to a store that already has a replica %s for the range", rdesc)
+			return nil, false, errors.AssertionFailedf(
+				"invalid rebalancing decision: trying to"+
+					" move non-voter to a store that already has a replica %s for the range", rdesc,
+			)
 		}
 		chgs = []roachpb.ReplicationChange{
 			{ChangeType: roachpb.ADD_NON_VOTER, Target: addTarget},
 			{ChangeType: roachpb.REMOVE_NON_VOTER, Target: removeTarget},
 		}
 	}
-	return chgs, nil
+	return chgs, performingSwap, nil
 }
 
 type transferLeaseOptions struct {
@@ -1380,9 +1381,19 @@ func (rq *replicateQueue) changeReplicas(
 	return nil
 }
 
-func (rq *replicateQueue) canTransferLease() bool {
+// canTransferLeaseFrom checks is a lease can be transferred from the specified
+// replica. It considers two factors if the replica is in -conformance with
+// lease preferences and the last time a transfer occurred to avoid thrashing.
+func (rq *replicateQueue) canTransferLeaseFrom(ctx context.Context, repl *Replica) bool {
+	// Do a best effort check to see if this replica conforms to the configured
+	// lease preferences (if any), if it does not we want to encourage more
+	// aggressive lease movement and not delay it.
+	respectsLeasePreferences, err := repl.checkLeaseRespectsPreferences(ctx)
+	if err == nil && !respectsLeasePreferences {
+		return true
+	}
 	if lastLeaseTransfer := rq.lastLeaseTransfer.Load(); lastLeaseTransfer != nil {
-		minInterval := minLeaseTransferInterval.Get(&rq.store.cfg.Settings.SV)
+		minInterval := MinLeaseTransferInterval.Get(&rq.store.cfg.Settings.SV)
 		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
 	}
 	return true

@@ -535,6 +535,11 @@ CREATE TABLE crdb_internal.leases (
    expiration TIMESTAMP NOT NULL,
    deleted BOOL NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.node_build_info (
    node_id INT8 NOT NULL,
    field STRING NOT NULL,
@@ -656,6 +661,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
    flags STRING NOT NULL,
+   statement_id STRING NOT NULL,
    key STRING NOT NULL,
    anonymized STRING NULL,
    count INT8 NOT NULL,
@@ -688,11 +694,13 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    max_disk_usage_var FLOAT8 NULL,
    contention_time_avg FLOAT8 NULL,
    contention_time_var FLOAT8 NULL,
-   implicit_txn BOOL NOT NULL
+   implicit_txn BOOL NOT NULL,
+   full_scan BOOL NOT NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
    flags STRING NOT NULL,
+   statement_id STRING NOT NULL,
    key STRING NOT NULL,
    anonymized STRING NULL,
    count INT8 NOT NULL,
@@ -725,7 +733,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    max_disk_usage_var FLOAT8 NULL,
    contention_time_avg FLOAT8 NULL,
    contention_time_var FLOAT8 NULL,
-   implicit_txn BOOL NOT NULL
+   implicit_txn BOOL NOT NULL,
+   full_scan BOOL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_transaction_statistics (
    node_id INT8 NOT NULL,

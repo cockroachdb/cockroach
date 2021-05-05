@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -125,6 +126,26 @@ func TestSegmentize(t *testing.T) {
 			maxSegmentLength: -1,
 			expectedWKT:      "MULTIPOINT ((0.0 0.0), (1.0 1.0))",
 		},
+		{
+			wkt:              "LINESTRING(0 0, 1 1)",
+			maxSegmentLength: math.NaN(),
+			expectedWKT:      "LINESTRING(0 0, 1 1)",
+		},
+		{
+			wkt:              "LINESTRING M (0 0 0, 1 1 1)",
+			maxSegmentLength: math.Sqrt(-1),
+			expectedWKT:      "LINESTRING M (0 0 0, 1 1 1)",
+		},
+		{
+			wkt:              "LINESTRING ZM (0 0 0 0, 1 1 1 1)",
+			maxSegmentLength: -math.NaN(),
+			expectedWKT:      "LINESTRING(0 0 0 0, 1 1 1 1)",
+		},
+		{
+			wkt:              "LINESTRING(0 0, 1 1)",
+			maxSegmentLength: math.Inf(1),
+			expectedWKT:      "LINESTRING(0 0, 1 1)",
+		},
 	}
 	for _, test := range segmentizeTestCases {
 		t.Run(fmt.Sprintf("%s, maximum segment length: %f", test.wkt, test.maxSegmentLength), func(t *testing.T) {
@@ -143,6 +164,16 @@ func TestSegmentize(t *testing.T) {
 		require.NoError(t, err)
 		_, err = Segmentize(geom, 0)
 		require.EqualError(t, err, "maximum segment length must be positive")
+	})
+	t.Run("Error when segments to make is infinite", func(t *testing.T) {
+		geom, err := geo.ParseGeometry(" POLYGON M ((-5757990590.2166 -4519452260.862033 2804858792.6955757,-3495930342.911956 -3913707431.095213 9956876080.738373,-5456424425.598897 -8951413012.610432 3893065263.609459,5171950909.470152 -3160389565.052106 -1536304847.4179764,7229852360.871143 -1100415531.4846077 -2312950462.5578575,3596535169.705099 771146579.7308273 -405855460.51558876,7650485577.341057 3911494351.8519344 9371555787.233376,5202820209.160244 4927246719.614132 750359531.9446983,-379577383.76449776 8738277761.50978 -7426242721.149497,-4063987925.4022484 3815950665.1846447 4224483522.3448334,-5757990590.2166 -4519452260.862033 2804858792.6955757))")
+		require.NoError(t, err)
+		_, err = Segmentize(geom, 5e-324)
+		require.EqualError(
+			t,
+			err,
+			fmt.Sprintf("attempting to segmentize into too many coordinates; need +Inf points between [-5.7579905902166e+09 -4.519452260862033e+09 2.8048587926955757e+09] and [-3.495930342911956e+09 -3.913707431095213e+09 9.956876080738373e+09], max %d", geo.MaxAllowedSplitPoints),
+		)
 	})
 }
 

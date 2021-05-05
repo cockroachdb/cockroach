@@ -84,7 +84,8 @@ func Stack(d ...Doc) Doc {
 	return Fold(ConcatLine, d...)
 }
 
-// Fillwords fills lines with as many docs as will fit joined with a space or line.
+// Fillwords fills lines with as many docs as will fit joined with a space or
+// line.
 func Fillwords(d ...Doc) Doc {
 	u := &union{textSpace, line{}}
 	fill := func(a, b Doc) Doc {

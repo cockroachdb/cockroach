@@ -6,6 +6,10 @@ exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT)
+----
+
 # --------------------------------------------------
 # CommuteVar
 # --------------------------------------------------
@@ -235,7 +239,7 @@ project
  ├── scan a
  │    └── columns: s:4
  └── projections
-      └── s:4 NOT IN ('foo',) [as=r:7, outer=(4)]
+      └── s:4 != 'foo' [as=r:7, outer=(4)]
 
 # Don't sort, since the list is not constant.
 norm expect-not=NormalizeInConst
@@ -270,6 +274,111 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (true IN (NULL, NULL, ('201.249.149.90/18' & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61') << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82'),)
+
+# --------------------------------------------------
+# SimplifyInSingleElement
+# --------------------------------------------------
+norm expect=SimplifyInSingleElement
+SELECT * FROM a WHERE k IN (1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm expect=SimplifyInSingleElement
+SELECT 1 IN (k) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 = 1 [as="?column?":7, outer=(1)]
+
+norm expect=SimplifyInSingleElement
+SELECT k+1 IN (i*2) FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── (k:1 + 1) = (i:2 * 2) [as="?column?":7, outer=(1,2), immutable]
+
+norm expect-not=SimplifyInSingleElement
+SELECT k IN (1,2) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 IN (1, 2) [as="?column?":7, outer=(1)]
+
+# --------------------------------------------------
+# SimplifyNotInSingleElement
+# --------------------------------------------------
+norm expect=SimplifyNotInSingleElement
+SELECT * FROM a WHERE k NOT IN (1)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── k:1 != 1 [outer=(1), constraints=(/1: (/NULL - /0] [/2 - ]; tight)]
+
+norm expect=SimplifyNotInSingleElement
+SELECT 1 NOT IN (k) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 != 1 [as="?column?":7, outer=(1)]
+
+norm expect=SimplifyNotInSingleElement
+SELECT k+1 NOT IN (i*2) FROM a
+----
+project
+ ├── columns: "?column?":7
+ ├── immutable
+ ├── scan a
+ │    ├── columns: k:1!null i:2
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── (k:1 + 1) != (i:2 * 2) [as="?column?":7, outer=(1,2), immutable]
+
+norm expect-not=SimplifyNotInSingleElement
+SELECT k NOT IN (1,2) FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── projections
+      └── k:1 NOT IN (1, 2) [as="?column?":7, outer=(1)]
 
 # --------------------------------------------------
 # EliminateExistsZeroRows
@@ -457,6 +566,126 @@ select
                 │    ├── columns: i:8 s:10
                 │    └── limit hint: 1.00
                 └── 1
+
+# --------------------------------------------------
+# InlineExistsSelectTuple
+# --------------------------------------------------
+norm expect=InlineExistsSelectTuple
+SELECT * FROM a WHERE (k, i) IN (SELECT x, y FROM xy)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      ├── x:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── y:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+norm expect=InlineExistsSelectTuple
+SELECT * FROM a WHERE (k, i) IN (SELECT x, 2 FROM xy)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2!null f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3-5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3-5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ ├── scan xy
+ │    ├── columns: x:7!null
+ │    └── key: (7)
+ └── filters
+      └── x:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+norm expect=InlineExistsSelectTuple
+SELECT * FROM a WHERE f>1 AND (k, i) IN (SELECT x, 2 FROM xy) AND s = 'foo'
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2!null f:3!null s:4!null arr:5
+ ├── key: (1)
+ ├── fd: ()-->(2,4), (1)-->(3,5)
+ ├── select
+ │    ├── columns: k:1!null i:2!null f:3!null s:4!null arr:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2,4), (1)-->(3,5)
+ │    ├── scan a
+ │    │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         ├── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ │         ├── f:3 > 1.0 [outer=(3), constraints=(/3: [/1.0000000000000002 - ]; tight)]
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ ├── scan xy
+ │    ├── columns: x:7!null
+ │    └── key: (7)
+ └── filters
+      └── x:7 = k:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Verify that we handle multiple tuples.
+norm expect=InlineExistsSelectTuple
+SELECT * FROM abcd WHERE (a, b) IN (SELECT x, y FROM xy) AND (c, d) IN (SELECT k, i FROM a)
+----
+semi-join (hash)
+ ├── columns: a:1 b:2 c:3 d:4
+ ├── semi-join (hash)
+ │    ├── columns: a:1 b:2 c:3 d:4
+ │    ├── scan abcd
+ │    │    └── columns: a:1 b:2 c:3 d:4
+ │    ├── scan a
+ │    │    ├── columns: k:10!null i:11
+ │    │    ├── key: (10)
+ │    │    └── fd: (10)-->(11)
+ │    └── filters
+ │         ├── k:10 = c:3 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+ │         └── i:11 = d:4 [outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
+ ├── scan xy
+ │    ├── columns: x:7!null y:8
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8)
+ └── filters
+      ├── x:7 = a:1 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── y:8 = b:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+# Make sure we check that the left-hand side is the correct tuple; the result
+# would be bad if we didn't check that the variable is for the tuple in the
+# projection.
+norm expect=InlineExistsSelectTuple
+SELECT * FROM abcd WHERE EXISTS(SELECT * FROM (SELECT (x, y), (x+1,y+1) FROM xy) AS v(tup1,tup2) WHERE tup2 = (a, b))
+----
+semi-join (hash)
+ ├── columns: a:1 b:2 c:3 d:4
+ ├── immutable
+ ├── scan abcd
+ │    └── columns: a:1 b:2 c:3 d:4
+ ├── project
+ │    ├── columns: column13:13 column12:12!null
+ │    ├── immutable
+ │    ├── scan xy
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
+ │    └── projections
+ │         ├── y:8 + 1 [as=column13:13, outer=(8), immutable]
+ │         └── x:7 + 1 [as=column12:12, outer=(7), immutable]
+ └── filters
+      ├── a:1 = column12:12 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+      └── b:2 = column13:13 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
 
 # --------------------------------------------------
 # IntroduceExistsLimit
@@ -938,7 +1167,7 @@ project
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── prune: (1)
-      └── interesting orderings: (+1) (+2,+1)
+      └── interesting orderings: (+1 opt(2))
 
 opt expect-not=UnifyComparisonTypes format=show-all
 SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT
@@ -1148,36 +1377,24 @@ SELECT k FROM a WHERE (k, i) IN (SELECT b, a FROM (VALUES (1, 1), (2, 2), (3, 3)
 ----
 project
  ├── columns: k:1!null
- ├── immutable
  ├── key: (1)
  └── semi-join (hash)
-      ├── columns: k:1!null column10:10
-      ├── immutable
+      ├── columns: k:1!null i:2
       ├── key: (1)
-      ├── fd: (1)-->(10)
-      ├── project
-      │    ├── columns: column10:10 k:1!null
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
       │    ├── key: (1)
-      │    ├── fd: (1)-->(10)
-      │    ├── scan a
-      │    │    ├── columns: k:1!null i:2
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2)
-      │    └── projections
-      │         └── (k:1, i:2) [as=column10:10, outer=(1,2)]
-      ├── project
-      │    ├── columns: column9:9!null
+      │    └── fd: (1)-->(2)
+      ├── values
+      │    ├── columns: column1:7!null column2:8!null
       │    ├── cardinality: [3 - 3]
-      │    ├── values
-      │    │    ├── columns: column1:7!null column2:8!null
-      │    │    ├── cardinality: [3 - 3]
-      │    │    ├── (1, 1)
-      │    │    ├── (2, 2)
-      │    │    └── (3, 3)
-      │    └── projections
-      │         └── (column2:8, column1:7) [as=column9:9, outer=(7,8)]
+      │    ├── (1, 1)
+      │    ├── (2, 2)
+      │    └── (3, 3)
       └── filters
-           └── column10:10 = column9:9 [outer=(9,10), immutable, constraints=(/9: (/NULL - ]; /10: (/NULL - ]), fd=(9)==(10), (10)==(9)]
+           ├── column2:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── column1:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # --------------------------------------------------
 # SimplifyEqualsAnyTuple

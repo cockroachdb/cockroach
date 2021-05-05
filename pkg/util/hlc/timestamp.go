@@ -175,7 +175,7 @@ func (t Timestamp) AsOfSystemTime() string {
 	return fmt.Sprintf("%d.%010d%s", t.WallTime, t.Logical, syn)
 }
 
-// IsEmpty retruns true if t is an empty Timestamp.
+// IsEmpty returns true if t is an empty Timestamp.
 func (t Timestamp) IsEmpty() bool {
 	return t == Timestamp{}
 }
@@ -420,6 +420,11 @@ func (t *ClockTimestamp) ProtoMessage() {}
 
 // MarshalTo implements the protoutil.Message interface.
 func (t *ClockTimestamp) MarshalTo(data []byte) (int, error) { return (*Timestamp)(t).MarshalTo(data) }
+
+// MarshalToSizedBuffer implements the protoutil.Message interface.
+func (t *ClockTimestamp) MarshalToSizedBuffer(data []byte) (int, error) {
+	return (*Timestamp)(t).MarshalToSizedBuffer(data)
+}
 
 // Unmarshal implements the protoutil.Message interface.
 func (t *ClockTimestamp) Unmarshal(data []byte) error { return (*Timestamp)(t).Unmarshal(data) }

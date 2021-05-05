@@ -14,9 +14,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -92,7 +94,30 @@ func (p *PGTest) Close() error {
 	return p.fe.Send(&pgproto3.Terminate{})
 }
 
-// Send sends msg to the serrver.
+// SendOneLine sends a single msg to the server represented as a single string
+// in the format `<msg type> <msg body in JSON>`. See testdata for examples.
+func (p *PGTest) SendOneLine(line string) error {
+	sp := strings.SplitN(line, " ", 2)
+	msg := toMessage(sp[0])
+	if len(sp) == 2 {
+		msgBytes := []byte(sp[1])
+		switch msg := msg.(type) {
+		case *pgproto3.CopyData:
+			var data struct{ Data string }
+			if err := json.Unmarshal(msgBytes, &data); err != nil {
+				return err
+			}
+			msg.Data = []byte(data.Data)
+		default:
+			if err := json.Unmarshal(msgBytes, msg); err != nil {
+				return err
+			}
+		}
+	}
+	return p.Send(msg.(pgproto3.FrontendMessage))
+}
+
+// Send sends msg to the server.
 func (p *PGTest) Send(msg pgproto3.FrontendMessage) error {
 	if testing.Verbose() {
 		fmt.Printf("SEND %T: %+[1]v\n", msg)
