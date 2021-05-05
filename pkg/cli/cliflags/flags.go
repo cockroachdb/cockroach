@@ -1362,6 +1362,13 @@ default configuration, you can use the 'cockroach debug check-log-config' sub-co
 `,
 	}
 
+	LogConfigFile = FlagInfo{
+		Name: "log-config-file",
+		Description: `File name to read the logging configuration from.
+This has the same effect as passing the content of the file via
+the --log flag.`,
+	}
+
 	DeprecatedStderrThreshold = FlagInfo{
 		Name:        "logtostderr",
 		Description: `Write log messages beyond the specified severity to stderr.`,
