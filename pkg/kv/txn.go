@@ -27,6 +27,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// asyncRollbackTimeout is the context timeout during rollback() for a client
+// who has already disconnected. This is needed to asynchronously clean up the
+// client's intents and txn record. If the intent resolver has spare async task
+// capacity, this timeout only needs to be long enough for the EndTxn request to
+// make it through Raft, but if the cleanup task is synchronous (to backpressure
+// clients) then cleanup will be abandoned when the timeout expires.
+//
+// We generally want to clean up if possible, so we set it high at 1 minute. If
+// the transaction is very large or cleanup is very costly (e.g. hits a slow
+// path for some reason), and the async pool is full (i.e. the system is
+// under load), then it makes sense to abandon the cleanup before too long.
+const asyncRollbackTimeout = time.Minute
+
 // Txn is an in-progress distributed database transaction. A Txn is safe for
 // concurrent use by multiple goroutines.
 type Txn struct {
@@ -710,48 +723,50 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 
-	sync := true
-	if ctx.Err() != nil {
-		sync = false
-	}
-	if sync {
+	// If the client has already disconnected, fall back to asynchronous cleanup
+	// below. Note that this is the common path when a client disconnects in the
+	// middle of an open transaction or during statement execution.
+	if ctx.Err() == nil {
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
 		}
-		// If ctx has been canceled, assume that caused the error and try again
-		// async below.
+		// If rollback errored and the ctx was canceled during rollback, assume
+		// ctx cancellation caused the error and try again async below.
 		if ctx.Err() == nil {
 			return pErr
 		}
 	}
 
-	// We don't have a client whose context we can attach to, but we do want to limit how
-	// long this request is going to be around or it could leak a goroutine (in case of a
-	// long-lived network partition).
+	// We don't have a client whose context we can attach to, but we do want to
+	// limit how long this request is going to be around for to avoid leaking a
+	// goroutine (in case of a long-lived network partition). If it gets through
+	// Raft, and the intent resolver has free async task capacity, the actual
+	// cleanup will be independent of this context.
 	stopper := txn.db.ctx.Stopper
 	ctx, cancel := stopper.WithCancelOnQuiesce(txn.db.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTask(ctx, "async-rollback", func(ctx context.Context) {
 		defer cancel()
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
-		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
-			if _, pErr := txn.Send(ctx, ba); pErr != nil {
-				if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-					statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-					// A common cause of these async rollbacks failing is when they're
-					// triggered by a ctx canceled while a commit is in-flight (and it's too
-					// late for it to be canceled), and so the rollback finds the txn to be
-					// already committed. We don't spam the logs with those.
-					log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-				} else {
-					log.Infof(ctx, "async rollback failed: %s", pErr)
+		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
+			func(ctx context.Context) error {
+				if _, pErr := txn.Send(ctx, ba); pErr != nil {
+					if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+						statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+						// A common cause of these async rollbacks failing is when they're
+						// triggered by a ctx canceled while a commit is in-flight (and it's too
+						// late for it to be canceled), and so the rollback finds the txn to be
+						// already committed. We don't spam the logs with those.
+						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+					} else {
+						log.Infof(ctx, "async rollback failed: %s", pErr)
+					}
 				}
-			}
-			return nil
-		})
+				return nil
+			})
 	}); err != nil {
 		cancel()
 		return roachpb.NewError(err)
