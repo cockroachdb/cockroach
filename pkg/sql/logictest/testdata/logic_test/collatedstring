@@ -472,7 +472,7 @@ collation_name_case  CREATE TABLE public.collation_name_case (
 statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed
 CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le""vel2");
 
-statement error syntax error: invalid locale en-US-u-ks-le: language: tag is not well-formed
+statement error at or near "vel2": syntax error
 CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le"vel2");
 
 statement error invalid locale en-us-u-ks-l"evel2: language: tag is not well-formed
