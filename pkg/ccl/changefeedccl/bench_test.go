@@ -216,16 +216,17 @@ func createBenchmarkChangefeed(
 	}
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := kvfeed.Config{
-		Settings:         settings,
-		DB:               s.DB(),
-		Clock:            feedClock,
-		Gossip:           gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
-		Spans:            spans,
-		Targets:          details.Targets,
-		Sink:             buf,
-		LeaseMgr:         leaseMgr,
-		Metrics:          &metrics.KVFeedMetrics,
-		MM:               mm,
+		Settings: settings,
+		DB:       s.DB(),
+		Clock:    feedClock,
+		Gossip:   gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
+		Spans:    spans,
+		Targets:  details.Targets,
+		Sink:     buf,
+		LeaseMgr: leaseMgr,
+		EventBufferFactory: func() kvfeed.EventBuffer {
+			return kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics)
+		},
 		InitialHighWater: initialHighWater,
 		WithDiff:         withDiff,
 		NeedsInitialScan: needsInitialScan,

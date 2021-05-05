@@ -23,6 +23,9 @@ type TestingKnobs struct {
 	AfterSinkFlush func() error
 	// MemMonitor, if non-nil, overrides memory monitor to use for changefeed..
 	MemMonitor *mon.BytesMonitor
+	// HandleDistChangfeedError is called with the result error from
+	// the distributed changefeed.
+	HandleDistChangefeedError func(error) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

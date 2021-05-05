@@ -593,6 +593,13 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
+
+		if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+			if knobs != nil && knobs.HandleDistChangefeedError != nil {
+				err = knobs.HandleDistChangefeedError(err)
+			}
+		}
+
 		if !IsRetryableError(err) {
 			if ctx.Err() != nil {
 				return ctx.Err()
