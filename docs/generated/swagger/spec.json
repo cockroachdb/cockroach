@@ -608,6 +608,7 @@
           "$ref": "#/definitions/ActiveQuery_Phase"
         },
         "progress": {
+          "description": "progress is an estimate of the fraction of this query that has been\nprocessed.",
           "type": "number",
           "format": "float",
           "x-go-name": "Progress"
@@ -936,13 +937,6 @@
       "format": "int32",
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
     },
-    "NodeLivenessStatus": {
-      "description": "TODO(irfansharif): We should reconsider usage of NodeLivenessStatus.\nIt's unclear if the enum is well considered. It enumerates across two\ndistinct set of things: the \"membership\" status (live/active,\ndecommissioning, decommissioned), and the node \"process\" status (live,\nunavailable, available). It's possible for two of these \"states\" to be true,\nsimultaneously (consider a decommissioned, dead node). It makes for confusing\nsemantics, and the code attempting to disambiguate across these states\n(kvserver.LivenessStatus() for e.g.) seem wholly arbitrary.\n\nSee #50707 for more details.",
-      "type": "integer",
-      "format": "int32",
-      "title": "NodeLivenessStatus describes the status of a node from the perspective of the\nliveness system. See comment on LivenessStatus() for a description of the\nstates.",
-      "x-go-package": "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-    },
     "PrettySpan": {
       "type": "object",
       "properties": {
@@ -957,19 +951,9 @@
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
     },
-    "RKey": {
-      "description": "RKey stands for \"resolved key,\" as in a key whose address has been resolved.",
-      "title": "RKey denotes a Key whose local addressing has been accounted for.\nA key can be transformed to an RKey by keys.Addr().",
-      "$ref": "#/definitions/Key"
-    },
-    "RangeID": {
-      "type": "integer",
-      "format": "int64",
-      "title": "A RangeID is a unique ID associated to a Raft consensus group.",
-      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
-    },
     "RangeProblems": {
       "type": "object",
+      "title": "RangeProblems describes issues reported by a range. For internal use only.",
       "properties": {
         "leader_not_lease_holder": {
           "type": "boolean",
@@ -1009,15 +993,17 @@
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
     },
     "RangeStatistics": {
+      "description": "RangeStatistics describes statistics reported by a range. For internal use\nonly.",
       "type": "object",
       "properties": {
         "queries_per_second": {
-          "description": "Note that queries per second will only be known by the leaseholder.\nAll other replicas will report it as 0.",
+          "description": "Queries per second served by this range.\n\nNote that queries per second will only be known by the leaseholder.\nAll other replicas will report it as 0.",
           "type": "number",
           "format": "double",
           "x-go-name": "QueriesPerSecond"
         },
         "writes_per_second": {
+          "description": "Writes per second served by this range.",
           "type": "number",
           "format": "double",
           "x-go-name": "WritesPerSecond"
@@ -1814,11 +1800,13 @@
       "title": "Response struct for listNodeRanges.",
       "properties": {
         "next": {
+          "description": "Continuation token for the next limited run. Use in the `offset` parameter.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "Next"
         },
         "ranges": {
+          "description": "Info about retrieved ranges.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/rangeInfo"
@@ -1830,6 +1818,7 @@
     },
     "nodeStatus": {
       "type": "object",
+      "title": "Status about a node.",
       "properties": {
         "ServerVersion": {
           "$ref": "#/definitions/Version"
@@ -1841,21 +1830,26 @@
           "$ref": "#/definitions/Attributes"
         },
         "build_tag": {
+          "description": "BuildTag is an internal build marker.",
           "type": "string",
           "x-go-name": "BuildTag"
         },
         "cluster_name": {
+          "description": "ClusterName is the string name of this cluster, if set.",
           "type": "string",
           "x-go-name": "ClusterName"
         },
         "liveness_status": {
-          "$ref": "#/definitions/NodeLivenessStatus"
+          "description": "LivenessStatus is the status of the node from the perspective of the\nliveness subsystem. For internal use only.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "LivenessStatus"
         },
         "locality": {
           "$ref": "#/definitions/Locality"
         },
         "metrics": {
-          "description": "Other fields that are a subset of roachpb.NodeStatus.",
+          "description": "Metrics contain the last sampled metrics for this node.",
           "type": "object",
           "additionalProperties": {
             "type": "number",
@@ -1864,9 +1858,13 @@
           "x-go-name": "Metrics"
         },
         "node_id": {
-          "$ref": "#/definitions/NodeID"
+          "description": "NodeID is the integer ID of this node.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "NodeID"
         },
         "num_cpus": {
+          "description": "NumCpus is the number of CPUs on this node.",
           "type": "integer",
           "format": "int32",
           "x-go-name": "NumCpus"
@@ -1875,16 +1873,19 @@
           "$ref": "#/definitions/UnresolvedAddr"
         },
         "started_at": {
+          "description": "StartedAt is the time when this node was started, expressed as\nnanoseconds since Unix epoch.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "StartedAt"
         },
         "total_system_memory": {
+          "description": "TotalSystemMemory is the total amount of available system memory on this\nnode (or cgroup), in bytes.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "TotalSystemMemory"
         },
         "updated_at": {
+          "description": "UpdatedAt is the time at which the node status record was last updated,\nin nanoseconds since Unix epoch.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "UpdatedAt"
@@ -1903,6 +1904,7 @@
           "x-go-name": "Next"
         },
         "nodes": {
+          "description": "Status of nodes.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/nodeStatus"
@@ -1913,40 +1915,62 @@
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
     },
     "rangeDescriptorInfo": {
-      "description": "rangeDescriptorInfo contains a subset of fields from roachpb.RangeDescriptor\nthat are safe to be returned from APIs.",
+      "description": "rangeDescriptorInfo contains a subset of fields from the Cockroach-internal\nrange descriptor that are safe to be returned from APIs.",
       "type": "object",
       "properties": {
         "end_key": {
-          "$ref": "#/definitions/RKey"
+          "description": "EndKey is the resolved Cockroach-internal key that denotes the end of\nthis range.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          },
+          "x-go-name": "EndKey"
         },
         "queries_per_second": {
+          "description": "QueriesPerSecond is the number of queries per second this range is\nserving. Only set for hot ranges.",
           "type": "number",
           "format": "double",
           "x-go-name": "QueriesPerSecond"
         },
         "range_id": {
-          "$ref": "#/definitions/RangeID"
+          "description": "RangeID is the integer id of this range.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RangeID"
         },
         "start_key": {
-          "$ref": "#/definitions/RKey"
+          "description": "StartKey is the resolved Cockroach-internal key that denotes the start of\nthis range.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          },
+          "x-go-name": "StartKey"
         },
         "store_id": {
-          "$ref": "#/definitions/StoreID"
+          "description": "StoreID is the ID of the store this hot range is on. Only set for hot\nranges.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "StoreID"
         }
       },
       "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
     },
     "rangeInfo": {
       "type": "object",
+      "title": "Info related to a range.",
       "properties": {
         "desc": {
           "$ref": "#/definitions/rangeDescriptorInfo"
         },
         "error_message": {
+          "description": "ErrorMessage is any error retrieved from the internal range info. For\ninternal use only.",
           "type": "string",
           "x-go-name": "ErrorMessage"
         },
         "lease_history": {
+          "description": "LeaseHistory is for internal use only.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/Lease"
@@ -1957,14 +1981,21 @@
           "$ref": "#/definitions/RangeProblems"
         },
         "quiescent": {
+          "description": "Quiescent is for internal use only.",
           "type": "boolean",
           "x-go-name": "Quiescent"
         },
         "source_node_id": {
-          "$ref": "#/definitions/NodeID"
+          "description": "SourceNodeID is the ID of the node where this range info was retrieved\nfrom.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "SourceNodeID"
         },
         "source_store_id": {
-          "$ref": "#/definitions/StoreID"
+          "description": "SourceStoreID is the ID of the store on the node where this range info was\nretrieved from.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "SourceStoreID"
         },
         "span": {
           "$ref": "#/definitions/PrettySpan"
@@ -1973,6 +2004,7 @@
           "$ref": "#/definitions/RangeStatistics"
         },
         "ticking": {
+          "description": "Ticking is for internal use only.",
           "type": "boolean",
           "x-go-name": "Ticking"
         }
