@@ -38,8 +38,9 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 
 	{
 		db := c.Conn(ctx, 1)
-		// Disable consistency checks. We're going to be introducing an inconsistency and wish for it to be detected when
-		// we've set up the test to expect it.
+		// Disable consistency checks. We're going to be introducing an
+		// inconsistency and wish for it to be detected when we've set up the test
+		// to expect it.
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
 		if err != nil {
 			t.Fatal(err)
@@ -48,37 +49,47 @@ func runInconsistency(ctx context.Context, t *test, c *cluster) {
 		_, db = db.Close(), nil
 	}
 
-	c.Stop(ctx, nodes)
-
-	// KV pair created via:
+	// Stop the cluster "gracefully" by letting each node initiate a "hard
+	// shutdown" This will prevent any potential problems in which data isn't
+	// synced. It seems (remotely) possible (see #64602) that without this, we
+	// sometimes let the inconsistency win by ending up replicating it to all
+	// nodes. This has not been conclusively proven, though.
 	//
-	// t.Errorf("0x%x", EncodeKey(MVCCKey{
-	// 	Key: keys.TransactionKey(keys.LocalMax, uuid.Nil),
-	// }))
-	// for i := 0; i < 3; i++ {
-	// 	var m enginepb.MVCCMetadata
-	// 	var txn enginepb.TxnMeta
-	// 	txn.Key = []byte(fmt.Sprintf("fake transaction %d", i))
-	// 	var err error
-	// 	m.RawBytes, err = protoutil.Marshal(&txn)
-	// 	require.NoError(t, err)
-	// 	data, err := protoutil.Marshal(&m)
-	// 	require.NoError(t, err)
-	// 	t.Error(fmt.Sprintf("0x%x", data))
+	// First SIGINT initiates graceful shutdown, second one initiates a
+	// "hard" (i.e. don't shed leases, etc) shutdown.
+	c.Stop(ctx, nodes, stopArgs("--sig=2", "--wait=false"))
+	c.Stop(ctx, nodes, stopArgs("--sig=2", "--wait=true"))
+
+	// Write an extraneous transaction record to n1's engine. This means n1 should
+	// ultimately be terminated by the consistency checker (as the other two nodes
+	// agree).
+	//
+	// Raw KVs created via:
+	//
+	// func TestFoo(t *testing.T) { // pkg/storage/batch_test.go
+	//   t.Errorf("hex:%x", EncodeKey(MVCCKey{
+	//     Key: keys.TransactionKey(keys.LocalMax, uuid.Nil),
+	//   }))
+	//   for i := 0; i < 3; i++ {
+	//     var m enginepb.MVCCMetadata
+	//     var txn enginepb.TxnMeta
+	//     txn.Key = []byte(fmt.Sprintf("fake transaction %d", i))
+	//     var err error
+	//     m.RawBytes, err = protoutil.Marshal(&txn)
+	//     require.NoError(t, err)
+	//     data, err := protoutil.Marshal(&m)
+	//     require.NoError(t, err)
+	//     t.Error(fmt.Sprintf("hex:%x", data))
+	//   }
 	// }
-	//
-	// Output:
-	// 0x016b1202000174786e2d0000000000000000000000000000000000
-	// 0x120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00
-	// 0x120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20312a004a00
-	// 0x120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20322a004a00
-
 	c.Run(ctx, c.Node(1), "./cockroach debug pebble db set {store-dir} "+
 		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
-		"hex:12040800100018002000280032280a10000000000000000000000000000000001a1066616b65207472616e73616374696f6e2a004a00")
+		"hex:120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00")
 
 	m := newMonitor(ctx, c)
-	c.Start(ctx, t, nodes)
+	// If the consistency check "fails to fail", the verbose logging will help
+	// determine why.
+	c.Start(ctx, t, nodes, startArgs("--args='--vmodule=consistency_queue=5,replica_consistency=5,queue=5'"))
 	m.Go(func(ctx context.Context) error {
 		select {
 		case <-time.After(5 * time.Minute):
