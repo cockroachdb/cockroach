@@ -24,6 +24,7 @@ import {
   selectColumns,
 } from "./statementsPage.selectors";
 import { AggregateStatistics } from "../statementsTable";
+import { nodeRegionsByIDSelector } from "../store/nodes";
 
 export const ConnectedStatementsPage = withRouter(
   connect<
@@ -39,6 +40,7 @@ export const ConnectedStatementsPage = withRouter(
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
       columns: selectColumns(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
     }),
     (dispatch: Dispatch) => ({
       refreshStatements: () => dispatch(statementActions.refresh()),
