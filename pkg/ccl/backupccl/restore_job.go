@@ -266,6 +266,17 @@ rangeLoop:
 					return nil, hlc.Timestamp{}, err
 				}
 			}
+			if len(files) == 0 {
+				// There may be import entries that refer to no data, and hence
+				// no files. These are caused because file spans start at a
+				// specific key. E.g. consider the first file backing up data
+				// from table 51. It will cover span ‹/Table/51/1/0/0› -
+				// ‹/Table/51/1/3273›. When merged with the backup span:
+				// ‹/Table/51› - ‹/Table/52›, we get an empty span with no
+				// files: ‹/Table/51› - ‹/Table/51/1/0/0›. We should ignore
+				// these to avoid thrashing during restore's split and scatter.
+				continue
+			}
 			// If needed is false, we have data backed up that is not necessary
 			// for this restore. Skip it.
 			requestEntries = append(requestEntries, execinfrapb.RestoreSpanEntry{
@@ -571,6 +582,10 @@ func restore(
 	if err != nil {
 		return emptyRowCount, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
+	if len(importSpans) == 0 {
+		// There are no files to restore.
+		return emptyRowCount, nil
+	}
 
 	for i := range importSpans {
 		importSpans[i].ProgressIdx = int64(i)
@@ -598,10 +613,17 @@ func restore(
 
 	g := ctxgroup.WithContext(restoreCtx)
 
-	// TODO(dan): This not super principled. I just wanted something that wasn't
-	// a constant and grew slower than linear with the length of importSpans. It
-	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
-	chunkSize := int(math.Sqrt(float64(len(importSpans))))
+	// TODO(pbardea): This not super principled. I just wanted something that
+	// wasn't a constant and grew slower than linear with the length of
+	// importSpans. It seems to be working well for BenchmarkRestore2TB but
+	// worth revisiting.
+	// It tries to take the cluster size into account so that larger clusters
+	// distribute more chunks amongst them so that after scattering there isn't
+	// a large varience in the distribution of entries.
+	chunkSize := int(math.Sqrt(float64(len(importSpans)))) / numClusterNodes
+	if chunkSize == 0 {
+		chunkSize = 1
+	}
 	importSpanChunks := make([][]execinfrapb.RestoreSpanEntry, 0, len(importSpans)/chunkSize)
 	for start := 0; start < len(importSpans); {
 		importSpanChunk := importSpans[start:]
