@@ -139,7 +139,7 @@ func newCSVWriterProcessor(
 		output:      output,
 	}
 	semaCtx := tree.MakeSemaContext()
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx(), output); err != nil {
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx()); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -286,7 +286,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				),
 			}
 
-			cs, err := sp.out.EmitRow(ctx, res)
+			cs, err := sp.out.EmitRow(ctx, res, sp.output)
 			if err != nil {
 				return err
 			}
