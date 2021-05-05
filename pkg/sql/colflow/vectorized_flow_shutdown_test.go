@@ -346,7 +346,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 
 				ctxLocal, cancelLocal := context.WithCancel(ctxLocal)
 				materializerCalledClose := false
-				materializer, err := colexec.NewMaterializer(
+				materializer := colexec.NewMaterializer(
 					flowCtx,
 					1, /* processorID */
 					colexecargs.OpWithMetaInfo{
@@ -361,7 +361,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					nil, /* output */
 					func() context.CancelFunc { return cancelLocal },
 				)
-				require.NoError(t, err)
 				materializer.Start(ctxLocal)
 
 				for i := 0; i < 10; i++ {
