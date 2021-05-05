@@ -1,4 +1,4 @@
-BAZEL_IMAGE=cockroachdb/bazel:20210408-113636
+BAZEL_IMAGE=cockroachdb/bazel:20210505-134517
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
