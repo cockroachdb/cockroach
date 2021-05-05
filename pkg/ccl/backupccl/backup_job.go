@@ -472,7 +472,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			break
 		}
 
-		if !utilccl.IsDistSQLRetryableError(err) {
+		if utilccl.IsPermanentBulkJobError(err) {
 			return errors.Wrap(err, "failed to run backup")
 		}
 
@@ -483,7 +483,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		var reloadBackupErr error
 		backupManifest, reloadBackupErr = b.readManifestOnResume(ctx, p.ExecCfg(), defaultStore, details)
 		if reloadBackupErr != nil {
-			log.Warning(ctx, "could not reload backup manifest when retrying, continuing with old progress")
+			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
 	}
 	if err != nil {
