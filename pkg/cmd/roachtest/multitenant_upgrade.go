@@ -165,7 +165,13 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 			withResults([][]string{{"1", "bar"}}))
 
 	t.Status("preserving downgrade option on host server")
-	runner.Exec(t, `SET CLUSTER SETTING cluster.preserve_downgrade_option = '20.2'`)
+	{
+		s := runner.QueryStr(t, `SHOW CLUSTER SETTING version`)
+		runner.Exec(
+			t,
+			`SET CLUSTER SETTING cluster.preserve_downgrade_option = $1`, s[0][0],
+		)
+	}
 
 	t.Status("upgrading host server")
 	c.Stop(ctx, kvNodes)
@@ -230,12 +236,29 @@ func runMultiTenantUpgrade(ctx context.Context, t *test, c *cluster, v version.V
 	t.Status("starting the tenant 11 server with the current binary")
 	tenant11.start(ctx, t, c, currentBinary)
 
+	if v, err := version.Parse("v" + predecessor); err != nil {
+		t.Fatal(err)
+	} else if !v.AtLeast(version.MustParse("v21.1.1")) {
+		// If we take this branch, the current branch is 21.2 but we haven't released 21.1.1 yet.
+		// The multi-tenant upgrade PR #60730 will only be contained in 21.1.1. That PR is responsible
+		// for giving tenants the initial cluster version, which is thus absent here. We still want to
+		// run this test until #60730 is backported, so fill the cluster version in. Without this, the
+		// tenant would report a cluster version of 20.2 which is going to trip up the test. We won't
+		// actually upgrade tenants in production in scenarios in which this branch is active (the host
+		// cluster will be at the latest patch release before attempting an upgrade, which is going to
+		// be at least 21.1.1).
+		// This can be deleted once the PredecessorVersion(21.2) is >= 21.1.1.
+		verifySQL(t, tenant11.pgURL, mkStmt(`SET CLUSTER SETTING version = $1`, initialVersion))
+	}
+
 	t.Status("verify tenant 11 server works with the new binary")
-	verifySQL(t, tenant11.pgURL,
-		mkStmt(`SELECT * FROM foo LIMIT 1`).
-			withResults([][]string{{"1", "bar"}}),
-		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}))
+	{
+		verifySQL(t, tenant11.pgURL,
+			mkStmt(`SELECT * FROM foo LIMIT 1`).
+				withResults([][]string{{"1", "bar"}}),
+			mkStmt("SHOW CLUSTER SETTING version").
+				withResults([][]string{{initialVersion}}))
+	}
 
 	// Note that this is exercising a path we likely want to eliminate in the
 	// future where the tenant is upgraded before the KV nodes.
