@@ -201,6 +201,12 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
     "3": "127.0.0.1:55538 (n3)",
     "4": "127.0.0.1:55546 (n4)",
   },
+  nodeRegions: {
+    "1": "gcp-us-east1",
+    "2": "gcp-us-east1",
+    "3": "gcp-us-west1",
+    "4": "gcp-europe-west1",
+  },
   refreshStatements: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshNodes: noop,

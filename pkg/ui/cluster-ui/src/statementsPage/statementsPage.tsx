@@ -93,6 +93,7 @@ export interface StatementsPageStateProps {
   totalFingerprints: number;
   lastReset: string;
   columns: string[];
+  nodeRegions: { [key: string]: string };
 }
 
 export interface StatementsPageState {
