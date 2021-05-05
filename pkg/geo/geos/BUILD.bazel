@@ -19,10 +19,10 @@ go_library(
             "-ldl",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
-            "-ldl",
+            "-ldl -lm",
         ],
         "@io_bazel_rules_go//go/platform:freebsd": [
-            "-ldl",
+            "-ldl -lm",
         ],
         "@io_bazel_rules_go//go/platform:illumos": [
             "-ldl",
@@ -37,10 +37,10 @@ go_library(
             "-ldl",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
-            "-ldl",
+            "-ldl -lm",
         ],
         "@io_bazel_rules_go//go/platform:openbsd": [
-            "-ldl",
+            "-ldl -lm",
         ],
         "@io_bazel_rules_go//go/platform:plan9": [
             "-ldl",
