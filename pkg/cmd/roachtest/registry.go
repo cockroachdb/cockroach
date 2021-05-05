@@ -100,6 +100,7 @@ func registerTests(r *testRegistry) {
 	registerSQLSmith(r)
 	registerSyncTest(r)
 	registerSysbench(r)
+	registerTLP(r)
 	registerTPCC(r)
 	registerTPCDSVec(r)
 	registerTPCE(r)
