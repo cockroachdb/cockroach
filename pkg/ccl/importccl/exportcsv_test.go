@@ -482,3 +482,29 @@ func TestExportPrivileges(t *testing.T) {
 	_, err = testuser.Exec(`EXPORT INTO CSV $1 FROM TABLE privs`, dest)
 	require.NoError(t, err)
 }
+
+func TestExportTargetFileSizeSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo' WITH chunk_size='10KB' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
+	files, err := ioutil.ReadDir(filepath.Join(dir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, 14, len(files))
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo-compressed' WITH chunk_size='10KB',compression='gzip' FROM select i, gen_random_uuid() from generate_series(1, 4000) as i;`)
+	zipFiles, err := ioutil.ReadDir(filepath.Join(dir, "foo-compressed"))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(zipFiles), 6)
+}
