@@ -12,7 +12,10 @@ import {
   selectStatement,
   selectStatementDetailsUiConfig,
 } from "./statementDetails.selectors";
-import { nodeDisplayNameByIDSelector } from "../store/nodes";
+import {
+  nodeDisplayNameByIDSelector,
+  nodeRegionsByIDSelector,
+} from "../store/nodes";
 import { actions as statementActions } from "src/store/statements";
 import {
   actions as statementDiagnosticsActions,
@@ -33,6 +36,7 @@ const mapStateToProps = (
     statement,
     statementsError: state.adminUI.statements.lastError,
     nodeNames: nodeDisplayNameByIDSelector(state),
+    nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
       state,
       statementFingerprint,
