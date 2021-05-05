@@ -124,11 +124,7 @@ func (w *workloadReader) readFiles(
 
 	wcs := make([]*WorkloadKVConverter, 0, len(dataFiles))
 	for fileID, fileName := range dataFiles {
-		file, err := url.Parse(fileName)
-		if err != nil {
-			return err
-		}
-		conf, err := parseWorkloadConfig(file)
+		conf, err := parseWorkloadConfig(fileName)
 		if err != nil {
 			return err
 		}
@@ -273,8 +269,14 @@ func (w *WorkloadKVConverter) Worker(ctx context.Context, evalCtx *tree.EvalCont
 var errNotWorkloadURI = errors.New("not a workload URI")
 
 // parseWorkloadConfig parses a workload config URI to a config.
-func parseWorkloadConfig(uri *url.URL) (workloadConfig, error) {
+func parseWorkloadConfig(fileName string) (workloadConfig, error) {
 	c := workloadConfig{}
+
+	uri, err := url.Parse(fileName)
+	if err != nil {
+		return c, err
+	}
+
 	if uri.Scheme != "workload" {
 		return c, errNotWorkloadURI
 	}

@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -1533,8 +1532,8 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "pgdump single table with insert",
 			typ:  "PGDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (1, 2), (3, 4);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (1, 2), (3, 4);
 				`,
 			with:        `WITH row_limit = '1'`,
 			verifyQuery: `SELECT * from t`,
@@ -1543,11 +1542,11 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "pgdump multiple inserts same table",
 			typ:  "PGDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (1, 2);		
-				INSERT INTO t (a, b) VALUES (3, 4);		
-				INSERT INTO t (a, b) VALUES (5, 6);		
-				INSERT INTO t (a, b) VALUES (7, 8);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (1, 2);
+				INSERT INTO t (a, b) VALUES (3, 4);
+				INSERT INTO t (a, b) VALUES (5, 6);
+				INSERT INTO t (a, b) VALUES (7, 8);
 				`,
 			with:        `WITH row_limit = '2'`,
 			verifyQuery: `SELECT * from t`,
@@ -1557,8 +1556,8 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "mysqldump single table",
 			typ:  "MYSQLDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (5, 6), (7, 8);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (5, 6), (7, 8);
 				`,
 			with:        `WITH row_limit = '1'`,
 			verifyQuery: `SELECT * from t`,
@@ -1567,11 +1566,11 @@ func TestImportRowLimit(t *testing.T) {
 		{
 			name: "mysqldump multiple inserts same table",
 			typ:  "MYSQLDUMP",
-			data: `CREATE TABLE t (a INT, b INT);		
-				INSERT INTO t (a, b) VALUES (1, 2);		
-				INSERT INTO t (a, b) VALUES (3, 4);		
-				INSERT INTO t (a, b) VALUES (5, 6);		
-				INSERT INTO t (a, b) VALUES (7, 8);		
+			data: `CREATE TABLE t (a INT, b INT);
+				INSERT INTO t (a, b) VALUES (1, 2);
+				INSERT INTO t (a, b) VALUES (3, 4);
+				INSERT INTO t (a, b) VALUES (5, 6);
+				INSERT INTO t (a, b) VALUES (7, 8);
 				`,
 			with:        `WITH row_limit = '2'`,
 			verifyQuery: `SELECT * from t`,
@@ -1656,11 +1655,11 @@ func TestImportRowLimit(t *testing.T) {
 
 		var numRows int
 		expectedRowLimit := 1
-		data = `CREATE TABLE t (a INT, b INT);	
-				CREATE TABLE u (a INT);	
-				INSERT INTO t (a, b) VALUES (1, 2);		
-				INSERT INTO u (a) VALUES (100);		
-				INSERT INTO t (a, b) VALUES (7, 8);		
+		data = `CREATE TABLE t (a INT, b INT);
+				CREATE TABLE u (a INT);
+				INSERT INTO t (a, b) VALUES (1, 2);
+				INSERT INTO u (a) VALUES (100);
+				INSERT INTO t (a, b) VALUES (7, 8);
 				INSERT INTO u (a) VALUES (600);`
 
 		importDumpQuery := fmt.Sprintf(`IMPORT PGDUMP ($1) WITH row_limit="%d"`, expectedRowLimit)
@@ -2566,13 +2565,9 @@ func TestURIRequiresAdminRole(t *testing.T) {
 		})
 
 		t.Run(tc.name+"-direct", func(t *testing.T) {
-			requires, scheme, err := cloud.AccessIsWithExplicitAuth(tc.uri)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(tc.uri, security.RootUserName())
 			require.NoError(t, err)
-			require.Equal(t, requires, !tc.requiresAdmin)
-
-			url, err := url.Parse(tc.uri)
-			require.NoError(t, err)
-			require.Equal(t, scheme, url.Scheme)
+			require.Equal(t, conf.AccessIsWithExplicitAuth(), !tc.requiresAdmin)
 		})
 	}
 }
@@ -6123,7 +6118,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		expectedTableName := "test"
 		expectedTableName2 := "test2"
 		expectedSeqName := "testseq"
-		sqlDB.CheckQueryResults(t, `SELECT schema_name, 
+		sqlDB.CheckQueryResults(t, `SELECT schema_name,
 table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			[][]string{{"bar", expectedTableName}, {"bar", expectedTableName2}, {"bar", expectedSeqName},
 				{"baz", expectedTableName}, {"foo", expectedTableName}, {"public", expectedTableName}})
@@ -6178,7 +6173,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 			// Check that we have a test table in each schema with the expected content.
 			expectedContent := [][]string{{"1", "abc"}, {"2", "def"}}
 			expectedTableName := "test"
-			sqlDB.CheckQueryResults(t, `SELECT schema_name, 
+			sqlDB.CheckQueryResults(t, `SELECT schema_name,
 table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 				[][]string{{"public", expectedTableName}})
 
@@ -6762,7 +6757,7 @@ CREATE TABLE destination_fake_rbr (crdb_region public.crdb_internal_region NOT N
  FROM SELECT crdb_region, i from original_rbr;`)
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(`EXPORT INTO CSV 'nodelocal://0/original_rbr_default' 
+	_, err = sqlDB.Exec(`EXPORT INTO CSV 'nodelocal://0/original_rbr_default'
 FROM TABLE original_rbr;`)
 	require.NoError(t, err)
 
@@ -6787,7 +6782,7 @@ FROM TABLE original_rbr;`)
  crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region;`)
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET LOCALITY 
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET LOCALITY
  REGIONAL BY ROW AS crdb_region;`)
 	require.NoError(t, err)
 

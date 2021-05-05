@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
@@ -136,11 +136,11 @@ func (ef *execFactory) ConstructExport(
 		panic(err)
 	}
 	if !admin {
-		hasExplicitAuth, _, err := cloud.AccessIsWithExplicitAuth(string(*destination))
+		conf, err := cloudimpl.ExternalStorageConfFromURI(string(*destination), ef.planner.User())
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
-		if !hasExplicitAuth {
+		if !conf.AccessIsWithExplicitAuth() {
 			panic(pgerror.Newf(
 				pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to EXPORT to the specified URI"))

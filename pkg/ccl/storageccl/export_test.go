@@ -52,7 +52,7 @@ func TestExportCmd(t *testing.T) {
 			RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 			StartTime:     start,
 			Storage: roachpb.ExternalStorage{
-				Provider:  roachpb.ExternalStorageProvider_LocalFile,
+				Provider:  roachpb.ExternalStorageProvider_nodelocal,
 				LocalFile: roachpb.ExternalStorage_LocalFilePath{Path: "/foo"},
 			},
 			MVCCFilter:     mvccFilter,

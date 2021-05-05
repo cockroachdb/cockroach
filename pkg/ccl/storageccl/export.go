@@ -102,7 +102,7 @@ func evalExport(
 
 	if makeExternalStorage {
 		if _, ok := roachpb.TenantFromContext(ctx); ok {
-			if args.Storage.Provider == roachpb.ExternalStorageProvider_FileTable {
+			if args.Storage.Provider == roachpb.ExternalStorageProvider_userfile {
 				return result.Result{}, errors.Errorf("requests to userfile on behalf of tenants must be made by the tenant's SQL process")
 			}
 		}

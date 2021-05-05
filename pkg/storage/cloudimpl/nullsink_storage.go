@@ -25,7 +25,7 @@ import (
 )
 
 func parseNullURL(_ ExternalStorageURIContext, _ *url.URL) (roachpb.ExternalStorage, error) {
-	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_NullSink}, nil
+	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_null}, nil
 }
 
 // MakeNullSinkStorageURI returns a valid null sink URI.
@@ -48,7 +48,7 @@ func (n *nullSinkStorage) Close() error {
 }
 
 func (n *nullSinkStorage) Conf() roachpb.ExternalStorage {
-	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_NullSink}
+	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_null}
 }
 
 func (n *nullSinkStorage) ExternalIOConf() base.ExternalIODirConfig {

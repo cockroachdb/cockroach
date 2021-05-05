@@ -34,7 +34,7 @@ import (
 
 func parseGSURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_GoogleCloud
+	conf.Provider = roachpb.ExternalStorageProvider_gs
 	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
 		Bucket:         uri.Host,
 		Prefix:         uri.Path,
@@ -74,7 +74,7 @@ var _ cloud.ExternalStorage = &gcsStorage{}
 
 func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:          roachpb.ExternalStorageProvider_GoogleCloud,
+		Provider:          roachpb.ExternalStorageProvider_gs,
 		GoogleCloudConfig: g.conf,
 	}
 }
