@@ -171,8 +171,6 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		int32(len(args.inputs))+2,
 		result.OpWithMetaInfo,
 		args.pspec.ResultTypes,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 
 	outProc.Start(ctx)
