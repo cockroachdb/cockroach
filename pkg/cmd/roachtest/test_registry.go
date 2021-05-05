@@ -75,7 +75,7 @@ var roachtestOwners = map[Owner]OwnerMetadata{
 	OwnerCDC: {SlackRoom: `cdc`, Mention: []string{`@cockroachdb/cdc`},
 		TriageColumnID: 3570120,
 	},
-	OwnerKV: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
+	OwnerKV: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv-triage`},
 		TriageColumnID: 3550674,
 	},
 	// This is an alias for the KV team.
