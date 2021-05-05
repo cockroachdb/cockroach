@@ -843,7 +843,7 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem:  optional.MakeUint(uint64(w.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(w.diskMonitor.MaximumBytes())),
 		},
-		Output: w.Out.Stats(),
+		Output: w.OutputHelper.Stats(),
 	}
 }
 
