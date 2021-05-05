@@ -25,6 +25,9 @@ type TestingKnobs struct {
 	MemMonitor *mon.BytesMonitor
 	// Dial, if set, is a function that overrides normal sink "dial" functionality.
 	Dial func(s Sink)
+	// HandleDistChangfeedError is called with the result error from
+	// the distributed changefeed.
+	HandleDistChangefeedError func(error) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
