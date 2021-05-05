@@ -1,227 +1,74 @@
-- Feature Name: Reimport Published Cluster UI into DB Console
+- Feature Name: Cluster UI Code Organization
 - Status: draft
 - Start Date: 2021-04-15
 - Authors: Nathan Stilwell
 - RFC PR: (PR # after acceptance of initial draft)
 - Cockroach Issue: (one or more # from the issue tracker)
 
-**Remember, you can submit a PR with your RFC before the text is
-complete. Refer to the [README](README.md#rfc-process) for details.**
+# The Problem
 
-**Remember, you can either fill in this template from scratch, for
-example if you prefer working from a blank slate, or you can follow
-the writing prompts in the [GUIDE](GUIDE.md). In any case, please ensure
-at the end that you have all relevant topics from the guide covered in
-your prose.**
+The current architecture to share common "page" components for cluster observability across DB Console and CockroachCloud Console makes development and maintenance of those components difficult. The motivation behind moving these components out of a repository containing an application was to not show preference to a specific context; to treat each application as a generic consumer. In practice, this simply isn't true. CockroachDB is the API that drives these components (through protocol buffers) and the majority of the work to create the collection of components known as "Cluster UI" was to mirror these views in CockroachCloud. Sharing these components has been successful and the "Cluster UI" components function in CockroachCloud, but developing these components for DB Console has become more arduous.
 
-# Summary
+The components that are rendered for `/statements`, `/transactions`, and `/sessions` were extracted (the code copied and then refactored) from DB Console into another repo intended to publish UI dependencies. The motivation here was that they would be consumed by CockroachCloud console as a dependency. The _presentational_ components themselves had depenencies on may other presentational components that also needed to be copied. These components also dependend on _connected_ components to take relevant data from the application state and pass them as props to the component. These componets are generally lists of things that _link_ to another component to display an individual item (Statements -> Statement Details, Transactions -> Tranaction Details, etc) and so also depended on the ability to use the applications routing. All of these mechanisms were established in DB-Console, but are incompatible with the CockroachCloud console application. So code had to be created to integrate these features into the application state and routes of CC Console.
 
-After a year of extracting "pages" from the DB Console, we are proposing we _put them back_ into the CRDB codebase in `/pkg/ui`. While the extraction project has been ultimately successful, in that the page components were refactored to function in CockroachCloud, developing these components for DB Console has become more arduous. With the diverging contexts of DB Console and CockroachCloud, it is not suitable to develop these single components for use in multiple applications and so ultimately we want to have two distinct user interfaces in these applications based on the single API of CRDB.
+As it stands today most of the code that is published in `@cockroachlabs/cluster-ui` (the package containing these components) is to support the features of CockroachCloud Console. In an effort to keep these features consistent between DB Console and CC Console, the presentational components were replaced in DB Console leaving in place the routing and state managment. CRDB still serves as the API for the application state that supports these presentational components which is still housed in CRDB repo (`/pkg/ui/src/js/protos.js`). This creates a crisscross of dependencies that make local development increasingly challenging.
 
-This is not to say that the user interface features of a cluster don't have common elements between DB Console and CockroachCloud Console. Where the UI is consistent I am still proposing development of common ui components to function in both applications. I believe that what is common between the applications is the presentation UI (generic elements for input, notification, and display) rather than the application layer (routing, application state, and fetching data). The code that will be copied back into the `cockroachdb/cockroach` repository from the `cockroachdb/ui` repository will the application specific components which should cause minimal disruption. Most of the adaptation of these components was for the purpose of importing them into CockroachCloud Console. The challange of continuing to develop in that repository and application are outside of the scope of this RFC. The one remaining connection between the two applications will be continuing to publish `@cockroachlabs/crdb-protobuf-clients` as components running in CC Console will continue to use the API from a CRDB cluster. 
+![cluster ui dependency](http://www.plantuml.com/plantuml/png/VP91Yzim48Nl_XM3Jzs3y3sKihlUImjRba9FcnnaQUoeaMQ4D0g4qlzUEqvhXwIzsUXxpzyJVioYavJWAt7Y4UhMbooOuFjdi1YHB98vWIDuUGPD5jeMMgRC8_l1b9IGvA6keZO7FOpnaLgEsHmIQxEtNVFtkOc7eIdkeOQVrVkAVefnLxt7nC9P_SYxwbT5B0WTYt00xc5r21jelKEIivAS8kOj3KYOjA25Fd7OqenFwkstb-T5SLbuhLXSSs5oOsP6_H5Tti6mnSckJpfCRUsTmLvtkGcQnYwhCgQZCpWNZVXwyTXZF1SBzTUtL_YYZpgRvAB0syLa_dgodJhFwKglp7dvRYqrzQolHts2-o7OmAkcehq_GIoTTtcFzdOUgB5XtR-1fo8Sj3XpdTqI4mHC0u8m13q5xlHzLEeVHZTNChFhRTDlyd_Y4ScMu7y3)
 
-The impact of this change that I am hoping for is to simplify development and maintenance of DB Console. As ownership of parts of this application will fall to teams primarily working in this repository, it is important to support development there as much as possible. To that end, part of the advantage of extracting portions of the DB Console application was to simply development and testing.
+For local development, dependency management tools can create symlinks for dependency development. Developing with a single dependency, and thus a single symlink, is fairly trivial and a common practice among developers of published npm packages. Adding layers of dependency, and thus symlinks, increases the difficulty and combining layers of dependency and crisscrossing repos increases it further. This is due to the nature of frontend development tools needing to "watch and rebuild" these symlinked dependencies and so the more symlinks your are managing, the more build processes you are juggling simultanously. From the diagram above you can see that the `cluster-ui` package continues to depend on the `protos-js` in DB Console that need to be published to npm to be consumed as a depenency. For the purposes of local development in DB Console, this means a change to the _backend_ and the _frontend_ for one of these "pages" would require the engineer to create two symlinks and potentially manually rebuild two or three times to see an update in the UI. This is a significant hinderance. This hinderance becomes more exaserbated when considering multiple DB versions.
 
-# Motivation
+![cluster ui multiple versions](http://www.plantuml.com/plantuml/png/dP8nRuCm48Lt_ufJfZ1SACnHH4kNLcgLfLF4O8oJqXYCR1nLglBV2t55cjXkf6xeVEzzTu_BT4zLRnf1o5RHXiECIRPNahBtgeodxnby4O2EiZtT3JsF3v3BLal1OTDGtNDLmDmhZBlzBZPrP0q0Dh-azrq7QR982llIATbBZHyQhELOFf8GLd71gUQOtYtIVyC7hGCVYnPzz6PYwgimSc76SU7jQGfZ0ZBxXgO69YiESziGMK38vQoowuNjnkTecfO9QIgOlQvVu9aUg6QgxdfOMuIsBXkcgX9FwvPcYqpKlEqBSc6U3QwBJxUOZCLpAda-fNdENz1Inmrj1sA5cgj3pNZqWyukkoxMnBIuqP9WSg8Jxmt14Yj4tnRkOG4ElQjG5CHt9jRVbyVrwS3Vti6B03IuyiuVbYm7JHWLk1P0It9N2IWi9mmYxj20g71r-tSwGxZAmAralArC8xu1)
 
-The components that are rendered for `/statements`, `/transactions`, and `/sessions` were extracted (the code copied and then refactored) from DB Console into another repo intended to publish UI dependencies. The motivation here was that they would be consumed by CockroachCloud console as a dependency. The _presentational_ components themselves had depenencies on may other presentational components (_list dependencies here_) that also needed to be copied. These components also dependend on _connected_ components to take relevant data from the application state and pass them as props to the component. These componets are generally lists of things that _link_ to another component to display an individual item (Statements -> Statement Details, Transactions -> Tranaction Details, etc) and so also depended on the ability to use the applications routing. All of these mechanisms were established in DB-Console, but are incompatible with the CockroachCloud console application. So code had to be created to integrate these features into the application state and routes of CC Console.
 
-As it stands today most of the code that is published in `@cockroachlabs/cluster-ui` (the package containing these components) is to support the features of CockroachCloud Console. In an effort to keep these features consistent between DB Console and CC Console, the presentational components were replaced in DB Console leaving in place the routing and state managment. CRDB still serves as the API for the application state that supports these presentational components which is still housed in CRDB (`/pkg/ui/src/js/protos.js`). This creates a crisscross of dependencies that make local development increasingly challenging.
+# Proposal
 
-![cluster ui dependency in db console](http://www.plantuml.com/plantuml/png/VP31IWCn443l-OfXJte8-G6HQhqeABruAdl8JiOQDys4P2A8-E-sTZMxeDwIuStZCQiYDalT1oLU0a6t3hK8PNYy1KU9egE8R-0Zt5p3ccFXG9rA5aUxEz1j26V8E6Qs-Em6y_CsQToPwiyxU5VR6NsLKg-sARDmqI-bLnzDsXAMqkhDn1I39qP_gziVa1qTVHYuEkWUDlTmPrzjmUoJm6OodBQo6_HNn52VD0PFKVgvxE2PLuA-XF-NMW7e8zoclo4NMl_fMnvhOkUw5KLNz-4J)
+This leads me to how we might simplify this situation. Since the only code we are using from `@cockroachlabs/cluster-ui` are the presentational components, by moving the refactored components back into the CRDB codebase there will be no symlinks required to develop features there. By using the CRDB repo as the codebase for the cluster-ui pages used for CockroachCloud, the version of the pages and the underlying API (protos-js) will be controlled with versioned release branches and backports. This will create a great advantage for developing in DB Console as there will be no symlinked dependencies. Local development of CockroachCloud Console will still require symlinking to the CRDB repo, but it will be reduced to a single managable symlink.
 
-For local development, dependency management tools can create symlinks for dependency development. Developing with a single dependency, and thus a single symlink, is fairly trivial and a common practice among developers of published npm packages. Adding layers of dependency, and thus symlinks, increases the difficulty and combining layers of dependency and crisscrossing repos increases it further. This is due to the nature of frontend development tools needing to "watch and rebuild" these symlinked dependencies and so the more symlinks your are managing, the more build processes you are juggling simultanously.
+![no symlinks](http://www.plantuml.com/plantuml/png/NOynIySm44Vt-nH79lz3wUuWnRe8havjXpIvjh59BYGNGSJlRa7GuFQ3Uxp73KLqbXeyY1DFg4PVYr36rsUqb2XQYkO3NSIdHnmv5hwWkwrApNHJaBGvzKwesgjXSsRMvh1h_xlxTEvzTJU5dp2PdqXNtG9JoYnSkhUom1T45iALHJWWRzYIU7ybBE6MESonZVn1SmpyJXOFoWIj6hk7_x8NDjetJy9mZHhyDm00)
 
-This level of effort was considered a cost of maintaining feature parity across applications, when those features needed to be identical. Over time we have seen the need to diverge these features (for example presenting a view of Statements slightly differently in CockroachCloud than in DB Console) calling into question the value of this architecture. Upon reflection, I feel this is correct as I imagine we will want to present a different user experience for a developer or operator in a Serverless or Free Tier CockroachCloud context than an on-prem one in DB Console.
+![CC-Console dependency](http://www.plantuml.com/plantuml/png/VP31IWCn48RlUOfXJ_OGzYuYrHL1KUd5Kzj3DfbjOvDCI2O5aRwxiOMwgz1R8F_CztyppwmI5-y4MtO8JUTAPapm_WG68mQ3GN-23T1rq578L4DNG-6ISDQ8gFHERUhOm_tlhoQzIwJqrlJj-Tt6tQOjTjR0brZg4qGMknRBc8Wfou-y5WSHY15wOYOFDC0u2TSLOH26H7uL9f1pQ1KyxT705XEA8IbVgvsJJlMvzIhKmaPcJ7khyLYdgZqc2bnjuIx6dnxQKJ7Gl2rUuLdjLTR9HeR5IJSVf-RJnMEdWnXhWRpzA_92MhdHWVztW1ifuH9Zib5Mn8Lm9IvAxspUeW4c2D6BUIKLxxu1)
 
-This leads me to how we might simplify this situation. Since the only code we are using from `@cockroachlabs/cluster-ui` are the presentational components, by copying the refactored components back into the CRDB codebase there will be no symlinks required to develop features there.
+This also has the advantage of reducing the discussion of multiple versions to largely a discussion of the version of the database. DB Console will have no consideration of the version of Cluster UI as it will simply be the one in the codebase. Backports will be managed in the same way as other code changes in DB Console, using git branches.
 
-![no symlinks](http://www.plantuml.com/plantuml/png/TO-noi8m58NtFCKbq_yFeMyWrReeA5sSIeVq9jROc8JaHX3ntQqLj8lRvVATS_ZAH39IlbX6Xgm6NjcSI4SuR43fe9tI3czW7AnNK7cNlDMS1Oc3x4Vw-uG_z3X4B_6akk9p5s7eYsp-ETnPCwEN8RIi2T6JJ-ASMlPWQ7rMmFVr3hRoAXD64mZgzrIQ2Z2gJaoXBXy5MgCTlQAp8X0B-C6Leyre-WG0)
+![release branches](http://www.plantuml.com/plantuml/png/VT313e8m3CRn-vwYuJuK7i3m7eH3ALMKmKWxJiPtTxf8ucAyBVzy-MLfem4bRBE3eRVa5_MEhR1ZLBQzu48Zgp5dmPcX84-JUAHnw0_xku2x0LYH9hp4JJkZ1fOkPMXNyS6hlIau3AoX0tk2bjpsMjdjkkUuVfWlwVEFkYgh7zuxvrgA_x1ZMISiqsBFjHGJ5hc6bo6UoZm1)
+
+And in support of multiple cluster versions in CockroachCloud, the published package (`@cockroachlabs/cluster-ui`) could be aligned to the version of the DB for convinience.
+
+![aligned versions](http://www.plantuml.com/plantuml/png/ZP4nRyCW48LtViN9KpgG1F-0ofBdLjsj36UuDccmYG1tgVBVYuNY5brKPqDFxxx7lMj2H1-dmOBffNPZS9Qa9qiOIFOUHtsa8CIxnu6WqawVlKDzDFrkULVmBG0kgC_uaJpTW26IFsGPkejtqGNv6S1Yf10F89-XqtQQNN8wBN9oNqL1klsZLbjrXpVBZ9R5_s3xRPrX9MtMEMqMCopXj7MJWUhrxGKspRA_nJuyPU2VqQPMQPHhYcbpXBWk7RSjjFaEi2aoTWEEQHKZ0_clawPRPbEwVj6fDvdGQnQrPjdB_C5xHvFIfChutlmat9dRu7LpP-v8i9XiNQ-0fJuqgCh1udDhTJKqcccmuWS0)
+
 
 # Technical design
 
-WIP
+## Moving the code
 
-_still working on this section_
+Relocating the code from the UI repo into the `ui` package of the CRDB repo will require some adjustments to be made to the build configuration (webpack) to include and ignore portions of the code. Since much of the package is not intended for consumption in DB Console, but will still need to be published as a npm package, we want to ensure that all builds work successfully. I anticipate this will require minor adjustments to Webpack configurations, ignore files, TypeScript configuration, linting, and testing configuration. The versions of major dependencies in `cluster-ui` are pretty well aligned to DB Console (and CC Console) as they are declared as peer dependencies to not conflict or bulk the bundle. But there are most likely other dependencies that will need to be added to DB Console or versions that may need to be adjusted for compatibility. In addition to "moving the code", we also want to preserve the git history from the UI repo. This was done for previous moves and so should include a mostly complete. 
 
-- copy `StatementsPage`
-- copy `SessionDetails` and `SessionsPage`
-- copy `TransactionsPage`
 
-There are 30 something other occurances of `@cockroachlabs/cluster-ui` in CRDB, so we will need to account for other components that were copied out to support these components by copying them back into the codebase, moving them to `@cockroachlabs/ui-components` and importing from there, replacing them with existing components from `ui-components` or some other refactoring. 
+## Updating DB Console
 
-```
-34 results - 32 files
+After the code is moved, dependencies have been resolved, and the build is successful the native code that references the `@cockroachlabs/cluster-ui` dependency should be updated to point to local code instead. There are currently around 35 references to the external dependency with most of them being utility components. There will most likely be some component duplication when moving the whole of Cluster UI back into the repo from whence it came. There will be an opportunity to remove identical duplicate components, but I think an evaluation of similar components should be postponed until both applications have been fully updated. 
 
-pkg/ui/ccl/src/views/clusterviz/containers/map/breadcrumbs.tsx:
-  14  import { LocalityTier } from "src/redux/localities";
-  15: import { util } from "@cockroachlabs/cluster-ui";
-  16  import { getLocalityLabel } from "src/util/localities";
+Once the move and cleanup has happened on master, an update will need to be made to `release-20.2` as this version also depends on the an external `cluster-ui` as well. The version supporting 20.2 is on a separate branch in the UI repo (`cluster-ui-20.2`) and so while the code move on master could be referenced I'm not confident it can be duplicated. Depending on the state of the release, the work on CRDB master may need to be backported to `release-21.1` as well.
 
-pkg/ui/ccl/src/views/clusterviz/containers/map/index.tsx:
-  19  import { parseLocalityRoute } from "src/util/localities";
-  20: import { Loading } from "@cockroachlabs/cluster-ui";
-  21  import { AdminUIState } from "src/redux/state";
+## Updating CC Console
 
-pkg/ui/ccl/src/views/clusterviz/containers/map/nodeCanvasContainer.tsx:
-  42  import { getLocality } from "src/util/localities";
-  43: import { Loading } from "@cockroachlabs/cluster-ui";
-  44  import { NodeCanvas } from "./nodeCanvas";
+When we have confirmed that both DB Console can be built successfully and the Cluster UI package can be build independently, publishing for Cluster UI should be configured. Currently in the UI repo, the `cluster-ui` package is published by a Github Action when pull requests are merged to master. Eventually it would be highly beneficial to have publishing be a part of merging code, we anticipate that immediately after move publishing will be a manual process identical to the publishing of `@cockroachlabs/crdb-protobuf-client`. New versions of `@cockroachlabs/cluster-ui` should be published to match the version of DB Console they represent (21.2.x, 21.1.x, 20.2.x). Documentation for the Cluster UI package should be updated to reflect any significant architectural changes (probably mostly related to protobufs) and describing the new versioning. When the new versions are available on npm, CockroachCloud console should be updated to depend on these new versions. I don't anticipate any other code changes necessary as this proposal does not include any change in functionality of the components.
 
-pkg/ui/src/app.spec.tsx:
-  34  import { DataDistributionPage } from "src/views/cluster/containers/dataDistribution";
-  35: import { StatementsPage, StatementDetails } from "@cockroachlabs/cluster-ui";
-  36  import Debug from "src/views/reports/containers/debug";
+## Deprecate the package in UI repo
 
-pkg/ui/src/views/cluster/containers/dataDistribution/index.tsx:
-  17  
-  18: import { Loading } from "@cockroachlabs/cluster-ui";
-  19  import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+As a final step, the code in `cockroachdb/ui` should be deprecated, the `package.json` set to private, and the Github Action for publishing removed. We should keep the code around for reference or back up until we are confident it is no longer needed.
 
-pkg/ui/src/views/cluster/containers/events/index.tsx:
-  31  import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-  32: import { Loading } from "@cockroachlabs/cluster-ui";
-  33  import "./events.styl";
+# Next Step and recommendations for team
 
-pkg/ui/src/views/cluster/containers/nodeLogs/index.tsx:
-  27  import { getDisplayName } from "src/redux/nodes";
-  28: import { Loading } from "@cockroachlabs/cluster-ui";
-  29  import { getMatchParamByName } from "src/util/query";
+## Cluster UI
 
-pkg/ui/src/views/cluster/containers/nodeOverview/index.tsx:
-  35  } from "src/views/shared/components/summaryBar";
-  36: import { Button } from "@cockroachlabs/cluster-ui";
-  37  import { ArrowLeft } from "@cockroachlabs/icons";
+The Cluster UI team has the most familiarity with the current architecture. To assist in the transition of ownership of these components (to the SQL Observability team) we can commit to doing the bulk of the work mentioned in the above section. Cluster UI would take on moving the code and git commit history into the CRDB repo, updating the build systems, tools, and dependencies required, and configuring npm publishing to allow the SQL <abbr title="observability">o11y</abbr> team to manually publish the package. We could also commit to updating the depedency versions in CockroachCloud console and confirming no unexpected breakage.
 
-pkg/ui/src/views/cluster/containers/nodesOverview/index.tsx:
-  31  import { Text, TextTypes, Tooltip, Badge, BadgeProps } from "src/components";
-  32: import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
-  33  import { Percentage } from "src/util/format";
+## SQL Observability
 
-pkg/ui/src/views/databases/containers/databases/nonTableSummary.spec.tsx:
-  20  import { cockroach } from "src/js/protos";
-  21: import { Loading } from "@cockroachlabs/cluster-ui";
-  22  import NonTableStatsResponse = cockroach.server.serverpb.NonTableStatsResponse;
+As the new stewards of the observability components, it is our recommendation to the SQL Observabilty team to consider relocating code specifically engineered for state management and routing in CockroachCloud console to that repo. This should simplify the code in that is pubilshed, the dependency tree, and the code that handles external reducers and routes in that application.
 
-pkg/ui/src/views/databases/containers/databases/nonTableSummary.tsx:
-  17  import { Bytes } from "src/util/format";
-  18: import { Loading } from "@cockroachlabs/cluster-ui";
-  19  import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+## CockroachCloud Platform
 
-pkg/ui/src/views/databases/containers/tableDetails/index.tsx:
-  32  import { getMatchParamByName } from "src/util/query";
-  33: import { Button } from "@cockroachlabs/cluster-ui";
-  34  import { ArrowLeft } from "@cockroachlabs/icons";
+One issue that has been repeatedly encountered by the Cluster UI team in supporting these shared components is resolving conflicts with global styles in CockroachCloud Console. It is our recomendation that the web component paradigmn is best served by removing global css entirely from that application. CC-Console has the ability to use modular css at the component level (CSS Modules). Where styles need to be kept consistent across components, we suggest the use of design tokens or at the very least Sass mixins. 
 
-pkg/ui/src/views/jobs/index.tsx:
-  22  import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
-  23: import { Loading } from "@cockroachlabs/cluster-ui";
-  24  import {
-
-pkg/ui/src/views/jobs/jobDetails.tsx:
-  26  import { showSetting, statusSetting, typeSetting } from ".";
-  27: import { Loading } from "@cockroachlabs/cluster-ui";
-  28  import SqlBox from "../shared/components/sql/box";
-
-  33  import JobsResponse = cockroach.server.serverpb.JobsResponse;
-  34: import { Button } from "@cockroachlabs/cluster-ui";
-  35  import { ArrowLeft } from "@cockroachlabs/icons";
-
-pkg/ui/src/views/jobs/jobTable.tsx:
-  25  import JobsResponse = cockroach.server.serverpb.JobsResponse;
-  26: import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/cluster-ui";
-  27  import { jobTable } from "src/util/docs";
-  28  import { trackDocsLink } from "src/util/analytics";
-  29: import { EmptyTable } from "@cockroachlabs/cluster-ui";
-  30  import { Anchor } from "src/components";
-
-pkg/ui/src/views/reports/containers/certificates/index.tsx:
-  24  import { LongToMoment } from "src/util/convert";
-  25: import { Loading } from "@cockroachlabs/cluster-ui";
-  26  import { getMatchParamByName } from "src/util/query";
-
-pkg/ui/src/views/reports/containers/localities/index.tsx:
-  31  import { findMostSpecificLocation, hasLocation } from "src/util/locations";
-  32: import { Loading } from "@cockroachlabs/cluster-ui";
-  33  import "./localities.styl";
-
-pkg/ui/src/views/reports/containers/network/index.tsx:
-  37  } from "src/views/reports/components/nodeFilterList";
-  38: import { Loading } from "@cockroachlabs/cluster-ui";
-  39  import { Latency } from "./latency";
-
-pkg/ui/src/views/reports/containers/nodeHistory/decommissionedNodeHistory.tsx:
-  27  import { Text } from "src/components";
-  28: import { ColumnsConfig, Table } from "@cockroachlabs/cluster-ui";
-  29  import { createSelector } from "reselect";
-
-pkg/ui/src/views/reports/containers/problemRanges/index.tsx:
-  26  import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
-  27: import { Loading } from "@cockroachlabs/cluster-ui";
-  28  import { getMatchParamByName } from "src/util/query";
-
-pkg/ui/src/views/reports/containers/range/allocator.tsx:
-  17  import Print from "src/views/reports/containers/range/print";
-  18: import { Loading } from "@cockroachlabs/cluster-ui";
-  19  
-
-pkg/ui/src/views/reports/containers/range/connectionsTable.tsx:
-  16  import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-  17: import { Loading } from "@cockroachlabs/cluster-ui";
-  18  
-
-pkg/ui/src/views/reports/containers/range/logTable.tsx:
-  17  import Print from "src/views/reports/containers/range/print";
-  18: import { Loading } from "@cockroachlabs/cluster-ui";
-  19  import { TimestampToMoment } from "src/util/convert";
-
-pkg/ui/src/views/reports/containers/settings/index.tsx:
-  19  import { AdminUIState } from "src/redux/state";
-  20: import { Loading } from "@cockroachlabs/cluster-ui";
-  21  import "./index.styl";
-
-pkg/ui/src/views/reports/containers/statementDiagnosticsHistory/index.tsx:
-  51    getDiagnosticsStatus,
-  52: } from "@cockroachlabs/cluster-ui";
-  53  
-
-pkg/ui/src/views/reports/containers/stores/index.tsx:
-  22  import EncryptionStatus from "src/views/reports/containers/stores/encryption";
-  23: import { Loading } from "@cockroachlabs/cluster-ui";
-  24  import { getMatchParamByName } from "src/util/query";
-
-pkg/ui/src/views/sessions/sessionDetails.tsx:
-  26  import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
-  27: import { SessionDetails, byteArrayToUuid } from "@cockroachlabs/cluster-ui";
-  28  import {
-
-pkg/ui/src/views/sessions/sessionsPage.tsx:
-  19  
-  20: import { SessionsPage } from "@cockroachlabs/cluster-ui";
-  21  import {
-
-pkg/ui/src/views/shared/components/sortabletable/index.tsx:
-  289                      // TODO (koorosh): `title` field has ReactNode type isn't correct field to
-  290:                     // track column name. `SortableColumn` has to be imported from `@cockroachlabs/cluster-ui`
-  291                      // package which has extended field to track column name.
-
-pkg/ui/src/views/statements/statementDetails.tsx:
-  42    AggregateStatistics,
-  43: } from "@cockroachlabs/cluster-ui";
-  44  import { createStatementDiagnosticsReportAction } from "src/redux/statements";
-
-pkg/ui/src/views/statements/statementsPage.tsx:
-  35  
-  36: import { StatementsPage, AggregateStatistics } from "@cockroachlabs/cluster-ui";
-  37  import {
-
-pkg/ui/src/views/transactions/transactionsPage.tsx:
-  21  
-  22: import { TransactionsPage } from "@cockroachlabs/cluster-ui";
-```
-
-## Drawbacks
-
-WIP
-
-Drawbacks might be that since a single component isn't shared in two applications there may be some duplication or features may have to be written twice. This seems like a fair and potentially unavoidable reality that will be easier to deal with than what we have now.
