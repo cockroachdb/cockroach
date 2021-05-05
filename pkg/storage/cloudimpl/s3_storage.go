@@ -80,7 +80,7 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 
 func parseS3URL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
-	conf.Provider = roachpb.ExternalStorageProvider_S3
+	conf.Provider = roachpb.ExternalStorageProvider_s3
 	conf.S3Config = &roachpb.ExternalStorage_S3{
 		Bucket:        uri.Host,
 		Prefix:        uri.Path,
@@ -224,7 +224,7 @@ func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
 
 func (s *s3Storage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider: roachpb.ExternalStorageProvider_S3,
+		Provider: roachpb.ExternalStorageProvider_s3,
 		S3Config: s.conf,
 	}
 }

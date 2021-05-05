@@ -347,7 +347,7 @@ go_library(
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/types",
         "//pkg/sql/vtable",
-        "//pkg/storage/cloud",
+        "//pkg/storage/cloudimpl",
         "//pkg/util",
         "//pkg/util/bitarray",
         "//pkg/util/cancelchecker",

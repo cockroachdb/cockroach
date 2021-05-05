@@ -74,13 +74,13 @@ const (
 	AuthParam = "AUTH"
 	// AuthParamImplicit is the query parameter for the implicit authentication
 	// mode in a URI.
-	AuthParamImplicit = "implicit"
+	AuthParamImplicit = roachpb.ExternalStorageAuthImplicit
 	// AuthParamDefault is the query parameter for the default authentication
 	// mode in a URI.
 	AuthParamDefault = "default"
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
-	AuthParamSpecified = "specified"
+	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
 
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
@@ -106,14 +106,7 @@ const (
 	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
 
-// See SanitizeExternalStorageURI.
-var redactedQueryParams = map[string]struct{}{
-	AWSSecretParam:       {},
-	AWSTempTokenParam:    {},
-	AzureAccountKeyParam: {},
-	CredentialsParam:     {},
-}
-
+var redactedQueryParams = map[string]struct{}{}
 var confParsers = map[string]ExternalStorageURIParser{}
 var implementations = map[roachpb.ExternalStorageProvider]ExternalStorageConstructor{}
 
@@ -123,6 +116,7 @@ func RegisterExternalStorageProvider(
 	providerType roachpb.ExternalStorageProvider,
 	parseFn ExternalStorageURIParser,
 	constructFn ExternalStorageConstructor,
+	redactedParams map[string]struct{},
 	schemes ...string,
 ) {
 	for _, scheme := range schemes {
@@ -130,6 +124,9 @@ func RegisterExternalStorageProvider(
 			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
 		}
 		confParsers[scheme] = parseFn
+		for param := range redactedParams {
+			redactedQueryParams[param] = struct{}{}
+		}
 	}
 	if _, ok := implementations[providerType]; ok {
 		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
@@ -137,15 +134,33 @@ func RegisterExternalStorageProvider(
 	implementations[providerType] = constructFn
 }
 
+// RedactedParams is a helper for making a set of param names to redact in URIs.
+func RedactedParams(strs ...string) map[string]struct{} {
+	if len(strs) == 0 {
+		return nil
+	}
+	m := make(map[string]struct{}, len(strs))
+	for i := range strs {
+		m[strs[i]] = struct{}{}
+	}
+	return m
+}
+
 func init() {
-	cloud.AccessIsWithExplicitAuth = AccessIsWithExplicitAuth
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_Azure, parseAzureURL, makeAzureStorage, "azure")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_GoogleCloud, parseGSURL, makeGCSStorage, "gs")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_Http, parseHTTPURL, MakeHTTPStorage, "http", "https")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_LocalFile, parseNodelocalURL, makeLocalStorage, "nodelocal")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_NullSink, parseNullURL, makeNullSinkStorage, "null")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_S3, parseS3URL, MakeS3Storage, "s3")
-	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_FileTable, parseUserfileURL, makeFileTableStorage, "userfile")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_azure,
+		parseAzureURL, makeAzureStorage, RedactedParams(AzureAccountKeyParam), "azure")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_gs,
+		parseGSURL, makeGCSStorage, RedactedParams(CredentialsParam), "gs")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_http,
+		parseHTTPURL, MakeHTTPStorage, RedactedParams(), "http", "https")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal,
+		parseNodelocalURL, makeLocalStorage, RedactedParams(), "nodelocal")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_null,
+		parseNullURL, makeNullSinkStorage, RedactedParams(), "null")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_s3,
+		parseS3URL, MakeS3Storage, RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
+	RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_userfile,
+		parseUserfileURL, makeFileTableStorage, RedactedParams(), "userfile")
 }
 
 // ExternalStorageURIContext contains arguments needed to parse external storage
@@ -259,7 +274,7 @@ func MakeExternalStorage(
 		InternalExecutor:  ie,
 		DB:                kvDB,
 	}
-	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_FileTable {
+	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")
 	}
 	if fn, ok := implementations[dest.Provider]; ok {
@@ -284,51 +299,6 @@ func URINeedsGlobExpansion(uri string) bool {
 	}
 
 	return containsGlob(parsedURI.Path)
-}
-
-// AccessIsWithExplicitAuth checks if the provided ExternalStorage URI has
-// explicit authentication i.e does not rely on implicit machine credentials to
-// access the resource.
-// The following scenarios are considered implicit access:
-//
-// - implicit AUTH: access will use the node's machine account and only a
-// super user should have the authority to use these credentials.
-//
-// - HTTP/HTTPS/Custom endpoint: requests are made by the server, in the
-// server's network, potentially behind a firewall and only a super user should
-// be able to do this.
-//
-// - nodelocal: this is the node's shared filesystem and so only a super user
-// should be able to interact with it.
-func AccessIsWithExplicitAuth(path string) (bool, string, error) {
-	uri, err := url.Parse(path)
-	if err != nil {
-		return false, "", err
-	}
-	hasExplicitAuth := false
-	switch uri.Scheme {
-	case "s3":
-		auth := uri.Query().Get(AuthParam)
-		hasExplicitAuth = auth == AuthParamSpecified || auth == ""
-
-		// If a custom endpoint has been specified in the S3 URI then this is no
-		// longer an explicit AUTH.
-		hasExplicitAuth = hasExplicitAuth && uri.Query().Get(AWSEndpointParam) == ""
-	case "gs":
-		auth := uri.Query().Get(AuthParam)
-		hasExplicitAuth = auth == AuthParamSpecified
-	case "azure":
-		// Azure does not support implicit authentication i.e. all credentials have
-		// to be specified as part of the URI.
-		hasExplicitAuth = true
-	case "http", "https", "nodelocal":
-		hasExplicitAuth = false
-	case "experimental-workload", "workload", "userfile", "null":
-		hasExplicitAuth = true
-	default:
-		return hasExplicitAuth, "", nil
-	}
-	return hasExplicitAuth, uri.Scheme, nil
 }
 
 func containsGlob(str string) bool {
