@@ -288,6 +288,10 @@ func initCRowFetcher(
 // Release implements the execinfra.Releasable interface.
 func (s *ColBatchScan) Release() {
 	s.rf.Release()
+	// Deeply reset the spans so that we don't hold onto the keys of the spans.
+	for i := range s.spans {
+		s.spans[i] = roachpb.Span{}
+	}
 	*s = ColBatchScan{
 		spans: s.spans[:0],
 	}
