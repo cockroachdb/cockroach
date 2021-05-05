@@ -57,8 +57,6 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: vee},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 	mat.Start(ctx)
 
@@ -94,8 +92,6 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: nvee},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
 	mat.Start(ctx)
 
