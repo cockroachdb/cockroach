@@ -3081,7 +3081,7 @@ func TestChangefeedTelemetry(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
-func TestChangefeedMemBufferCapacity(t *testing.T) {
+func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3145,6 +3145,15 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 				return nil
 			}
 
+			distErrCh := make(chan error, numFeeds)
+			knobs.HandleDistChangefeedError = func(err error) error {
+				// NB: do not use t.Fatal (or anything that can call that) here.
+				// This function is invoked form a different go routine -- and calling
+				// t.Fatal will likely deadlock the test.
+				distErrCh <- err
+				return MaybeStripRetryableErrorMarker(err)
+			}
+
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
@@ -3206,15 +3215,12 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 					return err
 				})
 
-			err := <-firstErr
+			err := <-distErrCh
 			require.Regexp(t, `memory budget exceeded`, err)
+			require.True(t, IsRetryableError(err))
 		}
 	}
 
-	// The mem buffer is only used with RangeFeed.
-	t.Run(`sinkless-one-feed`, sinklessTest(memLimitTest(1)))
-	t.Run(`sinkless-two-feeds`, sinklessTest(memLimitTest(2)))
-	t.Run(`sinkless-many-feeds`, sinklessTest(memLimitTest(3)))
 	t.Run(`enterprise-one-feed`, enterpriseTest(memLimitTest(1)))
 	t.Run(`enterprise-two-feeds`, enterpriseTest(memLimitTest(2)))
 	t.Run(`enterprise-many-feeds`, enterpriseTest(memLimitTest(3)))
