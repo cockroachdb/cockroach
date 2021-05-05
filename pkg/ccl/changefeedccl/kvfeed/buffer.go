@@ -232,7 +232,9 @@ type memBuffer struct {
 	}
 }
 
-func makeMemBuffer(acc mon.BoundAccount, metrics *Metrics) *memBuffer {
+// MakeMemBuffer returns an EventBuffer backed by memory, limited
+// as specified by bound account.
+func MakeMemBuffer(acc mon.BoundAccount, metrics *Metrics) EventBuffer {
 	b := &memBuffer{
 		metrics:  metrics,
 		signalCh: make(chan struct{}, 1),
