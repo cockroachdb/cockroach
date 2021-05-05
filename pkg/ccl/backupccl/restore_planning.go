@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"go/constant"
 	"net/url"
 	"path"
@@ -18,12 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -59,12 +63,15 @@ import (
 // DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.
 type DescRewriteMap map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite
 
+const multiTenantZoneConfigNo = 49854
+
 const (
 	restoreOptIntoDB                    = "into_db"
 	restoreOptSkipMissingFKs            = "skip_missing_foreign_keys"
 	restoreOptSkipMissingSequences      = "skip_missing_sequences"
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
+	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -1631,6 +1638,75 @@ func checkPrivilegesForRestore(
 	return nil
 }
 
+func findNodeOfRegion(nodes []statuspb.NodeStatus, region descpb.RegionName) bool {
+	constraint := zonepb.Constraint{
+		Type:  zonepb.Constraint_REQUIRED,
+		Key:   "region",
+		Value: string(region),
+	}
+	for _, n := range nodes {
+		for _, store := range n.StoreStatuses {
+			if zonepb.StoreMatchesConstraint(store.Desc, constraint) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func checkClusterRegions(
+	ctx context.Context,
+	typesByID map[descpb.ID]*typedesc.Mutable,
+	ss serverpb.OptionalNodesStatusServer,
+	skipLocalitiesCheck bool,
+	codec keys.SQLCodec,
+) error {
+
+	regionDesc := make([]catalog.TypeDescriptor, 0)
+	for _, typ := range typesByID {
+		typeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType()
+		if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			regionDesc = append(regionDesc, typeDesc)
+		}
+	}
+
+	if skipLocalitiesCheck || len(regionDesc) == 0 {
+		return nil
+	}
+
+	var nodeStatusServer serverpb.NodesStatusServer
+	var err error
+	if nodeStatusServer, err = ss.OptionalNodesStatusServer(multiTenantZoneConfigNo); err != nil {
+		if !codec.ForSystemTenant() {
+			hintMsg := fmt.Sprintf("only the system tenant supports localities check for restore, otherwise option %q is required", restoreOptSkipLocalitiesCheck)
+			return errors.WithHint(err, hintMsg)
+		}
+		return err
+	}
+
+	var nodesResponse *serverpb.NodesResponse
+	nodesResponse, err = nodeStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+
+	for _, desc := range regionDesc {
+		regionNames, err := desc.RegionNames()
+		if err != nil {
+			return err
+		}
+		for _, region := range regionNames {
+			if nodeFound := findNodeOfRegion(nodesResponse.Nodes, region); !nodeFound {
+				mismatchErr := errors.Newf("detected mismatch regions between restore cluster and backup cluster, "+
+					"missing region %s.", region)
+				hintsMsg := fmt.Sprintf("please update cluster localities or restore with option %q.", restoreOptSkipLocalitiesCheck)
+				return errors.WithHint(mismatchErr, hintsMsg)
+			}
+		}
+	}
+	return nil
+}
+
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
@@ -1820,6 +1896,9 @@ func doRestorePlan(
 		case *typedesc.Mutable:
 			typesByID[desc.ID] = desc
 		}
+	}
+	if err := checkClusterRegions(ctx, typesByID, p.ExecCfg().NodesStatusServer, restoreStmt.Options.SkipLocalitiesCheck, p.ExecCfg().Codec); err != nil {
+		return err
 	}
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
