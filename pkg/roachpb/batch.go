@@ -188,6 +188,15 @@ func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
 	return ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == m
 }
 
+func (ba *BatchRequest) containsRequestWithMethod(m Method) bool {
+	for _, req := range ba.Requests {
+		if req.GetInner().Method() == m {
+			return true
+		}
+	}
+	return false
+}
+
 // IsSingleTransferLeaseRequest returns true iff the batch contains a single
 // request, and that request is a TransferLease.
 func (ba *BatchRequest) IsSingleTransferLeaseRequest() bool {
@@ -204,6 +213,11 @@ func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 // request, and that request is a HeartbeatTxn.
 func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(HeartbeatTxn)
+}
+
+// ContainsEndTxnRequest returns true iff the batch contains a EndTxnRequest.
+func (ba *BatchRequest) ContainsEndTxnRequest() bool {
+	return ba.containsRequestWithMethod(EndTxn)
 }
 
 // IsSingleEndTxnRequest returns true iff the batch contains a single request,

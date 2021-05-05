@@ -768,11 +768,10 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: cleanup txn records",
 		func(ctx context.Context) {
-			ctx, cancel := ir.stopper.WithCancelOnQuiesce(ctx)
-			defer cancel()
-			ctx, cancel = context.WithTimeout(ctx, gcTxnRecordTimeout)
-			defer cancel()
-			err := ir.gcTxnRecord(ctx, rangeID, txn)
+			err := contextutil.RunWithTimeout(ctx, "cleanup txn record",
+				gcTxnRecordTimeout, func(ctx context.Context) error {
+					return ir.gcTxnRecord(ctx, rangeID, txn)
+				})
 			if onComplete != nil {
 				onComplete(err)
 			}
