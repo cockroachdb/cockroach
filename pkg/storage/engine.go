@@ -76,10 +76,33 @@ type SimpleMVCCIterator interface {
 	UnsafeValue() []byte
 }
 
-// IteratorStats is returned from (MVCCIterator).Stats.
+// IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
 type IteratorStats struct {
+	// TODO(sumeer): populate this stat that was inherited from RocksDB, which
+	// counts the number of deletes or single deletes skipped over during
+	// iteration. It may be better to replace this with the number of Pebble
+	// key-values encountered, which would encompass Pebble versions that were
+	// explicitly deleted and those that were obsoleted due to newer Pebble
+	// versions.
 	InternalDeleteSkippedCount int
 	TimeBoundNumSSTs           int
+
+	// Iteration stats. We directly expose pebble.IteratorStats. Callers
+	// may want to aggregate and interpret these in the following manner:
+	// - Aggregate {Forward,Reverse}SeekCount, {Forward,Reverse}StepCount.
+	// - Interpret the four aggregated stats as follows:
+	//   - {SeekCount,StepCount}[InterfaceCall]: We can refer to these simply as
+	//     {SeekCount,StepCount} in logs/metrics/traces. These represents
+	//     explicit calls by the implementation of MVCCIterator, in response to
+	//     the caller of MVCCIterator. A high count relative to the unique MVCC
+	//     keys returned suggests there are many versions for the same key.
+	//   - {SeekCount,StepCount}[InternalIterCall]: We can refer to these simply
+	//     as {InternalSeekCount,InternalStepCount}. If these are significantly
+	//     larger than the ones in the preceding bullet, it suggests that there
+	//     are lots of uncompacted deletes or stale Pebble-versions (not to be
+	//     confused with MVCC versions) that need to be compacted away. This
+	//     should be very rare, but has been observed.
+	Stats pebble.IteratorStats
 }
 
 // MVCCIterator is an interface for iterating over key/value pairs in an
@@ -255,6 +278,8 @@ type EngineIterator interface {
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
 	// some pathological situations (uncompacted deleted locks).
 	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// Stats returns statistics about the iterator.
+	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.

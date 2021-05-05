@@ -860,6 +860,37 @@ func TestEngineScan1(t *testing.T) {
 				}
 				ensureRangeEqual(t, sortedKeys, keyMap, keyvals)
 			}
+
+			// Test iterator stats.
+			ro := engine.NewReadOnly()
+			iter := ro.NewMVCCIterator(MVCCKeyIterKind,
+				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+			iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})
+			for {
+				valid, err := iter.Valid()
+				require.NoError(t, err)
+				if !valid {
+					break
+				}
+				iter.Next()
+			}
+			stats := iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
+				"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
+			iter.Close()
+			iter = ro.NewMVCCIterator(MVCCKeyIterKind,
+				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
+			// pebble.Iterator is reused, but stats are reset.
+			stats = iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 0, 0), (rev, 0, 0)), "+
+				"(internal (dir, seek, step): (fwd, 0, 0), (rev, 0, 0))", stats.String())
+			iter.SeekGE(MVCCKey{Key: roachpb.Key("french")})
+			iter.SeekLT(MVCCKey{Key: roachpb.Key("server")})
+			stats = iter.Stats().Stats
+			require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 0), (rev, 1, 0)), "+
+				"(internal (dir, seek, step): (fwd, 1, 0), (rev, 1, 1))", stats.String())
+			iter.Close()
+			ro.Close()
 		})
 	}
 }
