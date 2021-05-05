@@ -3145,6 +3145,11 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 				return nil
 			}
 
+			knobs.HandleDistChangefeedError = func(err error) error {
+				require.True(t, IsRetryableError(err))
+				return MaybeStripRetryableErrorMarker(err)
+			}
+
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 

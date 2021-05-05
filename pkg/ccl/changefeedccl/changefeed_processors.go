@@ -338,6 +338,33 @@ func (f doNothingSchemaFeed) Pop(
 	return nil, nil
 }
 
+type errorWrapperEventBuffer struct {
+	kvfeed.EventBuffer
+}
+
+func (e errorWrapperEventBuffer) AddKV(
+	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
+) error {
+	if err := e.EventBuffer.AddKV(ctx, kv, prevVal, backfillTimestamp); err != nil {
+		return MarkRetryableError(err)
+	}
+	return nil
+}
+
+func (e errorWrapperEventBuffer) AddResolved(
+	ctx context.Context,
+	span roachpb.Span,
+	ts hlc.Timestamp,
+	boundaryType jobspb.ResolvedSpan_BoundaryType,
+) error {
+	if err := e.EventBuffer.AddResolved(ctx, span, ts, boundaryType); err != nil {
+		return MarkRetryableError(err)
+	}
+	return nil
+}
+
+var _ kvfeed.EventBuffer = (*errorWrapperEventBuffer)(nil)
+
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
 	mm *mon.BytesMonitor,
@@ -353,6 +380,11 @@ func makeKVFeedCfg(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
 	_, withDiff := spec.Feed.Opts[changefeedbase.OptDiff]
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
+	bf := func() kvfeed.EventBuffer {
+		return &errorWrapperEventBuffer{
+			EventBuffer: kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics),
+		}
+	}
 	kvfeedCfg := kvfeed.Config{
 		Sink:               buf,
 		Settings:           cfg.Settings,
@@ -362,8 +394,7 @@ func makeKVFeedCfg(
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
 		Targets:            spec.Feed.Targets,
-		Metrics:            &metrics.KVFeedMetrics,
-		MM:                 mm,
+		EventBufferFactory: bf,
 		InitialHighWater:   initialHighWater,
 		WithDiff:           withDiff,
 		NeedsInitialScan:   needsInitialScan,
