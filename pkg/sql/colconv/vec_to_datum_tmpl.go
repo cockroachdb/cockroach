@@ -118,8 +118,17 @@ func NewAllVecToDatumConverter(batchWidth int) *VecToDatumConverter {
 
 // Release is part of the execinfra.Releasable interface.
 func (c *VecToDatumConverter) Release() {
+	// Deeply reset the converted vectors so that we don't hold onto the old
+	// datums.
+	for _, vec := range c.convertedVecs {
+		for i := range vec {
+			//gcassert:bce
+			vec[i] = nil
+		}
+	}
 	*c = VecToDatumConverter{
-		convertedVecs:    c.convertedVecs[:0],
+		convertedVecs: c.convertedVecs[:0],
+		// This slice is of integers, so there is no need to reset it deeply.
 		vecIdxsToConvert: c.vecIdxsToConvert[:0],
 	}
 	vecToDatumConverterPool.Put(c)

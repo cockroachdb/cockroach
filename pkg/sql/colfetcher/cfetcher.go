@@ -64,6 +64,12 @@ type cTableInfo struct {
 	// The set of required value-component column ordinals in the table.
 	neededValueColsByIdx util.FastIntSet
 
+	// The set of ordinals of the columns that are **not** required. cFetcher
+	// creates an output batch that includes all columns in cols, yet only
+	// needed columns are actually populated. The vectors at positions in
+	// notNeededColOrdinals will be set to have all null values.
+	notNeededColOrdinals []int
+
 	// Map used to get the index for columns in cols.
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
 	// time.
@@ -135,6 +141,8 @@ func newCTableInfo() *cTableInfo {
 
 // Release implements the execinfra.Releasable interface.
 func (c *cTableInfo) Release() {
+	// Note that all slices are being reused, but there is no need to deeply
+	// reset them since all of the slices are of Go native types.
 	c.colIdxMap.ords = c.colIdxMap.ords[:0]
 	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
@@ -142,6 +150,7 @@ func (c *cTableInfo) Release() {
 		keyValTypes:            c.keyValTypes[:0],
 		extraTypes:             c.extraTypes[:0],
 		neededColsList:         c.neededColsList[:0],
+		notNeededColOrdinals:   c.notNeededColOrdinals[:0],
 		indexColOrdinals:       c.indexColOrdinals[:0],
 		allIndexColOrdinals:    c.allIndexColOrdinals[:0],
 		extraValColOrdinals:    c.extraValColOrdinals[:0],
@@ -452,6 +461,17 @@ func (rf *cFetcher) Init(
 		}
 	}
 	sort.Ints(table.neededColsList)
+
+	// Find the set of columns for which vectors will **not** be properly
+	// populated.
+	if numNeededCols := tableArgs.ValNeededForCol.Len(); cap(table.notNeededColOrdinals) < len(rf.typs)-numNeededCols {
+		table.notNeededColOrdinals = make([]int, 0, len(rf.typs)-numNeededCols)
+	}
+	for i := 0; i < len(rf.typs); i++ {
+		if !tableArgs.ValNeededForCol.Contains(i) {
+			table.notNeededColOrdinals = append(table.notNeededColOrdinals, i)
+		}
+	}
 
 	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
 
@@ -1093,7 +1113,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			if emitBatch {
 				rf.pushState(stateResetBatch)
-				rf.machine.batch.SetLength(rf.machine.rowIdx)
+				rf.finalizeBatch()
 				rf.machine.rowIdx = 0
 				return rf.machine.batch, nil
 			}
@@ -1475,6 +1495,16 @@ func (rf *cFetcher) fillNulls() error {
 	return nil
 }
 
+func (rf *cFetcher) finalizeBatch() {
+	// We need to set all values in "not needed" vectors to nulls because if the
+	// batch is materialized (i.e. values are converted to datums), the
+	// conversion of unset values might encounter an error.
+	for _, notNeededIdx := range rf.table.notNeededColOrdinals {
+		rf.machine.batch.ColVec(notNeededIdx).Nulls().SetNulls()
+	}
+	rf.machine.batch.SetLength(rf.machine.rowIdx)
+}
+
 // getCurrentColumnFamilyID returns the column family id of the key in
 // rf.machine.nextKV.Key.
 func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
@@ -1536,6 +1566,8 @@ var cFetcherPool = sync.Pool{
 func (rf *cFetcher) Release() {
 	rf.table.Release()
 	*rf = cFetcher{
+		// The types are small objects, so we don't bother deeply resetting this
+		// slice.
 		typs: rf.typs[:0],
 	}
 	cFetcherPool.Put(rf)
