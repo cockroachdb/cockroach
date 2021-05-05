@@ -68,13 +68,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	col, err := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 1, mts)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 1, mts)
 	noop := colexecop.NewNoop(col)
-	mat, err := colexec.NewMaterializer(
+	mat := colexec.NewMaterializer(
 		&flowCtx,
 		2, /* processorID */
 		colexecargs.OpWithMetaInfo{
@@ -85,9 +81,6 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		nil, /* output */
 		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	mtr, err := execinfra.NewMetadataTestReceiver(
 		&flowCtx,
