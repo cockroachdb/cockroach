@@ -4887,16 +4887,11 @@ func TestImportControlJobRBAC(t *testing.T) {
 	}
 }
 
-// TestImportWorkerFailure tests that IMPORT can restart after the failure
-// of a worker node.
+// TestImportWorkerFailure tests that IMPORT retries after the failure of a
+// worker node.
 func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(mjibson): Although this test passes most of the time it still
-	// sometimes fails because not all kinds of failures caused by shutting a
-	// node down are detected and retried.
-	skip.WithIssue(t, 51793, "flaky due to undetected kinds of failures when the node is shutdown")
 
 	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 
@@ -4940,13 +4935,13 @@ func TestImportWorkerFailure(t *testing.T) {
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 
-	// Shut down a node. This should force LoadCSV to fail in its current
-	// execution. It should detect this as a context canceled error.
+	// Shut down a node.
 	tc.StopServer(1)
 
 	close(allowResponse)
-	// We expect the statement to fail.
-	if err := <-errCh; !testutils.IsError(err, "node failure") {
+	// We expect the statement to retry since it should have encountered a
+	// retryable error.
+	if err := <-errCh; err != nil {
 		t.Fatal(err)
 	}
 
