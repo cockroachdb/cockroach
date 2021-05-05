@@ -312,9 +312,15 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
 			// Resolve subqueries before running the queries' physical plan.
 			if len(localPlanner.curPlan.subqueryPlans) != 0 {
+				// Create a separate memory account for the results of the
+				// subqueries. Note that we intentionally defer the closure of
+				// the account until we return from this method (after the main
+				// query is executed).
+				subqueryResultMemAcc := localPlanner.EvalContext().Mon.MakeBoundAccount()
+				defer subqueryResultMemAcc.Close(ctx)
 				if !sc.distSQLPlanner.PlanAndRunSubqueries(
 					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
-					localPlanner.curPlan.subqueryPlans, recv,
+					localPlanner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 				) {
 					if planAndRunErr = rw.Err(); planAndRunErr != nil {
 						return
