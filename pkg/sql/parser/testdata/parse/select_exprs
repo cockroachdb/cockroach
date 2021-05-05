@@ -1615,3 +1615,35 @@ SELECT (1 + COALESCE(NULL, 'a', x)) - ARRAY[3.14] -- normalized!
 SELECT ((((1) + (COALESCE((NULL), ('a'), (x))))) - (ARRAY[(3.14)])) -- fully parenthetized
 SELECT (_ + COALESCE(_, _, x)) - ARRAY[_] -- literals removed
 SELECT (1 + COALESCE(NULL, 'a', _)) - ARRAY[3.14] -- identifiers removed
+
+parse
+SELECT 1 OPERATOR(+) 5
+----
+SELECT 1 + 5 -- normalized!
+SELECT ((1) + (5)) -- fully parenthetized
+SELECT _ + _ -- literals removed
+SELECT 1 + 5 -- identifiers removed
+
+parse
+SELECT 1 OPERATOR(pg_catalog.+) 5
+----
+SELECT 1 + 5 -- normalized!
+SELECT ((1) + (5)) -- fully parenthetized
+SELECT _ + _ -- literals removed
+SELECT 1 + 5 -- identifiers removed
+
+parse
+SELECT 1 OPERATOR(<<) 5
+----
+SELECT 1 << 5 -- normalized!
+SELECT ((1) << (5)) -- fully parenthetized
+SELECT _ << _ -- literals removed
+SELECT 1 << 5 -- identifiers removed
+
+parse
+SELECT 1 OPERATOR(pg_catalog.<<) 5
+----
+SELECT 1 << 5 -- normalized!
+SELECT ((1) << (5)) -- fully parenthetized
+SELECT _ << _ -- literals removed
+SELECT 1 << 5 -- identifiers removed

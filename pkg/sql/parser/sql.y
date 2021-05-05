@@ -71,6 +71,23 @@ func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int
     return 1
 }
 
+func processBinaryQualOp(
+  sqllex sqlLexer,
+  op tree.Operator,
+  lhs tree.Expr,
+  rhs tree.Expr,
+) (tree.Expr, int) {
+    switch op := op.(type) {
+    case tree.BinaryOperator:
+      return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
+    case tree.ComparisonOperator:
+      return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
+    default:
+      sqllex.Error(fmt.Sprintf("unknown operator %s of type %T", op, op))
+      return nil, 1
+    }
+}
+
 
 %}
 
@@ -1011,7 +1028,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <*tree.TableIndexName> table_index_name
 %type <tree.TableIndexNames> table_index_name_list
 
-%type <tree.Operator> math_op
+%type <tree.Operator> all_op op math_op operator_op qual_op
 
 %type <tree.IsolationLevel> iso_level
 %type <tree.UserPriority> user_priority
@@ -1278,6 +1295,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %left      '#'
 %left      '&'
 %left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS AND_AND SQRT CBRT
+%left      OPERATOR // OPERATOR keyword comes before all math_ops.
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
@@ -10311,57 +10329,9 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.GT, Left: $1.expr(), Right: $3.expr()}
   }
-| a_expr '?' a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.JSONExists, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr JSON_SOME_EXISTS a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.JSONSomeExists, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr JSON_ALL_EXISTS a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.JSONAllExists, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr CONTAINS a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.Contains, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr CONTAINED_BY a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.ContainedBy, Left: $1.expr(), Right: $3.expr()}
-  }
 | a_expr '=' a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.EQ, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr CONCAT a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.Concat, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr LSHIFT a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.LShift, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr RSHIFT a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.RShift, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr FETCHVAL a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchVal, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr FETCHTEXT a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchText, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr FETCHVAL_PATH a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchValPath, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr FETCHTEXT_PATH a_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchTextPath, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr REMOVE_PATH a_expr
   {
@@ -10370,10 +10340,6 @@ a_expr:
 | a_expr INET_CONTAINED_BY_OR_EQUALS a_expr
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contained_by_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
-  }
-| a_expr AND_AND a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.Overlaps, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
@@ -10391,6 +10357,15 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NE, Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr qual_op a_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processBinaryQualOp(sqllex, $2.op(), $1.expr(), $3.expr())
+    if retCode != 0 {
+      return retCode
+    }
+  }
+
 | a_expr AND a_expr
   {
     $$.val = &tree.AndExpr{Left: $1.expr(), Right: $3.expr()}
@@ -10458,18 +10433,6 @@ a_expr:
 | a_expr '~' a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.RegMatch, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr NOT_REGMATCH a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.NotRegMatch, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr REGIMATCH a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: $1.expr(), Right: $3.expr()}
-  }
-| a_expr NOT_REGIMATCH a_expr
-  {
-    $$.val = &tree.ComparisonExpr{Operator: tree.NotRegIMatch, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr IS NAN %prec IS
   {
@@ -10666,18 +10629,6 @@ b_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.EQ, Left: $1.expr(), Right: $3.expr()}
   }
-| b_expr CONCAT b_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.Concat, Left: $1.expr(), Right: $3.expr()}
-  }
-| b_expr LSHIFT b_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.LShift, Left: $1.expr(), Right: $3.expr()}
-  }
-| b_expr RSHIFT b_expr
-  {
-    $$.val = &tree.BinaryExpr{Operator: tree.RShift, Left: $1.expr(), Right: $3.expr()}
-  }
 | b_expr LESS_EQUALS b_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.LE, Left: $1.expr(), Right: $3.expr()}
@@ -10689,6 +10640,18 @@ b_expr:
 | b_expr NOT_EQUALS b_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NE, Left: $1.expr(), Right: $3.expr()}
+  }
+| b_expr '~' b_expr
+  {
+    $$.val = &tree.ComparisonExpr{Operator: tree.RegMatch, Left: $1.expr(), Right: $3.expr()}
+  }
+| b_expr qual_op b_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processBinaryQualOp(sqllex, $2.op(), $1.expr(), $3.expr())
+    if retCode != 0 {
+      return retCode
+    }
   }
 | b_expr IS DISTINCT FROM b_expr %prec IS
   {
@@ -11456,6 +11419,34 @@ sub_type:
     $$.val = tree.All
   }
 
+all_op:
+  math_op
+| op
+
+
+qual_op:
+  OPERATOR '(' operator_op ')'
+  {
+    $$ = $3
+  }
+| op
+
+operator_op:
+  all_op
+| name '.' all_op
+  {
+    // Only support operators on pg_catalog.
+    if $1 != "pg_catalog" {
+      return unimplemented(sqllex, "user defined operator")
+    }
+    $$ = $3
+  }
+
+// math_op extend PostgreSQL's MathOp in gram.y.
+// These operations have order of operation precedence.
+// CockroachDB specifics:
+// * Introduced FLOORDIV, |, &, # to obey order of operations in binary expressions.
+// * Introduced ~ for order of operations in unary expressions.
 math_op:
   '+' { $$.val = tree.Plus  }
 | '-' { $$.val = tree.Minus }
@@ -11473,9 +11464,31 @@ math_op:
 | LESS_EQUALS    { $$.val = tree.LE }
 | GREATER_EQUALS { $$.val = tree.GE }
 | NOT_EQUALS     { $$.val = tree.NE }
+| '~' { $$.val = tree.RegMatch }
+
+// op contains support operators that are not part of math_op.
+// This match PostgreSQL's Op in gram.y.
+op:
+  '?' { $$.val = tree.JSONExists }
+| CONTAINS { $$.val = tree.Contains }
+| CONTAINED_BY { $$.val = tree.ContainedBy }
+| LSHIFT { $$.val = tree.LShift }
+| RSHIFT { $$.val = tree.RShift }
+| CONCAT { $$.val = tree.Concat }
+| FETCHVAL { $$.val = tree.JSONFetchVal }
+| FETCHTEXT { $$.val = tree.JSONFetchText }
+| FETCHVAL_PATH { $$.val = tree.JSONFetchValPath }
+| FETCHTEXT_PATH { $$.val = tree.JSONFetchTextPath }
+| JSON_SOME_EXISTS { $$.val = tree.JSONSomeExists }
+| JSON_ALL_EXISTS { $$.val = tree.JSONAllExists }
+| NOT_REGMATCH { $$.val = tree.NotRegMatch }
+| REGIMATCH { $$.val = tree.RegIMatch }
+| NOT_REGIMATCH { $$.val = tree.NotRegIMatch }
+| AND_AND { $$.val = tree.Overlaps }
 
 subquery_op:
   math_op
+| OPERATOR '(' operator_op ')' { $$.val = $3 }
 | LIKE         { $$.val = tree.Like     }
 | NOT_LA LIKE  { $$.val = tree.NotLike  }
 | ILIKE        { $$.val = tree.ILike    }
