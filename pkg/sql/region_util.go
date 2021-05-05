@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -1088,10 +1090,19 @@ func blockDiscardOfZoneConfigForMultiRegionObject(
 // The change is permitted iff it is not modifying a protected multi-region
 // field of the zone configs (as defined by zonepb.MultiRegionZoneConfigFields).
 func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
-	ctx context.Context, zs tree.ZoneSpecifier, options tree.KVOptions, force bool,
+	ctx context.Context, zs tree.ZoneSpecifier, options tree.KVOptions,
 ) error {
-	// If the user has specified the FORCE option, the world is their oyster.
-	if force {
+	// If the user has specified that they're overriding, then the world is
+	// their oyster.
+	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
+		// Note that we increment the telemetry counter unconditionally here.
+		// It's possible that this will lead to over-counting as the user may
+		// have left the override on and is now updating a zone configuration
+		// that is not protected by the multi-region abstractions. To get finer
+		// grained counting however, would be more difficult to code, and may
+		// not even prove to be that valuable, so we have decided to live with
+		// the potential for over-counting.
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionZoneConfigurationUser)
 		return nil
 	}
 
@@ -1130,8 +1141,9 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
 
-	// The request is to discard the zone configuration. Error in all discard
-	// cases.
+	// The request is to discard the zone configuration. Error in cases where
+	// the zone configuration being discarded was created by the multi-region
+	// abstractions.
 	if options == nil {
 		needToError := false
 		// Determine if this zone config that we're trying to discard is
@@ -1411,6 +1423,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 ) error {
 	// If the user is overriding, our work here is done.
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionDatabaseZoneConfigurationSystem)
 		return nil
 	}
 	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID())
@@ -1484,6 +1497,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	// If the user is overriding, or this is not a multi-region table our work here
 	// is done.
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled || desc.GetLocalityConfig() == nil {
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
 		return nil
 	}
 	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
