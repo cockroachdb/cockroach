@@ -8193,6 +8193,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 func TestBackupWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 64773, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "under stress the test unexpectedly surfaces non-retryable errors on"+
