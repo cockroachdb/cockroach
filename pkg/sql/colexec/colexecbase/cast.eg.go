@@ -1454,9 +1454,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						}
 						v := inputCol.Get(tupleIdx)
 						var r int32
-
 						r = int32(v)
-
 						outputCol[tupleIdx] = r
 					}
 				} else {
@@ -1472,9 +1470,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int32
-
 						r = int32(v)
-
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
@@ -1490,9 +1486,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						tupleIdx = sel[i]
 						v := inputCol.Get(tupleIdx)
 						var r int32
-
 						r = int32(v)
-
 						outputCol[tupleIdx] = r
 					}
 				} else {
@@ -1505,9 +1499,7 @@ func (c *castInt16Int32Op) Next() coldata.Batch {
 						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int32
-
 						r = int32(v)
-
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
@@ -1563,9 +1555,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						}
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						outputCol[tupleIdx] = r
 					}
 				} else {
@@ -1581,9 +1571,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
@@ -1599,9 +1587,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						tupleIdx = sel[i]
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						outputCol[tupleIdx] = r
 					}
 				} else {
@@ -1614,9 +1600,7 @@ func (c *castInt16Int64Op) Next() coldata.Batch {
 						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
@@ -2016,6 +2000,12 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						outputCol[tupleIdx] = r
@@ -2034,6 +2024,12 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						//gcassert:bce
@@ -2052,6 +2048,12 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						outputCol[tupleIdx] = r
@@ -2067,6 +2069,12 @@ func (c *castInt32Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						//gcassert:bce
@@ -2225,9 +2233,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						}
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						outputCol[tupleIdx] = r
 					}
 				} else {
@@ -2243,9 +2249,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
@@ -2261,9 +2265,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						tupleIdx = sel[i]
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						outputCol[tupleIdx] = r
 					}
 				} else {
@@ -2276,9 +2278,7 @@ func (c *castInt32Int64Op) Next() coldata.Batch {
 						//gcassert:bce
 						v := inputCol.Get(tupleIdx)
 						var r int64
-
 						r = int64(v)
-
 						//gcassert:bce
 						outputCol[tupleIdx] = r
 					}
@@ -2678,6 +2678,12 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						outputCol[tupleIdx] = r
@@ -2696,6 +2702,12 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						//gcassert:bce
@@ -2714,6 +2726,12 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						outputCol[tupleIdx] = r
@@ -2729,6 +2747,12 @@ func (c *castInt64Int16Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int16
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(15)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt2OutOfRange)
+						}
 						r = int16(v)
 
 						//gcassert:bce
@@ -2787,6 +2811,12 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(31)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+						}
 						r = int32(v)
 
 						outputCol[tupleIdx] = r
@@ -2805,6 +2835,12 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(31)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+						}
 						r = int32(v)
 
 						//gcassert:bce
@@ -2823,6 +2859,12 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(31)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+						}
 						r = int32(v)
 
 						outputCol[tupleIdx] = r
@@ -2838,6 +2880,12 @@ func (c *castInt64Int32Op) Next() coldata.Batch {
 						v := inputCol.Get(tupleIdx)
 						var r int32
 
+						// We're performing bounds checks inline with Go's
+						// implementation of min and max ints in Math.go.
+						shifted := v >> uint(31)
+						if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+							colexecerror.ExpectedError(tree.ErrInt4OutOfRange)
+						}
 						r = int32(v)
 
 						//gcassert:bce
