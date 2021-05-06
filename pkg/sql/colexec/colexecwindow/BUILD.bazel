@@ -19,6 +19,8 @@ go_library(
         "//pkg/sql/colexecop",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfrapb",  # keep
+        "//pkg/sql/pgwire/pgcode",  # keep
+        "//pkg/sql/pgwire/pgerror",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/mon",  # keep
@@ -67,6 +69,7 @@ targets = [
     ("relative_rank.eg.go", "relative_rank_tmpl.go"),
     ("row_number.eg.go", "row_number_tmpl.go"),
     ("window_peer_grouper.eg.go", "window_peer_grouper_tmpl.go"),
+    ("ntile.eg.go", "ntile_tmpl.go"),
 ]
 
 # Define a file group for all the .eg.go targets.

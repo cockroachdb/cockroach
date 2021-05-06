@@ -24,6 +24,7 @@ var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
 	execinfrapb.WindowerSpec_DENSE_RANK:   {},
 	execinfrapb.WindowerSpec_PERCENT_RANK: {},
 	execinfrapb.WindowerSpec_CUME_DIST:    {},
+	execinfrapb.WindowerSpec_NTILE:        {},
 }
 
 // WindowFnNeedsPeersInfo returns whether a window function pays attention to
@@ -34,8 +35,10 @@ var SupportedWindowFns = map[execinfrapb.WindowerSpec_WindowFunc]struct{}{
 // this information.
 func WindowFnNeedsPeersInfo(windowFn execinfrapb.WindowerSpec_WindowFunc) bool {
 	switch windowFn {
-	case execinfrapb.WindowerSpec_ROW_NUMBER:
-		// row_number doesn't pay attention to the concept of "peers."
+	case
+		execinfrapb.WindowerSpec_ROW_NUMBER,
+		execinfrapb.WindowerSpec_NTILE:
+		// Functions that ignore the concept of "peers."
 		return false
 	case
 		execinfrapb.WindowerSpec_RANK,
