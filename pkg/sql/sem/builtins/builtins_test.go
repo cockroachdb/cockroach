@@ -447,22 +447,95 @@ func TestTruncateTimestamp(t *testing.T) {
 		timeSpan string
 		expected *tree.DTimestampTZ
 	}{
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "millennium", tree.MustMakeDTimestampTZ(time.Date(2001, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "century", tree.MustMakeDTimestampTZ(time.Date(2101, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "decade", tree.MustMakeDTimestampTZ(time.Date(2110, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "year", tree.MustMakeDTimestampTZ(time.Date(2118, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "quarter", tree.MustMakeDTimestampTZ(time.Date(2118, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "month", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 1, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "day", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "week", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 7, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "hour", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "second", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 0, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "millisecond", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 80000000, loc), time.Microsecond)},
-		{time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc), "microsecond", tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 80009000, loc), time.Microsecond)},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"millennium",
+			tree.MustMakeDTimestampTZ(time.Date(2001, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"century",
+			tree.MustMakeDTimestampTZ(time.Date(2101, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"decade",
+			tree.MustMakeDTimestampTZ(time.Date(2110, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"year",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"quarter",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.January, 1, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"month",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 1, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"day",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"week",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 7, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"hour",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"second",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"millisecond",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 80000000, loc), time.Microsecond),
+		},
+		{
+			time.Date(2118, time.March, 11, 5, 6, 7, 80009001, loc),
+			"microsecond",
+			tree.MustMakeDTimestampTZ(time.Date(2118, time.March, 11, 5, 6, 7, 80009000, loc), time.Microsecond),
+		},
 
 		// Test Monday and Sunday boundaries.
-		{time.Date(2019, time.November, 11, 5, 6, 7, 80009001, loc), "week", tree.MustMakeDTimestampTZ(time.Date(2019, time.November, 11, 0, 0, 0, 0, loc), time.Microsecond)},
-		{time.Date(2019, time.November, 10, 5, 6, 7, 80009001, loc), "week", tree.MustMakeDTimestampTZ(time.Date(2019, time.November, 4, 0, 0, 0, 0, loc), time.Microsecond)},
+		{
+			time.Date(2019, time.November, 11, 5, 6, 7, 80009001, loc),
+			"week",
+			tree.MustMakeDTimestampTZ(time.Date(2019, time.November, 11, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2019, time.November, 10, 5, 6, 7, 80009001, loc),
+			"week",
+			tree.MustMakeDTimestampTZ(time.Date(2019, time.November, 4, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+
+		// Test DST boundaries.
+		{
+			time.Date(2021, time.April, 4, 0, 0, 0, 0, loc).Add(time.Hour * 2),
+			"hour",
+			tree.MustMakeDTimestampTZ(time.Date(2021, time.April, 4, 0, 0, 0, 0, loc).Add(time.Hour*2), time.Microsecond),
+		},
+		{
+			time.Date(2021, time.April, 4, 0, 0, 0, 0, loc).Add(time.Hour * 2),
+			"day",
+			tree.MustMakeDTimestampTZ(time.Date(2021, time.April, 4, 0, 0, 0, 0, loc), time.Microsecond),
+		},
+		{
+			time.Date(2021, time.April, 4, 2, 0, 0, 0, loc),
+			"day",
+			tree.MustMakeDTimestampTZ(time.Date(2021, time.April, 4, 0, 0, 0, 0, loc), time.Microsecond),
+		},
 	}
 
 	for _, tc := range testCases {
