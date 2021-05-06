@@ -7126,6 +7126,8 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 	nsec := fromTime.Nanosecond()
 	loc := fromTime.Location()
 
+	_, origZoneOffset := fromTime.Zone()
+
 	monthTrunc := time.January
 	dayTrunc := 1
 	hourTrunc := 0
@@ -7205,6 +7207,24 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
+	_, newZoneOffset := toTime.Zone()
+	// If we have a mismatching zone offset, check whether the truncated timestamp
+	// can exist at both the new and original zone time offset.
+	// e.g. in Bucharest, 2020-10-25 has 03:00+02 and 03:00+03. Using time.Date
+	// automatically assumes 03:00+02.
+	if origZoneOffset != newZoneOffset {
+		// To remedy this, try set the time.Date to have the same fixed offset as the original timezone
+		// and force it to use the same location as the incoming time.
+		// If using the fixed offset in the given location gives us a timestamp that is the
+		// same as the original time offset, use that timestamp instead.
+		fixedOffsetLoc := timeutil.FixedOffsetTimeZoneToLocation(origZoneOffset, "date_trunc")
+		fixedOffsetTime := time.Date(year, month, day, hour, min, sec, nsec, fixedOffsetLoc)
+		locCorrectedOffsetTime := fixedOffsetTime.In(loc)
+
+		if _, zoneOffset := locCorrectedOffsetTime.Zone(); origZoneOffset == zoneOffset {
+			toTime = locCorrectedOffsetTime
+		}
+	}
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond)
 }
 
