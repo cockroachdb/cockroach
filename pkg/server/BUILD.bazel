@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "server",
     srcs = [
+        "addjoin.go",
         "admin.go",
         "api_v2.go",
         "api_v2_auth.go",
@@ -240,6 +241,7 @@ go_library(
 go_test(
     name = "server_test",
     srcs = [
+        "addjoin_test.go",
         "admin_cluster_test.go",
         "admin_test.go",
         "api_v2_ranges_test.go",
