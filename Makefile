@@ -253,7 +253,7 @@ $(info GOPATH set to $(GOPATH))
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
-GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(GO) install
+GO_INSTALL := GOBIN='$(abspath bin)' GOFLAGS= $(GO) install $(GOMODVENDORFLAGS)
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
@@ -1638,7 +1638,7 @@ pkg/sql/opt/rule_name.og.go: $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-
 	optgen -out $@ rulenames $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules)
 
 pkg/sql/opt/rule_name_string.go: pkg/sql/opt/rule_name.go pkg/sql/opt/rule_name.og.go bin/.bootstrap
-	stringer -output=$@ -type=RuleName $(filter %.go,$^)
+	GOFLAGS=$(GOMODVENDORFLAGS) stringer -output=$@ -type=RuleName $(filter %.go,$^)
 
 pkg/sql/opt/xform/explorer.og.go: $(optgen-defs) $(optgen-xform-rules) bin/optgen
 	optgen -out $@ explorer $(optgen-defs) $(optgen-xform-rules)
