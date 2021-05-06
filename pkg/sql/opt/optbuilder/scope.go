@@ -925,9 +925,17 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		colI, err := t.Resolve(s.builder.ctx, s)
-		if err != nil {
-			panic(err)
+		colI, resolveErr := t.Resolve(s.builder.ctx, s)
+		if resolveErr != nil {
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				// Attempt to resolve as columnname.*, which allows items
+				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
+				return func() (bool, tree.Expr) {
+					defer wrapColTupleStarPanic(resolveErr)
+					return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
+				}()
+			}
+			panic(resolveErr)
 		}
 		return false, colI.(*scopeColumn)
 
@@ -1592,4 +1600,28 @@ func (s *scope) String() string {
 	buf.WriteByte(')')
 
 	return buf.String()
+}
+
+func columnNameAsTupleStar(colName string) *tree.TupleStar {
+	return &tree.TupleStar{
+		Expr: &tree.UnresolvedName{
+			Star:     true,
+			NumParts: 2,
+			Parts:    tree.NameParts{"", colName},
+		},
+	}
+}
+
+// wrapColTupleStarPanic checks for panics and if the pgcode is
+// UndefinedTable panics with the originalError.
+// Otherwise, it will panic with the recovered error.
+func wrapColTupleStarPanic(originalError error) {
+	if r := recover(); r != nil {
+		if err, ok := r.(error); ok {
+			if sqlerrors.IsUndefinedRelationError(err) {
+				panic(originalError)
+			}
+		}
+		panic(r)
+	}
 }
