@@ -2990,7 +2990,11 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td></tr>
+<tr><td><a name="pg_column_is_updatable"></a><code>pg_column_is_updatable(reloid: oid, attnum: int2, include_triggers: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_column_is_updatable was created for compatibility. This will return true if is a table (not virtual) and column is not a computed column.</p>
+</span></td></tr>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
+</span></td></tr>
+<tr><td><a name="pg_relation_is_updatable"></a><code>pg_relation_is_updatable(reloid: oid, include_triggers: <a href="bool.html">bool</a>) &rarr; int4</code></td><td><span class="funcdesc"><p>pg_relation_is_updatable was created for compatibility. This should return the update events the relation supports, but as crdb does not support updatable views or foreign tables, right now this basically return allEvents or none.</p>
 </span></td></tr>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td></tr>
