@@ -122,7 +122,7 @@ yarn_install(
 # NB: @bazel_skylib comes from go_rules_dependencies().
 load("@bazel_skylib//lib:versions.bzl", "versions")
 
-versions.check(minimum_bazel_version = "3.5.0")
+versions.check(minimum_bazel_version = "4.0.0")
 
 # Load gazelle dependencies.
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")

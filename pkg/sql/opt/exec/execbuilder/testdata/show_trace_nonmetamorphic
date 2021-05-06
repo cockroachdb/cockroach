@@ -316,3 +316,70 @@ SET tracing = on; SELECT * FROM t; SET tracing = off
 # dist sender send  r6: sending batch 1 Get to (n1,s1):1
 # dist sender send  querying next range at /Table/12/1
 # dist sender send  r8: sending batch 1 Scan to (n1,s1):1
+
+# Regression tests for incorrect interaction between consecutive session traces
+# (#59203, #60672).
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE a ]
+
+# Populate table descriptor cache.
+query I
+SELECT * FROM a
+----
+
+statement ok
+BEGIN;
+SET TRACING=ON;
+  INSERT INTO a VALUES (1);
+ROLLBACK
+
+# The tracing is still enabled. Insert a couple of rows with auto-commit, and
+# stop the tracing.
+statement ok
+  INSERT INTO a VALUES (2), (3);
+SET TRACING=OFF
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r38: sending batch 1 CPut to (n1,s1):1
+dist sender send  r38: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r38: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+
+# Make another session trace.
+statement ok
+BEGIN;
+SET TRACING=ON;
+  INSERT INTO a VALUES (4), (5), (6);
+SET TRACING=OFF;
+COMMIT
+
+# Start the tracing again and insert a few rows with auto-commit.
+statement ok
+SET TRACING=ON;
+  INSERT INTO a VALUES (7), (8), (9), (10);
+
+# The tracing is still enabled. Insert a few rows, rollback the txn, and stop
+# the tracing.
+statement ok
+BEGIN;
+  INSERT INTO a VALUES (11), (12), (13), (14), (15);
+ROLLBACK;
+SET TRACING=OFF;
+
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r38: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r38: sending batch 5 CPut to (n1,s1):1
+dist sender send  r38: sending batch 1 EndTxn to (n1,s1):1

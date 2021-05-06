@@ -36,7 +36,7 @@ RUN echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.
  && curl https://bazel.build/bazel-release.pub.gpg | apt-key add - \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    bazel-3.6.0
+    bazel-4.0.0
 
 # git - Upgrade to a more modern version
 RUN DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
@@ -58,7 +58,7 @@ RUN apt-get purge -y \
 
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
-RUN ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
+RUN ln -s /usr/bin/bazel-4.0.0 /usr/bin/bazel
 
 COPY entrypoint.sh /usr/bin
 ENTRYPOINT ["/usr/bin/entrypoint.sh"]
