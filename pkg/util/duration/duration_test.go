@@ -17,6 +17,7 @@ import (
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type durationTest struct {
@@ -197,6 +198,12 @@ func TestDiffMicros(t *testing.T) {
 // TestAdd looks at various rounding cases, comparing our date math
 // to behavior observed in PostgreSQL 10.
 func TestAdd(t *testing.T) {
+
+	bucharest, err := timeutil.LoadLocation("Europe/Bucharest")
+	if err != nil {
+		panic(err)
+	}
+
 	tests := []struct {
 		t   time.Time
 		d   Duration
@@ -262,6 +269,24 @@ func TestAdd(t *testing.T) {
 			t:   time.Date(2020, time.July, 30, 0, 0, 0, 0, time.UTC),
 			d:   Duration{Months: 12},
 			exp: time.Date(2021, time.July, 30, 0, 0, 0, 0, time.UTC),
+		},
+		// Check DST boundaries.
+		{
+			// Regression for #64772.
+			t:   time.Date(2020, 10, 25, 0, 0, 0, 0, bucharest).Add(3 * time.Hour), // 03:00+03
+			d:   Duration{},
+			exp: time.Date(2020, 10, 25, 0, 0, 0, 0, bucharest).Add(3 * time.Hour), // 03:00+03
+		},
+		{
+			// Regression for #64772.
+			t:   time.Date(2020, 10, 25, 0, 0, 0, 0, bucharest).Add(3 * time.Hour), // 03:00+03
+			d:   Duration{nanos: int64(time.Hour)},
+			exp: time.Date(2020, 10, 25, 3, 0, 0, 0, bucharest), // 03:00+02
+		},
+		{
+			t:   time.Date(2020, 10, 24, 3, 0, 0, 0, bucharest),
+			d:   Duration{Days: 1},
+			exp: time.Date(2020, 10, 25, 3, 0, 0, 0, bucharest),
 		},
 
 		// Check leap behaviors
