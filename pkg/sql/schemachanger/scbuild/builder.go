@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
@@ -573,7 +572,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// Create a new primary index, identical to the existing one except for its
 	// ID and name.
 	idxID = b.nextIndexID(table)
-	newIdx := protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)
+	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
 	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
 		"new_primary_key",
 		func(name string) bool {
@@ -608,7 +607,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 
 	b.addNode(scpb.Target_ADD, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
-		Index:               *newIdx,
+		Index:               newIdx,
 		OtherPrimaryIndexID: table.GetPrimaryIndexID(),
 		StoreColumnIDs:      addStoreColIDs,
 		StoreColumnNames:    addStoreColNames,
@@ -617,7 +616,7 @@ func (b *Builder) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// Drop the existing primary index.
 	b.addNode(scpb.Target_DROP, &scpb.PrimaryIndex{
 		TableID:             table.GetID(),
-		Index:               *(protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)),
+		Index:               table.GetPrimaryIndex().IndexDescDeepCopy(),
 		OtherPrimaryIndexID: idxID,
 		StoreColumnIDs:      dropStoreColIDs,
 		StoreColumnNames:    dropStoreColNames,
