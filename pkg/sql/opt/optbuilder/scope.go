@@ -925,9 +925,29 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		colI, err := t.Resolve(s.builder.ctx, s)
-		if err != nil {
-			panic(err)
+		colI, resolveErr := t.Resolve(s.builder.ctx, s)
+		if resolveErr != nil {
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				return func() (bool, tree.Expr) {
+					defer func() {
+						if r := recover(); r != nil {
+							// Error with the original error message.
+							panic(resolveErr)
+						}
+					}()
+					// Attempt to resolve as columnname.*, which allows items
+					// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
+					tup := tree.TupleStar{
+						Expr: &tree.UnresolvedName{
+							Star:     true,
+							NumParts: 2,
+							Parts:    tree.NameParts{"", string(t.ColumnName)},
+						},
+					}
+					return s.VisitPre(&tup)
+				}()
+			}
+			panic(resolveErr)
 		}
 		return false, colI.(*scopeColumn)
 
