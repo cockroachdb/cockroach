@@ -228,7 +228,7 @@ func registerRestoreNodeShutdown(r *testRegistry) {
 
 				// 10 GiB restore.
 				restoreQuery := `RESTORE bank.bank FROM
-					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank'`
+					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
 
 				t.l.Printf("starting to run the restore job")
 				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
@@ -373,7 +373,7 @@ func registerRestore(r *testRegistry) {
 					tick()
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank'
+				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
 				WITH into_db = 'restore2tb'"`)
 					tick()
 

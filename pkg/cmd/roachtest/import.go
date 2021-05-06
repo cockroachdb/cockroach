@@ -32,16 +32,16 @@ func registerImportNodeShutdown(r *testRegistry) {
 			}
 			importStmt := fmt.Sprintf(`
 				IMPORT TABLE %[1]s
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql'
+				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql?AUTH=implicit'
 				CSV DATA (
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.3',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.4',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.5',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.6',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.7',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8'
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.3?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.4?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.5?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.6?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.7?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|', detached
 			`, tableName)
 			gatewayDB := c.Conn(ctx, gatewayNode)
@@ -233,16 +233,16 @@ func registerImportTPCH(r *testRegistry) {
 					defer t.WorkerStatus()
 					_, err := conn.Exec(`
 				IMPORT TABLE csv.lineitem
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
+				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit'
 				CSV DATA (
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.3',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.4',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.5',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.6',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8'
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.3?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.4?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.5?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.6?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7?AUTH=implicit',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|'
 			`)
 					return errors.Wrap(err, "import failed")

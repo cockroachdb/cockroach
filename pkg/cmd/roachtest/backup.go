@@ -195,7 +195,7 @@ func registerBackup(r *testRegistry) {
 				// the average MB/sec per node.
 				tick()
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
+				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`?AUTH=implicit'"`)
 				tick()
 
 				// Upload the perf artifacts to any one of the nodes so that the test
@@ -348,7 +348,7 @@ func registerBackup(r *testRegistry) {
 			}
 			warehouses := 10
 
-			backupDir := "gs://cockroachdb-backup-testing/" + c.name
+			backupDir := "gs://cockroachdb-backup-testing/" + c.name + "?AUTH=implicit"
 			// Use inter-node file sharing on 20.1+.
 			if r.buildVersion.AtLeast(version.MustParse(`v20.1.0-0`)) {
 				backupDir = "nodelocal://1/" + c.name
