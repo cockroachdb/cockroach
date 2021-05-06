@@ -55,6 +55,10 @@ import (
 var (
 	// ErrIntOutOfRange is reported when integer arithmetic overflows.
 	ErrIntOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range")
+	// ErrInt4OutOfRange is reported when casting to INT4 overflows.
+	ErrInt4OutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range for type int4")
+	// ErrInt2OutOfRange is reported when casting to INT2 overflows.
+	ErrInt2OutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "integer out of range for type int2")
 	// ErrFloatOutOfRange is reported when float arithmetic overflows.
 	ErrFloatOutOfRange = pgerror.New(pgcode.NumericValueOutOfRange, "float out of range")
 	errDecOutOfRange   = pgerror.New(pgcode.NumericValueOutOfRange, "decimal out of range")
