@@ -13,27 +13,36 @@ package scbuild
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(ajwerner): Add privilege checking.
+// AuthorizationAccessor for checking authorization (e.g. desc privileges).
+type AuthorizationAccessor interface {
+	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
+	CheckPrivilege(
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	) error
+}
 
 // Dependencies are non-stateful objects needed for planning schema
 // changes.
 type Dependencies struct {
 	// TODO(ajwerner): Inject a better interface than this.
-	Res     resolver.SchemaResolver
-	SemaCtx *tree.SemaContext
-	EvalCtx *tree.EvalContext
-	Descs   *descs.Collection
+	Res          resolver.SchemaResolver
+	SemaCtx      *tree.SemaContext
+	EvalCtx      *tree.EvalContext
+	Descs        *descs.Collection
+	AuthAccessor AuthorizationAccessor
 }
 
 // buildContext is the entry point for planning schema changes. From AST nodes
@@ -129,6 +138,8 @@ func (b *buildContext) build(
 		}
 	}()
 	switch n := n.(type) {
+	case *tree.DropView:
+		b.dropView(ctx, n)
 	case *tree.DropSequence:
 		b.dropSequence(ctx, n)
 	case *tree.AlterTable:
@@ -137,6 +148,58 @@ func (b *buildContext) build(
 		return nil, &notImplementedError{n: n}
 	}
 	return b.outputNodes, nil
+}
+
+func checkIfElemHasSameObject(first scpb.Element, second scpb.Element) bool {
+	if reflect.TypeOf(first) != reflect.TypeOf(second) {
+		return false
+	}
+	switch first := first.(type) {
+	case *scpb.View:
+		second, ok := second.(*scpb.View)
+		if !ok ||
+			first.TableID != second.TableID {
+			return false
+		}
+	case *scpb.DefaultExpression:
+		second, ok := second.(*scpb.DefaultExpression)
+		if !ok ||
+			first.TableID != second.TableID ||
+			first.ColumnID != second.ColumnID {
+			return false
+		}
+	default:
+		panic(notImplementedError{
+			n:      nil,
+			detail: "checkIfElemHasSameObject is not implemented for this type",
+		})
+	}
+	return true
+}
+
+func (b *buildContext) checkIfNodeExists(dir scpb.Target_Direction, elem scpb.Element) bool {
+	// Check if any existing node matches the new node we are
+	// trying to add.
+	dropCount := 0
+	for _, node := range b.outputNodes {
+		if checkIfElemHasSameObject(node.Element(), elem) {
+			if node.State == scpb.State_ABSENT {
+				dropCount--
+			} else if node.State == scpb.State_PUBLIC {
+				dropCount++
+			}
+		}
+	}
+	// If the dropping, then there should be no existing drops.
+	// If adding then extra adds should not exist.
+	if dir == scpb.Target_ADD &&
+		dropCount > 0 {
+		return true
+	} else if dir == scpb.Target_DROP &&
+		dropCount < 0 {
+		return true
+	}
+	return false
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
