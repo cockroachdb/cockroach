@@ -53,7 +53,9 @@ func TestConsumeJoinToken(t *testing.T) {
 	dialOpts := rpc.GetAddJoinDialOptions(nil)
 	conn, err := grpc.DialContext(ctx, s.RPCAddr(), dialOpts...)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close() // nolint:grpcconnclose
+	}()
 	adminClient := serverpb.NewAdminClient(conn)
 
 	req := serverpb.CARequest{}
@@ -73,7 +75,9 @@ func TestConsumeJoinToken(t *testing.T) {
 	dialOpts = rpc.GetAddJoinDialOptions(certPool)
 	conn2, err := grpc.DialContext(ctx, s.RPCAddr(), dialOpts...)
 	require.NoError(t, err)
-	defer conn2.Close()
+	defer func() {
+		_ = conn2.Close() // nolint:grpcconnclose
+	}()
 	adminClient = serverpb.NewAdminClient(conn2)
 
 	cbReq := serverpb.CertBundleRequest{

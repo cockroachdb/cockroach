@@ -262,7 +262,6 @@ func init() {
 		connectCmd,
 		initCmd,
 		certCmd,
-		nodeJoinCmd,
 		quitCmd,
 
 		sqlShellCmd,

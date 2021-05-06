@@ -4,12 +4,12 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "cli",
     srcs = [
-        "addjoin.go",
         "auth.go",
         "cert.go",
         "cli.go",
         "client_url.go",
         "connect.go",
+        "connect_join.go",
         "context.go",
         "cpuprofile.go",
         "debug.go",
@@ -263,9 +263,9 @@ go_test(
     name = "cli_test",
     size = "large",
     srcs = [
-        "addjoin_test.go",
         "cli_debug_test.go",
         "cli_test.go",
+        "connect_join_test.go",
         "debug_check_store_test.go",
         "debug_list_files_test.go",
         "debug_merge_logs_test.go",

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -34,6 +35,14 @@ var ErrAddJoinTokenConsumed = errors.New("add/join token consumed but then anoth
 func (s *adminServer) RequestCA(
 	ctx context.Context, req *serverpb.CARequest,
 ) (*serverpb.CAResponse, error) {
+	settings := s.server.ClusterSettings()
+	if settings == nil {
+		return nil, errors.New("could not look up cluster settings")
+	}
+	if !sql.FeatureTLSAutoJoinEnabled.Get(&settings.SV) {
+		return nil, errors.New("feature disabled by administrator")
+	}
+
 	cm, err := s.server.rpcContext.GetCertificateManager()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get certificate manager")
@@ -54,7 +63,7 @@ func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security
 			clientToken.TokenID.String())
 		if err != nil {
 			return err
-		} else if row == nil {
+		} else if len(row) != 1 {
 			return ErrInvalidAddJoinToken
 		}
 
@@ -82,6 +91,14 @@ func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security
 func (s *adminServer) RequestCertBundle(
 	ctx context.Context, req *serverpb.CertBundleRequest,
 ) (*serverpb.CertBundleResponse, error) {
+	settings := s.server.ClusterSettings()
+	if settings == nil {
+		return nil, errors.New("could not look up cluster settings")
+	}
+	if !sql.FeatureTLSAutoJoinEnabled.Get(&settings.SV) {
+		return nil, errors.New("feature disabled by administrator")
+	}
+
 	var err error
 	var clientToken security.JoinToken
 	clientToken.SharedSecret = req.SharedSecret

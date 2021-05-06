@@ -62,7 +62,7 @@ func TestNodeJoin(t *testing.T) {
 	baseCfg.Addr = "127.0.0.1:0"
 	baseCfg.AdvertiseAddr = baseCfg.Addr
 
-	err = runNodeJoin(nil, []string{token})
+	err = runConnectJoin(nil, []string{token})
 	require.NoError(t, err)
 
 	// Ensure the SSLCertsDir is non-empty.
@@ -113,8 +113,9 @@ func TestNodeJoinBadToken(t *testing.T) {
 	baseCfg.Addr = "127.0.0.1:0"
 	baseCfg.AdvertiseAddr = baseCfg.Addr
 
-	err = runNodeJoin(nil, []string{token})
+	err = runConnectJoin(nil, []string{token})
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid join token")
 
 	// Ensure the SSLCertsDir is empty.
 	f, err := os.Open(sslCertsDir)

@@ -33,11 +33,11 @@ import (
 
 const nodeJoinTimeout = 1 * time.Minute
 
-var nodeJoinCmd = &cobra.Command{
-	Use:   "node-join <join-token>",
+var connectJoinCmd = &cobra.Command{
+	Use:   "join <join-token>",
 	Short: "request the TLS certs for a new node from an existing node",
 	Args:  cobra.MinimumNArgs(1),
-	RunE:  MaybeDecorateGRPCError(runNodeJoin),
+	RunE:  MaybeDecorateGRPCError(runConnectJoin),
 }
 
 func requestPeerCA(
@@ -125,11 +125,11 @@ func requestCertBundle(
 	return &certBundle, nil
 }
 
-// runNodeJoin will attempt to connect to peers from the join list provided and
+// runConnectJoin will attempt to connect to peers from the join list provided and
 // request a certificate initialization bundle if it is able to validate a
 // peer.
 // TODO(aaron-crl): Parallelize this and handle errors.
-func runNodeJoin(cmd *cobra.Command, args []string) error {
+func runConnectJoin(cmd *cobra.Command, args []string) error {
 	return contextutil.RunWithTimeout(context.Background(), "init handshake", nodeJoinTimeout, func(ctx context.Context) error {
 		ctx = logtags.AddTag(ctx, "init-tls-handshake", nil)
 
