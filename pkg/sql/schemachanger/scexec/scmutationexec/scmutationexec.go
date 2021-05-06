@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -32,6 +34,8 @@ import (
 // MutableDescGetter encapsulates the logic to retrieve descriptors.
 // All retrieved descriptors are modified.
 type MutableDescGetter interface {
+	GetMutableTypeByID(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error)
+	GetImmutableDatabaseByID(ctx context.Context, id descpb.ID) (catalog.DatabaseDescriptor, error)
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
 	SubmitDrainedNames(ctx context.Context, codec keys.SQLCodec, ba *kv.Batch) error
@@ -134,8 +138,43 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	return nil
 }
 
+func (m *visitor) RemoveTypeBackRefs(ctx context.Context, op scop.RemoveTypeBackRefs) error {
+	// TODO(fqazi):  Consider cleaning up all references by getting them using tableDesc.GetReferencedDescIDs()
+	// 							 and adding a new method to clean up based on this list inside the mutable descriptor as a
+	//							 generalization.
+
+	// Remove the descriptors namespaces as the last stage
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	dbDesc, err := m.descs.GetImmutableDatabaseByID(ctx, tableDesc.GetParentID())
+	if err != nil {
+		return err
+	}
+	typeIDs, err := tableDesc.GetAllReferencedTypeIDs(dbDesc, func(id descpb.ID) (catalog.TypeDescriptor, error) {
+		mutDesc, err := m.descs.GetMutableTypeByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return mutDesc, nil
+	})
+	if err != nil {
+		return err
+	}
+	// Drop all references to this table/view/sequence
+	for _, typeID := range typeIDs {
+		mutDesc, err := m.descs.GetMutableTypeByID(ctx, typeID)
+		if err != nil {
+			return err
+		}
+		mutDesc.RemoveReferencingDescriptorID(op.TableID)
+	}
+	return nil
+}
+
 func (m *visitor) CreateGcJobForDescriptor(
-	ctx context.Context, op scop.CreateGcJobForDescriptor,
+	_ context.Context, op scop.CreateGcJobForDescriptor,
 ) error {
 	// Setup a GC job for this object
 	tablesToDrop := []jobspb.SchemaChangeGCDetails_DroppedID{{

@@ -13,12 +13,14 @@ package scbuild
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -26,14 +28,23 @@ import (
 
 // TODO(ajwerner): Add privilege checking.
 
+// AuthorizationAccessor for checking authorization (e.g. desc privileges).
+type AuthorizationAccessor interface {
+	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
+	CheckPrivilege(
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	) error
+}
+
 // Dependencies are non-stateful objects needed for planning schema
 // changes.
 type Dependencies struct {
 	// TODO(ajwerner): Inject a better interface than this.
-	Res     resolver.SchemaResolver
-	SemaCtx *tree.SemaContext
-	EvalCtx *tree.EvalContext
-	Descs   *descs.Collection
+	Res          resolver.SchemaResolver
+	SemaCtx      *tree.SemaContext
+	EvalCtx      *tree.EvalContext
+	Descs        *descs.Collection
+	AuthAccessor AuthorizationAccessor
 }
 
 // buildContext is the entry point for planning schema changes. From AST nodes
@@ -129,6 +140,8 @@ func (b *buildContext) build(
 		}
 	}()
 	switch n := n.(type) {
+	case *tree.DropView:
+		b.dropView(ctx, n)
 	case *tree.DropSequence:
 		b.dropSequence(ctx, n)
 	case *tree.AlterTable:
@@ -137,6 +150,47 @@ func (b *buildContext) build(
 		return nil, &notImplementedError{n: n}
 	}
 	return b.outputNodes, nil
+}
+
+func (b *buildContext) addNodeOnce(dir scpb.Target_Direction, elem scpb.Element) {
+	var s scpb.State
+	switch dir {
+	case scpb.Target_ADD:
+		s = scpb.State_ABSENT
+	case scpb.Target_DROP:
+		s = scpb.State_PUBLIC
+	default:
+		panic(errors.Errorf("unknown direction %s", dir))
+	}
+	dropCount := 0
+	newNode := &scpb.Node{
+		Target: scpb.NewTarget(dir, elem),
+		State:  s,
+	}
+	// Check if any existing node matches the new node we are
+	// trying to add.
+	for _, node := range b.outputNodes {
+		if newNode.Element().DescriptorID() == node.Element().DescriptorID() &&
+			reflect.TypeOf(newNode.Element()) == reflect.TypeOf(node.Element()) {
+			if node.State == scpb.State_ABSENT {
+				dropCount--
+			} else if node.State == scpb.State_PUBLIC {
+				dropCount++
+			}
+		}
+	}
+	// TODO(fqazi): Add longer term add a optional comparison function
+	// have something different
+	// If the dropping, then there should be no existing drops.
+	// If adding then extra adds should not exist.
+	if newNode.State == scpb.State_PUBLIC &&
+		dropCount > 0 {
+		return
+	} else if newNode.State == scpb.State_ABSENT &&
+		dropCount < 0 {
+		return
+	}
+	b.outputNodes = append(b.outputNodes, newNode)
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
