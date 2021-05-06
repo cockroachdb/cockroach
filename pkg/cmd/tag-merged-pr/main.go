@@ -1,0 +1,210 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+
+	"github.com/jessevdk/go-flags"
+)
+
+type Options struct {
+	TokenPath      string `long:"token" description:"Path to GitHub token with repo:public_repo scope" required:"true"`
+	FromRef        string `long:"from" description:"From git ref" required:"true"`
+	ToRef          string `long:"to" description:"To git ref" required:"true"`
+	Repository     string `long:"repo" description:"Github repository to work on in 'owner/repo' format" required:"true"`
+	GitCheckoutDir string `long:"dir" description:"Git checkout directory"`
+	DryRun         bool   `long:"dry-run" description:"Dry run"`
+}
+
+func main() {
+	log.SetFlags(0)
+	// Validating args
+	var opts Options
+	if _, err := flags.Parse(&opts); err != nil {
+		log.Fatalf("Parse error: %+v\n", err)
+	}
+	if opts.GitCheckoutDir != "" {
+		if err := os.Chdir(opts.GitCheckoutDir); err != nil {
+			log.Fatalf("Cannot chdir to %s: %+v\n", opts.GitCheckoutDir, err)
+		}
+	}
+	token, err := readToken(opts.TokenPath)
+	if err != nil {
+		log.Fatalf("Cannot read token from %s: %+v\n", opts.TokenPath, err)
+	}
+	refList, err := getRefs(opts.FromRef, opts.ToRef)
+	if err != nil {
+		log.Fatalf("Cannot get refs: %+v\n", err)
+	}
+
+	for _, ref := range refList {
+		tag, err := getTag(ref)
+		if err != nil {
+			log.Fatalf("Cannot get tag for ref %s: %+v\n", ref, err)
+		}
+		// TODO: change findPullRequest to something less confusing
+		pr, err := findPR(ref)
+		if err != nil {
+			log.Fatalf("Cannot find PR for ref %s: %+v\n", ref, err)
+		}
+		log.Printf("Labeling PR#%s (ref %s) using tag %s", pr, ref, tag)
+		if opts.DryRun {
+			log.Println("DRY RUN: skipping labeling")
+			continue
+		}
+		if err := labelPR(http.DefaultClient, opts.Repository, token, pr, tag); err != nil {
+			log.Fatalf("Failed on tag creation for Pull Request %s, error : '%s'\n", pr, err)
+		}
+	}
+}
+
+func readToken(path string) (string, error) {
+	token, err := ioutil.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(token)), nil
+}
+
+func filterPullRequests(text string) []string {
+	// TODO: unit tests
+	var shas []string
+	for _, line := range strings.Split(text, "\n") {
+		if !strings.Contains(line, "Merge pull request") {
+			continue
+		}
+		sha := strings.Fields(line)[0]
+		shas = append(shas, sha)
+	}
+	return shas
+}
+
+func getRefs(fromRef, toRef string) ([]string, error) {
+	cmd := exec.Command("git", "log", "--merges", "--reverse", "--oneline",
+		"--format=format:%h %s", "--ancestry-path", fmt.Sprintf("%s..%s", fromRef, toRef))
+	out, err := cmd.Output()
+	if err != nil {
+		return []string{}, err
+	}
+	return filterPullRequests(string(out)), nil
+}
+
+func matchVersion(text string) string {
+	for _, line := range strings.Fields(text) {
+		// Only looking for version tags.
+		regVersion := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)`)
+		if !regVersion.MatchString(line) {
+			continue
+		}
+		// Should avoid *-alpha.00000000 tag, so we continue with the next line value.
+		alpha00Regex := regexp.MustCompile(`v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-alpha.00+$`)
+		if alpha00Regex.MatchString(line) {
+			continue
+		}
+		// Checking first for An alpha/beta/rc tag.
+		// if present, return line value
+		alphaBetaRcRegex := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[-.0-9A-Za-z]+$`)
+		if alphaBetaRcRegex.MatchString(line) {
+			return line
+		}
+		// Second check is vX.Y.Z patch release >= .1 is first (ex: v20.1.1).
+		patchRegex := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.[1-9][0-9]*$`)
+		if patchRegex.MatchString(line) {
+			return line
+		}
+		// Third check is major release A vX.Y.0 release.
+		majorReleaseRegex := regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.0$`)
+		if majorReleaseRegex.MatchString(line) {
+			return line
+		}
+	}
+	return ""
+}
+
+func getTag(ref string) (string, error) {
+	cmd := exec.Command("git", "tag", "--contains", ref)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	version := matchVersion(string(out))
+	if version == "" {
+		return "", fmt.Errorf("cannot find valid version")
+	}
+	return version, nil
+}
+
+func findPullRequest(text string) string {
+	for _, prNumber := range strings.Fields(text) {
+		if strings.HasPrefix(prNumber, "#") == true {
+			return strings.TrimPrefix(prNumber, "#")
+		}
+	}
+	return ""
+}
+
+func findPR(ref string) (string, error) {
+	cmd := exec.Command("git", "show", "--oneline", "--format=format:%h %s", ref)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	pr := findPullRequest(string(out))
+	if pr == "" {
+		return "", fmt.Errorf("cannot find PR number")
+	}
+	return pr, nil
+}
+
+func apiCall(client *http.Client, url string, token string, payload interface{}) error {
+	// TODO: unit test using https://pkg.go.dev/net/http/httptest
+	payloadJson, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewReader(payloadJson))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("token %s", token))
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	// Status code 422 is returned when a label already exist
+	if !(resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusUnprocessableEntity || resp.
+		StatusCode == http.StatusOK) {
+		return fmt.Errorf("status code %d from %s", resp.StatusCode, url)
+	}
+	return nil
+}
+
+func labelPR(client *http.Client, repository string, token string, pr string, tag string) error {
+	label := fmt.Sprintf("earliest-release-%s", tag)
+	payload := struct {
+		Name  string `json:"name"`
+		Color string `json:"color"`
+	}{
+		Name:  label,
+		Color: "000000",
+	}
+	if err := apiCall(client, fmt.Sprintf("https://api.github.com/repos/%s/labels", repository), token,
+		payload); err != nil {
+		return err
+	}
+	url := fmt.Sprintf("https://api.github.com/repos/%s/issues/%s/labels", repository, pr)
+	labels := []string{label}
+	if err := apiCall(client, url, token, labels); err != nil {
+		return err
+	}
+	log.Printf("Label %s added to PR %s\n", label, pr)
+	return nil
+}
