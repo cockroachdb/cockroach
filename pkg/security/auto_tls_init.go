@@ -11,7 +11,6 @@
 package security
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -32,7 +31,7 @@ import (
 const defaultKeySize = 2048
 
 // notBeforeMargin provides a window to compensate for potential clock skew.
-const notBeforeMargin = time.Second * 30
+const notBeforeMargin = time.Hour * 24
 
 // createCertificateSerialNumber is a helper function that generates a
 // random value between [1, 2^130). The use of crypto random for a serial with
@@ -78,9 +77,8 @@ func describeCert(cert *x509.Certificate) redact.RedactableString {
 }
 
 const (
-	crlOrg      = "Cockroach Labs"
+	crlOrg      = "Cockroach"
 	crlIssuerOU = "automatic cert generator"
-	crlC        = "US"
 )
 
 // CreateCACertAndKey will create a CA with a validity beginning
@@ -88,7 +86,7 @@ const (
 // with cluster auto certificate generation.
 func CreateCACertAndKey(
 	ctx context.Context, loggerFn LoggerFn, lifespan time.Duration, service string,
-) (certPEM []byte, keyPEM []byte, err error) {
+) (certPEM, keyPEM *pem.Block, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
 
@@ -102,21 +100,19 @@ func CreateCACertAndKey(
 	ca := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Issuer: pkix.Name{
-			Organization:       []string{crlOrg},
-			OrganizationalUnit: []string{crlIssuerOU},
-			Country:            []string{crlC},
+			Organization: []string{crlOrg},
+			CommonName:   service,
 		},
 		Subject: pkix.Name{
-			Organization:       []string{crlOrg},
-			OrganizationalUnit: []string{service},
-			Country:            []string{crlC},
+			Organization: []string{crlOrg},
+			CommonName:   service,
 		},
 		NotBefore:             notBefore,
 		NotAfter:              notAfter,
 		IsCA:                  true,
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageContentCommitment,
 		BasicConstraintsValid: true,
-		MaxPathLenZero:        true,
+		MaxPathLen:            1,
 	}
 	if loggerFn != nil {
 		loggerFn(ctx, "creating CA cert from template: %s", describeCert(ca))
@@ -128,16 +124,7 @@ func CreateCACertAndKey(
 		return nil, nil, err
 	}
 
-	caPrivKeyPEM := new(bytes.Buffer)
-	caPrivKeyPEMBytes, err := x509.MarshalPKCS8PrivateKey(caPrivKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	err = pem.Encode(caPrivKeyPEM, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: caPrivKeyPEMBytes,
-	})
+	caPrivKeyPEM, err := PrivateKeyToPEM(caPrivKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -151,19 +138,12 @@ func CreateCACertAndKey(
 		return nil, nil, err
 	}
 
-	caPEM := new(bytes.Buffer)
-	err = pem.Encode(caPEM, &pem.Block{
+	caPEM := &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caBytes,
-	})
-	if err != nil {
-		return nil, nil, err
 	}
 
-	certPEM = caPEM.Bytes()
-	keyPEM = caPrivKeyPEM.Bytes()
-
-	return certPEM, keyPEM, nil
+	return caPEM, caPrivKeyPEM, nil
 }
 
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
@@ -172,12 +152,11 @@ func CreateServiceCertAndKey(
 	ctx context.Context,
 	loggerFn LoggerFn,
 	lifespan time.Duration,
-	commonName, service string,
+	commonName string,
 	hostnames []string,
-	caCertPEM []byte,
-	caKeyPEM []byte,
+	caCertBlock, caKeyBlock *pem.Block,
 	serviceCertIsAlsoValidAsClient bool,
-) (certPEM []byte, keyPEM []byte, err error) {
+) (certPEM *pem.Block, keyPEM *pem.Block, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
 
@@ -187,27 +166,15 @@ func CreateServiceCertAndKey(
 		return nil, nil, err
 	}
 
-	caCertBlock, _ := pem.Decode(caCertPEM)
-	if caCertBlock == nil {
-		err = errors.New("failed to parse valid PEM from CaCertificate blob")
-		return nil, nil, err
-	}
-
 	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
 	if err != nil {
 		err = errors.Wrap(err, "failed to parse valid Certificate from PEM blob")
 		return nil, nil, err
 	}
 
-	caKeyBlock, _ := pem.Decode(caKeyPEM)
-	if caKeyBlock == nil {
-		err = errors.New("failed to parse valid PEM from CaKey blob")
-		return nil, nil, err
-	}
-
-	caKey, err := x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
+	caKey, err := x509.ParsePKCS1PrivateKey(caKeyBlock.Bytes)
 	if err != nil {
-		err = errors.Wrap(err, "failed to parse valid Certificate from PEM blob")
+		err = errors.Wrap(err, "failed to parse valid Private Key from PEM blob")
 		return nil, nil, err
 	}
 
@@ -220,13 +187,11 @@ func CreateServiceCertAndKey(
 		Issuer: pkix.Name{
 			Organization:       []string{crlOrg},
 			OrganizationalUnit: []string{crlIssuerOU},
-			Country:            []string{crlC},
+			CommonName:         caCommonName,
 		},
 		Subject: pkix.Name{
-			Organization:       []string{crlOrg},
-			OrganizationalUnit: []string{service},
-			Country:            []string{crlC},
-			CommonName:         commonName,
+			Organization: []string{crlOrg},
+			CommonName:   commonName,
 		},
 		NotBefore:   notBefore,
 		NotAfter:    notAfter,
@@ -267,28 +232,15 @@ func CreateServiceCertAndKey(
 		return nil, nil, err
 	}
 
-	serviceCertBlock := new(bytes.Buffer)
-	err = pem.Encode(serviceCertBlock, &pem.Block{
+	serviceCertBlock := &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: serviceCertBytes,
-	})
+	}
+
+	servicePrivKeyPEM, err := PrivateKeyToPEM(servicePrivKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	servicePrivKeyPEM := new(bytes.Buffer)
-	certPrivKeyPEMBytes, err := x509.MarshalPKCS8PrivateKey(servicePrivKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	err = pem.Encode(servicePrivKeyPEM, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: certPrivKeyPEMBytes,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return serviceCertBlock.Bytes(), servicePrivKeyPEM.Bytes(), nil
+	return serviceCertBlock, servicePrivKeyPEM, nil
 }

@@ -35,6 +35,7 @@ import (
 
 const (
 	initServiceName     = "temp-init-service"
+	caCommonName        = "Cockroach CA"
 	defaultInitLifespan = 10 * time.Minute
 
 	trustInitURL     = "/trustInit/"
@@ -134,25 +135,28 @@ func createNodeInitTempCertificates(
 	log.Ops.Infof(ctx, "creating temporary initial certificates for hosts %+v, duration %s", hostnames, lifespan)
 
 	caCtx := logtags.AddTag(ctx, "create-temp-ca", nil)
-	caCert, caKey, err := security.CreateCACertAndKey(caCtx, log.Ops.Infof, lifespan, initServiceName)
+	caCertPEM, caKeyPEM, err := security.CreateCACertAndKey(caCtx, log.Ops.Infof, lifespan, initServiceName)
 	if err != nil {
 		return certs, err
 	}
 	serviceCtx := logtags.AddTag(ctx, "create-temp-service", nil)
-	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(
+	serviceCertPEM, serviceKeyPEM, err := security.CreateServiceCertAndKey(
 		serviceCtx,
 		log.Ops.Infof,
 		lifespan,
 		security.NodeUser,
-		initServiceName,
 		hostnames,
-		caCert,
-		caKey,
+		caCertPEM,
+		caKeyPEM,
 		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return certs, err
 	}
+	caCert := pem.EncodeToMemory(caCertPEM)
+	caKey := pem.EncodeToMemory(caKeyPEM)
+	serviceCert := pem.EncodeToMemory(serviceCertPEM)
+	serviceKey := pem.EncodeToMemory(serviceKeyPEM)
 
 	certs = ServiceCertificateBundle{
 		CACertificate:   caCert,
@@ -584,7 +588,7 @@ func initHandshakeHelper(
 		}
 
 		if numExpectedPeers > 0 {
-			peerInit, err := collectLocalCABundle(*cfg)
+			peerInit, err := collectLocalCABundle(cfg.SSLCertsDir)
 			if err != nil {
 				return errors.Wrap(err, "error when loading initialization bundle")
 			}
