@@ -1160,6 +1160,10 @@ func NewColOperator(
 				// temporary columns that can be appended below.
 				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
 				copy(typs, result.ColumnTypes)
+				argTypes := make([]*types.T, len(wf.ArgsIdxs))
+				for i, idx := range wf.ArgsIdxs {
+					argTypes[i] = typs[idx]
+				}
 				tempColOffset, partitionColIdx := uint32(0), tree.NoColumnIdx
 				peersColIdx := tree.NoColumnIdx
 				windowFn := *wf.Func.WindowFunc
@@ -1238,6 +1242,21 @@ func NewColOperator(
 					if c, ok := result.Root.(colexecop.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
+				case execinfrapb.WindowerSpec_NTILE:
+					// We are using an unlimited memory monitor here because
+					// the ntile operators themselves are responsible for
+					// making sure that we stay within the memory limit, and
+					// they will fall back to disk if necessary.
+					opName := opNamePrefix + "ntile"
+					unlimitedAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					diskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+					argIdx := int(wf.ArgsIdxs[0])
+					result.Root = colexecwindow.NewNTileOperator(
+						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
+						args.FDSemaphore, input, typs, outputIdx, partitionColIdx, argIdx, diskAcc,
+					)
 				default:
 					return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
 				}
@@ -1254,7 +1273,7 @@ func NewColOperator(
 					result.Root = colexecbase.NewSimpleProjectOp(result.Root, int(wf.OutputColIdx+tempColOffset), projection)
 				}
 
-				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, []*types.T{}...)
+				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, argTypes...)
 				if err != nil {
 					return r, err
 				}

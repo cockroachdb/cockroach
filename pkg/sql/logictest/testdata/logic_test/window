@@ -979,83 +979,121 @@ SELECT k, ntile(20) OVER (ORDER BY k) FROM kv ORDER BY 1
 11  9
 
 # The value of 'w' in the first row will be 3.
-query II
-SELECT k, ntile(w) OVER (ORDER BY k) FROM kv ORDER BY 1
+query III
+SELECT k, w, ntile(w) OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
-1   1
-3   1
-5   1
-6   2
-7   2
-8   2
-9   3
-10  3
-11  3
+1   3  1
+3   5  1
+5   5  1
+6   3  2
+7   2  2
+8   2  2
+9   9  3
+10  9  3
+11  9  3
 
 query III
-SELECT k, v, ntile(3) OVER (PARTITION BY v ORDER BY k) FROM kv ORDER BY 1
+SELECT k, v, ntile(3) OVER (PARTITION BY v ORDER BY k) FROM kv ORDER BY v, k
 ----
-1   2     1
-3   4     1
 5   NULL  1
+11  NULL  2
+1   2     1
 6   2     1
 7   2     2
-8   4     2
 9   2     3
+3   4     1
+8   4     2
 10  4     3
-11  NULL  2
 
 query IIII
-SELECT k, v, w, ntile(6) OVER (PARTITION BY v ORDER BY w, k) FROM kv ORDER BY 1
+SELECT k, v, w, ntile(6) OVER (PARTITION BY v ORDER BY w, k) FROM kv ORDER BY v, w, k
 ----
-1   2     3  2
-3   4     5  2
 5   NULL  5  1
-6   2     3  3
-7   2     2  1
-8   4     2  1
-9   2     9  4
-10  4     9  3
 11  NULL  9  2
-
-query II
-SELECT k, ntile(w) OVER (PARTITION BY k) FROM kv ORDER BY 1
-----
-1   1
-3   1
-5   1
-6   1
-7   1
-8   1
-9   1
-10  1
-11  1
+7   2     2  1
+1   2     3  2
+6   2     3  3
+9   2     9  4
+8   4     2  1
+3   4     5  2
+10  4     9  3
 
 query III
-SELECT k, v, ntile(3) OVER (PARTITION BY v, k) FROM kv ORDER BY 1
+SELECT k, w, ntile(w) OVER (PARTITION BY k) FROM kv ORDER BY k
 ----
-1   2     1
-3   4     1
+1   3  1
+3   5  1
+5   5  1
+6   3  1
+7   2  1
+8   2  1
+9   9  1
+10  9  1
+11  9  1
+
+query III
+SELECT k, v, ntile(3) OVER (PARTITION BY v, k) FROM kv ORDER BY v, k
+----
 5   NULL  1
+11  NULL  1
+1   2     1
 6   2     1
 7   2     1
-8   4     1
 9   2     1
+3   4     1
+8   4     1
 10  4     1
-11  NULL  1
 
 query IIII
-SELECT k, v, w, ntile(6) OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
+SELECT k, v, w, ntile(6) OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY v, k, w
 ----
-1   2     3  1
-3   4     5  1
 5   NULL  5  1
+11  NULL  9  1
+1   2     3  1
 6   2     3  1
 7   2     2  1
+9   2     9  1
+3   4     5  1
 8   4     2  1
+10  4     9  1
+
+query IIII
+SELECT k, v, w, ntile(v) OVER (PARTITION BY w ORDER BY v, k) FROM kv ORDER BY w, v, k
+----
+7   2     2  1
+8   4     2  2
+1   2     3  1
+6   2     3  2
+5   NULL  5  NULL
+3   4     5  1
+11  NULL  9  NULL
 9   2     9  1
 10  4     9  1
-11  NULL  9  1
+
+query III
+SELECT k, v, ntile(v) OVER (ORDER BY v, k) FROM kv ORDER BY v, k
+----
+5   NULL  NULL
+11  NULL  NULL
+1   2     1
+6   2     1
+7   2     1
+9   2     1
+3   4     1
+8   4     2
+10  4     2
+
+query III
+SELECT k, v, ntile(v) OVER (ORDER BY v, k)
+FROM (SELECT * FROM kv WHERE w != 3) ORDER BY v, k
+----
+5   NULL  NULL
+11  NULL  NULL
+7   2     1
+9   2     1
+3   4     1
+8   4     1
+10  4     2
 
 query II
 SELECT k, lag(9) OVER (ORDER BY k) FROM kv ORDER BY 1
