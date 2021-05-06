@@ -56,6 +56,8 @@ func TestBuilderAlterTable(t *testing.T) {
 				fallthrough
 			case "create-sequence":
 				fallthrough
+			case "create-type":
+				fallthrough
 			case "create-table":
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
@@ -68,17 +70,21 @@ func TestBuilderAlterTable(t *testing.T) {
 					tableName = node.Name.String()
 				case *tree.CreateView:
 					tableName = node.Name.String()
+				case *tree.CreateType:
+					tableName = ""
 				default:
 					t.Fatal("not a CREATE TABLE/SEQUENCE/VIEW statement")
 				}
 				tdb.Exec(t, d.Input)
 
-				var tableID descpb.ID
-				tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
-				if tableID == 0 {
-					t.Fatalf("failed to read ID of new table %s", tableName)
+				if len(tableName) > 0 {
+					var tableID descpb.ID
+					tdb.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
+					if tableID == 0 {
+						t.Fatalf("failed to read ID of new table %s", tableName)
+					}
+					t.Logf("created relation with id %d", tableID)
 				}
-				t.Logf("created relation with id %d", tableID)
 
 				return ""
 			case "build":
@@ -158,13 +164,15 @@ func newTestingBuilderDeps(s serverutils.TestServerInterface) (*scbuild.Dependen
 		resolver.SchemaResolver
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
+		scbuild.AuthorizationAccessor
 		Descriptors() *descs.Collection
 	})
 	buildDeps := scbuild.Dependencies{
-		Res:     planner,
-		SemaCtx: planner.SemaCtx(),
-		EvalCtx: planner.EvalContext(),
-		Descs:   planner.Descriptors(),
+		Res:          planner,
+		SemaCtx:      planner.SemaCtx(),
+		EvalCtx:      planner.EvalContext(),
+		Descs:        planner.Descriptors(),
+		AuthAccessor: planner,
 	}
 	return &buildDeps, cleanup
 }

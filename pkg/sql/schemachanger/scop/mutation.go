@@ -102,6 +102,13 @@ type RemoveColumnDefaultExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// RemoveTypeBackRef removes type back references from a relation.
+type RemoveTypeBackRef struct {
+	mutationOp
+	DescID descpb.ID
+	TypeID descpb.ID
+}
+
 // MakeAddedColumnDeleteAndWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedColumnDeleteAndWriteOnly struct {
