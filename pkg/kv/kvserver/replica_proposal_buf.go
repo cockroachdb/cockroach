@@ -466,7 +466,13 @@ func (b *propBuf) flushLocked(ctx context.Context) error {
 // If raftGroup is non-nil (the common case) then the commands will also be
 // proposed to the RawNode. This initiates Raft replication of the commands.
 //
-// Returns the number of proposals handed to the RawNode.
+// Returns the number of proposals flushed from the proposal buffer, counting
+// proposals even if they were dropped and never handed to the RawNode. This
+// second part is important, because it ensures that even if we drop a lease
+// request by calling rejectProposalWithRedirectLocked, we still inform the
+// caller of its presence. This ensures that callers like handleRaftReady
+// consider unquiescing and waking the Raft leader, which may be necessary to
+// notice the failure of the leader and allow a future lease request through.
 func (b *propBuf) FlushLockedWithRaftGroup(
 	ctx context.Context, raftGroup proposerRaft,
 ) (int, error) {
