@@ -551,6 +551,54 @@ func TestChangefeedUserDefinedTypes(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
+func TestChangefeedExternalIODisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	t.Run("sinkful changefeeds not allowed with disabled external io", func(t *testing.T) {
+		disallowedSinkProtos := []string{
+			changefeedbase.SinkSchemeExperimentalSQL,
+			changefeedbase.SinkSchemeKafka,
+			changefeedbase.SinkSchemeNull, // Doesn't work because all sinkful changefeeds are disallowed
+			// Cloud sink schemes
+			"experimental-s3",
+			"experimental-gs",
+			"experimental-nodelocal",
+			"experimental-http",
+			"experimental-https",
+			"experimental-azure",
+		}
+		ctx := context.Background()
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			ExternalIODirConfig: base.ExternalIODirConfig{
+				DisableOutbound: true,
+			},
+		})
+		defer s.Stopper().Stop(ctx)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
+		for _, proto := range disallowedSinkProtos {
+			sqlDB.ExpectErr(t, "Outbound IO is disabled by configuration, cannot create changefeed",
+				"CREATE CHANGEFEED FOR target_table INTO $1",
+				fmt.Sprintf("%s://does-not-matter", proto),
+			)
+		}
+	})
+
+	withDisabledOutbound := func(args *base.TestServerArgs) { args.ExternalIODirConfig.DisableOutbound = true }
+	t.Run("sinkless changfeeds are allowed with disabled external io",
+		sinklessTestWithServerArgs(withDisabledOutbound,
+			func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(db)
+				sqlDB.Exec(t, "CREATE TABLE target_table (pk INT PRIMARY KEY)")
+				sqlDB.Exec(t, "INSERT INTO target_table VALUES (1)")
+				feed := feed(t, f, "CREATE CHANGEFEED FOR target_table")
+				defer closeFeed(t, feed)
+				assertPayloads(t, feed, []string{
+					`target_table: [1]->{"after": {"pk": 1}}`,
+				})
+			}))
+}
+
 // Test how Changefeeds react to schema changes that do not require a backfill
 // operation.
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
