@@ -109,7 +109,6 @@ func TestFixture(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.gs.default.key = $1`, gcsKey)
 
 	gen := makeTestWorkload()
 	flag := fmt.Sprintf(`val=%d`, timeutil.Now().UnixNano())
