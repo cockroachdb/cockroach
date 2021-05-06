@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -186,9 +187,17 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 	unresolved, ok := e.(*tree.UnresolvedName)
 	if ok && !unresolved.Star && unresolved.NumParts == 1 {
 		colName := unresolved.Parts[0]
-		_, srcMeta, _, err := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
-		if err != nil {
-			panic(err)
+		_, srcMeta, _, resolveErr := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
+		if resolveErr != nil {
+			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
+				// Attempt to resolve as a TupleStar.
+				return func() tree.TypedExpr {
+					defer wrapColTupleStarPanic(resolveErr)
+					return inScope.resolveType(columnNameAsTupleStar(colName), types.Any)
+				}()
+			}
+			panic(resolveErr)
 		}
 		return srcMeta.(tree.TypedExpr)
 	}
