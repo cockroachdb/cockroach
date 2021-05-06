@@ -296,7 +296,8 @@ func init() {
 	// Logging flags common to all commands.
 	{
 		// Logging configuration.
-		varFlag(pf, &cliCtx.logConfigInput, cliflags.Log)
+		varFlag(pf, &stringValue{settableString: &cliCtx.logConfigInput}, cliflags.Log)
+		varFlag(pf, &fileContentsValue{settableString: &cliCtx.logConfigInput, fileName: "<unset>"}, cliflags.LogConfigFile)
 
 		// Pre-v21.1 overrides. Deprecated.
 		// TODO(knz): Remove this.
@@ -310,7 +311,7 @@ func init() {
 		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrNoColor.Name,
 			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {no-color: true}}'")
 
-		varFlag(pf, &cliCtx.deprecatedLogOverrides.logDir, cliflags.DeprecatedLogDir)
+		varFlag(pf, &stringValue{&cliCtx.deprecatedLogOverrides.logDir}, cliflags.DeprecatedLogDir)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedLogDir.Name,
 			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {dir: ...}'")
 
@@ -330,7 +331,7 @@ func init() {
 		_ = pf.MarkDeprecated(cliflags.DeprecatedRedactableLogs.Name,
 			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {redactable: ...}")
 
-		varFlag(pf, &cliCtx.deprecatedLogOverrides.sqlAuditLogDir, cliflags.DeprecatedSQLAuditLogDir)
+		varFlag(pf, &stringValue{&cliCtx.deprecatedLogOverrides.sqlAuditLogDir}, cliflags.DeprecatedSQLAuditLogDir)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedSQLAuditLogDir.Name,
 			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}")
 	}

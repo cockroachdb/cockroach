@@ -23,7 +23,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// CommonSQLPrivilegeEventDetails contains the fields copmmon to all
+// CommonSQLPrivilegeEventDetails contains the fields common to all
 // grant/revoke events.
 type CommonSQLPrivilegeEventDetails struct {
 	// The user/role affected by the grant or revoke operation.
