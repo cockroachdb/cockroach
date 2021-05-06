@@ -99,8 +99,8 @@ func TestNodeRangesV2(t *testing.T) {
 		t.Errorf("didn't get any ranges")
 	}
 	for _, ri := range nodeRangesResp.Ranges {
-		require.Equal(t, roachpb.NodeID(1), ri.SourceNodeID)
-		require.Equal(t, roachpb.StoreID(1), ri.SourceStoreID)
+		require.Equal(t, int32(1), ri.SourceNodeID)
+		require.Equal(t, int32(1), ri.SourceStoreID)
 		require.GreaterOrEqual(t, len(ri.LeaseHistory), 1)
 		require.NotEmpty(t, ri.Span.StartKey)
 		require.NotEmpty(t, ri.Span.EndKey)

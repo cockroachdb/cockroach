@@ -644,6 +644,7 @@ func (m *RaftState_Progress) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RaftState_Progress proto.InternalMessageInfo
 
+// RangeProblems describes issues reported by a range. For internal use only.
 type RangeProblems struct {
 	Unavailable          bool `protobuf:"varint,1,opt,name=unavailable,proto3" json:"unavailable,omitempty"`
 	LeaderNotLeaseHolder bool `protobuf:"varint,2,opt,name=leader_not_lease_holder,json=leaderNotLeaseHolder,proto3" json:"leader_not_lease_holder,omitempty"`
@@ -689,11 +690,16 @@ func (m *RangeProblems) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RangeProblems proto.InternalMessageInfo
 
+// RangeStatistics describes statistics reported by a range. For internal use
+// only.
 type RangeStatistics struct {
+	// Queries per second served by this range.
+	//
 	// Note that queries per second will only be known by the leaseholder.
 	// All other replicas will report it as 0.
 	QueriesPerSecond float64 `protobuf:"fixed64,1,opt,name=queries_per_second,json=queriesPerSecond,proto3" json:"queries_per_second,omitempty"`
-	WritesPerSecond  float64 `protobuf:"fixed64,2,opt,name=writes_per_second,json=writesPerSecond,proto3" json:"writes_per_second,omitempty"`
+	// Writes per second served by this range.
+	WritesPerSecond float64 `protobuf:"fixed64,2,opt,name=writes_per_second,json=writesPerSecond,proto3" json:"writes_per_second,omitempty"`
 }
 
 func (m *RangeStatistics) Reset()         { *m = RangeStatistics{} }
@@ -1932,8 +1938,10 @@ type ActiveQuery struct {
 	// True if this query is distributed.
 	IsDistributed bool `protobuf:"varint,4,opt,name=is_distributed,json=isDistributed,proto3" json:"is_distributed,omitempty"`
 	// phase stores the current phase of execution for this query.
-	Phase    ActiveQuery_Phase `protobuf:"varint,5,opt,name=phase,proto3,enum=cockroach.server.serverpb.ActiveQuery_Phase" json:"phase,omitempty"`
-	Progress float32           `protobuf:"fixed32,6,opt,name=progress,proto3" json:"progress,omitempty"`
+	Phase ActiveQuery_Phase `protobuf:"varint,5,opt,name=phase,proto3,enum=cockroach.server.serverpb.ActiveQuery_Phase" json:"phase,omitempty"`
+	// progress is an estimate of the fraction of this query that has been
+	// processed.
+	Progress float32 `protobuf:"fixed32,6,opt,name=progress,proto3" json:"progress,omitempty"`
 	// The SQL statement fingerprint, compatible with StatementStatisticsKey.
 	SqlAnon string `protobuf:"bytes,8,opt,name=sql_anon,json=sqlAnon,proto3" json:"sql_anon,omitempty"`
 }

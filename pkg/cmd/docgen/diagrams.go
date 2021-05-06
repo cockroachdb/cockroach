@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -49,7 +50,8 @@ func init() {
 
 	// BNF vars.
 	var (
-		addr string
+		addr          string
+		bnfAPITimeout time.Duration
 	)
 
 	cmdBNF := &cobra.Command{
@@ -58,7 +60,7 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			bnfDir := args[0]
-			bnf, err := runBNF(addr)
+			bnf, err := runBNF(addr, bnfAPITimeout)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -129,11 +131,14 @@ func init() {
 	}
 
 	cmdBNF.Flags().StringVar(&addr, "addr", "./pkg/sql/parser/sql.y", "Location of sql.y file. Can also specify an http address.")
+	cmdBNF.Flags().DurationVar(&bnfAPITimeout, "timeout", time.Second*120, "Timeout in seconds for bnf HTTP Api, "+
+		"only relevant when the web api is used; default 120s.")
 
 	// SVG vars.
 	var (
-		maxWorkers  int
-		railroadJar string
+		maxWorkers         int
+		railroadJar        string
+		railroadAPITimeout time.Duration
 	)
 
 	cmdSVG := &cobra.Command{
@@ -195,7 +200,7 @@ func init() {
 					}
 					defer f.Close()
 
-					rr, err := runRR(f, railroadJar)
+					rr, err := runRR(f, railroadJar, railroadAPITimeout)
 					if err != nil {
 						log.Fatalf("%s: %s\n", m, err)
 					}
@@ -246,6 +251,8 @@ func init() {
 
 	cmdSVG.Flags().IntVar(&maxWorkers, "max-workers", 1, "maximum number of concurrent workers")
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
+	cmdSVG.Flags().DurationVar(&railroadAPITimeout, "timeout", time.Second*120, "Timeout in seconds for railroad HTTP Api, "+
+		"only relevant when the web api is used; default 120s.")
 
 	diagramCmd := &cobra.Command{
 		Use:   "grammar",
@@ -274,8 +281,8 @@ type stmtSpec struct {
 	nosplit        bool
 }
 
-func runBNF(addr string) ([]byte, error) {
-	return extract.GenerateBNF(addr)
+func runBNF(addr string, bnfAPITimeout time.Duration) ([]byte, error) {
+	return extract.GenerateBNF(addr, bnfAPITimeout)
 }
 
 func runParse(
@@ -298,14 +305,14 @@ func runParse(
 	return b, err
 }
 
-func runRR(r io.Reader, railroadJar string) ([]byte, error) {
+func runRR(r io.Reader, railroadJar string, railroadAPITimeout time.Duration) ([]byte, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 	var html []byte
 	if railroadJar == "" {
-		html, err = extract.GenerateRRNet(b)
+		html, err = extract.GenerateRRNet(b, railroadAPITimeout)
 	} else {
 		html, err = extract.GenerateRRJar(railroadJar, b)
 	}
