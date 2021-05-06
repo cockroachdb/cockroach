@@ -21,7 +21,7 @@ func TestGetElement(t *testing.T) {
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		if !f.Type.Implements(elementInterfaceType) {
-			t.Errorf("%v does not implement %v", f.Type, elementInterfaceType)
+			t.Errorf("%value does not implement %value", f.Type, elementInterfaceType)
 		}
 	}
 }

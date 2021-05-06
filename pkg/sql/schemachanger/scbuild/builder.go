@@ -19,21 +19,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(ajwerner): Add privilege checking.
+// AuthorizationAccessor for checking authorization (e.g. desc privileges).
+type AuthorizationAccessor interface {
+	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
+	CheckPrivilege(
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	) error
+}
 
 // Dependencies are non-stateful objects needed for planning schema
 // changes.
 type Dependencies struct {
 	// TODO(ajwerner): Inject a better interface than this.
-	Res     resolver.SchemaResolver
-	SemaCtx *tree.SemaContext
-	EvalCtx *tree.EvalContext
-	Descs   *descs.Collection
+	Res          resolver.SchemaResolver
+	SemaCtx      *tree.SemaContext
+	EvalCtx      *tree.EvalContext
+	Descs        *descs.Collection
+	AuthAccessor AuthorizationAccessor
 }
 
 // buildContext is the entry point for planning schema changes. From AST nodes
@@ -129,6 +137,8 @@ func (b *buildContext) build(
 		}
 	}()
 	switch n := n.(type) {
+	case *tree.DropView:
+		b.dropView(ctx, n)
 	case *tree.DropSequence:
 		b.dropSequence(ctx, n)
 	case *tree.AlterTable:
@@ -137,6 +147,29 @@ func (b *buildContext) build(
 		return nil, &notImplementedError{n: n}
 	}
 	return b.outputNodes, nil
+}
+
+// checkIfElemHasSameObject checks if two elements are the same object
+// via their unique identifiers.
+func checkIfElemHasSameObject(first scpb.Element, second scpb.Element) bool {
+	firstPrint := first.GetAttributes()
+	secondPrint := second.GetAttributes()
+	return firstPrint.Equal(secondPrint)
+}
+
+// checkIfNodeExists checks if an existing node is already there,
+// in any direction.
+func (b *buildContext) checkIfNodeExists(
+	dir scpb.Target_Direction, elem scpb.Element,
+) (exists bool, index int) {
+	// Check if any existing node matches the new node we are
+	// trying to add.
+	for idx, node := range b.outputNodes {
+		if checkIfElemHasSameObject(node.Element(), elem) {
+			return true, idx
+		}
+	}
+	return false, -1
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
@@ -148,6 +181,10 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 		s = scpb.State_PUBLIC
 	default:
 		panic(errors.Errorf("unknown direction %s", dir))
+	}
+
+	if exists, _ := b.checkIfNodeExists(dir, elem); exists {
+		panic(errors.Errorf("attempted to add duplicate element %s", elem))
 	}
 	b.outputNodes = append(b.outputNodes, &scpb.Node{
 		Target: scpb.NewTarget(dir, elem),

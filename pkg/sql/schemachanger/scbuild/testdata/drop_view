@@ -1,0 +1,96 @@
+create-table
+CREATE TABLE defaultdb.t1 (id INT PRIMARY KEY, name varchar(256))
+----
+
+create-view
+CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
+----
+
+build
+DROP VIEW defaultdb.v1
+----
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy: []
+        tableId: 53
+  state: PUBLIC
+
+create-view
+CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
+----
+
+create-view
+CREATE VIEW defaultdb.v3 AS (SELECT name, n1 FROM v1, v2);
+----
+
+create-view
+CREATE VIEW defaultdb.v4 AS (SELECT n2, n1 FROM v2);
+----
+
+create-type
+CREATE TYPE defaultdb.typ AS ENUM('a')
+----
+
+create-view
+CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb.v4)
+----
+
+build
+DROP VIEW defaultdb.v1 CASCADE
+----
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy:
+        - 54
+        - 55
+        tableId: 53
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy:
+        - 55
+        - 56
+        tableId: 54
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy: []
+        tableId: 55
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy:
+        - 59
+        tableId: 56
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      view:
+        dependedOnBy: []
+        tableId: 59
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      typeRef:
+        descriptorId: 59
+        typeId: 57
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      typeRef:
+        descriptorId: 59
+        typeId: 58
+  state: PUBLIC
