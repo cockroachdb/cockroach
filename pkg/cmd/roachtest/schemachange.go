@@ -26,7 +26,7 @@ func registerSchemaChangeDuringKV(r *testRegistry) {
 		Owner:   OwnerSQLSchema,
 		Cluster: makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
+			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")

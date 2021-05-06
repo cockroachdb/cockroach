@@ -87,7 +87,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		ts := timeutil.Now().Format(`20060102150405`)
 		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
 		// data.
-		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts
+		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	} else {
 		t.Status("installing kafka")
 		kafka.install(ctx)
