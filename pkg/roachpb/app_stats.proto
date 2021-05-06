@@ -97,6 +97,9 @@ message StatementStatistics {
   // LastExecTimestamp is the last timestamp the statement was executed.
   optional google.protobuf.Timestamp last_exec_timestamp = 23 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
+  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  repeated int64 nodes = 24;
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

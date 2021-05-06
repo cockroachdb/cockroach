@@ -47,6 +47,7 @@ import {
 } from "src/redux/analyticsActions";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
+import { nodeRegionsByIDSelector } from "src/redux/nodes";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -214,6 +215,7 @@ export default withRouter(
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
       columns: statementColumnsLocalSetting.selectorToArray(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
     }),
     {
       refreshStatements,

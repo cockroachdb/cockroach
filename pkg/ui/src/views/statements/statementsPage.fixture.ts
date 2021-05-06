@@ -169,6 +169,12 @@ const statementsPagePropsFixture: StatementsPageProps = {
     state: null,
   },
   databases: ["defaultdb", "foo"],
+  nodeRegions: {
+    "1": "gcp-us-east1",
+    "2": "gcp-us-east1",
+    "3": "gcp-us-west1",
+    "4": "gcp-europe-west1",
+  },
   columns: null,
   match: {
     path: "/statements",
