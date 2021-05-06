@@ -88,6 +88,7 @@ go_library(
         "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",
         "//pkg/testutils",
+        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
