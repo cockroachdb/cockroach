@@ -13,6 +13,7 @@ go_library(
         "scope.go",
         "setup.go",
         "sqlsmith.go",
+        "tlp.go",
         "type.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/sqlsmith",

@@ -111,6 +111,7 @@ go_library(
         "test.go",
         "test_registry.go",
         "test_runner.go",
+        "tlp.go",
         "toxiproxy.go",
         "tpc_utils.go",
         "tpcc.go",
