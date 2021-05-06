@@ -194,7 +194,6 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		ctx,
 		n.ZoneSpecifier,
 		n.Options,
-		p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 	); err != nil {
 		return nil, err
 	}
