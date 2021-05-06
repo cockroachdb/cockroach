@@ -19,7 +19,15 @@ import { MetricsQuery, requestMetrics as requestMetricsAction } from "src/redux/
 import { AdminUIState } from "src/redux/state";
 import { MilliToNano } from "src/util/convert";
 import { findChildrenOfType } from "src/util/find";
-import { Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo } from "src/views/shared/components/metricQuery";
+import {
+  Metric,
+  MetricProps,
+  MetricsDataComponentProps,
+  QueryTimeInfo,
+} from "src/views/shared/components/metricQuery";
+import { PayloadAction } from "src/interfaces/action";
+import { TimeWindow, TimeScale } from "src/redux/timewindow";
+import { History } from "history";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -77,6 +85,9 @@ interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
   timeInfo: QueryTimeInfo;
   requestMetrics: typeof requestMetricsAction;
+  setTimeRange?: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale?: (ts: TimeScale) => PayloadAction<TimeScale>;
+  history?: History;
 }
 
 /**
@@ -190,6 +201,9 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     const dataProps: MetricsDataComponentProps = {
       data: this.getData(),
       timeInfo: this.props.timeInfo,
+      setTimeRange: this.props.setTimeRange,
+      setTimeScale: this.props.setTimeScale,
+      history: this.props.history,
     };
     return React.cloneElement(child as React.ReactElement<MetricsDataComponentProps>, dataProps);
   }

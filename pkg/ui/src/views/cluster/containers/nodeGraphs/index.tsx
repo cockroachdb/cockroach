@@ -45,6 +45,13 @@ import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
 import { getMatchParamByName } from "src/util/query";
+import { PayloadAction } from "src/interfaces/action";
+import {
+  setTimeRange,
+  setTimeScale,
+  TimeWindow,
+  TimeScale,
+} from "src/redux/timewindow";
 
 interface GraphDashboard {
   label: string;
@@ -83,6 +90,8 @@ interface NodeGraphsOwnProps {
   livenessQueryValid: boolean;
   nodesSummary: NodesSummary;
   hoverState: HoverState;
+  setTimeRange: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & RouteComponentProps;
@@ -196,11 +205,15 @@ export class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     const graphComponents = _.map(graphs, (graph, idx) => {
       const key = `nodes.${dashboard}.${idx}`;
       return (
-        <div key={key}>
-          <MetricsDataProvider id={key}>
-            { React.cloneElement(graph, forwardParams) }
-          </MetricsDataProvider>
-        </div>
+        <MetricsDataProvider
+          id={key}
+          key={key}
+          setTimeRange={this.props.setTimeRange}
+          setTimeScale={this.props.setTimeScale}
+          history={this.props.history}
+        >
+          {React.cloneElement(graph, forwardParams)}
+        </MetricsDataProvider>
       );
     });
 
@@ -260,5 +273,7 @@ export default withRouter(connect(
     refreshLiveness,
     hoverOn,
     hoverOff,
+    setTimeRange: setTimeRange,
+    setTimeScale: setTimeScale,
   },
 )(NodeGraphs));

@@ -217,6 +217,7 @@ export function *processQueryManagementAction(state: ManagedQuerySagaState) {
  * when the query is being executed.
  */
 export function *refreshQuery(state: ManagedQuerySagaState) {
+    // @ts-ignore
     const queryTask = yield fork(runQuery, state);
     while (queryTask.isRunning()) {
         // While the query is running, we still need to increment or
@@ -237,12 +238,14 @@ export function *waitForNextRefresh(state: ManagedQuerySagaState) {
     // If this query should be auto-refreshed, compute the time until
     // the query is out of date. If the request is already out of date,
     // refresh the query immediately.
+    // @ts-ignore
     const delayTime = yield call(timeToNextRefresh, state);
     if (delayTime <= 0) {
         state.shouldRefreshQuery = true;
         return;
     }
 
+    // @ts-ignore
     const delayTask = yield fork(delayGenerator, delayTime);
     while (delayTask.isRunning()) {
         yield race({

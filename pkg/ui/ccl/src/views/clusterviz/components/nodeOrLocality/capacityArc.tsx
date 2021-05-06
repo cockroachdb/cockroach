@@ -15,7 +15,11 @@ import {
   MAIN_BLUE,
 } from "src/views/shared/colors";
 import { Bytes } from "src/util/format";
-import { NodeArcPercentageTooltip, NodeArcUsedCapacityTooltip, NodeArcTotalCapacityTooltip } from "src/views/clusterviz/components/nodeOrLocality/tooltips.tsx";
+import {
+  NodeArcPercentageTooltip,
+  NodeArcUsedCapacityTooltip,
+  NodeArcTotalCapacityTooltip,
+} from "src/views/clusterviz/components/nodeOrLocality/tooltips";
 
 const ARC_INNER_RADIUS = 56;
 const ARC_WIDTH = 6;
