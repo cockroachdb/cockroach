@@ -158,13 +158,15 @@ func newTestingBuilderDeps(s serverutils.TestServerInterface) (*scbuild.Dependen
 		resolver.SchemaResolver
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
+		scbuild.AuthorizationAccessor
 		Descriptors() *descs.Collection
 	})
 	buildDeps := scbuild.Dependencies{
-		Res:     planner,
-		SemaCtx: planner.SemaCtx(),
-		EvalCtx: planner.EvalContext(),
-		Descs:   planner.Descriptors(),
+		Res:          planner,
+		SemaCtx:      planner.SemaCtx(),
+		EvalCtx:      planner.EvalContext(),
+		Descs:        planner.Descriptors(),
+		AuthAccessor: planner,
 	}
 	return &buildDeps, cleanup
 }
