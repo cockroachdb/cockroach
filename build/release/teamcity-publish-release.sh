@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
+source "$(dirname "${0}")/../teamcity-common-support.sh"
 
 
 tc_start_block "Variable Setup"
