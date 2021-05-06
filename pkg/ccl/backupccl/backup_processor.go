@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,6 +56,13 @@ var (
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
+		settings.NonNegativeDuration,
+	)
+	timeoutPerAttempt = settings.RegisterDurationSetting(
+		"bulkio.backup.read_timeout",
+		"amount of time after which a read attempt is considered timed out and is canceled. "+
+			"Hitting this timeout will cause the backup job to fail.",
+		time.Minute*5,
 		settings.NonNegativeDuration,
 	)
 )
@@ -308,8 +316,19 @@ func runBackupProcessor(
 
 				log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
 					span.span, span.attempts+1, header.UserPriority.String())
-				rawRes, pErr := kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, req)
-				if pErr != nil {
+				var rawRes roachpb.Response
+				var pErr *roachpb.Error
+				exportRequestErr := contextutil.RunWithTimeout(ctx,
+					fmt.Sprintf("ExportRequest for span %s", span.span),
+					timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
+						rawRes, pErr = kv.SendWrappedWith(ctx, flowCtx.Cfg.DB.NonTransactionalSender(),
+							header, req)
+						if pErr != nil {
+							return pErr.GoError()
+						}
+						return nil
+					})
+				if exportRequestErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
 						span.lastTried = timeutil.Now()
 						span.attempts++
@@ -318,7 +337,12 @@ func runBackupProcessor(
 						// the intents being hit.
 						continue
 					}
-					return errors.Wrapf(pErr.GoError(), "exporting %s", span.span)
+					// TimeoutError improves the opaque `context deadline exceeded` error
+					// message so use that instead.
+					if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
+						return errors.Wrapf(exportRequestErr, "timeout: %s", exportRequestErr.Error())
+					}
+					return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 				}
 				res := rawRes.(*roachpb.ExportResponse)
 
