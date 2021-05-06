@@ -148,6 +148,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.JoinList = []string{params.JoinAddr}
 	}
 	cfg.ClusterName = params.ClusterName
+	cfg.ExternalIODirConfig = params.ExternalIODirConfig
 	cfg.Insecure = params.Insecure
 	cfg.AutoInitializeCluster = !params.NoAutoInitializeCluster
 	cfg.SocketFile = params.SocketFile

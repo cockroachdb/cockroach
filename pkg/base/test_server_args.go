@@ -88,6 +88,10 @@ type TestServerArgs struct {
 	// ExternalIODir is used to initialize field in cluster.Settings.
 	ExternalIODir string
 
+	// ExternalIODirConfig is used to initialize the same-named
+	// field on the server.Config struct.
+	ExternalIODirConfig ExternalIODirConfig
+
 	// Fields copied to the server.Config.
 	Insecure                    bool
 	RetryOptions                retry.Options // TODO(tbg): make testing knob.
