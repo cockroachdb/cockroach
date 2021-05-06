@@ -16,38 +16,3 @@ run_json_test build/builder.sh \
   GOTESTFLAGS=-json \
   PKG=./pkg/sql/logictest \
   TESTTIMEOUT="${TESTTIMEOUT}"
-
-# Run each of the optimizer tests again with randomized alternate query plans.
-
-# Perturb the cost of each expression by up to 90%.
-run_json_test build/builder.sh \
-  stdbuf -oL -eL \
-  make testrace \
-  GOTESTFLAGS=-json \
-  PKG=./pkg/sql/logictest \
-  TESTS='^TestLogic/local$$' \
-  TESTTIMEOUT="${TESTTIMEOUT}" \
-  TESTFLAGS='-optimizer-cost-perturbation=0.9'
-
-LOGICTESTS=`ls -A pkg/sql/logictest/testdata/logic_test/`
-
-# Exclude the following tests when running with -disable-opt-rule-probability.
-# These files either do not use the opt configurations or contain queries that
-# rely on normalization rules for optimization, to avoid out-of-memory errors,
-# or for subquery decorrelation.
-EXCLUDE="(cluster_version|distsql_.*|explain_analyze.*|feature_counts|join|\
-optimizer|orms|sequences_distsql|show_trace|subquery_correlated)"
-
-# Disable each rule with 50% probability.
-for file in $LOGICTESTS; do
-    if [[ ! "$file" =~ (^|[[:space:]])${EXCLUDE}($|[[:space:]]) ]]; then
-        run_json_test build/builder.sh \
-          stdbuf -oL -eL \
-          make testrace \
-          GOTESTFLAGS=-json \
-          PKG=./pkg/sql/logictest \
-          TESTS='^TestLogic/local/'${file}'$$' \
-          TESTTIMEOUT="${TESTTIMEOUT}" \
-          TESTFLAGS='-disable-opt-rule-probability=0.5'
-    fi
-done
