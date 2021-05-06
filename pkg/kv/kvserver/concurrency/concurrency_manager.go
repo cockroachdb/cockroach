@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,8 +31,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+// DiscoveredLocksThresholdToConsultFinalizedTxnCache sets a threshold as
+// mentioned in the description string. The default of 200 is somewhat
+// arbitrary but should suffice for small OLTP transactions. Given the default
+// 10,000 lock capacity of the lock table, 200 is small enough to not matter
+// much against the capacity, which is desirable. We have seen examples with
+// discoveredCount > 100,000, caused by stats collection, where we definitely
+// want to avoid adding these locks to the lock table, if possible.
+var DiscoveredLocksThresholdToConsultFinalizedTxnCache = settings.RegisterIntSetting(
+	"kv.lock_table.discovered_locks_threshold_for_consulting_finalized_txn_cache",
+	"the maximum number of discovered locks by a waiter, above which the finalized txn cache"+
+		"is consulted and resolvable locks are not added to the lock table -- this should be a small"+
+		"fraction of the maximum number of locks in the lock table",
+	200,
+	settings.NonNegativeInt,
+)
+
 // managerImpl implements the Manager interface.
 type managerImpl struct {
+	st *cluster.Settings
 	// Synchronizes conflicting in-flight requests.
 	lm latchManager
 	// Synchronizes conflicting in-progress transactions.
@@ -73,10 +91,9 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := &lockTableImpl{
-		maxLocks: cfg.MaxLockTableSize,
-	}
+	lt := newLockTable(cfg.MaxLockTableSize)
 	*m = managerImpl{
+		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
 		// latchManager interface directly, if possible.
@@ -259,10 +276,12 @@ func (m *managerImpl) HandleWriterIntentError(
 	// Add a discovered lock to lock-table for each intent and enter each lock's
 	// wait-queue. If the lock-table is disabled and one or more of the intents
 	// are ignored then we immediately wait on all intents.
+	consultFinalizedTxnCache :=
+		int64(len(t.Intents)) > DiscoveredLocksThresholdToConsultFinalizedTxnCache.Get(&m.st.SV)
 	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		added, err := m.lt.AddDiscoveredLock(intent, seq, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(intent, seq, consultFinalizedTxnCache, g.ltg)
 		if err != nil {
 			log.Fatalf(ctx, "%v", err)
 		}
@@ -284,6 +303,13 @@ func (m *managerImpl) HandleWriterIntentError(
 		for i := range t.Intents {
 			intent := &t.Intents[i]
 			if err := m.ltw.WaitOnLock(ctx, g.Req, intent); err != nil {
+				m.FinishReq(g)
+				return nil, err
+			}
+		}
+	} else {
+		if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+			if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
 				m.FinishReq(g)
 				return nil, err
 			}
