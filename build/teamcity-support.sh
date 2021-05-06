@@ -6,7 +6,6 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 source "$root/build/teamcity-common-support.sh"
 
 remove_files_on_exit() {
-  rm -f ~/.ssh/id_rsa{,.pub}
   common_support_remove_files_on_exit
 }
 trap remove_files_on_exit EXIT
