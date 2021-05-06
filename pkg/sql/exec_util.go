@@ -1621,10 +1621,11 @@ type SessionTracing struct {
 	ex *connExecutor
 
 	// firstTxnSpan is the span of the first txn that was active when session
-	// tracing was enabled.
+	// tracing was enabled. It is finished and unset in StopTracing.
 	firstTxnSpan *tracing.Span
 
-	// connSpan is the connection's span. This is recording.
+	// connSpan is the connection's span. This is recording. It is finished and
+	// unset in StopTracing.
 	connSpan *tracing.Span
 
 	// lastRecording will collect the recording when stopping tracing.
@@ -1740,7 +1741,6 @@ func (st *SessionTracing) StartTracing(
 }
 
 // StopTracing stops the trace that was started with StartTracing().
-// An error is returned if tracing was not active.
 func (st *SessionTracing) StopTracing() error {
 	if !st.enabled {
 		// We're not currently tracing. No-op.
@@ -1751,18 +1751,16 @@ func (st *SessionTracing) StopTracing() error {
 	st.showResults = false
 	st.recordingType = tracing.RecordingOff
 
+	// Accumulate all recordings and finish the tracing spans.
 	var spans []tracingpb.RecordedSpan
-
 	if st.firstTxnSpan != nil {
 		spans = append(spans, st.firstTxnSpan.GetRecording()...)
-		st.firstTxnSpan.SetVerbose(false)
+		st.firstTxnSpan.Finish()
+		st.firstTxnSpan = nil
 	}
-	st.connSpan.Finish()
 	spans = append(spans, st.connSpan.GetRecording()...)
-	// NOTE: We're stopping recording on the connection's ctx only; the stopping
-	// is not inherited by children. If we are inside of a txn, that span will
-	// continue recording, even though nobody will collect its recording again.
-	st.connSpan.SetVerbose(false)
+	st.connSpan.Finish()
+	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()
 
 	var err error
