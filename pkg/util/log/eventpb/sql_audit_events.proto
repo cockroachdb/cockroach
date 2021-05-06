@@ -48,11 +48,11 @@ message CommonSQLExecDetails {
 // Channel: SENSITIVE_ACCESS
 //
 // Events in this category are generated when a table has been
-// marked as audited via `ALTER ... EXPERIMENTAL_AUDIT SET`.
+// marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
 //
-// This feature is experimental.
+// {% include {{ page.version.version }}/misc/experimental-warning.md %}
 //
-// Note: these events are not written to `system.eventlog`, even
+// Note: These events are not written to `system.eventlog`, even
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
 
@@ -92,8 +92,9 @@ message AdminQuery {
 // - the cluster setting `sql.log.slow_query.latency_threshold`
 //   set to a non-zero value, AND
 // - EITHER of the following conditions:
-//   - the actual age of the query exceeds the configured threshold; OR
-//   - the query performs a full table/index scan.
+//   - the actual age of the query exceeds the configured threshold; AND/OR
+//   - the query performs a full table/index scan AND the cluster setting
+//     `sql.log.slow_query.experimental_full_table_scans.enabled` is set.
 message SlowQuery {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
@@ -104,7 +105,7 @@ message SlowQuery {
 // Channel: SQL_INTERNAL_PERF
 //
 // Events in this category report slow query execution by
-// internal executors, i.e. when CockroachDB internally issues
+// internal executors, i.e., when CockroachDB internally issues
 // SQL statements.
 //
 // Note: these events are not written to `system.eventlog`, even
@@ -127,7 +128,7 @@ message SlowQueryInternal {
 //
 // Events in this category report executed queries.
 //
-// Note: these events are not written to `system.eventlog`, even
+// Note: These events are not written to `system.eventlog`, even
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
 

@@ -160,8 +160,9 @@ var xxx_messageInfo_AdminQuery proto.InternalMessageInfo
 // - the cluster setting `sql.log.slow_query.latency_threshold`
 //   set to a non-zero value, AND
 // - EITHER of the following conditions:
-//   - the actual age of the query exceeds the configured threshold; OR
-//   - the query performs a full table/index scan.
+//   - the actual age of the query exceeds the configured threshold; AND/OR
+//   - the query performs a full table/index scan AND the cluster setting
+//     `sql.log.slow_query.experimental_full_table_scans.enabled` is set.
 type SlowQuery struct {
 	CommonEventDetails    `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
 	CommonSQLEventDetails `protobuf:"bytes,2,opt,name=sql,proto3,embedded=sql" json:""`
