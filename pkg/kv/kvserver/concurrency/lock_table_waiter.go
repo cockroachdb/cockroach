@@ -297,7 +297,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// the comment in lockTableImpl.tryActiveWait for the proper way to
 				// remove this and other evaluation races.
 				toResolve := guard.ResolveBeforeScanning()
-				return w.resolveDeferredIntents(ctx, toResolve)
+				return w.ResolveDeferredIntents(ctx, toResolve)
 
 			default:
 				panic("unexpected waiting state")
@@ -624,10 +624,8 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) roachpb.Header {
 	return h
 }
 
-// resolveDeferredIntents resolves the batch of intents if the provided error is
-// nil. The batch of intents may be resolved more efficiently than if they were
-// resolved individually.
-func (w *lockTableWaiterImpl) resolveDeferredIntents(
+// ResolveDeferredIntents implements the lockTableWaiter interface.
+func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	ctx context.Context, deferredResolution []roachpb.LockUpdate,
 ) *Error {
 	if len(deferredResolution) == 0 {
