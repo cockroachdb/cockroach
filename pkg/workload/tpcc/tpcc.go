@@ -166,6 +166,7 @@ var tpccMeta = workload.Meta{
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
 			`conns`:              {RuntimeOnly: true},
+			`idle-conns`:         {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
