@@ -36,7 +36,7 @@ func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err erro
 		return nil, errors.AssertionFailedf("subquery %q was not processed", expr)
 	}
 	if expr.Idx < 0 || expr.Idx-1 >= len(p.curPlan.subqueryPlans) {
-		return nil, errors.AssertionFailedf("invalid index %d for %q", expr.Idx, expr)
+		return nil, errors.AssertionFailedf("subquery eval: invalid index %d for %q", expr.Idx, expr)
 	}
 
 	s := &p.curPlan.subqueryPlans[expr.Idx-1]

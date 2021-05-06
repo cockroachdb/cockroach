@@ -205,7 +205,7 @@ func registerSQLSmith(r *testRegistry) {
 					// that are because of #39433 and #40929.
 					var expectedError bool
 					for _, exp := range []string{
-						"internal error: invalid index",
+						"internal error: subquery eval: invalid index",
 						"could not parse \"0E-2019\" as type decimal",
 					} {
 						expectedError = expectedError || strings.Contains(es, exp)
