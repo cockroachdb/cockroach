@@ -239,4 +239,12 @@ type TestTenantArgs struct {
 
 	// TestingKnobs for the test server.
 	TestingKnobs TestingKnobs
+
+	// MemoryPoolSize is the amount of memory in bytes that can be used by SQL
+	// clients to store row data in server RAM.
+	MemoryPoolSize int64
+
+	// TempStorageConfig is used to configure temp storage, which stores
+	// ephemeral data when processing large queries.
+	TempStorageConfig *TempStorageConfig
 }

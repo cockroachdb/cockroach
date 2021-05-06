@@ -121,11 +121,7 @@ func makeTestKVConfig() KVConfig {
 }
 
 func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
-	sqlCfg := MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
-	// Configure the default in-memory temp storage for all tests unless
-	// otherwise configured.
-	sqlCfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
-	return sqlCfg
+	return MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
 }
 
 // makeTestConfigFromParams creates a Config from a TestServerParams.
@@ -724,6 +720,12 @@ func (ts *TestServer) StartTenant(
 	st := cluster.MakeTestingClusterSettings()
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
+	if params.MemoryPoolSize != 0 {
+		sqlCfg.MemoryPoolSize = params.MemoryPoolSize
+	}
+	if params.TempStorageConfig != nil {
+		sqlCfg.TempStorageConfig = *params.TempStorageConfig
+	}
 	baseCfg := makeTestBaseConfig(st)
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.IdleExitAfter = params.IdleExitAfter
