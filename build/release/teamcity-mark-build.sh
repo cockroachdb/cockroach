@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 source "$(dirname "${0}")/teamcity-support.sh"
+source "$(dirname "${0}")/../teamcity-support.sh"
 
 # mark_build marks a build with a given label specified as a parameter on
 # docker. For example, calling this function on the label "qualified", on a
