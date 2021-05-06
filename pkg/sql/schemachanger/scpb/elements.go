@@ -11,6 +11,10 @@
 package scpb
 
 import (
+	"reflect"
+	"strconv"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -30,11 +34,26 @@ func (n *Node) Element() Element {
 	return n.Target.Element()
 }
 
+// FingerprintKey Set of keys used for finger prints of objects
+// for comparing uniqueness
+type FingerprintKey string
+type Fingerprint map[FingerprintKey]interface{}
+
+const (
+	FingerprintColumnID    FingerprintKey = "ColumnID"
+	FingerprintElementName FingerprintKey = "ElementName"
+	FingerprintIndexID     FingerprintKey = "IndexID"
+	FingerprintDescID      FingerprintKey = "DescID"
+	FingerprintDepID       FingerprintKey = "DepDescID"
+	FingerprintType        FingerprintKey = "Type"
+)
+
 // Element represents a logical component of a catalog entry's schema (e.g., an
 // index or column in a table).
 type Element interface {
 	protoutil.Message
 	DescriptorID() descpb.ID
+	Fingerprint() Fingerprint
 }
 
 // Element returns an Element from its wrapper for serialization.
@@ -54,26 +73,145 @@ func NewTarget(dir Target_Direction, elem Element) *Target {
 	return &t
 }
 
+type ElementTypeID int
+
+var typeToElementID map[reflect.Type]ElementTypeID
+
+func init() {
+	typ := reflect.TypeOf((*ElementProto)(nil)).Elem()
+	typeToElementID = make(map[reflect.Type]ElementTypeID, typ.NumField())
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		protoFlags := strings.Split(f.Tag.Get("protobuf"), ",")
+		id, err := strconv.Atoi(protoFlags[1])
+		if err != nil {
+			panic(errors.Wrapf(err, "failed to extract ID from protobuf tag: %q", protoFlags))
+		}
+		typeToElementID[f.Type] = ElementTypeID(id)
+	}
+}
+func ElementType(el Element) ElementTypeID {
+	return typeToElementID[reflect.TypeOf(el)]
+}
+
 // DescriptorID implements the Element interface.
 func (e *Column) DescriptorID() descpb.ID { return e.TableID }
+
+// Fingerprint implements the Element interface
+func (e *Column) Fingerprint() Fingerprint {
+	return Fingerprint{
+		FingerprintColumnID:    e.Column.ID,
+		FingerprintDescID:      e.TableID,
+		FingerprintElementName: e.Column.Name,
+		FingerprintType:        ElementType(e),
+	}
+}
 
 // DescriptorID implements the Element interface.
 func (e *PrimaryIndex) DescriptorID() descpb.ID { return e.TableID }
 
+// Fingerprint implements the Element interface
+func (e *PrimaryIndex) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintIndexID:     e.Index.ID,
+		FingerprintDescID:      e.TableID,
+		FingerprintElementName: e.Index.Name,
+		FingerprintType:        ElementType(e),
+	}
+}
+
 // DescriptorID implements the Element interface.
 func (e *SecondaryIndex) DescriptorID() descpb.ID { return e.TableID }
+
+// Fingerprint implements the Element interface
+func (e *SecondaryIndex) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintIndexID:     e.Index.ID,
+		FingerprintDescID:      e.TableID,
+		FingerprintElementName: e.Index.Name,
+		FingerprintType:        ElementType(e),
+	}
+}
 
 // DescriptorID implements the Element interface.
 func (e *SequenceDependency) DescriptorID() descpb.ID { return e.SequenceID }
 
+// Fingerprint implements the Element interface
+func (e *SequenceDependency) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintColumnID: e.ColumnID,
+		FingerprintDepID:    e.TableID,
+		FingerprintDescID:   e.SequenceID,
+		FingerprintType:     ElementType(e),
+	}
+}
+
 // DescriptorID implements the Element interface.
 func (e *UniqueConstraint) DescriptorID() descpb.ID { return e.TableID }
+
+// Fingerprint implements the Element interface
+func (e *UniqueConstraint) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintIndexID: e.IndexID,
+		FingerprintDescID:  e.TableID,
+		FingerprintType:    ElementType(e),
+	}
+}
 
 // DescriptorID implements the Element interface.
 func (e *CheckConstraint) DescriptorID() descpb.ID { return e.TableID }
 
+// Fingerprint implements the Element interface
+func (e *CheckConstraint) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintDescID:      e.TableID,
+		FingerprintElementName: e.Name,
+		FingerprintType:        ElementType(e),
+	}
+}
+
 // DescriptorID implements the Element interface.
 func (e *Sequence) DescriptorID() descpb.ID { return e.TableID }
 
+// Fingerprint implements the Element interface
+func (e *Sequence) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintDescID: e.TableID,
+		FingerprintType:   ElementType(e),
+	}
+}
+
 // DescriptorID implements the Element interface.
 func (e *DefaultExpression) DescriptorID() descpb.ID { return e.TableID }
+
+// Fingerprint implements the Element interface
+func (e *DefaultExpression) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintColumnID: e.ColumnID,
+		FingerprintDescID:   e.TableID,
+		FingerprintType:     ElementType(e),
+	}
+}
+
+// DescriptorID implements the Element interface.
+func (e *View) DescriptorID() descpb.ID { return e.TableID }
+
+// Fingerprint implements the Element interface
+func (e *View) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintDescID: e.TableID,
+		FingerprintType:   ElementType(e),
+	}
+}
+
+// DescriptorID implements the Element interface
+func (e *TypeReference) DescriptorID() descpb.ID { return e.DescID }
+
+// Fingerprint implements the Element interface
+func (e *TypeReference) Fingerprint() Fingerprint {
+	return map[FingerprintKey]interface{}{
+		FingerprintDepID:  e.DescID,
+		FingerprintDescID: e.TypeID,
+		FingerprintType:   ElementType(e),
+	}
+}

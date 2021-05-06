@@ -19,21 +19,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(ajwerner): Add privilege checking.
+// AuthorizationAccessor for checking authorization (e.g. desc privileges).
+type AuthorizationAccessor interface {
+	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
+	CheckPrivilege(
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	) error
+}
 
 // Dependencies are non-stateful objects needed for planning schema
 // changes.
 type Dependencies struct {
 	// TODO(ajwerner): Inject a better interface than this.
-	Res     resolver.SchemaResolver
-	SemaCtx *tree.SemaContext
-	EvalCtx *tree.EvalContext
-	Descs   *descs.Collection
+	Res          resolver.SchemaResolver
+	SemaCtx      *tree.SemaContext
+	EvalCtx      *tree.EvalContext
+	Descs        *descs.Collection
+	AuthAccessor AuthorizationAccessor
 }
 
 // buildContext is the entry point for planning schema changes. From AST nodes
@@ -129,6 +137,8 @@ func (b *buildContext) build(
 		}
 	}()
 	switch n := n.(type) {
+	case *tree.DropView:
+		b.dropView(ctx, n)
 	case *tree.DropSequence:
 		b.dropSequence(ctx, n)
 	case *tree.AlterTable:
@@ -137,6 +147,52 @@ func (b *buildContext) build(
 		return nil, &notImplementedError{n: n}
 	}
 	return b.outputNodes, nil
+}
+
+func checkIfElemHasSameObject(first scpb.Element, second scpb.Element) bool {
+	firstPrint := first.Fingerprint()
+	secondPrint := second.Fingerprint()
+	// Check if the maps are the same size
+	// and the types are equal.
+	if len(firstPrint) != len(secondPrint) ||
+		firstPrint[scpb.FingerprintType] != secondPrint[scpb.FingerprintType] {
+		return false
+	}
+	// Otherwise, confirm if all the values and keys
+	// match.
+	for key, val := range firstPrint {
+		secondVal, ok := secondPrint[key]
+		if !ok ||
+			secondVal != val {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *buildContext) checkIfNodeExists(dir scpb.Target_Direction, elem scpb.Element) bool {
+	// Check if any existing node matches the new node we are
+	// trying to add.
+	dropCount := 0
+	for _, node := range b.outputNodes {
+		if checkIfElemHasSameObject(node.Element(), elem) {
+			if node.State == scpb.State_ABSENT {
+				dropCount--
+			} else if node.State == scpb.State_PUBLIC {
+				dropCount++
+			}
+		}
+	}
+	// If the dropping, then there should be no existing drops.
+	// If adding then extra adds should not exist.
+	if dir == scpb.Target_ADD &&
+		dropCount > 0 {
+		return true
+	} else if dir == scpb.Target_DROP &&
+		dropCount < 0 {
+		return true
+	}
+	return false
 }
 
 func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
@@ -148,6 +204,10 @@ func (b *buildContext) addNode(dir scpb.Target_Direction, elem scpb.Element) {
 		s = scpb.State_PUBLIC
 	default:
 		panic(errors.Errorf("unknown direction %s", dir))
+	}
+
+	if b.checkIfNodeExists(dir, elem) {
+		panic(errors.Errorf("attempted to add duplicate element %s", elem))
 	}
 	b.outputNodes = append(b.outputNodes, &scpb.Node{
 		Target: scpb.NewTarget(dir, elem),
