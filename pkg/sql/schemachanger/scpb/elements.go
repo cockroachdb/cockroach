@@ -77,3 +77,6 @@ func (e *Sequence) DescriptorID() descpb.ID { return e.TableID }
 
 // DescriptorID implements the Element interface.
 func (e *DefaultExpression) DescriptorID() descpb.ID { return e.TableID }
+
+// DescriptorID implements the Element interface.
+func (e *View) DescriptorID() descpb.ID { return e.TableID }
