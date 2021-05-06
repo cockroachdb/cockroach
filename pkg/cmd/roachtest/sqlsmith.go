@@ -154,6 +154,10 @@ func registerSQLSmith(r *testRegistry) {
 			err := func() error {
 				done := make(chan error, 1)
 				go func(context.Context) {
+					// Generate can potentially panic in bad cases, so
+					// to avoid Go routines from dying we are going
+					// catch that here, and only pass the error into
+					// the channel.
 					defer func() {
 						if r := recover(); r != nil {
 							done <- errors.Newf("Caught error %s", r)
@@ -161,10 +165,6 @@ func registerSQLSmith(r *testRegistry) {
 						}
 					}()
 
-					// Generate can potentially panic in bad cases, so
-					// to avoid Go routines from dying we are going
-					// catch that here, and only pass the error into
-					// the channel.
 					stmt = smither.Generate()
 					if stmt == "" {
 						// If an empty statement is generated, then ignore it.
