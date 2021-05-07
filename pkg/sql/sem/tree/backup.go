@@ -115,6 +115,7 @@ type RestoreOptions struct {
 	SkipMissingSequenceOwners bool
 	SkipMissingViews          bool
 	Detached                  bool
+	SkipLocalitiesCheck       bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -339,6 +340,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("detached")
 	}
+
+	if o.SkipLocalitiesCheck {
+		maybeAddSep()
+		ctx.WriteString("skip_localities_check")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -402,6 +408,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.Detached = other.Detached
 	}
 
+	if o.SkipLocalitiesCheck {
+		if other.SkipLocalitiesCheck {
+			return errors.New("skip_localities_check specified multiple times")
+		}
+	} else {
+		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
+	}
+
 	return nil
 }
 
@@ -415,5 +429,6 @@ func (o RestoreOptions) IsDefault() bool {
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&
-		o.Detached == options.Detached
+		o.Detached == options.Detached &&
+		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck
 }
