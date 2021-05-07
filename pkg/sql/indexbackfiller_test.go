@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -515,8 +514,6 @@ INSERT INTO foo VALUES (1), (10), (100);
 			table = mut.ImmutableCopy().(catalog.TableDescriptor)
 			return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn)
 		}))
-		_, err := lm.WaitForOneVersion(ctx, tableID, retry.Options{})
-		require.NoError(t, err)
 
 		// Run the index backfill
 		changer := sql.NewSchemaChangerForTesting(

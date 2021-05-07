@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,7 +31,8 @@ var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violat
 // retrieved immutable descriptors are properly leased and all mutable
 // descriptors are handled. The function deals with verifying the two version
 // invariant and retrying when it is violated. Callers need not worry that they
-// write mutable descriptors multiple times.
+// write mutable descriptors multiple times. Callers also don't need to worry
+// about a single version being visible.
 //
 // The passed transaction is pre-emptively anchored to the system config key on
 // the system tenant.
@@ -48,8 +50,35 @@ func Txn(
 		nil, // hydratedTables
 		nil, // virtualSchemas
 	)
+	// Waits for descriptors that were modified, skipping
+	// over ones that had their namespaced wiped.
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, droppedDescs []catalog.Descriptor) error {
+		// Wait for a single version on leased descriptors.
+		for _, ld := range modifiedDescriptors {
+			skip := false
+			// Detect unpublished ones..
+			for _, dropped := range droppedDescs {
+				if dropped.GetID() == ld.ID {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				continue
+			}
+			_, err := leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	for {
+		var modifiedDescriptors []lease.IDVersion
+		var droppedDescs []catalog.Descriptor
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			modifiedDescriptors = nil
+			droppedDescs = nil
 			defer descsCol.ReleaseAll(ctx)
 			if err := txn.SetSystemConfigTrigger(leaseMgr.Codec().ForSystemTenant()); err != nil {
 				return err
@@ -57,18 +86,24 @@ func Txn(
 			if err := f(ctx, txn, descsCol); err != nil {
 				return err
 			}
+
 			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
 				return err
 			}
+			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
 			retryErr, err := CheckTwoVersionInvariant(
 				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {
 				return errTwoVersionInvariantViolated
 			}
+			droppedDescs = descsCol.droppedDescs
 			return err
 		}); errors.Is(err, errTwoVersionInvariantViolated) {
 			continue
 		} else {
+			if err == nil {
+				err = waitForDescriptors(modifiedDescriptors, droppedDescs)
+			}
 			return err
 		}
 	}

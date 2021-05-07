@@ -1435,13 +1435,6 @@ func createImportingDescriptors(
 		if err != nil {
 			return nil, nil, err
 		}
-
-		// Wait for one version on any existing changed types.
-		for existing := range existingTypeIDs {
-			if err := sql.WaitToUpdateLeases(ctx, p.ExecCfg().LeaseManager, existing); err != nil {
-				return nil, nil, err
-			}
-		}
 	}
 
 	// Get TableRekeys to use when importing raw data.
@@ -2192,6 +2185,7 @@ func (r *restoreResumer) dropDescriptors(
 		}
 		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
+		descsCol.AddDeletedDescriptor(mutType)
 	}
 
 	// Queue a GC job.
@@ -2260,6 +2254,7 @@ func (r *restoreResumer) dropDescriptors(
 			false, /* kvTrace */
 		)
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
+		descsCol.AddDeletedDescriptor(sc)
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
@@ -2293,6 +2288,7 @@ func (r *restoreResumer) dropDescriptors(
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
 		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))
+		descsCol.AddDeletedDescriptor(db)
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 
