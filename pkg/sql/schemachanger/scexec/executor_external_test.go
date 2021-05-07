@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -348,8 +347,6 @@ func TestSchemaChanger(t *testing.T) {
 				State:  scpb.State_ABSENT,
 			},
 		}, after)
-		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
-		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 	t.Run("with builder", func(t *testing.T) {
@@ -419,8 +416,6 @@ func TestSchemaChanger(t *testing.T) {
 			}
 			return nil
 		}))
-		_, err := ti.lm.WaitForOneVersion(ctx, id, retry.Options{})
-		require.NoError(t, err)
 		ti.tsql.Exec(t, "INSERT INTO db.foo VALUES (1, 1)")
 	})
 }

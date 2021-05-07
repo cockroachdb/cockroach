@@ -386,13 +386,6 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	}
 	log.Info(ctx, "making table public")
 
-	fks := table.AllActiveAndInactiveForeignKeys()
-	for _, fk := range fks {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, fk.ReferencedTableID); err != nil {
-			return err
-		}
-	}
-
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
 		if err != nil {
@@ -598,15 +591,6 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				return err
-			}
-			log.Warningf(ctx, "waiting to update leases: %+v", err)
-			// As we are dismissing the error, go through the recording motions.
-			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
-		}
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
@@ -757,15 +741,6 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				return err
-			}
-			log.Warningf(ctx, "waiting to update leases: %+v", err)
-			// As we are dismissing the error, go through the recording motions.
-			// This ensures that any important error gets reported to Sentry, etc.
-			sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
-		}
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
@@ -985,9 +960,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	}
 
 	log.Info(ctx, "finished stepping through state machine")
-
-	// wait for the state change to propagate to all leases.
-	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+	return nil
 }
 
 func (sc *SchemaChanger) createIndexGCJob(
@@ -1029,19 +1002,6 @@ func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID des
 	return err
 }
 
-// WaitToUpdateLeasesMultiple waits until the entire cluster has been updated to
-// the latest versions of all the specified descriptors.
-func WaitToUpdateLeasesMultiple(
-	ctx context.Context, leaseMgr *lease.Manager, ids []lease.IDVersion,
-) error {
-	for _, idVer := range ids {
-		if err := WaitToUpdateLeases(ctx, leaseMgr, idVer.ID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of
 // sc.descID and that all nodes are on the new (post-update) version of
@@ -1054,7 +1014,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// descriptor updates are published.
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
-	modified, err := sc.txnWithModified(ctx, func(
+	_, err := sc.txnWithModified(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
@@ -1385,17 +1345,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Wait for the modified versions of tables other than the table we're
-	// updating to have their leases updated.
-	for _, desc := range modified {
-		// sc.descID gets waited for above this call in sc.exec().
-		if desc.ID == sc.descID {
-			continue
-		}
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, desc.ID); err != nil {
-			return err
-		}
-	}
 	// Notify the job registry to start jobs, in case we started any.
 	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
 		return err
@@ -1678,16 +1627,6 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	if err != nil || alreadyReversed {
 		return err
 	}
-
-	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID); err != nil {
-		return err
-	}
-	for id := range fksByBackrefTable {
-		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

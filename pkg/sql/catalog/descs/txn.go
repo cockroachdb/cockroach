@@ -48,6 +48,7 @@ func Txn(
 		nil, // hydratedTables
 		nil, // virtualSchemas
 	)
+	var leasedDescriptors []lease.IDVersion
 	for {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			defer descsCol.ReleaseAll(ctx)
@@ -57,9 +58,11 @@ func Txn(
 			if err := f(ctx, txn, descsCol); err != nil {
 				return err
 			}
+
 			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
 				return err
 			}
+			leasedDescriptors = descsCol.GetDescriptorsWithNewVersion()
 			retryErr, err := CheckTwoVersionInvariant(
 				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {
@@ -69,6 +72,14 @@ func Txn(
 		}); errors.Is(err, errTwoVersionInvariantViolated) {
 			continue
 		} else {
+			if err == nil {
+				for _, ld := range leasedDescriptors {
+					_, err := leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
+					if err != nil {
+						return err
+					}
+				}
+			}
 			return err
 		}
 	}

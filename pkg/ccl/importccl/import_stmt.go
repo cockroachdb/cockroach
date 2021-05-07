@@ -2025,15 +2025,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// to see the same version of the updated table descriptor, after which we
 	// shall chose a ts to import from.
 	if details.Walltime == 0 {
-		// TODO(dt): update job status to mention waiting for tables to go offline.
-		for _, i := range details.Tables {
-			if !i.IsNew {
-				if _, err := p.ExecCfg().LeaseManager.WaitForOneVersion(ctx, i.Desc.ID, retry.Options{}); err != nil {
-					return err
-				}
-			}
-		}
-
 		// Now that we know all the tables are offline, pick a walltime at which we
 		// will write.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
@@ -2275,14 +2266,6 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		return err
 	}
 
-	// Wait for the table to be public before completing.
-	for _, tbl := range details.Tables {
-		_, err := lm.WaitForOneVersion(ctx, tbl.Desc.ID, retry.Options{})
-		if err != nil {
-			return errors.Wrap(err, "publishing tables waiting for one version")
-		}
-	}
-
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
@@ -2329,15 +2312,6 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
 	}); err != nil {
 		return err
-	}
-	// Wait for the tables to become public before completing.
-	if details.PrepareComplete {
-		for _, tableDesc := range details.Tables {
-			_, err := cfg.LeaseManager.WaitForOneVersion(ctx, tableDesc.Desc.ID, retry.Options{})
-			if err != nil {
-				return errors.Wrap(err, "rolling back tables waiting for them to be public")
-			}
-		}
 	}
 
 	// Run any jobs which might have been queued when dropping the schemas.

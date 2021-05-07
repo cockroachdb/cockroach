@@ -1433,13 +1433,6 @@ func createImportingDescriptors(
 		if err != nil {
 			return nil, nil, err
 		}
-
-		// Wait for one version on any existing changed types.
-		for existing := range existingTypeIDs {
-			if err := sql.WaitToUpdateLeases(ctx, p.ExecCfg().LeaseManager, existing); err != nil {
-				return nil, nil, err
-			}
-		}
 	}
 
 	// Get TableRekeys to use when importing raw data.

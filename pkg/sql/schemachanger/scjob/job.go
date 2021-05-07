@@ -139,15 +139,6 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		}); err != nil {
 			return err
 		}
-
-		// Wait for new versions.
-		if err := sql.WaitToUpdateLeasesMultiple(
-			ctx,
-			lm,
-			descriptorsWithUpdatedVersions,
-		); err != nil {
-			return err
-		}
 	}
 	return nil
 }
