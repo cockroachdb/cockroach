@@ -319,10 +319,16 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 	return buf
 }
 
-// crdbV2LongLineLen is the max length of a log line before it gets broken up into multiple lines.
+// crdbV2LongLineLen is the max length of a log line before it gets
+// broken up into multiple lines.
 //
-// NB: the value of 1KiB is mentioned in the format's documentation above. Keep them in sync.
-const crdbV2LongLineLen = 1024
+// This is implemented as a variable so it can be modified
+// in unit tests.
+// TODO(knz): This could also be made configurable by the user.
+//
+// NB: the value of this variable might be mentioned in the format's
+// documentation above. Keep them in sync if necessary.
+var crdbV2LongLineLen = 16 * 1024
 
 func (buf *buffer) maybeMultiLine(prefixLen int, contMark byte, msg string, cp ttycolor.Profile) {
 	var i int
