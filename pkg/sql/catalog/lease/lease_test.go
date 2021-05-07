@@ -55,7 +55,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2763,8 +2762,6 @@ CREATE TABLE d1.t2 (name int);
 `)
 	require.NoError(t, err)
 
-	tableID := descpb.InvalidID
-
 	// Force the table descriptor into a offline state
 	err = descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager), s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
@@ -2777,12 +2774,8 @@ CREATE TABLE d1.t2 (name int);
 			if err != nil {
 				return err
 			}
-			tableID = tableDesc.ID
 			return nil
 		})
-	require.NoError(t, err)
-
-	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID, retry.Options{})
 	require.NoError(t, err)
 
 	go func() {
