@@ -35,6 +35,9 @@ func TestFormatCrdbV2(t *testing.T) {
 	ctx = logtags.AddTag(ctx, "s", "1")
 	ctx = logtags.AddTag(ctx, "long", "2")
 
+	defer func(prev int) { crdbV2LongLineLen = prev }(crdbV2LongLineLen)
+	crdbV2LongLineLen = 1024
+
 	longLine := string(bytes.Repeat([]byte("a"), 1030))
 
 	withStack := func(e logEntry) logEntry {
