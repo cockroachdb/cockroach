@@ -55,8 +55,9 @@ cockroachdb/server:
 cockroachdb/cluster-ui:
   aliases: [cockroachdb/cluster-ui-prs]
   triage_column_id: 6598672
-cockroachdb/obs-infra:
-  triage_column_id: 0 # TODO
+cockroachdb/obs-inf:
+  aliases: [cockroachdb/obs-inf-prs]
+  triage_column_id: 14196277
 cockroachdb/unowned:
   aliases: [cockroachdb/rfc-prs]
   triage_column_id: 0 # TODO
