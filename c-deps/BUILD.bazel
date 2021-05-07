@@ -35,6 +35,12 @@ cmake(
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_LIBPROJ_SHARED": "OFF",
     },
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = select({
+        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
+        "//conditions:default": ["-GUnix Makefiles"],
+    }),
     lib_source = "@proj//:all",
     out_static_libs = ["libproj.a"],
     visibility = ["//visibility:public"],
@@ -48,6 +54,12 @@ cmake(
         "CMAKE_C_FLAGS": "-fPIC",
         "CMAKE_CXX_FLAGS": "-fPIC",
     },
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = select({
+        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
+        "//conditions:default": ["-GUnix Makefiles"],
+    }),
     lib_source = "@geos//:all",
     make_commands = [
         "mkdir -p libgeos/lib",
@@ -96,6 +108,12 @@ cmake(
         "CMAKE_TARGET_MESSAGES": "OFF",
         "CMAKE_BUILD_TYPE": "Release",
     },
+    # As of this writing (2021-05-05), foreign_cc
+    # only knows about windows, darwin and linux.
+    cmake_options = select({
+        "@io_bazel_rules_go//go/platform:windows": ["-GNinja"],
+        "//conditions:default": ["-GUnix Makefiles"],
+    }),
     lib_source = "@libroach//:all",
     make_commands = [
         "make roach",
