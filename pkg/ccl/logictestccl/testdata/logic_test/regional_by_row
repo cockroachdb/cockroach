@@ -915,7 +915,7 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 │           │ table: child@primary
 │           │ equality: (lookup_join_const_col_@12, column1) = (crdb_region,c_id)
 │           │ equality cols are key
-│           │ pred: column8 != crdb_region
+│           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • cross join
 │               │ estimated row count: 3
@@ -1067,7 +1067,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │           │ table: regional_by_row_table@primary
 │           │ equality: (lookup_join_const_col_@23, column1) = (crdb_region,pk)
 │           │ equality cols are key
-│           │ pred: column15 != crdb_region
+│           │ pred: crdb_region_default != crdb_region
 │           │
 │           └── • cross join
 │               │ estimated row count: 3
@@ -1086,7 +1086,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
 │           │ equality: (lookup_join_const_col_@38, column4) = (crdb_region,b)
 │           │ equality cols are key
-│           │ pred: (column1 != pk) OR (column15 != crdb_region)
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • cross join
 │               │ estimated row count: 3
@@ -1104,7 +1104,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@uniq_idx (partial index)
 │           │ equality: (lookup_join_const_col_@53, column3) = (crdb_region,a)
-│           │ pred: (column1 != pk) OR (column15 != crdb_region)
+│           │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
 │           │
 │           └── • cross join
 │               │ estimated row count: 3
@@ -1127,7 +1127,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES 
             │ table: regional_by_row_table@new_idx
             │ equality: (lookup_join_const_col_@68, column3, column4) = (crdb_region,a,b)
             │ equality cols are key
-            │ pred: (column1 != pk) OR (column15 != crdb_region)
+            │ pred: (column1 != pk) OR (crdb_region_default != crdb_region)
             │
             └── • cross join
                 │ estimated row count: 3
@@ -1600,7 +1600,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1
             │ table: regional_by_row_table_as@regional_by_row_table_as_b_key
             │ equality: (lookup_join_const_col_@21, column3) = (crdb_region_col,b)
             │ equality cols are key
-            │ pred: (column1 != pk) OR (column10 != crdb_region_col)
+            │ pred: (column1 != pk) OR (crdb_region_col_comp != crdb_region_col)
             │
             └── • cross join
                 │ estimated row count: 3
