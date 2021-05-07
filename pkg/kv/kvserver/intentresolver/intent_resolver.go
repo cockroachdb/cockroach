@@ -99,6 +99,10 @@ const (
 	// intentResolutionBatchIdle is similar to the above setting but is used when
 	// when no additional traffic hits the batch.
 	defaultIntentResolutionBatchIdle = 5 * time.Millisecond
+
+	// gcTxnRecordTimeout is the timeout for asynchronous txn record removal
+	// during cleanupFinishedTxnIntents.
+	gcTxnRecordTimeout = 20 * time.Second
 )
 
 // Config contains the dependencies to construct an IntentResolver.
@@ -754,12 +758,20 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	if pErr := ir.ResolveIntents(ctx, txn.LocksAsLockUpdates(), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
-	// Run transaction record GC outside of ir.sem.
+	// Run transaction record GC outside of ir.sem. We need a new context, in case
+	// we're still connected to the client's context (which can happen when
+	// allowSyncProcessing is true). Otherwise, we may return to the caller before
+	// gcTxnRecord completes, which may cancel the context and abort the cleanup
+	// either due to a defer cancel() or client disconnection. We give it a timeout
+	// as well, to avoid goroutine leakage.
 	return ir.stopper.RunAsyncTask(
-		ctx,
+		ir.ambientCtx.AnnotateCtx(context.Background()),
 		"storage.IntentResolver: cleanup txn records",
 		func(ctx context.Context) {
-			err := ir.gcTxnRecord(ctx, rangeID, txn)
+			err := contextutil.RunWithTimeout(ctx, "cleanup txn record",
+				gcTxnRecordTimeout, func(ctx context.Context) error {
+					return ir.gcTxnRecord(ctx, rangeID, txn)
+				})
 			if onComplete != nil {
 				onComplete(err)
 			}
