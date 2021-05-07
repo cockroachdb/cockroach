@@ -183,11 +183,11 @@ update computed
  ├── update-mapping:
  │    ├── a_new:9 => a:1
  │    ├── b_new:10 => b:2
- │    └── column11:11 => c:3
+ │    └── c_comp:11 => c:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: column11:11!null a_new:9!null b_new:10!null a:5!null b:6 c:7
+      ├── columns: c_comp:11!null a_new:9!null b_new:10!null a:5!null b:6 c:7
       ├── key: (5)
       ├── fd: ()-->(9-11), (5)-->(6,7)
       ├── scan computed
@@ -198,7 +198,7 @@ update computed
       │    ├── key: (5)
       │    └── fd: (5)-->(6,7)
       └── projections
-           ├── 4 [as=column11:11]
+           ├── 4 [as=c_comp:11]
            ├── 1 [as=a_new:9]
            └── 2 [as=b_new:10]
 

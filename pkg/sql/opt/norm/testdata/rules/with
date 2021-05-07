@@ -403,16 +403,16 @@ with &1 (foo)
  │    ├── columns: a.k:1!null a.i:2 a.f:3 a.s:4 a.j:5
  │    ├── insert-mapping:
  │    │    ├── column1:7 => a.k:1
- │    │    ├── column8:8 => a.i:2
- │    │    ├── column9:9 => a.f:3
- │    │    ├── column10:10 => a.s:4
- │    │    └── column11:11 => a.j:5
+ │    │    ├── i_default:8 => a.i:2
+ │    │    ├── f_default:9 => a.f:3
+ │    │    ├── s_default:10 => a.s:4
+ │    │    └── j_default:11 => a.j:5
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    └── values
- │         ├── columns: column1:7!null column8:8 column9:9 column10:10 column11:11
+ │         ├── columns: column1:7!null i_default:8 f_default:9 s_default:10 j_default:11
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
  │         ├── fd: ()-->(7-11)
