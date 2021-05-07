@@ -349,6 +349,41 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 	}
 }
 
+// WaitForNoVersion returns once there are no unexpired leases left
+// for any version of the descriptor.
+func (m *Manager) WaitForNoVersion(
+	ctx context.Context, id descpb.ID, retryOpts retry.Options,
+) error {
+	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+		// Check to see if there are any leases that still exist on the previous
+		// version of the descriptor.
+		now := m.storage.clock.Now()
+		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
+			now.AsOfSystemTime(),
+			id)
+		values, err := m.storage.internalExecutor.QueryRowEx(
+			ctx, "count-leases", nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			stmt, now.GoTime(),
+		)
+		if err != nil {
+			return err
+		}
+		if values == nil {
+			return errors.New("failed to count leases")
+		}
+		count := int(tree.MustBeDInt(values[0]))
+		if count == 0 {
+			break
+		}
+		if count != lastCount {
+			lastCount = count
+			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
+		}
+	}
+	return nil
+}
+
 // WaitForOneVersion returns once there are no unexpired leases on the
 // previous version of the descriptor. It returns the current version.
 // After returning there can only be versions of the descriptor >= to the
