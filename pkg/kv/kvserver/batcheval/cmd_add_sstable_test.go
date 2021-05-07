@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -489,6 +490,21 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	}
 }
 
+func getSSTBytes(t *testing.T, sstKVs []storage.MVCCKeyValue) []byte {
+	sstFile := &storage.MemFile{}
+	sst := storage.MakeBackupSSTWriter(sstFile)
+	defer sst.Close()
+	for _, kv := range sstKVs {
+		if err := sst.Put(kv.Key, kv.Value); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+	if err := sst.Finish(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+	return sstFile.Data()
+}
+
 func TestAddSSTableDisallowShadowing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -515,21 +531,6 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 			}
 
-			getSSTBytes := func(sstKVs []storage.MVCCKeyValue) []byte {
-				sstFile := &storage.MemFile{}
-				sst := storage.MakeBackupSSTWriter(sstFile)
-				defer sst.Close()
-				for _, kv := range sstKVs {
-					if err := sst.Put(kv.Key, kv.Value); err != nil {
-						t.Fatalf("%+v", err)
-					}
-				}
-				if err := sst.Finish(); err != nil {
-					t.Fatalf("%+v", err)
-				}
-				return sstFile.Data()
-			}
-
 			getStats := func(startKey, endKey roachpb.Key, data []byte) enginepb.MVCCStats {
 				dataIter, err := storage.NewMemSSTIterator(data, true)
 				if err != nil {
@@ -551,7 +552,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"a", 7, "aa"}, // colliding key has a higher timestamp than existing version.
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				stats := getStats(roachpb.Key("a"), roachpb.Key("b"), sstBytes)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
@@ -579,7 +580,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"g", 4, "ggg"}, // colliding key has a lower timestamp than existing version.
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -608,7 +609,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"z", 3, "z"}, // colliding key has a higher timestamp than existing version.
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -634,7 +635,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"h", 6, "hh"},
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				stats := getStats(roachpb.Key("c"), roachpb.Key("i"), sstBytes)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
@@ -667,7 +668,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"y", 3, "yyyy"}, // colliding key.
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -695,7 +696,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"y", 3, "yyyy"},
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -724,7 +725,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"z", 3, "zzz"},
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -771,7 +772,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					}
 				}
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -809,7 +810,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					t.Fatalf("%+v", err)
 				}
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -837,7 +838,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"y", 5, "yyy"}, // key has the same timestamp and value as the one present in the existing data.
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				stats := getStats(roachpb.Key("e"), roachpb.Key("zz"), sstBytes)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
@@ -867,7 +868,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"z", 3, "zzz"},
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -895,7 +896,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"z", 3, "zzz"},
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -923,7 +924,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"z", 3, "zzz"}, // shadow key
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				cArgs := batcheval.CommandArgs{
 					Header: roachpb.Header{
 						Timestamp: hlc.Timestamp{WallTime: 7},
@@ -957,7 +958,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"h", 6, "hh"},
 				})
 
-				sstBytes := getSSTBytes(sstKVs)
+				sstBytes := getSSTBytes(t, sstKVs)
 				stats := getStats(roachpb.Key("c"), roachpb.Key("i"), sstBytes)
 
 				// Accumulate stats across SST ingestion.
@@ -996,7 +997,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 					{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
 				})
-				secondSSTBytes := getSSTBytes(secondSSTKVs)
+				secondSSTBytes := getSSTBytes(t, secondSSTKVs)
 				secondStats := getStats(roachpb.Key("c"), roachpb.Key("i"), secondSSTBytes)
 
 				cArgs.Args = &roachpb.AddSSTableRequest{
@@ -1023,7 +1024,7 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 					{"e", 2, "ee"},
 					{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
 				})
-				thirdSSTBytes := getSSTBytes(thirdSSTKVs)
+				thirdSSTBytes := getSSTBytes(t, thirdSSTKVs)
 				thirdStats := getStats(roachpb.Key("c"), roachpb.Key("i"), thirdSSTBytes)
 
 				cArgs.Args = &roachpb.AddSSTableRequest{
@@ -1056,5 +1057,71 @@ func TestAddSSTableDisallowShadowing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCmdAddSSTableDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	sstKVs := mvccKVsFromStrs([]strKv{
+		{"f", 2, "ff"},
+		{"g", 3, "ggg"},
+		{"h", 4, "hhh"},
+	})
+
+	sstBytes := getSSTBytes(t, sstKVs)
+	startKey, endKey := roachpb.Key("e"), roachpb.Key("z")
+	args := roachpb.AddSSTableRequest{
+		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+		Data:          sstBytes,
+	}
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	var stats enginepb.MVCCStats
+	desc := roachpb.RangeDescriptor{
+		RangeID: 99, StartKey: roachpb.RKey(startKey), EndKey: roachpb.RKey(endKey),
+	}
+
+	cArgs := batcheval.CommandArgs{
+		Header: roachpb.Header{
+			Timestamp: hlc.Timestamp{WallTime: 7},
+		},
+		EvalCtx: (&batcheval.MockEvalCtx{Desc: &desc, Clock: clock, Stats: stats}).EvalContext(),
+		Stats:   &enginepb.MVCCStats{},
+		Args:    &args,
+	}
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+
+	// no deadline
+	args.Deadline = hlc.Timestamp{}
+	if _, err := batcheval.EvalAddSSTable(ctx, batch, cArgs, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// before deadline
+	args.Deadline = hlc.Timestamp{WallTime: 124}
+	if _, err := batcheval.EvalAddSSTable(ctx, batch, cArgs, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// at deadline.
+	args.Deadline = hlc.Timestamp{WallTime: 123}
+	if _, err := batcheval.EvalAddSSTable(ctx, batch, cArgs, nil); err == nil {
+		t.Fatal(err)
+	}
+
+	// after deadline
+	args.Deadline = hlc.Timestamp{WallTime: 122}
+	if _, err := batcheval.EvalAddSSTable(
+		ctx, batch, cArgs, nil,
+	); !testutils.IsError(err, "AddSSTable has deadline") {
+		t.Fatal("expected deadline error")
 	}
 }
