@@ -1142,6 +1142,16 @@ func (m *CommonSQLEventDetails) AppendJSONFields(printComma bool, b redact.Redac
 		b = append(b, '"')
 	}
 
+	if m.Tag != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Tag\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Tag))
+		b = append(b, '"')
+	}
+
 	if m.User != "" {
 		if printComma {
 			b = append(b, ',')
