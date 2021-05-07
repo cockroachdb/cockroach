@@ -230,6 +230,10 @@ type Collection struct {
 	// skipValidationOnWrite should only be set to true during forced descriptor
 	// repairs.
 	skipValidationOnWrite bool
+
+	// droppedDescriptors that will not need to wait for new
+	// lease versions.
+	droppedDescs []catalog.Descriptor
 }
 
 var _ catalog.Accessor = (*Collection)(nil)
@@ -1469,6 +1473,7 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommittedDescriptors = nil
 	tc.syntheticDescriptors = nil
+	tc.droppedDescs = nil
 	tc.releaseAllDescriptors()
 }
 
@@ -2120,6 +2125,13 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 
 func (tc *Collection) codec() keys.SQLCodec {
 	return tc.leaseMgr.Codec()
+}
+
+// AddDroppedDescriptor is temporary tracking for dropped descriptors,
+// so that the wait for one version logic inside descs.Txn skips over
+// these descriptors which will be missing from storage.
+func (tc *Collection) AddDroppedDescriptor(desc catalog.Descriptor) {
+	tc.droppedDescs = append(tc.droppedDescs, desc)
 }
 
 // LeaseManager returns the lease.Manager.

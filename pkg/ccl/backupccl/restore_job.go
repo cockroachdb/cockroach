@@ -1435,13 +1435,6 @@ func createImportingDescriptors(
 		if err != nil {
 			return nil, nil, err
 		}
-
-		// Wait for one version on any existing changed types.
-		for existing := range existingTypeIDs {
-			if err := sql.WaitToUpdateLeases(ctx, p.ExecCfg().LeaseManager, existing); err != nil {
-				return nil, nil, err
-			}
-		}
 	}
 
 	// Get TableRekeys to use when importing raw data.
@@ -2146,6 +2139,7 @@ func (r *restoreResumer) dropDescriptors(
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
+		descsCol.AddDroppedDescriptor(tableToDrop)
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
@@ -2187,6 +2181,7 @@ func (r *restoreResumer) dropDescriptors(
 			false, /* kvTrace */
 		)
 		mutType.SetDropped()
+		descsCol.AddDroppedDescriptor(mutType)
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
 			return errors.Wrap(err, "writing dropping type to batch")
 		}
@@ -2260,6 +2255,7 @@ func (r *restoreResumer) dropDescriptors(
 			false, /* kvTrace */
 		)
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
+		descsCol.AddDroppedDescriptor(sc)
 		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
@@ -2289,6 +2285,7 @@ func (r *restoreResumer) dropDescriptors(
 		if err := descsCol.AddUncommittedDescriptor(db); err != nil {
 			return err
 		}
+		descsCol.AddDroppedDescriptor(db)
 
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
@@ -2317,6 +2314,7 @@ func (r *restoreResumer) dropDescriptors(
 				delete(db.Schemas, sc.GetName())
 			}
 		}
+		descsCol.AddDroppedDescriptor(desc)
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, db, b,
 		); err != nil {
