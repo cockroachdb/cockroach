@@ -176,3 +176,16 @@ INSERT INTO t_47283 VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)
 query II
 SELECT * FROM (SELECT * FROM t_47283 ORDER BY k LIMIT 4) WHERE a > 5 LIMIT 1
 ----
+
+# Regression test for #60751. Do not incorrectly treat a limited scan as
+# containing full scan.
+statement ok
+SET disallow_full_table_scans = true;
+
+query I
+SELECT w FROM t ORDER BY k LIMIT 1;
+----
+1
+
+statement ok
+SET disallow_full_table_scans = false;
