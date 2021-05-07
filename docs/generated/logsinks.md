@@ -1,14 +1,12 @@
 
-# Documentation for logging sinks
-
 The supported log output sink types are documented below.
 
 
-- [Output to files](#sink-output-to-files)
+- [Output to files](#output-to-files)
 
-- [Output to Fluentd-compatible log collectors](#sink-output-to-fluentd-compatible-log-collectors)
+- [Output to Fluentd-compatible log collectors](#output-to-fluentd-compatible-log-collectors)
 
-- [Standard error stream](#sink-standard-error-stream)
+- [Standard error stream](#standard-error-stream)
 
 
 
