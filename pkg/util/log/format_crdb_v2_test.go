@@ -128,3 +128,29 @@ func TestFormatCrdbV2(t *testing.T) {
 	})
 
 }
+
+func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
+	f := formatCrdbV2{}
+	datadriven.RunTest(t, "testdata/crdb_v2_break_lines", func(t *testing.T, td *datadriven.TestData) string {
+		if td.Cmd != "run" {
+			t.Fatalf("unknown command: %s", td.Cmd)
+		}
+		var maxLen int
+		var redactable bool
+		td.ScanArgs(t, "maxlen", &maxLen)
+		td.ScanArgs(t, "redactable", &redactable)
+
+		defer func(prev int) { crdbV2LongLineLen = prev }(crdbV2LongLineLen)
+		crdbV2LongLineLen = maxLen
+
+		entry := logEntry{
+			payload: entryPayload{
+				redactable: redactable,
+				message:    td.Input,
+			},
+		}
+		b := f.formatEntry(entry)
+		defer putBuffer(b)
+		return b.String()
+	})
+}
