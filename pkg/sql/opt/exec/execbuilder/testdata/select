@@ -1791,3 +1791,195 @@ vectorized: true
                   missing stats
                   table: s@primary
                   spans: FULL SCAN
+
+statement ok
+CREATE TABLE disjunction (
+  k INT PRIMARY KEY,
+  a STRING,
+  b STRING,
+  c STRING,
+  INDEX a_idx (a),
+  INDEX b_idx (b),
+  INDEX c_idx (c)
+)
+
+statement ok
+ALTER TABLE disjunction INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 5010,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "aaa"},
+      {"num_eq": 10, "num_range": 990, "distinct_range": 999, "upper_bound": "foo"},
+      {"num_eq": 990, "num_range": 10, "distinct_range": 9, "upper_bound": "fop"},
+      {"num_eq": 0, "num_range": 8000, "distinct_range": 4000, "upper_bound": "zoo"}
+    ]
+  }
+]'
+
+# Single disjunction. A plan with a UNION of two constrained scans is not selected
+# because the selectivity of the disjunction is not accurately estimated.
+query T
+EXPLAIN SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ estimated row count: 5
+│ count: 5
+│
+└── • filter
+    │ estimated row count: 3,333
+    │ filter: (a LIKE 'foo%') OR (b LIKE 'foo%')
+    │
+    └── • scan
+          estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+          table: disjunction@primary
+          spans: FULL SCAN
+
+# More accurate estimation of the disjunction's selectivity leads to a plan with
+# a union of constrained scans. See #58744.
+statement ok
+SET CLUSTER SETTING sql.optimizer_improve_disjunction_selectivity.enabled = true
+
+# Single disjunction.
+query T
+EXPLAIN SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ estimated row count: 5
+│ count: 5
+│
+└── • distinct
+    │ estimated row count: 40
+    │ distinct on: k
+    │
+    └── • union all
+        │ estimated row count: 40
+        │
+        ├── • index join
+        │   │ estimated row count: 20
+        │   │ table: disjunction@primary
+        │   │
+        │   └── • scan
+        │         estimated row count: 20 (0.20% of the table; stats collected <hidden> ago)
+        │         table: disjunction@a_idx
+        │         spans: [/'foo' - /'fop')
+        │
+        └── • index join
+            │ estimated row count: 20
+            │ table: disjunction@primary
+            │
+            └── • scan
+                  estimated row count: 20 (0.20% of the table; stats collected <hidden> ago)
+                  table: disjunction@b_idx
+                  spans: [/'foo' - /'fop')
+
+# Multiple disjunctions.
+query T
+EXPLAIN SELECT * FROM disjunction WHERE a LIKE 'foo%' OR b LIKE 'foo%' OR c LIKE 'foo%' LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ estimated row count: 5
+│ count: 5
+│
+└── • distinct
+    │ estimated row count: 60
+    │ distinct on: k
+    │
+    └── • union all
+        │ estimated row count: 60
+        │
+        ├── • index join
+        │   │ estimated row count: 20
+        │   │ table: disjunction@primary
+        │   │
+        │   └── • scan
+        │         estimated row count: 20 (0.20% of the table; stats collected <hidden> ago)
+        │         table: disjunction@a_idx
+        │         spans: [/'foo' - /'fop')
+        │
+        └── • distinct
+            │ estimated row count: 40
+            │ distinct on: k
+            │
+            └── • union all
+                │ estimated row count: 40
+                │
+                ├── • index join
+                │   │ estimated row count: 20
+                │   │ table: disjunction@primary
+                │   │
+                │   └── • scan
+                │         estimated row count: 20 (0.20% of the table; stats collected <hidden> ago)
+                │         table: disjunction@c_idx
+                │         spans: [/'foo' - /'fop')
+                │
+                └── • index join
+                    │ estimated row count: 20
+                    │ table: disjunction@primary
+                    │
+                    └── • scan
+                          estimated row count: 20 (0.20% of the table; stats collected <hidden> ago)
+                          table: disjunction@b_idx
+                          spans: [/'foo' - /'fop')
+
+# The row count should not exceed the number of rows in the table when
+# disjunctions have high selectivity values.
+query T
+EXPLAIN SELECT * FROM disjunction WHERE a > 'fop' OR b > 'fop' OR c > 'fop' LIMIT 5
+----
+distribution: local
+vectorized: true
+·
+• limit
+│ estimated row count: 5
+│ count: 5
+│
+└── • filter
+    │ estimated row count: 10,000
+    │ filter: ((a > 'fop') OR (b > 'fop')) OR (c > 'fop')
+    │
+    └── • scan
+          estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+          table: disjunction@primary
+          spans: FULL SCAN
+
+statement ok
+RESET CLUSTER SETTING sql.optimizer_improve_disjunction_selectivity.enabled
