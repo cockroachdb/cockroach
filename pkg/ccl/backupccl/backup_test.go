@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -102,6 +103,33 @@ type datadrivenTestState struct {
 	cleanupFns []func()
 }
 
+var localityCfgs = map[string]roachpb.Locality{
+	"us-east-1": {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east-1"},
+			{Key: "availability-zone", Value: "us-east1"},
+		},
+	},
+	"us-west-1": {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-west-1"},
+			{Key: "availability-zone", Value: "us-west1"},
+		},
+	},
+	"eu-central-1": {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "eu-central-1"},
+			{Key: "availability-zone", Value: "eu-central-1"},
+		},
+	},
+	"eu-north-1": {
+		Tiers: []roachpb.Tier{
+			{Key: "region", Value: "eu-north-1"},
+			{Key: "availability-zone", Value: "eu-north-1"},
+		},
+	},
+}
+
 func (d *datadrivenTestState) cleanup(ctx context.Context) {
 	for _, db := range d.sqlDBs {
 		db.Close()
@@ -115,7 +143,10 @@ func (d *datadrivenTestState) cleanup(ctx context.Context) {
 }
 
 func (d *datadrivenTestState) addServer(
-	t *testing.T, name, iodir, tempCleanupFrequency string, allowImplicitAccess bool,
+	t *testing.T,
+	name, iodir, tempCleanupFrequency string,
+	allowImplicitAccess bool,
+	localities string,
 ) error {
 	var tc serverutils.TestClusterInterface
 	var cleanup func()
@@ -134,10 +165,24 @@ func (d *datadrivenTestState) addServer(
 		sql.TempObjectCleanupInterval.Override(&settings.SV, duration)
 		params.ServerArgs.Settings = settings
 	}
+
+	clusterSize := singleNode
+
+	if localities != "" {
+		cfgs := strings.Split(localities, ",")
+		clusterSize = len(cfgs)
+		serverArgsPerNode := make(map[int]base.TestServerArgs)
+		for i, cfg := range cfgs {
+			param := params.ServerArgs
+			param.Locality = localityCfgs[cfg]
+			serverArgsPerNode[i] = param
+		}
+		params.ServerArgsPerNode = serverArgsPerNode
+	}
 	if iodir == "" {
-		_, tc, _, iodir, cleanup = backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, params)
+		_, tc, _, iodir, cleanup = backupRestoreTestSetupWithParams(t, clusterSize, 0, InitManualReplication, params)
 	} else {
-		_, tc, _, cleanup = backupRestoreTestSetupEmptyWithParams(t, singleNode, iodir, InitManualReplication, params)
+		_, tc, _, cleanup = backupRestoreTestSetupEmptyWithParams(t, clusterSize, iodir, InitManualReplication, params)
 	}
 	d.servers[name] = tc.Server(0)
 	d.dataDirs[name] = iodir
@@ -219,7 +264,7 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				ds = newDatadrivenTestState()
 				return ""
 			case "new-server":
-				var name, shareDirWith, iodir, tempCleanupFrequency string
+				var name, shareDirWith, iodir, tempCleanupFrequency, localities string
 				var allowImplicitAccess bool
 				d.ScanArgs(t, "name", &name)
 				if d.HasArg("share-io-dir") {
@@ -234,8 +279,11 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				if d.HasArg("temp-cleanup-freq") {
 					d.ScanArgs(t, "temp-cleanup-freq", &tempCleanupFrequency)
 				}
+				if d.HasArg("localities") {
+					d.ScanArgs(t, "localities", &localities)
+				}
 				lastCreatedServer = name
-				err := ds.addServer(t, name, iodir, tempCleanupFrequency, allowImplicitAccess)
+				err := ds.addServer(t, name, iodir, tempCleanupFrequency, allowImplicitAccess, localities)
 				if err != nil {
 					return err.Error()
 				}
