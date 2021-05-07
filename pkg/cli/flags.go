@@ -229,6 +229,46 @@ var clusterNameRe = regexp.MustCompile(`^[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9]|)$`
 
 const maxClusterNameLength = 256
 
+type filter int8
+
+const (
+	showValuesFilter filter = iota
+	showIntentsFilter
+	showTxnsFilter
+	showAllFilter
+)
+
+// String implements the pflag.Value interface.
+func (f *filter) String() string {
+	switch *f {
+	case showValuesFilter:
+		return "values"
+	case showIntentsFilter:
+		return "intents"
+	case showTxnsFilter:
+		return "txns"
+	}
+	return "unknown"
+}
+
+// Type implements the pflag.Value interface.
+func (f *filter) Type() string { return "<key filter>" }
+
+// Set implements the pflag.Value interface.
+func (f *filter) Set(v string) error {
+	switch v {
+	case "values":
+		*f = showValuesFilter
+	case "intents":
+		*f = showIntentsFilter
+	case "txns":
+		*f = showTxnsFilter
+	default:
+		return errors.Newf("invalid filter type '%s'", v)
+	}
+	return nil
+}
+
 const backgroundEnvVar = "COCKROACH_BACKGROUND_RESTART"
 
 // flagSetForCmd is a replacement for cmd.Flag() that properly merges
@@ -838,6 +878,7 @@ func init() {
 		boolFlag(f, &debugCtx.values, cliflags.Values)
 		boolFlag(f, &debugCtx.sizes, cliflags.Sizes)
 		stringFlag(f, &debugCtx.decodeAsTableDesc, cliflags.DecodeAsTable)
+		varFlag(f, &debugCtx.filterKeys, cliflags.FilterKeys)
 	}
 	{
 		f := debugCheckLogConfigCmd.Flags()

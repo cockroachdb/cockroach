@@ -405,6 +405,7 @@ var debugCtx struct {
 	maxResults        int
 	decodeAsTableDesc string
 	verbose           bool
+	filterKeys        filter
 }
 
 // setDebugContextDefaults set the default values in debugCtx.  This
@@ -422,6 +423,7 @@ func setDebugContextDefaults() {
 	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false
+	debugCtx.filterKeys = showAllFilter
 }
 
 // startCtx captures the command-line arguments for the `start` command.

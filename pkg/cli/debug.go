@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	gohex "encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"math"
 	"os"
 	"path/filepath"
@@ -230,8 +231,43 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	filter := func(kv storage.MVCCKeyValue) bool {
+		return true
+	}
+	switch debugCtx.filterKeys {
+	case showValuesFilter:
+		filter = func(kv storage.MVCCKeyValue) bool {
+			return kv.Key.IsValue()
+		}
+	case showIntentsFilter:
+		filter = func(kv storage.MVCCKeyValue) bool {
+			if kv.Key.IsValue() {
+				return false
+			}
+			var meta enginepb.MVCCMetadata
+			if err = protoutil.Unmarshal(kv.Value, &meta); err != nil {
+				return false
+			}
+			return meta.Txn != nil
+		}
+	case showTxnsFilter:
+		filter = func(kv storage.MVCCKeyValue) bool {
+			if kv.Key.IsValue() {
+				return false
+			}
+			_, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
+			if err != nil {
+				return false
+			}
+			return keys.LocalTransactionSuffix.Equal(suffix)
+		}
+	}
+
 	results := 0
 	iterFunc := func(kv storage.MVCCKeyValue) error {
+		if !filter(kv) {
+			return nil
+		}
 		done, err := printer(kv)
 		if err != nil {
 			return err

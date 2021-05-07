@@ -1030,6 +1030,13 @@ long and not particularly human-readable.`,
 Base64-encoded Descriptor to use as the table when decoding KVs.`,
 	}
 
+	FilterKeys = FlagInfo{
+		Name: "show-keys",
+		Description: `
+Only show certain types of keys: values, intents, txns.
+If omitted all keys types are shown.`,
+	}
+
 	DrainWait = FlagInfo{
 		Name: "drain-wait",
 		Description: `
