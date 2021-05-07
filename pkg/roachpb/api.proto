@@ -1586,6 +1586,14 @@ message AddSSTableRequest {
   // the usual write pipeline (on-disk raft log, WAL, etc).
   // TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
   bool ingest_as_writes = 5;
+
+  // Deadline can be set to a time at or after which the server will refuse to
+  // execute this AddSSTable request, providing a form of delayed delivery
+  // protection: if a caller sets this to a time in the near future, they can
+  // then wait for that time (plus max offset) to have passed at which point
+  // they can be certain that the associated SSTable will not be ingested later
+  // due to a delayed delivery.
+  util.hlc.Timestamp deadline = 6 [(gogoproto.nullable) = false];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
