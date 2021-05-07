@@ -166,11 +166,11 @@ c_deps()
 # aforementioned PRs.
 git_repository(
     name = "rules_foreign_cc",
-    commit = "6127817283221408069d4ae6765f2d8144f09b9f",
+    commit = "a3b0e5eaa723259458f5c85285f58e46ae7f25a2",
     remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 
-load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
+load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
 
