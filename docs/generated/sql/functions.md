@@ -1029,6 +1029,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="timestamp.html">timestamp</a>, end: <a href="timestamp.html">timestamp</a>, step: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestamp values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
 </span></td></tr>
+<tr><td><a name="generate_series"></a><code>generate_series(start: <a href="timestamp.html">timestamptz</a>, end: <a href="timestamp.html">timestamptz</a>, step: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestampTZ values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
+</span></td></tr>
 <tr><td><a name="generate_subscripts"></a><code>generate_subscripts(array: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
 </span></td></tr>
 <tr><td><a name="generate_subscripts"></a><code>generate_subscripts(array: anyelement[], dim: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
