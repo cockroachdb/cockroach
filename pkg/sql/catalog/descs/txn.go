@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -48,6 +49,8 @@ func Txn(
 		nil, // hydratedTables
 		nil, // virtualSchemas
 	)
+	var droppedDescs []catalog.Descriptor
+	var leasedDescriptors []lease.IDVersion
 	for {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			defer descsCol.ReleaseAll(ctx)
@@ -57,18 +60,40 @@ func Txn(
 			if err := f(ctx, txn, descsCol); err != nil {
 				return err
 			}
+
 			if err := descsCol.ValidateUncommittedDescriptors(ctx, txn); err != nil {
 				return err
 			}
+			leasedDescriptors = descsCol.GetDescriptorsWithNewVersion()
 			retryErr, err := CheckTwoVersionInvariant(
 				ctx, db.Clock(), ie, descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {
 				return errTwoVersionInvariantViolated
 			}
+			droppedDescs = descsCol.droppedDescs
 			return err
 		}); errors.Is(err, errTwoVersionInvariantViolated) {
 			continue
 		} else {
+			if err == nil {
+				for _, ld := range leasedDescriptors {
+					skip := false
+					// Detect unpublished ones..
+					for _, dropped := range droppedDescs {
+						if dropped.GetID() == ld.ID {
+							skip = true
+							break
+						}
+					}
+					if skip {
+						continue
+					}
+					_, err := leaseMgr.WaitForOneVersion(ctx, ld.ID, retry.Options{})
+					if err != nil {
+						return err
+					}
+				}
+			}
 			return err
 		}
 	}
