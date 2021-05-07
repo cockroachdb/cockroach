@@ -1,0 +1,179 @@
+run maxlen=100 redactable=false
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0  [-]   hello ‹world› and universe
+
+# Although the entry *seems* to contain redaction markers,
+# it really does not - the redactability bit is not set.
+# in that case, the redaction markers are meant to be interpreted
+# as-is.
+run maxlen=10 redactable=false
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0  [-]   hello ‹w
+I000101 00:00:00.000000 0 :0  [-]  |orld› an
+I000101 00:00:00.000000 0 :0  [-]  |d universe
+
+# Ensure that multi-byte sequences do not get broken
+# up in the middle.
+run maxlen=20 redactable=false
+☃☃☃☃☃☃☃☃☃☃☃☃
+----
+I000101 00:00:00.000000 0 :0  [-]   ☃☃☃☃☃☃☃
+I000101 00:00:00.000000 0 :0  [-]  |☃☃☃☃☃
+
+# Same test offset by 1, in case the previous test
+# accidentally set maxlen to land exactly in-between two runes.
+run maxlen=21 redactable=false
+☃☃☃☃☃☃☃☃☃☃☃
+----
+I000101 00:00:00.000000 0 :0  [-]   ☃☃☃☃☃☃☃
+I000101 00:00:00.000000 0 :0  [-]  |☃☃☃☃
+
+
+
+## Entries with redactability follow. These
+## guarantees that redaction markers do not get
+## unbalanced during splitting.
+
+
+run maxlen=100 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world› and universe
+
+# Split a long redactable string so that its "middle" spans multiple
+# lines.
+run maxlen=14 redactable=true
+hello ‹world and universe, this is a large sentence› to the end.
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹ and universe,›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹ this is a lar›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹ge sentence›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  | to the end.
+
+# Ensure that multi-byte sequences do not get broken
+# up in the middle.
+run maxlen=20 redactable=true
+☃☃☃☃☃☃☃☃☃☃☃☃
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   ☃☃☃☃☃☃☃
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |☃☃☃☃☃
+
+# Same test offset by 1, in case the previous test
+# accidentally set maxlen to land exactly in-between two runes.
+run maxlen=21 redactable=true
+☃☃☃☃☃☃☃☃☃☃☃
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   ☃☃☃☃☃☃☃
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |☃☃☃☃
+
+# Ditto, between redaction markers.
+run maxlen=20 redactable=true
+‹☃☃☃☃☃☃☃☃☃☃›
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   ‹☃☃☃☃☃☃›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹☃☃☃☃›
+
+run maxlen=21 redactable=true
+‹☃☃☃☃☃☃☃☃☃☃›
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   ‹☃☃☃☃☃☃›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹☃☃☃☃›
+
+# First split outside of redaction markers.
+run maxlen=6 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello 
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹wor›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹ld› 
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |and un
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |iverse
+
+# First split exactly at start of opening redaction marker.
+run maxlen=7 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  | and un
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |iverse
+
+# First split inside the UTF-8 sequence of redaction markers.
+run maxlen=8 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  | and uni
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |verse
+
+# Ditto, a bit further.
+run maxlen=9 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹world› 
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |and unive
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |rse
+
+# Split in-between redaction markers.
+run maxlen=10 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹w›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹orld› an
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |d universe
+
+# Ditto.
+run maxlen=13 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹worl›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹d› and univ
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |erse
+
+# Split just before closing redaction marker.
+run maxlen=14 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |‹› and univer
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |se
+
+# Split in the middle of the UTF-8 sequence of the closing redaction marker.
+run maxlen=15 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  | and universe
+
+# Ditto.
+run maxlen=16 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  | and universe
+
+# Split at the end of the closing redaction marker.
+run maxlen=17 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world›
+I000101 00:00:00.000000 0 :0 ⋮ [-]  | and universe
+
+# Split just after the closing redaction marker.
+run maxlen=18 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world› 
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |and universe
+
+# Split after a redaction pair.
+run maxlen=19 redactable=true
+hello ‹world› and universe
+----
+I000101 00:00:00.000000 0 :0 ⋮ [-]   hello ‹world› a
+I000101 00:00:00.000000 0 :0 ⋮ [-]  |nd universe

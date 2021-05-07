@@ -12,6 +12,7 @@ package log
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -300,11 +301,11 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 		buf.Write(cp[ttycolor.Reset])
 		// Structured entries are guaranteed to fit on a single line already.
 		buf.WriteByte('{')
-		buf.maybeMultiLine(commonPrefixLen, '+', entry.payload.message, cp)
+		buf.maybeMultiLine(commonPrefixLen, '+', entry.payload.redactable, entry.payload.message, cp)
 		buf.WriteByte('}')
 	} else {
 		buf.WriteByte(' ')
-		buf.maybeMultiLine(commonPrefixLen, '+', entry.payload.message, cp)
+		buf.maybeMultiLine(commonPrefixLen, '+', entry.payload.redactable, entry.payload.message, cp)
 	}
 	if entry.stacks != nil {
 		buf.WriteByte('\n')
@@ -312,7 +313,7 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 		buf.Write(cp[ttycolor.Green])
 		buf.WriteByte('!')
 		buf.Write(cp[ttycolor.Reset])
-		buf.maybeMultiLine(commonPrefixLen, '!', string(entry.stacks), cp)
+		buf.maybeMultiLine(commonPrefixLen, '!', false /* redactable */, string(entry.stacks), cp)
 	}
 
 	// Ensure there is a final newline.
@@ -332,7 +333,9 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 // documentation above. Keep them in sync if necessary.
 var crdbV2LongLineLen = 16 * 1000
 
-func (buf *buffer) maybeMultiLine(prefixLen int, contMark byte, msg string, cp ttycolor.Profile) {
+func (buf *buffer) maybeMultiLine(
+	prefixLen int, contMark byte, redactable bool, msg string, cp ttycolor.Profile,
+) {
 	var i int
 	for i = len(msg) - 1; i > 0 && msg[i] == '\n'; i-- {
 		msg = msg[:i]
@@ -341,6 +344,7 @@ func (buf *buffer) maybeMultiLine(prefixLen int, contMark byte, msg string, cp t
 	// which we've already copied into buf.
 	k := 0
 	lastLen := 0
+	betweenRedactionMarkers := false
 	for i := 0; i < len(msg); i++ {
 		if msg[i] == '\n' {
 			buf.WriteString(msg[k : i+1])
@@ -354,15 +358,57 @@ func (buf *buffer) maybeMultiLine(prefixLen int, contMark byte, msg string, cp t
 		}
 		if lastLen >= crdbV2LongLineLen {
 			buf.WriteString(msg[k:i])
+			if betweenRedactionMarkers {
+				// We are breaking a long line in-between redaction
+				// markers. Ensures that the opening and closing markers do
+				// not straddle log entries.
+				buf.WriteString(endRedactionMarker)
+			}
 			buf.WriteByte('\n')
 			buf.Write(buf.Bytes()[0:prefixLen])
 			buf.Write(cp[ttycolor.Green])
 			buf.WriteByte('|')
 			buf.Write(cp[ttycolor.Reset])
+			if betweenRedactionMarkers {
+				// See above: if we are splitting in-between redaction
+				// markers, continue the sensitive item on the new line.
+				buf.WriteString(startRedactionMarker)
+			}
 			k = i
 			lastLen = 0
 		}
-		lastLen++
+		// Common case: single-byte runes and redaction marker known to
+		// start with a multi-byte sequence. Take a shortcut.
+		if markersStartWithMultiByteRune && msg[i] < utf8.RuneSelf {
+			lastLen++
+			continue
+		}
+		if redactable {
+			// If we see an opening redaction marker, remember this fact
+			// so that we close/open it properly.
+			if strings.HasPrefix(msg[i:], startRedactionMarker) {
+				betweenRedactionMarkers = true
+				lm := len(startRedactionMarker)
+				i += lm - 1
+				lastLen += lm
+				continue
+			} else if strings.HasPrefix(msg[i:], endRedactionMarker) {
+				betweenRedactionMarkers = false
+				le := len(endRedactionMarker)
+				i += le - 1
+				lastLen += le
+				continue
+			}
+		}
+
+		// Avoid breaking in the middle of UTF-8 sequences.
+		_, width := utf8.DecodeRuneInString(msg[i:])
+		i += width - 1
+		lastLen += width
 	}
 	buf.WriteString(msg[k:])
 }
+
+var startRedactionMarker = string(redact.StartMarker())
+var endRedactionMarker = string(redact.EndMarker())
+var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && endRedactionMarker[0] >= utf8.RuneSelf
