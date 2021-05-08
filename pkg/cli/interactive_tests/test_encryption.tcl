@@ -43,6 +43,11 @@ send "$argv debug encryption-status $storedir\r"
 eexpect ""
 end_test
 
+start_test "Run pebble debug tool."
+send "$argv debug pebble db lsm $storedir --store=$storedir\r"
+eexpect "__level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp\r"
+end_test
+
 start_test "Restart with plaintext."
 send "$argv start-single-node --insecure --store=$storedir --enterprise-encryption=path=$storedir,key=plain,old-key=plain\r"
 eexpect "node starting"
@@ -87,4 +92,12 @@ eexpect "encryption was used on this store before, but no encryption flags speci
 # Try with the wrong key.
 send "$argv start-single-node --insecure --store=$storedir --enterprise-encryption=path=$storedir,key=$keydir/aes-192.key,old-key=plain\r"
 eexpect "store key ID * was not found"
+end_test
+
+start_test "Run pebble debug tool with AES-256."
+send "$argv debug pebble db lsm $storedir --store=$storedir --enterprise-encryption=path=$storedir,key=$keydir/aes-256.key,old-key=$keydir/aes-256.key\r"
+eexpect "__level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp\r"
+# Try running without the encryption flag.
+send "$argv debug pebble db lsm $storedir --store=$storedir\r"
+eexpect "encryption was used on this store before, but no encryption flags specified."
 end_test
