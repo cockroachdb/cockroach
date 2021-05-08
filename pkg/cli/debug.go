@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/tool"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/spf13/cobra"
@@ -695,6 +696,33 @@ var debugPebbleCmd = &cobra.Command{
 	Long: `
 Allows the use of pebble tools, such as to introspect manifests, SSTables, etc.
 `,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		storageConfig := base.StorageConfig{
+			Settings: serverCfg.Settings,
+			Dir:      serverCfg.Stores.Specs[0].Path,
+		}
+
+		if PopulateRocksDBConfigHook != nil {
+			if err := PopulateRocksDBConfigHook(&storageConfig); err != nil {
+				return err
+			}
+		}
+
+		cfg := storage.PebbleConfig{
+			StorageConfig: storageConfig,
+			Opts:          storage.DefaultPebbleOptions(),
+		}
+		cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
+		defer cfg.Opts.Cache.Unref()
+
+		_, _, err := storage.ResolveEncryptedEnvOptions(&cfg)
+		if err != nil {
+			return err
+		}
+
+		pebbleToolFS.swap(cfg.Opts.FS)
+		return nil
+	},
 }
 
 var debugEnvCmd = &cobra.Command{
@@ -1233,6 +1261,7 @@ var DebugCmdsForRocksDB = []*cobra.Command{
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
+	debugPebbleCmd,
 }
 
 // All other debug commands go here.
@@ -1291,6 +1320,22 @@ func (m lockValueFormatter) Format(f fmt.State, c rune) {
 	fmt.Fprint(f, kvserver.SprintIntent(m.value))
 }
 
+// swappableFS is a vfs.FS that can be swapped out at a future time.
+type swappableFS struct {
+	vfs.FS
+}
+
+// swap replaces the FS in a swappableFS.
+func (s swappableFS) swap(fs vfs.FS) {
+	s.FS = fs
+}
+
+// pebbleToolFS is the vfs.FS that the pebble tool should use.
+// It is necessary because an FS must be passed to tool.New before
+// the command line flags are parsed (i.e. before we can determine
+// if we have an encrypted FS).
+var pebbleToolFS = &swappableFS{vfs.Default}
+
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
 
@@ -1315,7 +1360,9 @@ func init() {
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
 	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.EngineComparer))
+		tool.DefaultComparer(storage.EngineComparer),
+		tool.FS(pebbleToolFS),
+	)
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 

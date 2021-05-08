@@ -92,7 +92,7 @@ AES128_CTR:be235...   # AES-128 encryption with store key ID
 	// Add encryption flag to all OSS debug commands that want it.
 	for _, cmd := range cli.DebugCmdsForRocksDB {
 		// storeEncryptionSpecs is in start.go.
-		cli.VarFlag(cmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+		cli.VarFlag(cmd.PersistentFlags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 	}
 
 	cli.PopulateRocksDBConfigHook = fillEncryptionOptionsForStore
