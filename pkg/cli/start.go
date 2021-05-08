@@ -59,6 +59,19 @@ import (
 	"google.golang.org/grpc"
 )
 
+// debugTSImportFile is the path to a file (containing data coming from
+// `./cockroach debug tsdump --format=raw` that will be ingested upon server
+// start. This is an experimental feature and may break clusters it is invoked
+// against. The data will not display properly in the UI unless the source
+// cluster had one store to each node, with the store ID and node ID lining up.
+// Additionally, the local server's stores and nodes must match this pattern as
+// well. The only expected use case for this env var is against local single
+// node throwaway clusters and consequently this variable is only used for
+// the start-single-node command.
+//
+// See #64329 for details.
+var debugTSImportFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_FILE", "")
+
 // startCmd starts a node by initializing the stores and joining
 // the cluster.
 var startCmd = &cobra.Command{
@@ -256,6 +269,11 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 
 	// Make the node auto-init the cluster if not done already.
 	serverCfg.AutoInitializeCluster = true
+
+	// Allow passing in a timeseries file.
+	if debugTSImportFile != "" {
+		serverCfg.TestingKnobs.Server = &server.TestingKnobs{ImportTimeseriesFile: debugTSImportFile}
+	}
 
 	return runStart(cmd, args, true /*startSingleNode*/)
 }
