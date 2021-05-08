@@ -858,6 +858,11 @@ func init() {
 		varFlag(f, &debugCtx.ballastSize, cliflags.Size)
 	}
 	{
+		// TODO(ayang): clean up so dir isn't passed to both pebble and --store
+		f := DebugPebbleCmd.PersistentFlags()
+		varFlag(f, &serverCfg.Stores, cliflags.Store)
+	}
+	{
 		for _, c := range []*cobra.Command{
 			doctorExamineClusterCmd,
 			doctorExamineZipDirCmd,
