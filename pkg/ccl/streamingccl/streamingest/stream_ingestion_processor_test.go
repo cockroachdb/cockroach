@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -390,6 +391,9 @@ func runStreamIngestionProcessor(
 			Settings:    st,
 			DB:          kvDB,
 			JobRegistry: registry,
+			RPCContext: &rpc.Context{
+				ContextOptions: rpc.ContextOptions{Clock: &hlc.Clock{}},
+			},
 		},
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,

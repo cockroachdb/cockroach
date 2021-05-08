@@ -217,7 +217,8 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		iters = append(iters, iter)
 	}
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, cArgs.EvalCtx.ClusterSettings(), func() int64 { return MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) })
+	batcher, err := bulk.MakeSSTBatcher(ctx, db, cArgs.EvalCtx.ClusterSettings(),
+		func() int64 { return MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) }, 0 /* maxOffset */)
 	if err != nil {
 		return nil, err
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -36,12 +37,33 @@ var (
 		"size below which a 'bulk' write will be performed as a normal write instead",
 		400*1<<10, // 400 Kib
 	)
+	addSSTableRequestDeadlineWindow = 10 * time.Second
 )
 
 type sz int64
 
 func (b sz) String() string {
 	return humanizeutil.IBytes(int64(b))
+}
+
+// RequestDeadline wraps the deadline applied to AddSSTable requests.
+type RequestDeadline struct {
+	syncutil.Mutex
+	deadline hlc.Timestamp
+}
+
+// GetDeadline returns the deadline.
+func (r *RequestDeadline) GetDeadline() hlc.Timestamp {
+	r.Lock()
+	defer r.Unlock()
+	return r.deadline
+}
+
+// SetDeadline sets the deadline.
+func (r *RequestDeadline) SetDeadline(deadline hlc.Timestamp) {
+	r.Lock()
+	defer r.Unlock()
+	r.deadline = deadline
 }
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
@@ -80,6 +102,12 @@ type SSTBatcher struct {
 	// produced SSTs.
 	batchTS hlc.Timestamp
 
+	// deadline is applied by the batcher to every AddSSTableRequest.
+	requestDeadline *RequestDeadline
+
+	// maxOffset is the maximum allowed clock offset for the cluster.
+	maxOffset time.Duration
+
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
@@ -114,9 +142,14 @@ type SSTBatcher struct {
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	settings *cluster.Settings,
+	flushBytes func() int64,
+	maxOffset time.Duration,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true,
+		requestDeadline: &RequestDeadline{}, maxOffset: maxOffset}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -124,9 +157,16 @@ func MakeSSTBatcher(
 // MakeStreamSSTBatcher creates a batcher configured to ingest duplicate keys
 // that might be received from a cluster to cluster stream.
 func MakeStreamSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	settings *cluster.Settings,
+	flushBytes func() int64,
+	deadline hlc.Timestamp,
+	maxOffset time.Duration,
 ) (*SSTBatcher, error) {
-	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true}
+	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, ingestAll: true,
+		requestDeadline: &RequestDeadline{}, maxOffset: maxOffset}
+	b.requestDeadline.SetDeadline(deadline)
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -309,8 +349,16 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		b.ms.LastUpdateNanos = timeutil.Now().UnixNano()
 	}
 
+	// If the batcher does not have a deadline to apply to AddSSTable requests
+	// then set one now.
+	deadline := b.requestDeadline.GetDeadline()
+	if deadline.IsEmpty() {
+		deadline = hlc.Timestamp{WallTime: timeutil.Now().Add(addSSTableRequestDeadlineWindow).UnixNano()}
+	}
+
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings, b.batchTS)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms,
+		b.settings, b.batchTS, deadline, b.maxOffset)
 	if err != nil {
 		return err
 	}
@@ -373,7 +421,7 @@ type SSTSender interface {
 		disallowShadowing bool,
 		stats *enginepb.MVCCStats,
 		ingestAsWrites bool,
-		batchTs hlc.Timestamp,
+		batchTs, deadline hlc.Timestamp,
 	) error
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
@@ -396,7 +444,8 @@ func AddSSTable(
 	disallowShadowing bool,
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
-	batchTs hlc.Timestamp,
+	batchTs, deadline hlc.Timestamp,
+	maxOffset time.Duration,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
@@ -418,6 +467,7 @@ func AddSSTable(
 
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowing: disallowShadowing, stats: stats}}
 	const maxAddSSTableRetries = 10
+	var encounteredAmbiguousResultErr bool
 	for len(work) > 0 {
 		item := work[0]
 		work = work[1:]
@@ -442,7 +492,8 @@ func AddSSTable(
 					ingestAsWriteBatch = true
 				}
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch, batchTs)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing,
+					&item.stats, ingestAsWriteBatch, batchTs, deadline)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil
@@ -474,6 +525,7 @@ func AddSSTable(
 				// Retry on AmbiguousResult.
 				if errors.HasType(err, (*roachpb.AmbiguousResultError)(nil)) {
 					log.Warningf(ctx, "addsstable [%s,%s) attempt %d failed: %+v", start, end, i, err)
+					encounteredAmbiguousResultErr = true
 					continue
 				}
 			}
@@ -486,6 +538,15 @@ func AddSSTable(
 		// top level SST which is kept around to iterate over.
 		item.sstBytes = nil
 	}
+
+	// If any of the AddSSTableRequest's returned an AmbiguousResultError, then we
+	// must wait out the deadline applied to all the above requests to protect
+	// against delayed delivery.
+	if encounteredAmbiguousResultErr {
+		sleepUntil := deadline.Add(maxOffset.Nanoseconds(), 0)
+		time.Sleep(timeutil.Until(timeutil.Unix(0, sleepUntil.WallTime)))
+	}
+
 	log.VEventf(ctx, 3, "AddSSTable [%v, %v) added %d files and took %v", start, end, files, timeutil.Since(now))
 	return files, nil
 }
