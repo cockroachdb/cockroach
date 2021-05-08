@@ -98,18 +98,15 @@ func MakeBulkAdder(
 		opts.SplitAndScatterAfter = nil
 	}
 
+	sink, err := MakeBufferingAdderSSTBatcher(ctx, db, opts.SSTSize, opts.SplitAndScatterAfter,
+		rangeCache, settings, opts.SkipDuplicates, opts.DisallowShadowing, opts.BatchTimestamp,
+		opts.Deadline)
+	if err != nil {
+		return nil, err
+	}
 	b := &BufferingAdder{
-		name: opts.Name,
-		sink: SSTBatcher{
-			db:                db,
-			maxSize:           opts.SSTSize,
-			rc:                rangeCache,
-			settings:          settings,
-			skipDuplicates:    opts.SkipDuplicates,
-			disallowShadowing: opts.DisallowShadowing,
-			splitAfter:        opts.SplitAndScatterAfter,
-			batchTS:           opts.BatchTimestamp,
-		},
+		name:                opts.Name,
+		sink:                *sink,
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,
 		maxBufferSize:       opts.MaxBufferSize,

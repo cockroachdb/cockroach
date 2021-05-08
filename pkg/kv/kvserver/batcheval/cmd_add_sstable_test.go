@@ -116,12 +116,14 @@ func runTestDBAddSSTable(
 		// Key is before the range in the request span.
 		if err := db.AddSSTable(
 			ctx, "d", "e", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
+			hlc.Timestamp{},
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
 		if err := db.AddSSTable(
 			ctx, "a", "b", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
+			hlc.Timestamp{},
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
@@ -130,7 +132,8 @@ func runTestDBAddSSTable(
 		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 		defer cancel()
 		if err := db.AddSSTable(
-			ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
+			ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST,
+			hlc.Timestamp{}, hlc.Timestamp{},
 		); err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -174,6 +177,7 @@ func runTestDBAddSSTable(
 
 		if err := db.AddSSTable(
 			ctx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
+			hlc.Timestamp{},
 		); err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -210,7 +214,8 @@ func runTestDBAddSSTable(
 			defer cancel()
 
 			if err := db.AddSSTable(
-				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
+				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST,
+				hlc.Timestamp{}, hlc.Timestamp{},
 			); err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -265,7 +270,8 @@ func runTestDBAddSSTable(
 			defer cancel()
 
 			if err := db.AddSSTable(
-				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsWrites, hlc.Timestamp{},
+				ingestCtx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsWrites,
+				hlc.Timestamp{}, hlc.Timestamp{},
 			); err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -306,6 +312,7 @@ func runTestDBAddSSTable(
 
 		if err := db.AddSSTable(
 			ctx, "b", "c", data, false /* disallowShadowing */, nilStats, ingestAsSST, hlc.Timestamp{},
+			hlc.Timestamp{},
 		); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}

@@ -688,10 +688,10 @@ func (db *DB) AddSSTable(
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
-	batchTs hlc.Timestamp,
+	batchTs, deadline hlc.Timestamp,
 ) error {
 	b := &Batch{Header: roachpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites)
+	b.addSSTable(begin, end, data, disallowShadowing, stats, ingestAsWrites, deadline)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

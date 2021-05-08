@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -54,6 +55,9 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			Settings:    st,
 			DB:          kvDB,
 			JobRegistry: registry,
+			RPCContext: &rpc.Context{
+				ContextOptions: rpc.ContextOptions{Clock: &hlc.Clock{}},
+			},
 		},
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,
