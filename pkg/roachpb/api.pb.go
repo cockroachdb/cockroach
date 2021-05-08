@@ -4486,11 +4486,11 @@ type AddSSTableRequest struct {
 	// TODO(dt): https://github.com/cockroachdb/cockroach/issues/34579#issuecomment-544627193
 	IngestAsWrites bool `protobuf:"varint,5,opt,name=ingest_as_writes,json=ingestAsWrites,proto3" json:"ingest_as_writes,omitempty"`
 	// Deadline can be set to a time at or after which the server will refuse to
-	// execute this AddSSTable request, providing a form of replay protection: if
-	// a caller sets this to a time in the near future, they can then wait for
-	// that time (plus max offset) to have passed at which point they can be
-	// certain that the associated SSTable will not be ingested later due to a
-	// replay.
+	// execute this AddSSTable request, providing a form of delayed delivery
+	// protection: if a caller sets this to a time in the near future, they can
+	// then wait for that time (plus max offset) to have passed at which point
+	// they can be certain that the associated SSTable will not be ingested later
+	// due to a delayed delivery.
 	Deadline hlc.Timestamp `protobuf:"bytes,6,opt,name=deadline,proto3" json:"deadline"`
 }
 
