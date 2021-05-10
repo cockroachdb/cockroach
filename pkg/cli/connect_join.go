@@ -168,8 +168,10 @@ func runConnectJoin(cmd *cobra.Command, args []string) error {
 			// consumed.
 			certBundle, err := requestCertBundle(ctx, stopper, peer, certPool, jt)
 			if err != nil {
-				return errors.Wrapf(err,
-					"failed requesting certBundle from peer %q, token may have been consumed", peer)
+				return errors.WithHint(
+					errors.Wrapf(err,
+						"failed requesting certBundle from peer %q", peer),
+					"Token may have been consumed already.")
 			}
 
 			// Use the bundle to initialize the node.
