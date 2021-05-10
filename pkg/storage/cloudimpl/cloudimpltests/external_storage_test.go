@@ -121,12 +121,12 @@ func storeFromURI(
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
 ) cloud.ExternalStorage {
-	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory, ie, kvDB)
 	if err != nil {
 		t.Fatal(err)
@@ -157,14 +157,14 @@ func testExportStoreWithExternalIOConfig(
 ) {
 	ctx := context.Background()
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI(storeURI, user)
+	conf, err := cloud.ExternalStorageConfFromURI(storeURI, user)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloudimpl.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, kvDB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,7 +576,7 @@ func uploadData(
 	data := randutil.RandBytes(rnd, 16<<20)
 	ctx := context.Background()
 
-	s, err := cloudimpl.MakeExternalStorage(
+	s, err := cloud.MakeExternalStorage(
 		ctx, dest, base.ExternalIODirConfig{}, testSettings,
 		nil, nil, nil)
 	require.NoError(t, err)
@@ -613,7 +613,7 @@ func testAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage) {
 	}()
 
 	ctx := context.Background()
-	s, err := cloudimpl.MakeExternalStorage(
+	s, err := cloud.MakeExternalStorage(
 		ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		nil, nil, nil)
 	require.NoError(t, err)
@@ -644,7 +644,7 @@ func makeUserfile(
 	require.NoError(t, createUserGrantAllPrivieleges(user1, "defaultdb", sqlDB))
 
 	// Create a userfile connection as user1.
-	fileTableSystem, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+	fileTableSystem, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB)
 	require.NoError(t, err)
 

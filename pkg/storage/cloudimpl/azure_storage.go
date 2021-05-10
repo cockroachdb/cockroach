@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func parseAzureURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+func parseAzureURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_azure
 	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
@@ -70,7 +70,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	_ context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
+	_ context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.azure")
 	conf := dest.AzureConfig

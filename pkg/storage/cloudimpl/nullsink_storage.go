@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 )
 
-func parseNullURL(_ ExternalStorageURIContext, _ *url.URL) (roachpb.ExternalStorage, error) {
+func parseNullURL(_ cloud.ExternalStorageURIContext, _ *url.URL) (roachpb.ExternalStorage, error) {
 	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_null}, nil
 }
 
@@ -37,7 +37,7 @@ type nullSinkStorage struct {
 }
 
 func makeNullSinkStorage(
-	_ context.Context, _ ExternalStorageContext, _ roachpb.ExternalStorage,
+	_ context.Context, _ cloud.ExternalStorageContext, _ roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.nullsink")
 	return &nullSinkStorage{}, nil

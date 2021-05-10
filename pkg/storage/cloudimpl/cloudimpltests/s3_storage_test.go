@@ -36,14 +36,14 @@ import (
 func makeS3Storage(
 	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
-	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory, nil, nil)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func TestPutS3(t *testing.T) {
 	ctx := context.Background()
 	user := security.RootUserName()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := cloudimpl.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
+		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
 			blobs.TestEmptyBlobClientFactory, user, nil, nil)
 		require.EqualError(t, err, fmt.Sprintf(
@@ -210,7 +210,7 @@ func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
 	s3, err := cloudimpl.MakeS3Storage(context.Background(),
-		cloudimpl.ExternalStorageContext{
+		cloud.ExternalStorageContext{
 			IOConf: base.ExternalIODirConfig{DisableHTTP: true},
 		},
 		dest,
@@ -224,7 +224,7 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloudimpl.AuthParamImplicit}}
 
 	s3, err := cloudimpl.MakeS3Storage(context.Background(),
-		cloudimpl.ExternalStorageContext{
+		cloud.ExternalStorageContext{
 			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
 			Settings: testSettings,
 		},
@@ -267,14 +267,14 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	ctx := context.Background()
 	user := security.RootUserName()
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI(u.String(), user)
+	conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestAntagonisticS3Read(t *testing.T) {
 	s3file := fmt.Sprintf(
 		"s3://%s/%s?%s=%s", bucket, "antagonistic-read",
 		cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
-	conf, err := cloudimpl.ExternalStorageConfFromURI(s3file, security.RootUserName())
+	conf, err := cloud.ExternalStorageConfFromURI(s3file, security.RootUserName())
 	require.NoError(t, err)
 
 	testAntagonisticRead(t, conf)

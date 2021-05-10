@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,7 +41,7 @@ import (
 )
 
 func checkShowBackupURIPrivileges(ctx context.Context, p sql.PlanHookState, uri string) error {
-	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
+	conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
 	if err != nil {
 		return err
 	}

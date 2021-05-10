@@ -38,7 +38,7 @@ func newTestStorageFactory(t *testing.T) (cloud.ExternalStorageFromURIFactory, f
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error) {
-		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+		conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 		require.NoError(t, err)
 		return cloudimpl.TestingMakeLocalStorage(ctx, conf.LocalFile, settings, clientFactory, base.ExternalIODirConfig{})
 	}

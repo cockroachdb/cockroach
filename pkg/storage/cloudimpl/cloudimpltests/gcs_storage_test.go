@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -36,7 +35,7 @@ func TestAntagonisticGCSRead(t *testing.T) {
 	requireImplicitGoogleCredentials(t)
 
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-	conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, security.RootUserName())
+	conf, err := cloud.ExternalStorageConfFromURI(gsFile, security.RootUserName())
 	require.NoError(t, err)
 
 	testAntagonisticRead(t, conf)
@@ -53,10 +52,10 @@ func TestFileDoesNotExist(t *testing.T) {
 	{
 		// Invalid gsFile.
 		gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
-		conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, user)
+		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
-		s, err := cloudimpl.MakeExternalStorage(
+		s, err := cloud.MakeExternalStorage(
 			context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
 			nil, nil, nil)
 		require.NoError(t, err)
@@ -68,10 +67,10 @@ func TestFileDoesNotExist(t *testing.T) {
 	{
 		// Invalid gsBucket.
 		gsFile := "gs://cockroach-fixtures-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
-		conf, err := cloudimpl.ExternalStorageConfFromURI(gsFile, user)
+		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
-		s, err := cloudimpl.MakeExternalStorage(
+		s, err := cloud.MakeExternalStorage(
 			context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
 			nil, nil)
 		require.NoError(t, err)
@@ -94,14 +93,14 @@ func TestCompressedGCS(t *testing.T) {
 	// gsutil cp -Z /usr/share/dict/words gs://cockroach-fixtures/words-compressed.txt
 	gsFile2 := "gs://cockroach-fixtures/words-compressed.txt?AUTH=implicit"
 
-	conf1, err := cloudimpl.ExternalStorageConfFromURI(gsFile1, user)
+	conf1, err := cloud.ExternalStorageConfFromURI(gsFile1, user)
 	require.NoError(t, err)
-	conf2, err := cloudimpl.ExternalStorageConfFromURI(gsFile2, user)
+	conf2, err := cloud.ExternalStorageConfFromURI(gsFile2, user)
 	require.NoError(t, err)
 
-	s1, err := cloudimpl.MakeExternalStorage(ctx, conf1, base.ExternalIODirConfig{}, testSettings, nil, nil, nil)
+	s1, err := cloud.MakeExternalStorage(ctx, conf1, base.ExternalIODirConfig{}, testSettings, nil, nil, nil)
 	require.NoError(t, err)
-	s2, err := cloudimpl.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings, nil, nil, nil)
+	s2, err := cloud.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings, nil, nil, nil)
 	require.NoError(t, err)
 
 	reader1, err := s1.ReadFile(context.Background(), "")
