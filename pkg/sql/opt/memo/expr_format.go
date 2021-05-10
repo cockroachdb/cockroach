@@ -322,10 +322,13 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	// input columns that correspond to the output columns.
 	case *UnionExpr, *IntersectExpr, *ExceptExpr,
 		*UnionAllExpr, *IntersectAllExpr, *ExceptAllExpr, *LocalityOptimizedSearchExpr:
+		private := e.Private().(*SetPrivate)
 		if !f.HasFlags(ExprFmtHideColumns) {
-			private := e.Private().(*SetPrivate)
 			f.formatColList(e, tp, "left columns:", private.LeftCols)
 			f.formatColList(e, tp, "right columns:", private.RightCols)
+		}
+		if !f.HasFlags(ExprFmtHidePhysProps) && !private.Ordering.Any() {
+			tp.Childf("internal-ordering: %s", private.Ordering)
 		}
 
 	case *ScanExpr, *PlaceholderScanExpr:
@@ -1380,6 +1383,11 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 			fmt.Fprintf(f.Buffer, ",ordering=%s", t.Ordering)
 		}
 
+	case *SetPrivate:
+		if !t.Ordering.Any() {
+			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
+		}
+
 	case *IndexJoinPrivate:
 		tab := f.Memo.metadata.Table(t.Table)
 		fmt.Fprintf(f.Buffer, " %s", tab.Name())
@@ -1453,7 +1461,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *SetPrivate, *types.T, *ExportPrivate:
+	case *ExplainPrivate, *opt.ColSet, *types.T, *ExportPrivate:
 		// Don't show anything, because it's mostly redundant.
 
 	default:

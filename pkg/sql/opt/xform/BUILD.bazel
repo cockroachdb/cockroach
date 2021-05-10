@@ -18,6 +18,7 @@ go_library(
         "scan_funcs.go",
         "scan_index_iter.go",
         "select_funcs.go",
+        "set_funcs.go",
         ":gen-explorer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/xform",
