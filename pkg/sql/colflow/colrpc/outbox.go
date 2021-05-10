@@ -358,16 +358,18 @@ func (o *Outbox) runWithStream(
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
+				log.VEventf(ctx, 1, "Outbox watchdog received err: %+v", err)
 				if err != io.EOF {
 					log.Warningf(ctx, "Outbox calling flowCtxCancel after Recv connection error: %+v", err)
-					flowCtxCancel()
 				}
+				flowCtxCancel()
 				break
 			}
 			switch {
 			case msg.Handshake != nil:
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
+				log.VEventf(ctx, 1, "Outbox received drain request")
 				o.moveToDraining(ctx, "consumer requested draining" /* reason */)
 			}
 		}
