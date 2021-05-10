@@ -178,15 +178,15 @@ func (g *gcsStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
 	object := path.Join(g.prefix, basename)
-	r := &resumingReader{
-		ctx: ctx,
-		opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	r := &cloud.ResumingReader{
+		Ctx: ctx,
+		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
 		},
-		pos: offset,
+		Pos: offset,
 	}
 
-	if err := r.openStream(); err != nil {
+	if err := r.Open(); err != nil {
 		if errors.Is(err, gcs.ErrObjectNotExist) {
 			// Callers of this method sometimes look at the returned error to determine
 			// if file does not exist.  Regardless why we couldn't open the stream
@@ -196,7 +196,7 @@ func (g *gcsStorage) ReadFileAt(
 		}
 		return nil, 0, err
 	}
-	return r.reader, r.reader.(*gcs.Reader).Attrs.Size, nil
+	return r.Reader, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
