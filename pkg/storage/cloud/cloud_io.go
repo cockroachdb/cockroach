@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -109,4 +112,98 @@ func DelayedRetry(ctx context.Context, customDelay func(error) time.Duration, fn
 		}
 		return err
 	})
+}
+
+// isResumableHTTPError returns true if we can
+// resume download after receiving an error 'err'.
+// We can attempt to resume download if the error is ErrUnexpectedEOF.
+// In particular, we should not worry about a case when error is io.EOF.
+// The reason for this is two-fold:
+//   1. The underlying http library converts io.EOF to io.ErrUnexpectedEOF
+//   if the number of bytes transferred is less than the number of
+//   bytes advertised in the Content-Length header.  So if we see
+//   io.ErrUnexpectedEOF we can simply request the next range.
+//   2. If the server did *not* advertise Content-Length, then
+//   there is really nothing we can do: http standard says that
+//   the stream ends when the server terminates connection.
+// In addition, we treat connection reset by peer errors (which can
+// happen if we didn't read from the connection too long due to e.g. load),
+// the same as unexpected eof errors.
+func isResumableHTTPError(err error) bool {
+	return errors.Is(err, io.ErrUnexpectedEOF) ||
+		sysutil.IsErrConnectionReset(err) ||
+		sysutil.IsErrConnectionRefused(err)
+}
+
+// Maximum number of times we can attempt to retry reading from external storage,
+// without making any progress.
+const maxNoProgressReads = 3
+
+// ReaderOpenerAt describes a function that opens s ReadCloser at the passed
+// offset.
+type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
+
+// resumingReader is a reader which retries reads in case of a transient errors.
+type ResumingReader struct {
+	Ctx    context.Context           // Reader context
+	Opener ReaderOpenerAt            // Get additional content
+	Reader io.ReadCloser             // Currently opened reader
+	Pos    int64                     // How much data was received so far
+	ErrFn  func(error) time.Duration // custom error delay picker
+}
+
+var _ io.ReadCloser = &ResumingReader{}
+
+// Open opens the reader at its current offset.
+func (r *ResumingReader) Open() error {
+	return DelayedRetry(r.Ctx, r.ErrFn, func() error {
+		var readErr error
+		r.Reader, readErr = r.Opener(r.Ctx, r.Pos)
+		return readErr
+	})
+}
+
+// Read implments io.Reader.
+func (r *ResumingReader) Read(p []byte) (int, error) {
+	var lastErr error
+	for retries := 0; lastErr == nil; retries++ {
+		if r.Reader == nil {
+			lastErr = r.Open()
+		}
+
+		if lastErr == nil {
+			n, readErr := r.Reader.Read(p)
+			if readErr == nil || readErr == io.EOF {
+				r.Pos += int64(n)
+				return n, readErr
+			}
+			lastErr = readErr
+		}
+
+		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
+			log.Errorf(r.Ctx, "Read err: %s", lastErr)
+		}
+
+		if isResumableHTTPError(lastErr) {
+			if retries >= maxNoProgressReads {
+				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
+			}
+			log.Errorf(r.Ctx, "Retry IO: error %s", lastErr)
+			lastErr = nil
+			r.Reader = nil
+		}
+	}
+
+	// NB: Go says Read() callers need to expect n > 0 *and* non-nil error, and do
+	// something with what was read before the error, but this mostly applies to
+	// err = EOF case which we handle above, so likely OK that we're discarding n
+	// here and pretending it was zero.
+	return 0, lastErr
+}
+
+func (r *ResumingReader) Close() error {
+	if r.Reader != nil {
+		return r.Reader.Close()
+	}
+	return nil
 }
