@@ -551,18 +551,6 @@ func (tc *Collection) GetObjectDesc(
 	); isVirtual || err != nil {
 		return desc, err
 	}
-	// Resolve type aliases which are usually available in the PostgreSQL as an extension
-	// on the public schema.
-	// TODO(ajwerner): Pull this underneath type resolution.
-	if schema == tree.PublicSchema && flags.DesiredObjectKind == tree.TypeObject {
-		if alias, ok := types.PublicSchemaAliases[object]; ok {
-			if flags.RequireMutable {
-				return nil, errors.AssertionFailedf(
-					"cannot use mutable descriptor of aliased type %s.%s", schema, object)
-			}
-			return typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
-		}
-	}
 	// Fall back to physical descriptor access.
 	switch flags.DesiredObjectKind {
 	case tree.TypeObject:
