@@ -59,13 +59,13 @@ func newViperCfgFromFile(cfgFileName string) (*viper.Viper, error) {
 }
 
 // Denied implements the Service interface using viper to query the deny list.
-func (d *viperDenyList) Denied(item string) (*Entry, error) {
+func (d *viperDenyList) Denied(entity DenyEntity) (*Entry, error) {
 	if d.mu.viperCfg == nil {
 		return nil, nil
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.deniedLocked(item)
+	return d.deniedLocked(entity.Item)
 }
 
 func (d *viperDenyList) deniedLocked(item string) (*Entry, error) {
