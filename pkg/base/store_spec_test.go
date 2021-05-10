@@ -225,14 +225,14 @@ func TestJoinListType(t *testing.T) {
 		err  string
 	}{
 		{"", "", "no address specified in --join"},
-		{":", "--join=:", ""},
-		{"a", "--join=a:", ""},
-		{"a,b", "--join=a: --join=b:", ""},
-		{"a,,b", "--join=a: --join=b:", ""},
-		{",a", "--join=a:", ""},
-		{"a,", "--join=a:", ""},
-		{"a:123,b", "--join=a:123 --join=b:", ""},
-		{"[::1]:123,b", "--join=[::1]:123 --join=b:", ""},
+		{":", "--join=:" + base.DefaultPort, ""},
+		{"a", "--join=a:" + base.DefaultPort, ""},
+		{"a,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
+		{"a,,b", "--join=a:" + base.DefaultPort + " --join=b:" + base.DefaultPort, ""},
+		{",a", "--join=a:" + base.DefaultPort, ""},
+		{"a,", "--join=a:" + base.DefaultPort, ""},
+		{"a:123,b", "--join=a:123 --join=b:" + base.DefaultPort, ""},
+		{"[::1]:123,b", "--join=[::1]:123 --join=b:" + base.DefaultPort, ""},
 		{"[::1,b", "", `address \[::1: missing ']' in address`},
 	}
 
