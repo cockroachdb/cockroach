@@ -1,4 +1,3 @@
-# Documentation for logging formats
 
 The supported log output formats are documented below.
 

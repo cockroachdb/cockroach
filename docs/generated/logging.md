@@ -1,31 +1,31 @@
-# Logging levels (severities)
+## Logging levels (severities)
 
-## INFO
+### INFO
 
 The `INFO` severity is used for informational messages that do not
 require action.
 
-## WARNING
+### WARNING
 
 The `WARNING` severity is used for situations which may require special handling,
 where normal operation is expected to resume automatically.
 
-## ERROR
+### ERROR
 
 The `ERROR` severity is used for situations that require special handling,
 where normal operation could not proceed as expected.
 Other operations can continue mostly unaffected.
 
-## FATAL
+### FATAL
 
 The `FATAL` severity is used for situations that require an immedate, hard
 server shutdown. A report is also sent to telemetry if telemetry
 is enabled.
 
 
-# Logging channels
+## Logging channels
 
-## `DEV`
+### `DEV`
 
 The `DEV` channel is used during development to collect log
 details useful for troubleshooting that fall outside the
@@ -39,7 +39,7 @@ centralized logging facilities, because they likely contain
 sensitive operational data.
 See [Configure logs](configure-logs.html#dev-channel).
 
-## `OPS`
+### `OPS`
 
 The `OPS` channel is used to report "point" operational events,
 initiated by user operators or automation:
@@ -53,7 +53,7 @@ initiated by user operators or automation:
 - [Cluster setting](cluster-settings.html) changes
 - [Zone configuration](configure-replication-zones.html) changes
 
-## `HEALTH`
+### `HEALTH`
 
 The `HEALTH` channel is used to report "background" operational
 events, initiated by CockroachDB or reporting on automatic processes:
@@ -64,12 +64,12 @@ events, initiated by CockroachDB or reporting on automatic processes:
 - Range and table leasing events
 - Up- and down-replication, range unavailability
 
-## `STORAGE`
+### `STORAGE`
 
 The `STORAGE` channel is used to report low-level storage
 layer events (RocksDB/Pebble).
 
-## `SESSIONS`
+### `SESSIONS`
 
 The `SESSIONS` channel is used to report client network activity when enabled via
 the `server.auth_log.sql_connections.enabled` and/or
@@ -83,7 +83,7 @@ the `server.auth_log.sql_connections.enabled` and/or
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
-## `SQL_SCHEMA`
+### `SQL_SCHEMA`
 
 The `SQL_SCHEMA` channel is used to report changes to the
 SQL logical schema, excluding privilege and ownership changes
@@ -99,7 +99,7 @@ This includes:
 `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 functional behavior of client apps using stored objects.
 
-## `USER_ADMIN`
+### `USER_ADMIN`
 
 The `USER_ADMIN` channel is used to report changes
 in users and roles, including:
@@ -112,7 +112,7 @@ in users and roles, including:
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
-## `PRIVILEGES`
+### `PRIVILEGES`
 
 The `PRIVILEGES` channel is used to report data
 authorization changes, including:
@@ -123,7 +123,7 @@ authorization changes, including:
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
-## `SENSITIVE_ACCESS`
+### `SENSITIVE_ACCESS`
 
 The `SENSITIVE_ACCESS` channel is used to report SQL
 data access to sensitive data:
@@ -136,7 +136,7 @@ data access to sensitive data:
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
-## `SQL_EXEC`
+### `SQL_EXEC`
 
 The `SQL_EXEC` channel is used to report SQL execution on
 behalf of client connections:
@@ -145,7 +145,7 @@ behalf of client connections:
   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
 - uncaught Go panic errors during the execution of a SQL statement.
 
-## `SQL_PERF`
+### `SQL_PERF`
 
 The `SQL_PERF` channel is used to report SQL executions
 that are marked as "out of the ordinary"
@@ -157,7 +157,7 @@ However, we keep both channels separate for backward compatibility
 with versions prior to v21.1, where the corresponding events
 were redirected to separate files.
 
-## `SQL_INTERNAL_PERF`
+### `SQL_INTERNAL_PERF`
 
 The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 helping developers of CockroachDB itself. It exists as a separate
