@@ -19,13 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -37,6 +36,7 @@ import (
 // amount of data in there.
 func TestServerWithTimeseriesImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	path := filepath.Join(t.TempDir(), "dump.raw")
@@ -64,9 +64,9 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	cc, err := srv.Servers[0].RPCContext().GRPCUnvalidatedDial(srv.Servers[0].RPCAddr()).Connect(ctx)
 	require.NoError(t, err)
-	// This would time out if we didn't supply a dump. Just the fact that
-	// it returns proves that we ingested at least some time series (or
-	// that we failed to disable time series).
+	// This would fail if we didn't supply a dump. Just the fact that it returns
+	// successfully proves that we ingested at least some time series (or that we
+	// failed to disable time series).
 	bytesDumpedAgain := dumpTSNonempty(t, cc, filepath.Join(t.TempDir(), "dump2.raw"))
 	// We get the same number of bytes back, which serves as proximate proof
 	// that we ingested the dump properly.
@@ -74,24 +74,15 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 }
 
 func dumpTSNonempty(t *testing.T, cc *grpc.ClientConn, dest string) (bytes int64) {
-	// NB: at the time of writing, this never has to retry since we're
-	// persisting first batch of timeseries quickly, but better safe than
-	// sorry.
-	testutils.SucceedsSoon(t, func() error {
-		c, err := tspb.NewTimeSeriesClient(cc).DumpRaw(context.Background(), &tspb.DumpRequest{})
-		require.NoError(t, err)
+	c, err := tspb.NewTimeSeriesClient(cc).DumpRaw(context.Background(), &tspb.DumpRequest{})
+	require.NoError(t, err)
 
-		f, err := os.Create(dest)
-		require.NoError(t, err)
-		require.NoError(t, ts.DumpRawTo(c, f))
-		require.NoError(t, f.Close())
-		info, err := os.Stat(dest)
-		require.NoError(t, err)
-		if info.Size() == 0 {
-			return errors.New("no data dumped")
-		}
-		bytes = info.Size()
-		return nil
-	})
-	return bytes
+	f, err := os.Create(dest)
+	require.NoError(t, err)
+	require.NoError(t, ts.DumpRawTo(c, f))
+	require.NoError(t, f.Close())
+	info, err := os.Stat(dest)
+	require.NoError(t, err)
+	require.NotZero(t, info.Size())
+	return info.Size()
 }
