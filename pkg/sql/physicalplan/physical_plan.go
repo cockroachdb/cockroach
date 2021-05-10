@@ -522,10 +522,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 				}
 			}
 			if found == -1 {
-				// We have a column that is not in the projection but will be necessary
-				// later when the streams are merged; add it.
-				found = len(columns)
-				columns = append(columns, c.ColIdx)
+				panic(errors.AssertionFailedf("unexpectedly column %d isn't found in the columns %v", c.ColIdx, columns))
 			}
 			newOrdering[i].ColIdx = uint32(found)
 			newOrdering[i].Direction = c.Direction
@@ -661,25 +658,7 @@ func (p *PhysicalPlan) AddRendering(
 				}
 			}
 			if found == -1 {
-				// We have a column that is not being rendered but will be necessary
-				// later when the streams are merged; add it.
-
-				// The new expression refers to column post.OutputColumns[c.ColIdx].
-				internalColIdx := c.ColIdx
-				if post.Projection {
-					internalColIdx = post.OutputColumns[internalColIdx]
-				}
-				newExpr, err := MakeExpression(tree.NewTypedOrdinalReference(
-					int(internalColIdx),
-					p.GetResultTypes()[c.ColIdx]),
-					exprCtx, nil /* indexVarMap */)
-				if err != nil {
-					return err
-				}
-
-				found = len(post.RenderExprs)
-				post.RenderExprs = append(post.RenderExprs, newExpr)
-				outTypes = append(outTypes, p.GetResultTypes()[c.ColIdx])
+				return errors.AssertionFailedf("unexpectedly column %d isn't found in the exprs %v", c.ColIdx, exprs)
 			}
 			newOrdering[i].ColIdx = uint32(found)
 			newOrdering[i].Direction = c.Direction
