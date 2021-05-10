@@ -11,7 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { cloneDeep, noop, extend } from "lodash";
-import { data, routeProps } from "./transactions.fixture";
+import { data, nodeRegions, routeProps } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
 import { RequestError } from "../util";
@@ -29,6 +29,7 @@ storiesOf("Transactions Page", module)
     <TransactionsPage
       {...routeProps}
       data={data}
+      nodeRegions={nodeRegions}
       refreshData={noop}
       resetSQLStats={noop}
     />
@@ -38,6 +39,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         data={getEmptyData()}
+        nodeRegions={nodeRegions}
         refreshData={noop}
         resetSQLStats={noop}
       />
@@ -54,6 +56,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         data={getEmptyData()}
+        nodeRegions={nodeRegions}
         refreshData={noop}
         history={history}
         resetSQLStats={noop}
@@ -65,6 +68,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         data={undefined}
+        nodeRegions={nodeRegions}
         refreshData={noop}
         resetSQLStats={noop}
       />
@@ -75,6 +79,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         data={undefined}
+        nodeRegions={nodeRegions}
         error={
           new RequestError(
             "Forbidden",

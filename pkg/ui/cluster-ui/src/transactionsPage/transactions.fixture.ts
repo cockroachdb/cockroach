@@ -33,6 +33,13 @@ export const routeProps = {
   },
 };
 
+export const nodeRegions: { [nodeId: string]: string } = {
+  "1": "gcp-us-east1",
+  "2": "gcp-us-east1",
+  "3": "gcp-us-west1",
+  "4": "gcp-europe-west1",
+};
+
 export const data: cockroach.server.serverpb.IStatementsResponse = {
   statements: [
     {
