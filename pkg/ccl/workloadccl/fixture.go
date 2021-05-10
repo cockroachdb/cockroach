@@ -72,9 +72,12 @@ func (s FixtureConfig) objectPathToURI(folder string) string {
 		Host:   s.GCSBucket,
 		Path:   folder,
 	}
+	q := url.Values{}
 	if s.BillingProject != `` {
-		u.RawQuery = `GOOGLE_BILLING_PROJECT=` + url.QueryEscape(s.BillingProject)
+		q.Add("GOOGLE_BILLING_PROJECT", s.BillingProject)
 	}
+	q.Add("AUTH", "implicit")
+	u.RawQuery = q.Encode()
 	return u.String()
 }
 
