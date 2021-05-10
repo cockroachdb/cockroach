@@ -46,6 +46,7 @@ const transactionDetailsStylesCx = classNames.bind(transactionDetailsStyles);
 
 interface TransactionDetailsProps {
   statements?: Statement[];
+  nodeRegions: { [nodeId: string]: string };
   transactionStats?: TransactionStats;
   lastReset?: string | Date;
   handleDetails: (
