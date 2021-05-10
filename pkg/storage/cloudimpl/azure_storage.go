@@ -172,7 +172,7 @@ func (s *azureStorage) ReadFileAt(
 func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	pattern := s.prefix
 	if patternSuffix != "" {
-		if containsGlob(s.prefix) {
+		if cloud.ContainsGlob(s.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -180,7 +180,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
 		azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Prefix: getPrefixBeforeWildcard(s.prefix)},
+		azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to list files for specified blob")
