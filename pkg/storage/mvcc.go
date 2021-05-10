@@ -798,7 +798,7 @@ func mvccGet(
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer pebbleMVCCScannerPool.Put(mvccScanner)
+	defer mvccScanner.release()
 
 	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
 	// specify an empty key for the end key which will ensure we don't retrieve a
@@ -2381,7 +2381,7 @@ func mvccScanToBytes(
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer pebbleMVCCScannerPool.Put(mvccScanner)
+	defer mvccScanner.release()
 
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
