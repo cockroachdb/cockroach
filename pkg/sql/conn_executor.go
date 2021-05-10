@@ -2328,7 +2328,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	}
 
 	advInfo := ex.state.consumeAdvanceInfo()
-
 	if advInfo.code == rewind {
 		ex.extraTxnState.autoRetryCounter++
 	}
@@ -2347,9 +2346,12 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	// Handle transaction events which cause updates to txnState.
 	switch advInfo.txnEvent {
 	case noEvent:
+		_, nextStateIsAborted := ex.machine.CurState().(stateAborted)
 		// Update the deadline on the transaction based on the collections,
-		// if the transaction is currently open.
-		if txnIsOpen {
+		// if the transaction is currently open. If the next state is aborted
+		// then the collection will get reset once we retry or rollback the
+		// transaction, and no deadline needs to be picked up here.
+		if txnIsOpen && !nextStateIsAborted {
 			err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ex.Ctx(), ex.state.mu.txn)
 			if err != nil {
 				return advanceInfo{}, err
