@@ -331,6 +331,9 @@ const (
 	// include the type of lease acquisition event that resulted in that replica's
 	// current lease.
 	AcquisitionTypeInLeaseHistory
+	// SerializeViewUDTs serializes user defined types used in views to allow
+	// for renaming of the referenced types.
+	SerializeViewUDTs
 
 	// Step (1): Add new versions here.
 )
@@ -553,6 +556,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 6},
 	},
 
+	{
+		Key:     SerializeViewUDTs,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
+	},
 	// Step (2): Add new versions here.
 })
 
