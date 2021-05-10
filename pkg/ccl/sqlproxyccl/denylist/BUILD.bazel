@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "denylist",
     srcs = [
+        "file.go",
         "local_file.go",
         "mocks_generated.go",
         "service.go",
@@ -17,15 +18,21 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_mock//gomock",
         "@com_github_spf13_viper//:viper",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
 go_test(
     name = "denylist_test",
-    srcs = ["local_file_test.go"],
+    srcs = [
+        "file_test.go",
+        "local_file_test.go",
+    ],
     embed = [":denylist"],
     deps = [
         "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
