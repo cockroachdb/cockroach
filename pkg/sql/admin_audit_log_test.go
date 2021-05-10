@@ -70,7 +70,7 @@ func TestAdminAuditLogBasic(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.admin_audit.enabled = true;`)
 	db.Exec(t, `SELECT 1;`)
 
-	var selectAdminRe = regexp.MustCompile(`"EventType":"admin_query","Statement":"‹SELECT 1›","User":"‹root›"`)
+	var selectAdminRe = regexp.MustCompile(`"EventType":"admin_query","Statement":"‹SELECT 1›","Tag":"SELECT","User":"‹root›"`)
 
 	log.Flush()
 
