@@ -1091,7 +1091,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 		copy(fCopy.Exprs, oldExprs)
 
 		// Add implicit column to the input expressions.
-		fCopy.Exprs = append(fCopy.Exprs, fCopy.OrderBy[0].Expr.(tree.TypedExpr))
+		fCopy.Exprs = append(fCopy.Exprs, s.resolveType(fCopy.OrderBy[0].Expr, types.Any))
 	}
 
 	expr := fCopy.Walk(s)
