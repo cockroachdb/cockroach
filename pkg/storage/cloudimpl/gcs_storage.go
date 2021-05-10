@@ -155,7 +155,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 			return err
 		}
 		// Set the timeout within the retry loop.
-		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
+		return contextutil.RunWithTimeout(ctx, "put gcs file", cloud.Timeout.Get(&g.settings.SV),
 			func(ctx context.Context) error {
 				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 				if _, err := io.Copy(w, content); err != nil {
@@ -250,7 +250,7 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
-		timeoutSetting.Get(&g.settings.SV),
+		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
 		})
@@ -259,7 +259,7 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var r *gcs.Reader
 	if err := contextutil.RunWithTimeout(ctx, "size gcs file",
-		timeoutSetting.Get(&g.settings.SV),
+		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			r, err = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)

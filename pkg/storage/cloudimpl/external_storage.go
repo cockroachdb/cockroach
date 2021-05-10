@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -81,15 +80,6 @@ const (
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
 	CredentialsParam = "CREDENTIALS"
-
-	cloudstoragePrefix = "cloudstorage"
-
-	// CloudstorageHTTPCASetting is the setting whose value is the custom root CA
-	// (appended to system's default CAs) for verifying certificates when
-	// interacting with HTTPS storage.
-	CloudstorageHTTPCASetting = cloudstoragePrefix + ".http.custom_ca"
-
-	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
 
 var redactedQueryParams = map[string]struct{}{}
@@ -268,19 +258,6 @@ func MakeExternalStorage(
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
-
-var (
-	httpCustomCA = settings.RegisterStringSetting(
-		CloudstorageHTTPCASetting,
-		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
-		"",
-	).WithPublic()
-	timeoutSetting = settings.RegisterDurationSetting(
-		cloudStorageTimeout,
-		"the timeout for import/export storage operations",
-		10*time.Minute,
-	).WithPublic()
-)
 
 // delayedRetry runs fn and re-runs it a limited number of times if it
 // fails. It knows about specific kinds of errors that need longer retry

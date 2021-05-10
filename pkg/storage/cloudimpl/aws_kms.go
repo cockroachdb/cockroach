@@ -95,7 +95,7 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 			// situation is.
 			region = "default-region"
 		}
-		client, err := makeHTTPClient(env.ClusterSettings())
+		client, err := cloud.MakeHTTPClient(env.ClusterSettings())
 		if err != nil {
 			return nil, err
 		}

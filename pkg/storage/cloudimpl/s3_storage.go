@@ -125,7 +125,7 @@ func MakeS3Storage(
 		if conf.Region == "" {
 			conf.Region = "default-region"
 		}
-		client, err := makeHTTPClient(args.Settings)
+		client, err := cloud.MakeHTTPClient(args.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +243,7 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 		return err
 	}
 	err = contextutil.RunWithTimeout(ctx, "put s3 object",
-		timeoutSetting.Get(&s.settings.SV),
+		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			putObjectInput := s3.PutObjectInput{
 				Bucket: s.bucket,
@@ -404,7 +404,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 		return err
 	}
 	return contextutil.RunWithTimeout(ctx, "delete s3 object",
-		timeoutSetting.Get(&s.settings.SV),
+		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			_, err := client.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 				Bucket: s.bucket,
@@ -421,7 +421,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 	}
 	var out *s3.HeadObjectOutput
 	err = contextutil.RunWithTimeout(ctx, "get s3 object header",
-		timeoutSetting.Get(&s.settings.SV),
+		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			out, err = client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
