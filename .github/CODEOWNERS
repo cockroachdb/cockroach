@@ -98,7 +98,7 @@
 /pkg/cmd/docgen/             @cockroachdb/docs
 /pkg/cmd/fuzz/               @cockroachdb/test-eng
 /pkg/cmd/generate-binary/    @cockroachdb/sql-experience
-/pkg/cmd/generate-postgres-metadata-tables/ @cockroachdb/sql-experience
+/pkg/cmd/generate-metadata-tables/ @cockroachdb/sql-experience
 /pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
 /pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/geospatial

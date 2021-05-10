@@ -62,9 +62,7 @@ import (
 
 // Test data files.
 const (
-	catalogDump     = "%s_tables.json"              // PostgreSQL pg_catalog schema
-	expectedDiffs   = "%s_test_expected_diffs.json" // Contains expected difference between postgres and cockroach
-	testdata        = "testdata"                    // testdata directory
+	testdata        = "testdata" // testdata directory
 	catalogPkg      = "catalog"
 	catconstantsPkg = "catconstants"
 	constantsGo     = "constants.go"
@@ -76,6 +74,7 @@ const (
 var (
 	rewriteFlag = flag.Bool("rewrite-diffs", false, "This will re-create the expected diffs file")
 	catalogName = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
+	rdbmsName   = flag.String("rdbms", Postgres, "Used to determine which RDBMS to compare, default: postgres")
 )
 
 // strings used on constants creations and text manipulation.
@@ -140,34 +139,26 @@ var mappedPopulateFunctions = map[string]string{
 	"addPGTypeRow": "PGCatalogType",
 }
 
-// summary will keep accountability for any unexpected difference and report it in the log.
-type summary struct {
-	missingTables        int
-	missingColumns       int
-	mismatchDatatypesOid int
-}
-
-// report will log the amount of diffs for missing table and columns and data type mismatches.
-func (sum *summary) report(t *testing.T) {
-	if sum.missingTables != 0 {
-		errorf(t, "Missing %d tables", sum.missingTables)
-	}
-
-	if sum.missingColumns != 0 {
-		errorf(t, "Missing %d columns", sum.missingColumns)
-	}
-
-	if sum.mismatchDatatypesOid != 0 {
-		errorf(t, "Column datatype mismatches: %d", sum.mismatchDatatypesOid)
-	}
+// expectedDiffsFilename returns where to find the diffs that will not cause
+// diff tool tests to fail
+func expectedDiffsFilename() string {
+	return filepath.Join(
+		testdata,
+		fmt.Sprintf("%s_test_expected_diffs_on_%s.json", *rdbmsName, *catalogName),
+	)
 }
 
 // loadTestData retrieves the pg_catalog from the dumpfile generated from Postgres.
-func loadTestData(t testing.TB) PGMetadataTables {
+func loadTestData(t testing.TB, testdataFile string, isDiffFile bool) PGMetadataFile {
 	var pgCatalogFile PGMetadataFile
-	testdataFile := filepath.Join(testdata, fmt.Sprintf(catalogDump, *catalogName))
+
 	f, err := os.Open(testdataFile)
 	if err != nil {
+		if isDiffFile && oserror.IsNotExist(err) {
+			// File does not exists it means diffs are not expected.
+			return pgCatalogFile
+		}
+
 		t.Fatal(err)
 	}
 
@@ -178,10 +169,12 @@ func loadTestData(t testing.TB) PGMetadataTables {
 	}
 
 	if err = json.Unmarshal(bytes, &pgCatalogFile); err != nil {
-		t.Fatal(err)
+		if !isDiffFile {
+			t.Fatal(err)
+		}
 	}
 
-	return pgCatalogFile.PGMetadata
+	return pgCatalogFile
 }
 
 // loadCockroachPgCatalog retrieves pg_catalog schema from cockroach db.
@@ -205,40 +198,6 @@ func loadCockroachPgCatalog(t testing.TB) PGMetadataTables {
 	return crdbTables
 }
 
-// loadExpectedDiffs get all differences that will be skipped by the this test.
-func loadExpectedDiffs(t *testing.T) (diffs PGMetadataTables) {
-	diffs = PGMetadataTables{}
-
-	if *rewriteFlag {
-		// For rewrite we want this to be empty and get populated.
-		return
-	}
-
-	diffFile := filepath.Join(testdata, fmt.Sprintf(expectedDiffs, *catalogName))
-	if _, err := os.Stat(diffFile); err != nil {
-		if oserror.IsNotExist(err) {
-			// File does not exists it means diffs are not expected.
-			return
-		}
-
-		t.Fatal(err)
-	}
-	f, err := os.Open(diffFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dClose(f)
-	bytes, err := ioutil.ReadAll(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = json.Unmarshal(bytes, &diffs); err != nil {
-		t.Fatal(err)
-	}
-
-	return
-}
-
 // errorf wraps *testing.T Errorf to report fails only when the test doesn't run in rewrite mode.
 func errorf(t *testing.T, format string, args ...interface{}) {
 	if !*rewriteFlag {
@@ -246,12 +205,12 @@ func errorf(t *testing.T, format string, args ...interface{}) {
 	}
 }
 
-func rewriteDiffs(t *testing.T, diffs PGMetadataTables, diffsFile string) {
+func rewriteDiffs(t *testing.T, diffs PGMetadataTables, source PGMetadataFile, sum Summary) {
 	if !*rewriteFlag {
 		return
 	}
 
-	if err := diffs.rewriteDiffs(diffsFile); err != nil {
+	if err := diffs.rewriteDiffs(source, sum, expectedDiffsFilename()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1280,40 +1239,47 @@ func TestPGCatalog(t *testing.T) {
 		}
 	}()
 
-	if *addMissingTables && *catalogName != "pg_catalog" {
-		t.Fatal("--add-missing-tables only work for pg_catalog")
+	if *addMissingTables && (*rdbmsName != Postgres || *catalogName != "pg_catalog") {
+		t.Fatal("--add-missing-tables only work for pg_catalog on postgres rdbms")
 	}
 
-	pgTables := loadTestData(t)
+	var sum Summary
+	source := loadTestData(t, TablesMetadataFilename(testdata, *rdbmsName, *catalogName), false)
+	diffFile := loadTestData(t, expectedDiffsFilename(), true)
+	pgTables := source.PGMetadata
+	diffs := diffFile.PGMetadata
 	crdbTables := loadCockroachPgCatalog(t)
-	diffs := loadExpectedDiffs(t)
-	sum := &summary{}
+	if diffs == nil {
+		diffs = make(PGMetadataTables)
+	}
 
 	for pgTable, pgColumns := range pgTables {
+		sum.TotalTables++
 		t.Run(fmt.Sprintf("Table=%s", pgTable), func(t *testing.T) {
 			crdbColumns, ok := crdbTables[pgTable]
 			if !ok {
 				if !diffs.isExpectedMissingTable(pgTable) {
 					errorf(t, "Missing table `%s`", pgTable)
 					diffs.addMissingTable(pgTable)
-					sum.missingTables++
+					sum.MissingTables++
 				}
 				return
 			}
 
 			for expColumnName, expColumn := range pgColumns {
+				sum.TotalColumns++
 				gotColumn, ok := crdbColumns[expColumnName]
 				if !ok {
 					if !diffs.isExpectedMissingColumn(pgTable, expColumnName) {
 						errorf(t, "Missing column `%s`", expColumnName)
 						diffs.addMissingColumn(pgTable, expColumnName)
-						sum.missingColumns++
+						sum.MissingColumns++
 					}
 					continue
 				}
 
 				if diffs.isDiffOid(pgTable, expColumnName, expColumn, gotColumn) {
-					sum.mismatchDatatypesOid++
+					sum.DatatypeMismatches++
 					errorf(t, "Column `%s` expected data type oid `%d` (%s) but found `%d` (%s)",
 						expColumnName,
 						expColumn.Oid,
@@ -1327,9 +1293,8 @@ func TestPGCatalog(t *testing.T) {
 		})
 	}
 
-	sum.report(t)
 	diffs.removeImplementedColumns(crdbTables)
-	rewriteDiffs(t, diffs, filepath.Join(testdata, fmt.Sprintf(expectedDiffs, *catalogName)))
+	rewriteDiffs(t, diffs, source, sum)
 
 	if *addMissingTables {
 		validateUndefinedTablesField(t)

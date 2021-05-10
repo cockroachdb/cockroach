@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,24 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// This connects to Postgresql and retrieves all the information about
-// the tables in the pg_catalog schema. The result is printed into a
-// comma separated lines which are meant to be store at a CSV and used
-// to test that cockroachdb pg_catalog is up to date.
-//
-// This accepts the following arguments:
-//
-// -user: to change default pg username of `postgres`
-// -addr: to change default pg address of `localhost:5432`
-//
-// Output of this file should generate:
-// pkg/sql/testdata/pg_catalog_tables
-package main
+// postgres.go has the implementations of DBMetadataConnection to
+// connect and retrieve schemas from postgres rdbms.
+
+package rdbms
 
 import (
-	"flag"
 	"fmt"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -34,13 +23,6 @@ import (
 )
 
 const getServerVersion = `SELECT current_setting('server_version');`
-
-// Flags or command line arguments.
-var (
-	postgresAddr   = flag.String("addr", "localhost:5432", "Postgres server address")
-	postgresUser   = flag.String("user", "postgres", "Postgres user")
-	postgresSchema = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
-)
 
 // Map for unimplemented types.
 // For reference see:
@@ -57,21 +39,34 @@ var unimplementedEquivalencies = map[oid.Oid]oid.Oid{
 	// Other types
 	oid.T__aclitem:     oid.T__text,
 	oid.T_pg_node_tree: oid.T_text,
-	oid.T_xid:          oid.T_oid,
+	oid.T_xid:          oid.T_int8,
 	oid.T_pg_lsn:       oid.T_text,
 }
 
-func main() {
-	flag.Parse()
-	db := connect()
-	defer closeDB(db)
-	pgCatalogFile := &sql.PGMetadataFile{
-		PGVersion:  getPGVersion(db),
-		PGMetadata: sql.PGMetadataTables{},
+type pgMetadataConnection struct {
+	*pgx.Conn
+	catalog string
+}
+
+func postgresConnect(address, user, catalog string) (DBMetadataConnection, error) {
+	conf, err := pgx.ParseURI(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", user, address))
+	if err != nil {
+		return nil, err
+	}
+	conn, err := pgx.Connect(conf)
+	if err != nil {
+		return nil, err
 	}
 
-	rows := describePgCatalog(db)
-	defer rows.Close()
+	return pgMetadataConnection{conn, catalog}, nil
+}
+
+func (conn pgMetadataConnection) DescribeSchema() (ColumnMetadataList, error) {
+	var metadata []*columnMetadata
+	rows, err := conn.Query(sql.GetPGMetadataSQL, conn.catalog)
+	if err != nil {
+		return nil, err
+	}
 	for rows.Next() {
 		var table, column, dataTypeName string
 		var dataTypeOid uint32
@@ -82,49 +77,20 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		pgCatalogFile.PGMetadata.AddColumnMetadata(table, column, mappedTypeName, mappedTypeOid)
-		columnType := pgCatalogFile.PGMetadata[table][column]
-		if !columnType.IsImplemented() {
-			pgCatalogFile.AddUnimplementedType(columnType)
-		}
+		row := new(columnMetadata)
+		row.tableName = table
+		row.columnName = column
+		row.dataTypeName = mappedTypeName
+		row.dataTypeOid = mappedTypeOid
+		metadata = append(metadata, row)
 	}
-
-	pgCatalogFile.Save(os.Stdout)
+	return metadata, nil
 }
 
-func describePgCatalog(conn *pgx.Conn) *pgx.Rows {
-	rows, err := conn.Query(sql.GetPGMetadataSQL, *postgresSchema)
-	if err != nil {
-		panic(err)
-	}
-	return rows
-}
-
-func getPGVersion(conn *pgx.Conn) (pgVersion string) {
+func (conn pgMetadataConnection) DatabaseVersion() (pgVersion string, err error) {
 	row := conn.QueryRow(getServerVersion)
-	if err := row.Scan(&pgVersion); err != nil {
-		panic(err)
-	}
-	return
-}
-
-func connect() *pgx.Conn {
-	conf, err := pgx.ParseURI(fmt.Sprintf("postgresql://%s@%s?sslmode=disable", *postgresUser, *postgresAddr))
-	if err != nil {
-		panic(err)
-	}
-	conn, err := pgx.Connect(conf)
-	if err != nil {
-		panic(err)
-	}
-
-	return conn
-}
-
-func closeDB(conn *pgx.Conn) {
-	if err := conn.Close(); err != nil {
-		panic(err)
-	}
+	err = row.Scan(&pgVersion)
+	return pgVersion, err
 }
 
 // getMappedType checks if the postgres type can be implemented as other crdb
