@@ -159,6 +159,14 @@ var pebbleMVCCScannerPool = sync.Pool{
 	},
 }
 
+func putMVCCScannerInPool(p *pebbleMVCCScanner) {
+	// Discard most memory references before placing in pool.
+	*p = pebbleMVCCScanner{
+		keyBuf: p.keyBuf,
+	}
+	pebbleMVCCScannerPool.Put(p)
+}
+
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit hlc.Timestamp) {
