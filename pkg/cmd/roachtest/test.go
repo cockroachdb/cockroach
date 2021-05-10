@@ -161,6 +161,13 @@ type test struct {
 		status map[int64]testStatus
 		output []byte
 	}
+	// Map from version to path to the cockroach binary to be used when
+	// mixed-version test wants a binary for that binary. If a particular version
+	// <ver> is found in this map, it is used instead of the binary coming from
+	// `roachprod stage release <ver>`. See the --version-binary-override flags.
+	//
+	// Version strings look like "20.1.4".
+	versionsBinaryOverride map[string]string
 }
 
 func (t *test) Helper() {}
