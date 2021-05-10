@@ -119,7 +119,7 @@ func (s *azureStorage) Settings() *cluster.Settings {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	err := contextutil.RunWithTimeout(ctx, "write azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "write azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			_, err := blob.Upload(
@@ -214,7 +214,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
-	err := contextutil.RunWithTimeout(ctx, "delete azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
@@ -225,7 +225,7 @@ func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var props *azblob.BlobGetPropertiesResponse
-	err := contextutil.RunWithTimeout(ctx, "size azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			var err error
