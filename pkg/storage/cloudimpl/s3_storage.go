@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -204,13 +205,26 @@ func MakeS3Storage(
 	}, nil
 }
 
+func s3ErrDelay(err error) time.Duration {
+	var s3err s3.RequestFailure
+	if errors.As(err, &s3err) {
+		// A 503 error could mean we need to reduce our request rate. Impose an
+		// arbitrary slowdown in that case.
+		// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+		if s3err.StatusCode() == 503 {
+			return time.Second * 5
+		}
+	}
+	return 0
+}
+
 func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
 	sess, err := session.NewSessionWithOptions(s.opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}
 	if s.conf.Region == "" {
-		if err := delayedRetry(ctx, func() error {
+		if err := cloud.DelayedRetry(ctx, s3ErrDelay, func() error {
 			var err error
 			s.conf.Region, err = s3manager.GetBucketRegion(ctx, sess, s.conf.Bucket, "us-east-1")
 			return err
@@ -339,6 +353,7 @@ func (s *s3Storage) ReadFileAt(
 		},
 		reader: stream.Body,
 		pos:    offset,
+		errFn:  s3ErrDelay,
 	}, size, nil
 }
 

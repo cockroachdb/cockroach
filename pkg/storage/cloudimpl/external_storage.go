@@ -15,10 +15,8 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
@@ -259,40 +256,6 @@ func MakeExternalStorage(
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
 
-// delayedRetry runs fn and re-runs it a limited number of times if it
-// fails. It knows about specific kinds of errors that need longer retry
-// delays than normal.
-func delayedRetry(ctx context.Context, fn func() error) error {
-	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-		var s3err s3.RequestFailure
-		if errors.As(err, &s3err) {
-			// A 503 error could mean we need to reduce our request rate. Impose an
-			// arbitrary slowdown in that case.
-			// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
-			if s3err.StatusCode() == 503 {
-				select {
-				case <-time.After(time.Second * 5):
-				case <-ctx.Done():
-				}
-			}
-		}
-		// See https:github.com/GoogleCloudPlatform/google-cloudimpl-go/issues/1012#issuecomment-393606797
-		// which suggests this GCE error message could be due to auth quota limits
-		// being reached.
-		if strings.Contains(err.Error(), "net/http: timeout awaiting response headers") {
-			select {
-			case <-time.After(time.Second * 5):
-			case <-ctx.Done():
-			}
-		}
-		return err
-	})
-}
-
 // isResumableHTTPError returns true if we can
 // resume download after receiving an error 'err'.
 // We can attempt to resume download if the error is ErrUnexpectedEOF.
@@ -314,10 +277,6 @@ func isResumableHTTPError(err error) bool {
 		sysutil.IsErrConnectionRefused(err)
 }
 
-// MaxDelayedRetryAttempts is the number of times the delayedRetry method will
-// re-run the provided function.
-const MaxDelayedRetryAttempts = 3
-
 // Maximum number of times we can attempt to retry reading from external storage,
 // without making any progress.
 const maxNoProgressReads = 3
@@ -326,16 +285,17 @@ type openStreamAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
 
 // resumingReader is a reader which retries reads in case of a transient errors.
 type resumingReader struct {
-	ctx    context.Context // Reader context
-	opener openStreamAt    // Get additional content
-	reader io.ReadCloser   // Currently opened reader
-	pos    int64           // How much data was received so far
+	ctx    context.Context           // Reader context
+	opener openStreamAt              // Get additional content
+	reader io.ReadCloser             // Currently opened reader
+	pos    int64                     // How much data was received so far
+	errFn  func(error) time.Duration // custom error delay picker
 }
 
 var _ io.ReadCloser = &resumingReader{}
 
 func (r *resumingReader) openStream() error {
-	return delayedRetry(r.ctx, func() error {
+	return cloud.DelayedRetry(r.ctx, r.errFn, func() error {
 		var readErr error
 		r.reader, readErr = r.opener(r.ctx, r.pos)
 		return readErr

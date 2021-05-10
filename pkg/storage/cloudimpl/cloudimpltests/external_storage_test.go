@@ -77,7 +77,7 @@ func (d *antagonisticDialer) DialContext(
 ) (net.Conn, error) {
 	if network == "tcp" {
 		// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
-		if *d.numRepeatFailures < cloudimpl.MaxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
+		if *d.numRepeatFailures < cloud.MaxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
 			*(d.numRepeatFailures)++
 			return nil, econnrefused
 		}
@@ -94,7 +94,7 @@ func (d *antagonisticDialer) DialContext(
 func (c *antagonisticConn) Read(b []byte) (int, error) {
 	// The maximum number of injected errors should always be less
 	// than the maximum retry attempts in delayedRetry.
-	if *c.numRepeatFailures < cloudimpl.MaxDelayedRetryAttempts-1 && c.rnd.Int()%2 == 0 {
+	if *c.numRepeatFailures < cloud.MaxDelayedRetryAttempts-1 && c.rnd.Int()%2 == 0 {
 		*(c.numRepeatFailures)++
 		return 0, econnreset
 	}
