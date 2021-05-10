@@ -16,6 +16,8 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -315,4 +317,58 @@ func (*MemFile) Sync() error {
 // Data returns the in-memory buffer behind this MemFile.
 func (f *MemFile) Data() []byte {
 	return f.Bytes()
+}
+
+// AccountedMemFile wraps a MemFile so that can account for the memory it uses
+// in the given monitor if one is provided.
+type AccountedMemFile struct {
+	MemFile
+
+	ctx    context.Context
+	memAcc *mon.BoundAccount
+}
+
+// MakeAccountedMemFile creates an AccountedMemFile that can keep track of its
+// allocations towards the memory monitor provided.
+// Memory written to this buffer will be freed upon Close().
+func MakeAccountedMemFile(ctx context.Context, memMon *mon.BytesMonitor) (f AccountedMemFile) {
+	f.ctx = ctx
+	if memMon != nil {
+		memAcc := memMon.MakeBoundAccount()
+		f.memAcc = &memAcc
+	}
+
+	return
+}
+
+// Write implements the writeCloseSyncer interface. It accounts for memory it
+// uses.
+func (f *AccountedMemFile) Write(p []byte) (n int, err error) {
+	oldCap := f.MemFile.Cap()
+	n, err = f.MemFile.Write(p)
+	if err != nil {
+		return n, err
+	}
+
+	// Although this accounts for the memory after allocating it, that should
+	// generally be fine since we'll catch it. If this is not fine, we likely have
+	// larger issues and are very close to OOMing.
+	if f.memAcc != nil {
+		newCap := f.MemFile.Cap()
+		log.Infof(f.ctx, "growing by %d", int64(newCap-oldCap))
+		if err := f.memAcc.Grow(f.ctx, int64(newCap-oldCap)); err != nil {
+			return n, err
+		}
+	}
+
+	return n, nil
+}
+
+// Close implements the writeCloseSyncer interface.
+func (f *AccountedMemFile) Close() error {
+	if f.memAcc != nil {
+		f.memAcc.Close(f.ctx)
+	}
+
+	return f.MemFile.Close()
 }

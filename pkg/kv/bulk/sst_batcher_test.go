@@ -334,7 +334,8 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
 	if _, err := bulk.AddSSTable(
-		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(), hlc.Timestamp{},
+		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{},
+		cluster.MakeTestingClusterSettings(), hlc.Timestamp{}, nil /* memMon */, nil, /* memAcc */
 	); err != nil {
 		t.Fatal(err)
 	}

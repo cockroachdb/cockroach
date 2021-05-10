@@ -41,6 +41,8 @@ type restoreDataProcessor struct {
 
 	alloc rowenc.DatumAlloc
 	kr    *KeyRewriter
+
+	knobs sql.BackupRestoreTestingKnobs
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -106,6 +108,10 @@ func newRestoreDataProcessor(
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = rd.StartInternal(ctx, restoreDataProcName)
 	rd.input.Start(ctx)
+
+	if rdKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		rd.knobs = *rdKnobs
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -212,12 +218,16 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		iters = append(iters, iter)
 	}
 
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
+	maxBatchSize := func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) }
+	memMonitor := rd.flowCtx.Cfg.RestoreMemMonitor
+	if rd.knobs.RestoreMemMonitor != nil {
+		memMonitor = rd.knobs.RestoreMemMonitor
+	}
+	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings, maxBatchSize, memMonitor)
 	if err != nil {
 		return summary, err
 	}
-	defer batcher.Close()
+	defer batcher.Close(ctx)
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
