@@ -143,7 +143,6 @@ ALL_TESTS = [
     "//pkg/server/debug/goroutineui:goroutineui_test",
     "//pkg/server/debug/pprofui:pprofui_test",
     "//pkg/server/debug:debug_test",
-    "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_test",
     "//pkg/server/diagnostics:diagnostics_test",
     "//pkg/server/dumpstore:dumpstore_test",
     "//pkg/server/goroutinedumper:goroutinedumper_test",
