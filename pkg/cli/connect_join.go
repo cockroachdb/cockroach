@@ -35,9 +35,19 @@ const nodeJoinTimeout = 1 * time.Minute
 
 var connectJoinCmd = &cobra.Command{
 	Use:   "join <join-token>",
-	Short: "request the TLS certs for a new node from an existing node",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  MaybeDecorateGRPCError(runConnectJoin),
+	Short: "request the TLS certificates for a new node from an initialized cluster",
+	Long: `
+Connects to a CockroachDB node started with 'start' or 'start-single-node'
+and obtain a package of TLS certificates for use with secure inter-node connections.
+
+The TLS certificates are saved in the configured target directory.
+
+This command requires a join token created by an administrator account
+on the existing cluster using the SQL built-in function
+crdb_internal.create_join_token().
+`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: MaybeDecorateGRPCError(runConnectJoin),
 }
 
 func requestPeerCA(
