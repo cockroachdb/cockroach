@@ -347,7 +347,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 
 	pattern := s.prefix
 	if patternSuffix != "" {
-		if containsGlob(s.prefix) {
+		if cloud.ContainsGlob(s.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -362,7 +362,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		ctx,
 		&s3.ListObjectsInput{
 			Bucket: s.bucket,
-			Prefix: aws.String(getPrefixBeforeWildcard(s.prefix)),
+			Prefix: aws.String(cloud.GetPrefixBeforeWildcard(s.prefix)),
 		},
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
 			for _, fileObject := range page.Contents {

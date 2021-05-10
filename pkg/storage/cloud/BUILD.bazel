@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "external_storage.go",
         "kms.go",
+        "uris.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud",
     visibility = ["//visibility:public"],

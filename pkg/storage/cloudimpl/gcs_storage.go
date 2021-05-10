@@ -202,12 +202,12 @@ func (g *gcsStorage) ReadFileAt(
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	it := g.bucket.Objects(ctx, &gcs.Query{
-		Prefix: getPrefixBeforeWildcard(g.prefix),
+		Prefix: cloud.GetPrefixBeforeWildcard(g.prefix),
 	})
 
 	pattern := g.prefix
 	if patternSuffix != "" {
-		if containsGlob(g.prefix) {
+		if cloud.ContainsGlob(g.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)

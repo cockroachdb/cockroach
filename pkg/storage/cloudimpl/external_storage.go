@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
@@ -270,28 +269,6 @@ func MakeExternalStorage(
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }
 
-// URINeedsGlobExpansion checks if URI can be expanded by checking if it contains wildcard characters.
-// This should be used before passing a URI into ListFiles().
-func URINeedsGlobExpansion(uri string) bool {
-	parsedURI, err := url.Parse(uri)
-	if err != nil {
-		return false
-	}
-	// We don't support listing files for workload and http.
-	unsupported := []string{"workload", "http", "https", "experimental-workload"}
-	for _, str := range unsupported {
-		if parsedURI.Scheme == str {
-			return false
-		}
-	}
-
-	return containsGlob(parsedURI.Path)
-}
-
-func containsGlob(str string) bool {
-	return strings.ContainsAny(str, "*?[")
-}
-
 var (
 	httpCustomCA = settings.RegisterStringSetting(
 		CloudstorageHTTPCASetting,
@@ -358,14 +335,6 @@ func isResumableHTTPError(err error) bool {
 	return errors.Is(err, io.ErrUnexpectedEOF) ||
 		sysutil.IsErrConnectionReset(err) ||
 		sysutil.IsErrConnectionRefused(err)
-}
-
-func getPrefixBeforeWildcard(p string) string {
-	globIndex := strings.IndexAny(p, "*?[")
-	if globIndex < 0 {
-		return p
-	}
-	return path.Dir(p[:globIndex])
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
