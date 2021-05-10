@@ -11,11 +11,14 @@
 package cloud
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -72,4 +75,38 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 		// Add our custom CA.
 		TLSClientConfig: tlsConf,
 	}}, nil
+}
+
+// MaxDelayedRetryAttempts is the number of times the delayedRetry method will
+// re-run the provided function.
+const MaxDelayedRetryAttempts = 3
+
+// DelayedRetry runs fn and re-runs it a limited number of times if it
+// fails. It knows about specific kinds of errors that need longer retry
+// delays than normal.
+func DelayedRetry(ctx context.Context, customDelay func(error) time.Duration, fn func() error) error {
+	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		if customDelay != nil {
+			if d := customDelay(err); d > 0 {
+				select {
+				case <-time.After(d):
+				case <-ctx.Done():
+				}
+			}
+		}
+		// See https:github.com/GoogleCloudPlatform/google-cloudimpl-go/issues/1012#issuecomment-393606797
+		// which suggests this GCE error message could be due to auth quota limits
+		// being reached.
+		if strings.Contains(err.Error(), "net/http: timeout awaiting response headers") {
+			select {
+			case <-time.After(time.Second * 5):
+			case <-ctx.Done():
+			}
+		}
+		return err
+	})
 }
