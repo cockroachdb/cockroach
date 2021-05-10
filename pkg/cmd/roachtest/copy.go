@@ -69,14 +69,7 @@ func registerCopy(r *testRegistry) {
 				var count int
 				const q = "SELECT count(*) FROM [SHOW RANGES FROM TABLE bank.bank]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
-					// TODO(rafi): Remove experimental_ranges query once we stop testing
-					// 19.1 or earlier.
-					if strings.Contains(err.Error(), "syntax error at or near \"ranges\"") {
-						err = db.QueryRow("SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]").Scan(&count)
-					}
-					if err != nil {
-						t.Fatalf("failed to get range count: %v", err)
-					}
+					t.Fatalf("failed to get range count: %v", err)
 				}
 				return count
 			}
