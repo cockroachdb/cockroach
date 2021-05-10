@@ -651,7 +651,7 @@ show_partitions_stmt ::=
 	| 'SHOW' 'PARTITIONS' 'FROM' 'INDEX' table_name '@' '*'
 
 show_jobs_stmt ::=
-	'SHOW' 'AUTOMATIC' 'JOBS'
+	'SHOW' job_type 'JOBS'
 	| 'SHOW' 'JOBS'
 	| 'SHOW' 'JOBS' select_stmt
 	| 'SHOW' 'JOBS' 'WHEN' 'COMPLETE' select_stmt
@@ -1545,6 +1545,10 @@ opt_on_targets_roles ::=
 for_grantee_clause ::=
 	'FOR' name_list
 	| 
+
+job_type ::=
+	'AUTOMATIC'
+	| 'CHANGEFEED'
 
 opt_schedule_executor_type ::=
 	'FOR' 'BACKUP'

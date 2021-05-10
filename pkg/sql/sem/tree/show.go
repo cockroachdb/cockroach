@@ -248,15 +248,41 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 	}
 }
 
+// JobType describes what kind of jobs to display
+type JobType int
+
+const (
+
+	// NonAutomaticJobs indicates that show jobs should show only
+	// non-automatically-generated jobs.
+	NonAutomaticJobs JobType = iota + 1
+
+	// AutomaticJobs indicates that show jobs should show only
+	// automatically-generated jobs such as automatic CREATE STATISTICS
+	// jobs.
+	AutomaticJobs
+
+	// ChangefeedJobs indicates that show jobs should show only
+	// changefeed jobs created by CREATE CHANGEFEED.
+	ChangefeedJobs
+)
+
+// Format implements the NodeFormatter interface.
+func (s JobType) Format(ctx *FmtCtx) {
+	switch s {
+	case AutomaticJobs:
+		ctx.WriteString("AUTOMATIC ")
+	case ChangefeedJobs:
+		ctx.WriteString("CHANGEFEED ")
+	default:
+		// Nothing
+	}
+}
+
 // ShowJobs represents a SHOW JOBS statement
 type ShowJobs struct {
 	// If non-nil, a select statement that provides the job ids to be shown.
 	Jobs *Select
-
-	// If Automatic is true, show only automatically-generated jobs such
-	// as automatic CREATE STATISTICS jobs. If Automatic is false, show
-	// only non-automatically-generated jobs.
-	Automatic bool
 
 	// Whether to block and wait for completion of all running jobs to be displayed.
 	Block bool
@@ -264,13 +290,16 @@ type ShowJobs struct {
 	// If non-nil, only display jobs started by the specified
 	// schedules.
 	Schedules *Select
+
+	// Which job types to show.
+	WhichJobs JobType
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowJobs) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
-	if node.Automatic {
-		ctx.WriteString("AUTOMATIC ")
+	if node.WhichJobs != NonAutomaticJobs {
+		ctx.FormatNode(&node.WhichJobs)
 	}
 	ctx.WriteString("JOBS")
 	if node.Block {

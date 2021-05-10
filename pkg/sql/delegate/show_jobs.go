@@ -35,12 +35,22 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 				       running_status, created, started, finished, modified,
 				       fraction_completed, error, coordinator_id
 				FROM crdb_internal.jobs`
+		selectClauseChangefeed = `WITH payload AS (SELECT id, crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS payload_json FROM system.jobs)
+               SELECT job_id, job_type, description, statement, user_name, status,
+               running_status, created, started, finished, modified,
+               fraction_completed, high_water_timestamp, error, coordinator_id, 
+               btrim(jsonb_pretty(json_extract_path(payload_json, 'changefeed', 'sinkUri')), '"') AS sink_uri,
+               ARRAY(SELECT concat(database_name, '.', schema_name, '.', name) from crdb_internal.tables WHERE table_id = any(descriptor_ids)) AS full_table_names,
+               btrim(jsonb_pretty(json_extract_path(payload_json, 'changefeed', 'opts', 'format')), '"') AS format
+				FROM crdb_internal.jobs INNER JOIN payload ON id = job_id`
 	)
 	var typePredicate, whereClause, orderbyClause string
 	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
-		if n.Automatic {
+		if n.WhichJobs == tree.AutomaticJobs {
 			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+		} else if n.WhichJobs == tree.ChangefeedJobs {
+			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeChangefeed)
 		} else {
 			typePredicate = fmt.Sprintf(
 				"(job_type IS NULL OR job_type != '%s')", jobspb.TypeAutoCreateStats,
@@ -59,7 +69,13 @@ SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_i
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
-	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+	var sqlStmt string
+	if n.WhichJobs == tree.ChangefeedJobs {
+		sqlStmt = fmt.Sprintf("%s %s %s", selectClauseChangefeed, whereClause, orderbyClause)
+	} else {
+		sqlStmt = fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
+	}
+
 	if n.Block {
 		sqlStmt = fmt.Sprintf(
 			`SELECT * FROM [%s]

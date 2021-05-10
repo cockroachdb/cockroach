@@ -586,6 +586,9 @@ func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
     return u.val.(tree.ObjectNamePrefixList)
 }
+func (u *sqlSymUnion) jobType() tree.JobType {
+  return u.val.(tree.JobType)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1232,6 +1235,8 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
 %type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
+
+%type <tree.JobType> job_type
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -4984,20 +4989,20 @@ statements_or_queries:
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
 // %Text:
-// SHOW [AUTOMATIC] JOBS [select clause]
+// SHOW [AUTOMATIC | CHANGEFEED] JOBS [select clause]
 // SHOW JOBS FOR SCHEDULES [select clause]
 // SHOW JOB <jobid>
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
-  SHOW AUTOMATIC JOBS
+  SHOW job_type JOBS
   {
-    $$.val = &tree.ShowJobs{Automatic: true}
+    $$.val = &tree.ShowJobs{WhichJobs: $2.jobType()}
   }
 | SHOW JOBS
   {
-    $$.val = &tree.ShowJobs{Automatic: false}
+    $$.val = &tree.ShowJobs{WhichJobs: tree.NonAutomaticJobs}
   }
-| SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
+| SHOW job_type JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS select_stmt
   {
@@ -5030,6 +5035,16 @@ show_jobs_stmt:
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
+
+job_type:
+  AUTOMATIC
+  {
+    $$.val = tree.AutomaticJobs
+  }
+| CHANGEFEED
+  {
+    $$.val = tree.ChangefeedJobs
+  }
 
 // %Help: SHOW SCHEDULES - list periodic schedules
 // %Category: Misc

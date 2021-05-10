@@ -1647,6 +1647,121 @@ func TestShowAutomaticJobs(t *testing.T) {
 	}
 }
 
+func TestShowChangefeedJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
+	defer s.Stopper().Stop(context.Background())
+
+	// row represents a row returned from crdb_internal.jobs, but
+	// *not* a row in system.jobs.
+	type row struct {
+		id             jobspb.JobID
+		typ            string
+		status         string
+		details        jobspb.Details
+		SinkURI        string
+		FulLTableNames []uint8
+		format         string
+		DescriptorIDs  []descpb.ID
+	}
+
+	sqlDB.Exec(t,
+		`CREATE TABLE foo (a string)`)
+
+	sqlDB.Exec(t,
+		`CREATE TABLE bar (b string)`)
+
+	var fooDescriptorId, barDescriptorId int
+
+	sqlDB.QueryRow(t, `SELECT table_id from crdb_internal.tables WHERE name = 'foo'`).Scan(&fooDescriptorId)
+	sqlDB.QueryRow(t, `SELECT table_id from crdb_internal.tables WHERE name = 'bar'`).Scan(&barDescriptorId)
+
+	rows := []row{
+		{
+			id:     1,
+			typ:    "CHANGEFEED",
+			status: "running",
+			details: jobspb.ChangefeedDetails{
+				SinkURI: "kafka://localhost:9092",
+				Opts: map[string]string{
+					"format": "json",
+				},
+			},
+			DescriptorIDs: []descpb.ID{descpb.ID(fooDescriptorId)},
+		},
+		{
+			id:     2,
+			typ:    "CHANGEFEED",
+			status: "running",
+			details: jobspb.ChangefeedDetails{
+				SinkURI: "experimental-s3://fake-bucket-name/fake/path",
+				Opts: map[string]string{
+					"format": "avro",
+				},
+			},
+			DescriptorIDs: []descpb.ID{descpb.ID(fooDescriptorId), descpb.ID(barDescriptorId)},
+		},
+	}
+
+	for _, in := range rows {
+		// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+		// row struct directly.
+		inPayload, err := protoutil.Marshal(&jobspb.Payload{
+			UsernameProto: security.RootUserName().EncodeProto(),
+			Details:       jobspb.WrapPayloadDetails(in.details),
+			DescriptorIDs: in.DescriptorIDs,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sqlDB.Exec(t,
+			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
+			in.id, in.status, inPayload,
+		)
+	}
+
+	var out row
+
+	rowResults := sqlDB.Query(t, `SELECT job_id, job_type, sink_uri, full_table_names, format FROM [SHOW CHANGEFEED JOBS]`)
+
+	rowResults.Next()
+	err := rowResults.Scan(&out.id, &out.typ, &out.SinkURI, &out.FulLTableNames, &out.format)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.id != 1 ||
+		out.typ != "CHANGEFEED" ||
+		out.SinkURI != "kafka://localhost:9092" ||
+		string(out.FulLTableNames) != "{defaultdb.public.foo}" ||
+		out.format != "json" {
+		t.Fatalf("Expected id:%d, type:%s, sinkUri:%s, fullTableNames:%s and format:%s, "+
+			"but found id:%d, type:%s, sinkUri:%s, fullTableNames:%s and format:%s",
+			1, "CHANGEFEED", "kafka://localhost:9092", "{defaultdb.public.foo}", "json",
+			out.id, out.typ, out.SinkURI, string(out.FulLTableNames), out.format)
+	}
+
+	rowResults.Next()
+	err = rowResults.Scan(&out.id, &out.typ, &out.SinkURI, &out.FulLTableNames, &out.format)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.id != 2 ||
+		out.typ != "CHANGEFEED" ||
+		out.SinkURI != "experimental-s3://fake-bucket-name/fake/path" ||
+		string(out.FulLTableNames) != "{defaultdb.public.foo,defaultdb.public.bar}" ||
+		out.format != "avro" {
+		t.Fatalf("Expected id:%d, type:%s, sinkUri:%s, fullTableNames:%s and format:%s, "+
+			"but found id:%d, type:%s, sinkUri:%s, fullTableNames:%s and format:%s",
+			2, "CHANGEFEED", "experimental-s3://fake-bucket-name/fake/path", "{defaultdb.public.foo,defaultdb.public.bar}", "avro",
+			out.id, out.typ, out.SinkURI, string(out.FulLTableNames), out.format)
+	}
+}
+
 func TestShowJobsWithError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
