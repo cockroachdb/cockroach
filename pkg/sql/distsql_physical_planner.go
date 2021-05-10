@@ -1400,6 +1400,9 @@ func (dsp *DistSQLPlanner) selectRenders(
 	if err != nil {
 		return err
 	}
+	// Update the merge ordering according to the required ordering of
+	// renderNode.
+	p.SetMergeOrdering(dsp.convertOrdering(planReqOrdering(n), p.PlanToStreamColMap))
 	err = p.AddRendering(n.render, planCtx, p.PlanToStreamColMap, typs)
 	if err != nil {
 		return err
