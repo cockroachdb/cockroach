@@ -2440,12 +2440,24 @@ func (c *cluster) RunWithBuffer(
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
-// pgURL returns the Postgres endpoint for the specified node. It accepts a flag
-// specifying whether the URL should include the node's internal or external IP
-// address. In general, inter-cluster communication and should use internal IPs
-// and communication from a test driver to nodes in a cluster should use
-// external IPs.
+// pgURL is like pgURLErr, except that it calls c.t.Fatal on error.
+// DEPRECATED
 func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool) []string {
+	urls, err := c.pgURLErr(ctx, node, external)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return urls
+}
+
+// pgURLErr returns the Postgres endpoint for the specified node. It accepts a
+// flag specifying whether the URL should include the node's internal or
+// external IP address. In general, inter-cluster communication and should use
+// internal IPs and communication from a test driver to nodes in a cluster
+// should use external IPs.
+func (c *cluster) pgURLErr(
+	ctx context.Context, node nodeListOption, external bool,
+) ([]string, error) {
 	args := []string{roachprod, "pgurl"}
 	if external {
 		args = append(args, `--external`)
@@ -2454,11 +2466,11 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 	args = append(args, nodes)
 	cmd := execCmdEx(ctx, c.l, args...)
 	if cmd.err != nil {
-		c.t.Fatal(errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes))
+		return nil, errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes)
 	}
 	urls := strings.Split(strings.TrimSpace(cmd.stdout), " ")
 	if len(urls) != len(node) {
-		c.t.Fatalf(
+		return nil, errors.Errorf(
 			"pgurl for nodes %v got urls %v from stdout:\n%s\nstderr:\n%s",
 			node, urls, cmd.stdout, cmd.stderr,
 		)
@@ -2466,13 +2478,13 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 	for i := range urls {
 		urls[i] = strings.Trim(urls[i], "'")
 		if urls[i] == "" {
-			c.t.Fatalf(
+			return nil, errors.Errorf(
 				"pgurl for nodes %s empty: %v from\nstdout:\n%s\nstderr:\n%s",
 				urls, node, cmd.stdout, cmd.stderr,
 			)
 		}
 	}
-	return urls
+	return urls, nil
 }
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
@@ -2502,17 +2514,17 @@ func (c *cluster) ExternalPGUrlSecure(
 	return urls
 }
 
-func addrToAdminUIAddr(c *cluster, addr string) string {
+func addrToAdminUIAddr(c *cluster, addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		c.t.Fatal(err)
+		return "", err
 	}
 	webPort, err := strconv.Atoi(port)
 	if err != nil {
-		c.t.Fatal(err)
+		return "", err
 	}
 	// Roachprod makes Admin UI's port to be node's port + 1.
-	return fmt.Sprintf("%s:%d", host, webPort+1)
+	return fmt.Sprintf("%s:%d", host, webPort+1), nil
 }
 
 func urlToAddr(c *cluster, pgURL string) string {
@@ -2545,19 +2557,42 @@ func addrToHostPort(c *cluster, addr string) (string, int) {
 func (c *cluster) InternalAdminUIAddr(ctx context.Context, node nodeListOption) []string {
 	var addrs []string
 	for _, u := range c.InternalAddr(ctx, node) {
-		addrs = append(addrs, addrToAdminUIAddr(c, u))
+		addr, err := addrToAdminUIAddr(c, u)
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		addrs = append(addrs, addr)
 	}
 	return addrs
 }
 
-// ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
-// for the specified node.
+// ExternalAdminUIAddr is like ExternalAdminUIAddrE, except it calls c.t.Fatal
+// on error.
+// DEPRECATED
 func (c *cluster) ExternalAdminUIAddr(ctx context.Context, node nodeListOption) []string {
-	var addrs []string
-	for _, u := range c.ExternalAddr(ctx, node) {
-		addrs = append(addrs, addrToAdminUIAddr(c, u))
+	addr, err := c.ExternalAdminUIAddrE(ctx, node)
+	if err != nil {
+		c.t.Fatal(err)
 	}
-	return addrs
+	return addr
+}
+
+// ExternalAdminUIAddrE returns the internal Admin UI address in the form
+// host:port for the specified node.
+func (c *cluster) ExternalAdminUIAddrE(ctx context.Context, node nodeListOption) ([]string, error) {
+	rawAddrs, err := c.ExternalAddrE(ctx, node)
+	if err != nil {
+		return nil, err
+	}
+	var addrs []string
+	for _, u := range rawAddrs {
+		addr, err := addrToAdminUIAddr(c, u)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, nil
 }
 
 // InternalAddr returns the internal address in the form host:port for the
@@ -2579,14 +2614,28 @@ func (c *cluster) InternalIP(ctx context.Context, node nodeListOption) []string 
 	return ips
 }
 
-// ExternalAddr returns the external address in the form host:port for the
-// specified node.
+// ExternalAddr is like ExternalAddrE, except that it calls c.t.Fatal on error.
+// DEPRECATED
 func (c *cluster) ExternalAddr(ctx context.Context, node nodeListOption) []string {
-	var addrs []string
-	for _, u := range c.pgURL(ctx, node, true /* external */) {
-		addrs = append(addrs, urlToAddr(c, u))
+	addrs, err := c.ExternalAddrE(ctx, node)
+	if err != nil {
+		c.t.Fatal(err)
 	}
 	return addrs
+}
+
+// ExternalAddrE returns the external address in the form host:port for the
+// specified node.
+func (c *cluster) ExternalAddrE(ctx context.Context, node nodeListOption) ([]string, error) {
+	var addrs []string
+	urls, err := c.pgURLErr(ctx, node, true /* external */)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range urls {
+		addrs = append(addrs, urlToAddr(c, u))
+	}
+	return addrs, nil
 }
 
 // ExternalIP returns the external IP addresses for the specified node.
