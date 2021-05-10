@@ -14,7 +14,11 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
