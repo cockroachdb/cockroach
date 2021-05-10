@@ -3381,7 +3381,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	}
 
 	// Set the merge ordering.
-	mergeOrdering := dsp.convertOrdering(n.reqOrdering, p.PlanToStreamColMap)
+	mergeOrdering := dsp.convertOrdering(n.streamingOrdering, p.PlanToStreamColMap)
 
 	// Merge processors, streams, result routers, and stage counter.
 	leftRouters := leftPlan.ResultRouters
@@ -3487,13 +3487,16 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 
 		// Create the Core spec.
 		var core execinfrapb.ProcessorCoreUnion
-		if len(mergeOrdering.Columns) < len(streamCols) {
+		if len(mergeOrdering.Columns) == 0 {
 			core.HashJoiner = &execinfrapb.HashJoinerSpec{
 				LeftEqColumns:  eqCols,
 				RightEqColumns: eqCols,
 				Type:           joinType,
 			}
 		} else {
+			if len(mergeOrdering.Columns) < len(streamCols) {
+				return nil, errors.AssertionFailedf("the merge ordering must include all stream columns")
+			}
 			core.MergeJoiner = &execinfrapb.MergeJoinerSpec{
 				LeftOrdering:  mergeOrdering,
 				RightOrdering: mergeOrdering,

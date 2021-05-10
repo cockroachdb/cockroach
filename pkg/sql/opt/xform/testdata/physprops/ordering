@@ -1488,6 +1488,7 @@ union
  ├── columns: a:11!null b:12!null c:13!null
  ├── left columns: abc.a:1 abc.b:2 abc.c:3
  ├── right columns: y:7 x:6 z:8
+ ├── internal-ordering: +(11|12),+13
  ├── key: (12,13)
  ├── fd: (11)==(12), (12)==(11)
  ├── ordering: +(11|12) [actual: +11]
@@ -1536,6 +1537,7 @@ intersect
  ├── columns: a:1 b:2 c:3 d:4
  ├── left columns: a:1 b:2 c:3 d:4
  ├── right columns: c:10 d:11 a:8 b:9
+ ├── internal-ordering: +3,+4,+1,+2
  ├── key: (1-4)
  ├── ordering: +3,+4
  ├── sort (segmented)
@@ -1558,6 +1560,7 @@ intersect-all
  ├── columns: a:1!null b:2!null c:3!null
  ├── left columns: a:1!null b:2!null c:3!null
  ├── right columns: y:7 x:6 z:8
+ ├── internal-ordering: +(1|2),+3
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2) [actual: +1]
  ├── select
@@ -1586,31 +1589,34 @@ intersect-all
 opt
 SELECT * FROM (SELECT b, c FROM abc EXCEPT SELECT y, x FROM xyz) WHERE b = c ORDER BY c, b
 ----
-sort
+except
  ├── columns: b:2!null c:3!null
+ ├── left columns: b:2!null c:3!null
+ ├── right columns: y:7 x:6
+ ├── internal-ordering: +(2|3)
  ├── key: (3)
  ├── fd: (2)==(3), (3)==(2)
  ├── ordering: +(2|3) [actual: +2]
- └── except
-      ├── columns: b:2!null c:3!null
-      ├── left columns: b:2!null c:3!null
-      ├── right columns: y:7 x:6
-      ├── key: (3)
-      ├── fd: (2)==(3), (3)==(2)
-      ├── select
-      │    ├── columns: b:2!null c:3!null
-      │    ├── fd: (2)==(3), (3)==(2)
-      │    ├── scan abc
-      │    │    └── columns: b:2!null c:3!null
-      │    └── filters
-      │         └── b:2 = c:3 [outer=(2,3), fd=(2)==(3), (3)==(2)]
-      └── select
-           ├── columns: x:6!null y:7!null
-           ├── fd: (6)==(7), (7)==(6)
-           ├── scan xyz
-           │    └── columns: x:6!null y:7!null
-           └── filters
-                └── y:7 = x:6 [outer=(6,7), fd=(6)==(7), (7)==(6)]
+ ├── sort
+ │    ├── columns: b:2!null c:3!null
+ │    ├── fd: (2)==(3), (3)==(2)
+ │    ├── ordering: +(2|3) [actual: +2]
+ │    └── select
+ │         ├── columns: b:2!null c:3!null
+ │         ├── fd: (2)==(3), (3)==(2)
+ │         ├── scan abc
+ │         │    └── columns: b:2!null c:3!null
+ │         └── filters
+ │              └── b:2 = c:3 [outer=(2,3), fd=(2)==(3), (3)==(2)]
+ └── select
+      ├── columns: x:6!null y:7!null
+      ├── fd: (6)==(7), (7)==(6)
+      ├── ordering: +(6|7) [actual: +6]
+      ├── scan xyz
+      │    ├── columns: x:6!null y:7!null
+      │    └── ordering: +6
+      └── filters
+           └── y:7 = x:6 [outer=(6,7), fd=(6)==(7), (7)==(6)]
 
 opt
 SELECT * FROM (SELECT a, b, c, d FROM abcd EXCEPT ALL SELECT c, d, a, b FROM abcd) ORDER BY a, b
@@ -1619,6 +1625,7 @@ except-all
  ├── columns: a:1 b:2 c:3 d:4
  ├── left columns: a:1 b:2 c:3 d:4
  ├── right columns: c:10 d:11 a:8 b:9
+ ├── internal-ordering: +1,+2,+3,+4
  ├── ordering: +1,+2
  ├── sort (segmented)
  │    ├── columns: a:1 b:2 c:3 d:4

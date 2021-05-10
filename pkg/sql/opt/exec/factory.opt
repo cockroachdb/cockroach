@@ -164,26 +164,54 @@ define Distinct {
     ErrorOnDup string
 }
 
-# SetOp performs a UNION / INTERSECT / EXCEPT operation (either the ALL or the
-# DISTINCT version). The left and right nodes must have the same number of
-# columns.
+# HashSetOp performs a UNION / INTERSECT / EXCEPT operation (either the ALL or
+# the DISTINCT version). The left and right nodes must have the same number of
+# columns. Note that UNION ALL is special and is implemented by UnionAll.
 #
-# ReqOrdering specifies the required output ordering, and if not empty, both
-# inputs are already ordered according to it. If ReqOrdering is set, it is
-# guaranteed to include all columns produced by this SetOp (the one exception is
-# UNION ALL, which is implemented with only an ordered synchronizer and does not
-# require an ordering over all columns). The execution engine is then guaranteed
-# to use a merge join (or streaming DISTINCT for UNION), which is a streaming
-# operation that maintains ordering.
-#
-# HardLimit can only be set for UNION ALL operations. It is used to implement
-# locality optimized search, and instructs the execution engine that it should
-# execute the left node to completion and possibly short-circuit if the limit is
-# reached before executing the right node. The limit is guaranteed but the
-# short-circuit behavior is not.
-define SetOp {
+# HashSetOp uses a hash table to execute the set operation, and therefore is not
+# guaranteed to maintain any ordering. StreamingSetOp should be used instead if
+# the set operation must maintain an ordering.
+define HashSetOp {
     Typ tree.UnionType
     All bool
+    Left exec.Node
+    Right exec.Node
+}
+
+# StreamingSetOp performs a UNION / INTERSECT / EXCEPT operation (either the ALL
+# or the DISTINCT version). The left and right nodes must have the same number
+# of columns. Note that UNION ALL is special and is implemented by UnionAll.
+#
+# ReqOrdering specifies the required output ordering, and it is guaranteed to be
+# a prefix of StreamingOrdering. Both inputs are already ordered according to
+# StreamingOrdering. StreamingOrdering is guaranteed to include all columns
+# produced by this StreamingSetOp. The execution engine is then guaranteed to
+# use a merge join (or streaming DISTINCT for UNION), which is a streaming
+# operation that maintains ordering.
+#
+# HashSetOp should be used instead if both inputs are not ordered.
+define StreamingSetOp {
+    Typ tree.UnionType
+    All bool
+    Left exec.Node
+    Right exec.Node
+    StreamingOrdering colinfo.ColumnOrdering
+    ReqOrdering exec.OutputOrdering
+}
+
+# UnionAll performs a UNION ALL. The left and right nodes must have the same
+# number of columns.
+#
+# ReqOrdering specifies the required output ordering, and if not empty, both
+# inputs are already ordered according to it. If ReqOrdering is set, the
+# execution engine will use an ordered synchronizer to maintain ordering.
+#
+# If non-zero, HardLimit indicates that this UNION ALL represents a locality
+# optimized search. It instructs the execution engine that it should execute the
+# left node to completion and possibly short-circuit if the limit is reached
+# before executing the right node. The limit is guaranteed but the short-circuit
+# behavior is not.
+define UnionAll {
     Left exec.Node
     Right exec.Node
     ReqOrdering exec.OutputOrdering

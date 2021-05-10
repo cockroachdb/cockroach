@@ -1306,16 +1306,18 @@ except-all
  ├── columns: o_w_id:3!null o_d_id:2!null o_id:1!null o_ol_cnt:7
  ├── left columns: o_w_id:3!null o_d_id:2!null o_id:1!null o_ol_cnt:7
  ├── right columns: ol_w_id:13 ol_d_id:12 ol_o_id:11 count_rows:23
+ ├── internal-ordering: +3,+2,-1,+7
  ├── scan order
  │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null o_ol_cnt:7
  │    ├── key: (1-3)
- │    └── fd: (1-3)-->(7)
+ │    ├── fd: (1-3)-->(7)
+ │    └── ordering: +3,+2,-1
  └── group-by
       ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null count_rows:23!null
       ├── grouping columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null
-      ├── internal-ordering: +13,+12,-11
       ├── key: (11-13)
       ├── fd: (11-13)-->(23)
+      ├── ordering: +13,+12,-11
       ├── scan order_line
       │    ├── columns: ol_o_id:11!null ol_d_id:12!null ol_w_id:13!null
       │    └── ordering: +13,+12,-11
@@ -1340,12 +1342,13 @@ except-all
  ├── columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count:13
  ├── left columns: ol_w_id:3!null ol_d_id:2!null ol_o_id:1!null count_rows:13
  ├── right columns: o_w_id:16 o_d_id:15 o_id:14 o_ol_cnt:20
+ ├── internal-ordering: +3,+2,-1,+13
  ├── group-by
  │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null count_rows:13!null
  │    ├── grouping columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null
- │    ├── internal-ordering: +3,+2,-1
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(13)
+ │    ├── ordering: +3,+2,-1
  │    ├── scan order_line
  │    │    ├── columns: ol_o_id:1!null ol_d_id:2!null ol_w_id:3!null
  │    │    └── ordering: +3,+2,-1
@@ -1354,7 +1357,8 @@ except-all
  └── scan order
       ├── columns: o_id:14!null o_d_id:15!null o_w_id:16!null o_ol_cnt:20
       ├── key: (14-16)
-      └── fd: (14-16)-->(20)
+      ├── fd: (14-16)-->(20)
+      └── ordering: +16,+15,-14
 
 opt format=hide-qual
 SELECT count(*)
