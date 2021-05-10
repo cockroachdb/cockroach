@@ -279,7 +279,7 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 func externalStorageFromURIFactory(
 	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
-	return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
+	return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
 		cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
 }
 
@@ -534,7 +534,7 @@ func makeIters(
 	for i, file := range files {
 		var err error
 		clusterSettings := cluster.MakeClusterSettings()
-		dirStorage[i], err = cloudimpl.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
+		dirStorage[i], err = cloud.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
 			clusterSettings, newBlobFactory, nil /*internal executor*/, nil /*kvDB*/)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "making external storage")

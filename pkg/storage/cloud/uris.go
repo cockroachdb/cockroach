@@ -49,3 +49,20 @@ func URINeedsGlobExpansion(uri string) bool {
 func ContainsGlob(str string) bool {
 	return strings.ContainsAny(str, "*?[")
 }
+
+// RedactKMSURI redacts the Master Key ID and the ExternalStorage secret
+// credentials.
+func RedactKMSURI(kmsURI string) (string, error) {
+	sanitizedKMSURI, err := SanitizeExternalStorageURI(kmsURI, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Redact the path which contains the KMS Master Key identifier.
+	uri, err := url.ParseRequestURI(sanitizedKMSURI)
+	if err != nil {
+		return "", err
+	}
+	uri.Path = "/redacted"
+	return uri.String(), nil
+}

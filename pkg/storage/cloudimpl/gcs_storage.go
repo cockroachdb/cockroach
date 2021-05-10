@@ -32,7 +32,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-func parseGSURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_gs
 	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
@@ -88,7 +88,7 @@ func (g *gcsStorage) Settings() *cluster.Settings {
 }
 
 func makeGCSStorage(
-	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.google_cloud")
 	conf := dest.GoogleCloudConfig

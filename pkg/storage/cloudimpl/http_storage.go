@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func parseHTTPURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+func parseHTTPURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_http
 	conf.HttpPath.BaseUri = uri.String()
@@ -60,7 +60,7 @@ func (e *retryableHTTPError) Error() string {
 
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
 func MakeHTTPStorage(
-	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.http")
 	if args.IOConf.DisableHTTP {

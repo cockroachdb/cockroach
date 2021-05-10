@@ -367,7 +367,7 @@ func getUserfileConf(
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
 
-	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
+	userFileTableConf, err := cloud.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
 		return roachpb.ExternalStorage_FileTable{}, err
 	}
@@ -433,7 +433,7 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) ([]string, 
 		return nil, err
 	}
 
-	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
+	userFileTableConf, err := cloud.ExternalStorageConfFromURI(unescapedUserfileListURI, reqUsername)
 	if err != nil {
 		return nil, err
 	}

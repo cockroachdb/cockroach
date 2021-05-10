@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,7 +72,7 @@ func TestAntagonisticAzureRead(t *testing.T) {
 		return
 	}
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI(
+	conf, err := cloud.ExternalStorageConfFromURI(
 		cfg.filePath("antagonistic-read"), security.RootUserName())
 	require.NoError(t, err)
 

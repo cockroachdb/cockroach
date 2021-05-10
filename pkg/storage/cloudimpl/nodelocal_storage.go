@@ -31,7 +31,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func parseNodelocalURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+func parseNodelocalURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	if uri.Host == "" {
 		return conf, errors.Errorf(
@@ -82,12 +82,12 @@ func TestingMakeLocalStorage(
 	blobClientFactory blobs.BlobClientFactory,
 	ioConf base.ExternalIODirConfig,
 ) (cloud.ExternalStorage, error) {
-	args := ExternalStorageContext{IOConf: ioConf, BlobClientFactory: blobClientFactory, Settings: settings}
+	args := cloud.ExternalStorageContext{IOConf: ioConf, BlobClientFactory: blobClientFactory, Settings: settings}
 	return makeLocalStorage(ctx, args, roachpb.ExternalStorage{LocalFile: cfg})
 }
 
 func makeLocalStorage(
-	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
+	ctx context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.nodelocal")
 	if args.BlobClientFactory == nil {
