@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -110,13 +111,25 @@ type SSTBatcher struct {
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
 	rowCounter storage.RowCounter
+
+	// memAcc accounts for the memory used by the SST batcher to buffer
+	// they keys before sending them as an AddSSTable request.
+	memAcc *mon.BoundAccount
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	settings *cluster.Settings,
+	flushBytes func() int64,
+	bulkMon *mon.BytesMonitor,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	if bulkMon != nil {
+		memAcc := bulkMon.MakeBoundAccount()
+		b.memAcc = &memAcc
+	}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -189,6 +202,15 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 		b.updateMVCCStats(key, value)
 	}
 
+	if b.memAcc != nil {
+		// Note: The memAcc accounts for bytes occupied by the timestamp in the key
+		// which sstWriter.DataSize does not take into account.
+		kvSize := int64(key.Len()) + int64(len(value))
+		if err := b.memAcc.Grow(ctx, kvSize); err != nil {
+			return err
+		}
+	}
+
 	return b.sstWriter.Put(key, value)
 }
 
@@ -206,6 +228,10 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.flushKey = nil
 	b.flushKeyChecked = false
 	b.ms.Reset()
+
+	if b.memAcc != nil {
+		b.memAcc.Empty(ctx)
+	}
 
 	b.rowCounter.BulkOpSummary.Reset()
 	return nil
@@ -359,8 +385,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 }
 
 // Close closes the underlying SST builder.
-func (b *SSTBatcher) Close() {
+func (b *SSTBatcher) Close(ctx context.Context) {
 	b.sstWriter.Close()
+	if b.memAcc != nil {
+		b.memAcc.Close(ctx)
+	}
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
@@ -419,6 +448,12 @@ func AddSSTable(
 	} else {
 		stats = ms
 	}
+
+	// TODO(pbardea): Memory is temporarily allocated if the range has split. This
+	// memory is not yet accounted for. If a split is encountered, we allocate
+	// another len(sstBytes) when splitting the sst into a left and right
+	// partition. Furthermore, we may reallocate the right side temporarily if the
+	// range has split into more than 2 ranges.
 
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowing: disallowShadowing, stats: stats}}
 	const maxAddSSTableRetries = 10

@@ -126,15 +126,15 @@ func MakeBulkAdder(
 	// At minimum a bulk adder needs enough space to store a buffer of
 	// curBufferSize, and a subsequent SST of SSTSize in-memory. If the memory
 	// account is unable to reserve this minimum threshold we cannot continue.
-	//
-	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
-	// it will store in-memory before sending it to RocksDB.
 	b.memAcc = bulkMon.MakeBoundAccount()
 	if err := b.memAcc.Grow(ctx, b.curBufferSize); err != nil {
 		return nil, errors.WithHint(
 			errors.Wrap(err, "not enough memory available to create a BulkAdder"),
 			"Try setting a higher --max-sql-memory.")
 	}
+
+	sinkMemAcc := bulkMon.MakeBoundAccount()
+	b.sink.memAcc = &sinkMemAcc
 
 	return b, nil
 }
@@ -155,7 +155,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 		b.sink.flushCounts.total, b.sink.flushCounts.files,
 		b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
 	)
-	b.sink.Close()
+	b.sink.Close(ctx)
 
 	if b.bulkMon != nil {
 		b.memAcc.Close(ctx)
