@@ -62,6 +62,7 @@ interface TState {
 
 export interface TransactionsPageStateProps {
   data: IStatementsResponse;
+  nodeRegions: { [nodeId: string]: string };
   error?: Error | null;
   pageSize?: number;
 }
@@ -331,6 +332,7 @@ export class TransactionsPage extends React.Component<
     return (
       <TransactionDetails
         statements={aggregateStatementStats(transactionDetails)}
+        nodeRegions={this.props.nodeRegions}
         transactionStats={this.state.transactionStats}
         lastReset={this.lastReset()}
         handleDetails={this.handleDetails}

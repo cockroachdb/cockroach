@@ -553,4 +553,10 @@ export const transactionDetails = {
     403,
     "this operation requires admin privilege",
   ),
+  nodeRegions: {
+    "1": "gcp-us-east1",
+    "2": "gcp-us-east1",
+    "3": "gcp-us-west1",
+    "4": "gcp-europe-west1",
+  },
 };

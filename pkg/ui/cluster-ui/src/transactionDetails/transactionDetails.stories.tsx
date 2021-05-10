@@ -15,7 +15,7 @@ import { transactionDetails } from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
 
-const { data, error } = transactionDetails;
+const { data, nodeRegions, error } = transactionDetails;
 
 storiesOf("Transactions Details", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
@@ -25,6 +25,7 @@ storiesOf("Transactions Details", module)
   .add("with data", () => (
     <TransactionDetails
       statements={data.statements as any}
+      nodeRegions={nodeRegions}
       lastReset={Date().toString()}
       handleDetails={() => {}}
       resetSQLStats={() => {}}
@@ -33,6 +34,7 @@ storiesOf("Transactions Details", module)
   .add("with loading indicator", () => (
     <TransactionDetails
       statements={undefined}
+      nodeRegions={nodeRegions}
       lastReset={Date().toString()}
       handleDetails={() => {}}
       resetSQLStats={() => {}}
@@ -41,6 +43,7 @@ storiesOf("Transactions Details", module)
   .add("with error alert", () => (
     <TransactionDetails
       statements={undefined}
+      nodeRegions={nodeRegions}
       error={error}
       lastReset={Date().toString()}
       handleDetails={() => {}}
