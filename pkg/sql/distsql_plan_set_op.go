@@ -22,7 +22,26 @@ import (
 //
 // This method is intended to be used only for planning of set operations.
 func mergeResultTypesForSetOp(leftPlan, rightPlan *PhysicalPlan) ([]*types.T, error) {
-	left, right := leftPlan.GetResultTypes(), rightPlan.GetResultTypes()
+	// getTypesIgnoreMergeOrdering returns the schema of the rows produced by
+	// plan removing all columns that are propagated for the sole purpose of
+	// maintaining the ordering during stream merges.
+	getTypesIgnoreMergeOrdering := func(plan *PhysicalPlan) []*types.T {
+		typs := plan.GetResultTypes()
+		if len(plan.MergeOrdering.Columns) == 0 {
+			// There is no merge ordering, so we return the schema as is.
+			return typs
+		}
+		res := make([]*types.T, 0, len(plan.PlanToStreamColMap))
+		// Iterate over PlanToStreamColMap and include all columns that are
+		// needed by the consumer.
+		for _, colIdx := range plan.PlanToStreamColMap {
+			if colIdx != -1 {
+				res = append(res, typs[colIdx])
+			}
+		}
+		return res
+	}
+	left, right := getTypesIgnoreMergeOrdering(leftPlan), getTypesIgnoreMergeOrdering(rightPlan)
 	if len(left) != len(right) {
 		return nil, errors.Errorf("ResultTypes length mismatch: %d and %d", len(left), len(right))
 	}
