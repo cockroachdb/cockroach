@@ -21,6 +21,7 @@ import { TimestampToMoment } from "src/util/convert";
 import { PrintTime } from "src/views/reports/containers/range/print";
 
 import { TransactionsPage } from "@cockroachlabs/cluster-ui";
+import { nodeRegionsByIDSelector } from "src/redux/nodes";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -56,6 +57,7 @@ const TransactionsPageConnected = withRouter(
       statementsError: state.cachedData.statements.lastError,
       lastReset: selectLastReset(state),
       error: selectLastError(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
     }),
     {
       refreshData: refreshStatements,
