@@ -96,17 +96,20 @@ limit
  │    ├── columns: x:11!null y:12 z:13
  │    ├── left columns: t.x:1 t.y:2 t.z:3
  │    ├── right columns: t.x:6 t.z:8 t.y:7
+ │    ├── internal-ordering: +11,+12,+13
  │    ├── key: (11-13)
  │    ├── limit hint: 10.00
  │    ├── scan t
  │    │    ├── columns: t.x:1!null t.y:2 t.z:3
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── ordering: +1
  │    │    └── limit hint: 10.00
  │    └── scan t
  │         ├── columns: t.x:6!null t.y:7 t.z:8
  │         ├── key: (6)
  │         ├── fd: (6)-->(7,8)
+ │         ├── ordering: +6
  │         └── limit hint: 10.00
  └── 10
 

@@ -39,8 +39,8 @@ func getResultColumns(
 	}()
 
 	switch op {
-	case filterOp, invertedFilterOp, limitOp, max1RowOp,
-		sortOp, bufferOp, setOpOp, distinctOp, saveTableOp, recursiveCTEOp:
+	case filterOp, invertedFilterOp, limitOp, max1RowOp, sortOp, bufferOp, hashSetOpOp,
+		streamingSetOpOp, unionAllOp, distinctOp, saveTableOp, recursiveCTEOp:
 		// These ops inherit the columns from their first input.
 		return inputs[0], nil
 

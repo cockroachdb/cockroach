@@ -518,24 +518,51 @@ func (ef *execFactory) ConstructDistinct(
 	}, nil
 }
 
-// ConstructSetOp is part of the exec.Factory interface.
-func (ef *execFactory) ConstructSetOp(
+// ConstructHashSetOp is part of the exec.Factory interface.
+func (ef *execFactory) ConstructHashSetOp(
+	typ tree.UnionType, all bool, left, right exec.Node,
+) (exec.Node, error) {
+	return ef.planner.newUnionNode(
+		typ, all, left.(planNode), right.(planNode), nil, nil, 0, /* hardLimit */
+	)
+}
+
+// ConstructStreamingSetOp is part of the exec.Factory interface.
+func (ef *execFactory) ConstructStreamingSetOp(
 	typ tree.UnionType,
 	all bool,
 	left, right exec.Node,
+	streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
-	hardLimit uint64,
 ) (exec.Node, error) {
-	if hardLimit != 0 && (typ != tree.UnionOp || !all) {
-		return nil, errors.AssertionFailedf("a hard limit on a set operator is only supported for UNION ALL")
-	}
+	return ef.planner.newUnionNode(
+		typ,
+		all,
+		left.(planNode),
+		right.(planNode),
+		streamingOrdering,
+		ReqOrdering(reqOrdering),
+		0, /* hardLimit */
+	)
+}
+
+// ConstructUnionAll is part of the exec.Factory interface.
+func (ef *execFactory) ConstructUnionAll(
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+) (exec.Node, error) {
 	if hardLimit > 1 {
 		return nil, errors.AssertionFailedf(
 			"locality optimized search is not yet supported for more than one row at a time",
 		)
 	}
 	return ef.planner.newUnionNode(
-		typ, all, left.(planNode), right.(planNode), ReqOrdering(reqOrdering), hardLimit,
+		tree.UnionOp,
+		true, /* all */
+		left.(planNode),
+		right.(planNode),
+		colinfo.ColumnOrdering(reqOrdering),
+		ReqOrdering(reqOrdering),
+		hardLimit,
 	)
 }
 
