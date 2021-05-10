@@ -533,6 +533,10 @@ func (jls *JoinListType) Set(value string) error {
 		if err != nil {
 			return err
 		}
+		// Default the port if unspecified.
+		if len(port) == 0 {
+			port = DefaultPort
+		}
 		// Re-join the parts. This guarantees an address that
 		// will be valid for net.SplitHostPort().
 		*jls = append(*jls, net.JoinHostPort(addr, port))
