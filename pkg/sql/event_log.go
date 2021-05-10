@@ -65,9 +65,10 @@ func (p *planner) logEventsWithSystemEventLogOption(
 ) error {
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
+	stmtTag := p.stmt.AST.StatementTag()
 	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
 	appName := p.SessionData().ApplicationName
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descIDs, user, appName, stmt, pl, writeToEventLog, events...)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descIDs, user, appName, stmt, stmtTag, pl, writeToEventLog, events...)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -119,6 +120,7 @@ func logEventInternalForSQLStatements(
 	user security.SQLUsername,
 	appName string,
 	stmt string,
+	stmtTag string,
 	placeholders tree.QueryArguments,
 	writeToEventLog bool,
 	events ...eventpb.EventPayload,
@@ -126,7 +128,7 @@ func logEventInternalForSQLStatements(
 	// Inject the common fields into the payload provided by the caller.
 	for i := range events {
 		if err := injectCommonFields(
-			txn, descIDs[i], user, appName, stmt, placeholders, events[i],
+			txn, descIDs[i], user, appName, stmt, stmtTag, placeholders, events[i],
 		); err != nil {
 			return err
 		}
@@ -152,6 +154,7 @@ func injectCommonFields(
 	user security.SQLUsername,
 	appName string,
 	stmt string,
+	stmtTag string,
 	placeholders tree.QueryArguments,
 	event eventpb.EventPayload,
 ) error {
@@ -162,6 +165,7 @@ func injectCommonFields(
 	}
 	m := sqlCommon.CommonSQLDetails()
 	m.Statement = stmt
+	m.Tag = stmtTag
 	m.ApplicationName = appName
 	m.User = user.Normalized()
 	m.DescriptorID = uint32(descID)
