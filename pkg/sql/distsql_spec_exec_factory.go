@@ -596,14 +596,29 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 	return plan, nil
 }
 
-func (e *distSQLSpecExecFactory) ConstructSetOp(
+// ConstructHashSetOp is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructHashSetOp(
+	typ tree.UnionType, all bool, left, right exec.Node,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: hash set op")
+}
+
+// ConstructStreamingSetOp is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructStreamingSetOp(
 	typ tree.UnionType,
 	all bool,
 	left, right exec.Node,
+	streamingOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
-	hardLimit uint64,
 ) (exec.Node, error) {
-	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: streaming set op")
+}
+
+// ConstructUnionAll is part of the exec.Factory interface.
+func (e *distSQLSpecExecFactory) ConstructUnionAll(
+	left, right exec.Node, reqOrdering exec.OutputOrdering, hardLimit uint64,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: union all")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSort(
