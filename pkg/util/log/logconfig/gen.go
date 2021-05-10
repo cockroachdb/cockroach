@@ -264,12 +264,10 @@ func camelToSnake(typeName string) string {
 }
 
 var tmplSrc = `
-# Documentation for logging sinks
-
 The supported log output sink types are documented below.
 
 {{range .Sinks}}
-- [{{.Name}}](#sink-{{.AnchorName}})
+- [{{.Name}}](#{{.AnchorName}})
 {{end}}
 
 {{range .Sinks}}
