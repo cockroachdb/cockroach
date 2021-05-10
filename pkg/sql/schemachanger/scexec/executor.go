@@ -142,19 +142,19 @@ func (ex *Executor) executeIndexBackfillOp(ctx context.Context, op scop.Backfill
 	if err != nil {
 		return err
 	}
-	mut, _, err := descriptorutils.GetIndexMutation(table, op.IndexID)
+	mut, err := descriptorutils.FindMutation(table, descriptorutils.MakeIndexIDMutationSelector(op.IndexID))
 	if err != nil {
 		return err
 	}
 
 	// Must be the right index given the above call.
-	idxToBackfill := mut.GetIndex()
+	idxToBackfill := mut.AsIndex()
 
 	// Split off the index span prior to backfilling.
-	if err := ex.maybeSplitIndexSpans(ctx, table.IndexSpan(ex.codec, idxToBackfill.ID)); err != nil {
+	if err := ex.maybeSplitIndexSpans(ctx, table.IndexSpan(ex.codec, idxToBackfill.GetID())); err != nil {
 		return err
 	}
-	return ex.indexBackfiller.BackfillIndex(ctx, ex.jobTracker, table, table.GetPrimaryIndexID(), idxToBackfill.ID)
+	return ex.indexBackfiller.BackfillIndex(ctx, ex.jobTracker, table, table.GetPrimaryIndexID(), idxToBackfill.GetID())
 }
 
 // IndexBackfiller is an abstract index backfiller that performs index backfills

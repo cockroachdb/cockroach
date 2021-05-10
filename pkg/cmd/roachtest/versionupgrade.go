@@ -237,12 +237,24 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 	return db
 }
 
+// uploadVersion uploads the specified crdb version to nodes. It returns the
+// path of the uploaded binaries on the nodes, suitable to be used with
+// `roachdprod start --binary=<path>`.
 func uploadVersion(
 	ctx context.Context, t *test, c *cluster, nodes nodeListOption, newVersion string,
 ) (binaryName string) {
 	binaryName = "./cockroach"
 	if newVersion == "" {
-		c.Put(ctx, cockroach, binaryName, nodes)
+		if err := c.PutE(ctx, t.l, cockroach, binaryName, nodes); err != nil {
+			t.Fatal(err)
+		}
+	} else if binary, ok := t.versionsBinaryOverride[newVersion]; ok {
+		// If an override has been specified for newVersion, use that binary.
+		t.l.Printf("using binary override for version %s: %s", newVersion, binary)
+		binaryName = "./cockroach-" + newVersion
+		if err := c.PutE(ctx, t.l, binary, binaryName, nodes); err != nil {
+			t.Fatal(err)
+		}
 	} else {
 		newVersion = "v" + newVersion
 		dir := newVersion
