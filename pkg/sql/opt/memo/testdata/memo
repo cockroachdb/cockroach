@@ -269,15 +269,21 @@ memo
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
 memo (optimized, ~7KB, required=[presentation: x:9,y:10])
- ├── G1: (union G2 G3)
+ ├── G1: (union G2 G3) (union G2 G3 ordering=+9)
  │    └── [presentation: x:9,y:10]
  │         ├── best: (union G2 G3)
  │         └── cost: 2178.84
  ├── G2: (scan a,cols=(1,2))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan a,cols=(1,2))
+ │    │    └── cost: 1054.41
  │    └── []
  │         ├── best: (scan a,cols=(1,2))
  │         └── cost: 1054.41
  ├── G3: (project G4 G5)
+ │    ├── [ordering: +7]
+ │    │    ├── best: (sort G3)
+ │    │    └── cost: 1323.75
  │    └── []
  │         ├── best: (project G4 G5)
  │         └── cost: 1084.42

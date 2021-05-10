@@ -137,6 +137,13 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			))
 		}
 
+		switch t.Op() {
+		case opt.LocalityOptimizedSearchOp:
+			if !setPrivate.Ordering.Any() {
+				panic(errors.AssertionFailedf("locality optimized search op has a non-empty ordering"))
+			}
+		}
+
 	case *AggregationsExpr:
 		var checkAggs func(scalar opt.ScalarExpr)
 		checkAggs = func(scalar opt.ScalarExpr) {
@@ -355,6 +362,8 @@ func checkExprOrdering(e opt.Expr) {
 	case *OrdinalityPrivate:
 		ordering = t.Ordering
 	case GroupingPrivate:
+		ordering = t.Ordering
+	case SetPrivate:
 		ordering = t.Ordering
 	default:
 		return

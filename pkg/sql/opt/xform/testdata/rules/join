@@ -7495,7 +7495,7 @@ SELECT 1 FROM (VALUES (1), (1)) JOIN (VALUES (1), (1), (1)) ON true
 UNION ALL
 SELECT 1 FROM (VALUES (1), (1), (1)) JOIN (VALUES (1), (1)) ON true
 ----
-memo (optimized, ~18KB, required=[presentation: ?column?:7])
+memo (optimized, ~19KB, required=[presentation: ?column?:7])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: ?column?:7]
  │         ├── best: (union-all G2 G3)

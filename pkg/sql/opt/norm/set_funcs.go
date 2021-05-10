@@ -74,6 +74,7 @@ func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *
 		LeftCols:  make(opt.ColList, 0, length),
 		RightCols: make(opt.ColList, 0, length),
 		OutCols:   make(opt.ColList, 0, length),
+		Ordering:  set.Ordering,
 	}
 	for idx, outCol := range set.OutCols {
 		if needed.Contains(outCol) {
@@ -81,6 +82,10 @@ func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *
 			prunedSet.RightCols = append(prunedSet.RightCols, set.RightCols[idx])
 			prunedSet.OutCols = append(prunedSet.OutCols, outCol)
 		}
+	}
+	if !prunedSet.Ordering.SubsetOfCols(needed) {
+		prunedSet.Ordering = prunedSet.Ordering.Copy()
+		prunedSet.Ordering.ProjectCols(needed)
 	}
 	return &prunedSet
 }

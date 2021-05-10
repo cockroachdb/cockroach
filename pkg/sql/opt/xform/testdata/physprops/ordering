@@ -95,6 +95,7 @@ limit
  │    ├── columns: e:2 f:3
  │    ├── left columns: e:7 f:8
  │    ├── right columns: e:12 f:13
+ │    ├── internal-ordering: +2,+3
  │    ├── cardinality: [0 - 10]
  │    ├── key: (2,3)
  │    ├── ordering: +2
@@ -1489,6 +1490,7 @@ union
  ├── columns: a:9!null b:10!null c:11!null
  ├── left columns: abc.a:1 abc.b:2 abc.c:3
  ├── right columns: y:6 x:5 z:7
+ ├── internal-ordering: +(9|10),+11
  ├── key: (10,11)
  ├── fd: (9)==(10), (10)==(9)
  ├── ordering: +(9|10) [actual: +9]
@@ -1537,6 +1539,7 @@ intersect
  ├── columns: a:1 b:2 c:3 d:4
  ├── left columns: a:1 b:2 c:3 d:4
  ├── right columns: c:9 d:10 a:7 b:8
+ ├── internal-ordering: +3,+4
  ├── key: (1-4)
  ├── ordering: +3,+4
  ├── sort (segmented)
@@ -1559,6 +1562,7 @@ intersect-all
  ├── columns: a:1!null b:2!null c:3!null
  ├── left columns: a:1!null b:2!null c:3!null
  ├── right columns: y:6 x:5 z:7
+ ├── internal-ordering: +(1|2),+3
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2) [actual: +1]
  ├── select
@@ -1591,6 +1595,7 @@ except
  ├── columns: a:1!null b:2!null c:3!null
  ├── left columns: a:1!null b:2!null c:3!null
  ├── right columns: z:7 y:6 x:5
+ ├── internal-ordering: +(1|3),+2
  ├── key: (2,3)
  ├── fd: (1)==(3), (3)==(1)
  ├── ordering: +(1|3),+2 [actual: +1,+2]
@@ -1624,6 +1629,7 @@ except-all
  ├── columns: a:1 b:2 c:3 d:4
  ├── left columns: a:1 b:2 c:3 d:4
  ├── right columns: c:9 d:10 a:7 b:8
+ ├── internal-ordering: +1,+2
  ├── ordering: +1,+2
  ├── sort (segmented)
  │    ├── columns: a:1 b:2 c:3 d:4
