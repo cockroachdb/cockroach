@@ -322,8 +322,13 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 	return buf
 }
 
-// crdbV2LongLineLen is the max length of a log line, in bytes, before
+// crdbV2LongLineLen is the max length of a log entry, in bytes, before
 // it gets broken up into multiple lines.
+// This maximum is applied to the size of the entry without considering
+// the prefix (timestamp, location etc).
+// The value is approximate: lines can be effectively shorter than
+// this maximum. This margin exists so as to accommodate lines that
+// end with a multi-byte UTF-8 sequence, as these cannot be broken up.
 //
 // This is implemented as a variable so it can be modified
 // in unit tests.
@@ -331,7 +336,36 @@ func formatLogEntryInternalV2(entry logEntry, cp ttycolor.Profile) *buffer {
 //
 // NB: the value of this variable might be mentioned in the format's
 // documentation above. Keep them in sync if necessary.
-var crdbV2LongLineLen = 16 * 1000
+var crdbV2LongLineLen longLineLen
+
+func init() {
+	crdbV2LongLineLen.set(16 * 1000)
+}
+
+type longLineLen int
+
+func (l *longLineLen) set(v int) {
+	// We refuse to break a long entry in the middle of a UTF-8
+	// sequence, so the effective max length needs to be reduced by the
+	// maximum size of an UTF-8 sequence.
+	suffixLen := utf8.UTFMax
+	// We also refuse to break a long entry in the middle of a redaction
+	// marker. Additionally, if we observe a start redaction marker,
+	// we are going to insert a closing redaction marker after it
+	// before we break up the line.
+	if len(startRedactionMarker)+len(endRedactionMarker) > suffixLen {
+		suffixLen = len(startRedactionMarker) + len(endRedactionMarker)
+	}
+	newMax := v - suffixLen
+	if newMax < 1 {
+		panic("max line length cannot be zero or negative")
+	}
+	*l = longLineLen(newMax)
+}
+
+func (l longLineLen) shouldBreak(lastLen int) bool {
+	return lastLen >= int(l)
+}
 
 func (buf *buffer) maybeMultiLine(
 	prefixLen int, contMark byte, redactable bool, msg string, cp ttycolor.Profile,
@@ -356,7 +390,7 @@ func (buf *buffer) maybeMultiLine(
 			lastLen = 0
 			continue
 		}
-		if lastLen >= crdbV2LongLineLen {
+		if crdbV2LongLineLen.shouldBreak(lastLen) {
 			buf.WriteString(msg[k:i])
 			if betweenRedactionMarkers {
 				// We are breaking a long line in-between redaction
@@ -369,13 +403,14 @@ func (buf *buffer) maybeMultiLine(
 			buf.Write(cp[ttycolor.Green])
 			buf.WriteByte('|')
 			buf.Write(cp[ttycolor.Reset])
+			k = i
+			lastLen = 0
 			if betweenRedactionMarkers {
 				// See above: if we are splitting in-between redaction
 				// markers, continue the sensitive item on the new line.
 				buf.WriteString(startRedactionMarker)
+				lastLen += len(startRedactionMarker)
 			}
-			k = i
-			lastLen = 0
 		}
 		// Common case: single-byte runes and redaction marker known to
 		// start with a multi-byte sequence. Take a shortcut.
