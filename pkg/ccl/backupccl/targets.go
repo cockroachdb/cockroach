@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -611,4 +612,67 @@ func findLastSchemaChangeTime(
 		}
 	}
 	return lastSchemaChangeTime
+}
+
+// checkMultiRegionCompatible checks if the given table is compatible to be
+// restored into the given database according to their multi-region localities.
+// It returns an error describing their incompatibility if not.
+func checkMultiRegionCompatible(
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	table *tabledesc.Mutable,
+	database catalog.DatabaseDescriptor,
+) error {
+	// If either the database or table are non-MR then allow it.
+	if !(database.IsMultiRegion() && table.GetLocalityConfig() != nil) {
+		return nil
+	}
+
+	if table.IsLocalityGlobal() {
+		// Global tables are allowed because they do not reference a particular
+		// region.
+		return nil
+	} else if table.IsLocalityRegionalByTable() {
+		regionName, _ := table.GetRegionalByTableRegion()
+		if regionName == descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
+			// REGIONAL BY PRIMARY REGION tables are allowed since they do not
+			// reference a particular region.
+			return nil
+		}
+
+		// For REGION BY TABLE IN <region> tables, allow the restore if the
+		// database has the region.
+		regionEnumID := database.GetRegionConfig().RegionEnumID
+		regionEnum, err := catalogkv.MustGetTypeDescByID(ctx, txn, codec, regionEnumID)
+		if err != nil {
+			return err
+		}
+		dbRegionNames, err := regionEnum.RegionNames()
+		if err != nil {
+			return err
+		}
+		existingRegions := make([]string, len(dbRegionNames))
+		for i, dbRegionName := range dbRegionNames {
+			if dbRegionName == regionName {
+				return nil
+			}
+			existingRegions[i] = fmt.Sprintf("%q", dbRegionName)
+		}
+
+		return errors.Newf(
+			"cannot restore REGIONAL BY TABLE %s (ID: %d) into database %q; locality %q not found in database localities %s",
+			table.GetName(), table.GetID(), database.GetName(), regionName, strings.Join(existingRegions, ", "),
+		)
+	} else if table.IsLocalityRegionalByRow() {
+		return errors.Newf(
+			"cannot restore REGIONAL BY ROW table %s (ID: %d) individually into a multi-region database %s",
+			table.GetName(), table.GetID(), database.GetName(),
+		)
+	} else {
+		return errors.Newf(
+			"locality config of table %s (ID: %d) has locality %v which is unknown by RESTORE",
+			table.GetName(), table.GetID(), table.GetLocalityConfig(),
+		)
+	}
 }
