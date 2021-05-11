@@ -3276,7 +3276,7 @@ create_unsupported:
 | CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
-| CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
+| CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
@@ -11588,7 +11588,7 @@ operator_op:
   {
     // Only support operators on pg_catalog.
     if $1 != "pg_catalog" {
-      return unimplemented(sqllex, "user defined operator")
+      return unimplementedWithIssue(sqllex, 65017)
     }
     $$ = $3
   }
