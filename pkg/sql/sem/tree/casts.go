@@ -437,17 +437,21 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 	case types.IntFamily:
 		if v, ok := AsDInt(inVal); ok {
-			if typ.Width() == 32 || typ.Width() == 64 || typ.Width() == 16 {
+			if typ.Width() == 32 || typ.Width() == 16 {
 				// Width is defined in bits.
 				width := uint(typ.Width() - 1)
 
-				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
+				// We're performing range checks in line with Go's
+				// implementation of math.(Max|Min)(16|32) numbers that store
+				// the boundaries of the allowed range.
+				// NOTE: when updating the code below, make sure to update
+				// execgen/overloads_cast.go as well.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange,
-						"integer out of range for type %s",
-						typ.Name(),
-					)
+					if typ.Width() == 16 {
+						return nil, ErrInt2OutOfRange
+					}
+					return nil, ErrInt4OutOfRange
 				}
 			}
 		}

@@ -251,4 +251,12 @@ type TestTenantArgs struct {
 	// Test server starts with secure mode by default. When this is set to true
 	// it will switch to insecure
 	ForceInsecure bool
+
+	// MemoryPoolSize is the amount of memory in bytes that can be used by SQL
+	// clients to store row data in server RAM.
+	MemoryPoolSize int64
+
+	// TempStorageConfig is used to configure temp storage, which stores
+	// ephemeral data when processing large queries.
+	TempStorageConfig *TempStorageConfig
 }
