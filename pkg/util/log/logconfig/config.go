@@ -280,7 +280,7 @@ type FluentDefaults struct {
 // The default output format for Fluent sinks is
 // `json-fluent-compact`. The `fluent` variants of the JSON formats
 // include a `tag` field as required by the Fluentd protocol, which
-// the non-`fluent` JSON [format variants](logformats.html) do not include.
+// the non-`fluent` JSON [format variants](log-formats.html) do not include.
 //
 // {{site.data.alerts.callout_info}}
 // Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
