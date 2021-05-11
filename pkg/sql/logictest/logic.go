@@ -1317,6 +1317,11 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	// it installs detects a transaction that doesn't have
 	// modifiedSystemConfigSpan set even though it should, for
 	// "testdata/rename_table". Figure out what's up with that.
+	if serverArgs.maxSQLMemoryLimit == 0 {
+		// Specify a fixed memory limit (some test cases verify OOM conditions;
+		// we don't want those to take long on large machines).
+		serverArgs.maxSQLMemoryLimit = 192 * 1024 * 1024
+	}
 	var tempStorageConfig base.TempStorageConfig
 	if serverArgs.tempStorageDiskLimit == 0 {
 		tempStorageConfig = base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
@@ -1326,9 +1331,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Specify a fixed memory limit (some test cases verify OOM conditions; we
-			// don't want those to take long on large machines).
-			SQLMemoryPoolSize: 192 * 1024 * 1024,
+			SQLMemoryPoolSize: serverArgs.maxSQLMemoryLimit,
 			TempStorageConfig: tempStorageConfig,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -1453,6 +1456,8 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 					DeterministicExplain: true,
 				},
 			},
+			MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
+			TempStorageConfig: &params.ServerArgs.TempStorageConfig,
 		}
 
 		// Prevent a logging assertion that the server ID is initialized multiple times.
@@ -3136,6 +3141,10 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // TestServerArgs contains the parameters that callers of RunLogicTest might
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
+	// maxSQLMemoryLimit determines the value of --max-sql-memory startup
+	// argument for the server. If unset, then the default limit of 192MiB will
+	// be used.
+	maxSQLMemoryLimit int64
 	// tempStorageDiskLimit determines the limit for the temp storage (that is
 	// actually in-memory). If it is unset, then the default limit of 100MB
 	// will be used.
@@ -3423,9 +3432,10 @@ func runSQLLiteLogicTest(t *testing.T, configOverride string, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
-	// SQLLite logic tests can be very disk (with '-disk' configs) intensive,
-	// so we give them larger temp storage limit than other logic tests get.
+	// SQLLite logic tests can be very memory and disk intensive, so we give
+	// them larger limits than other logic tests get.
 	serverArgs := TestServerArgs{
+		maxSQLMemoryLimit:    512 << 20, // 512 MiB
 		tempStorageDiskLimit: 512 << 20, // 512 MiB
 	}
 	RunLogicTestWithDefaultConfig(t, serverArgs, configOverride, true /* runCCLConfigs */, prefixedGlobs...)
