@@ -98,7 +98,7 @@ func TestKVFeed(t *testing.T) {
 		)
 		metrics := MakeMetrics(time.Minute)
 		bufferFactory := func() EventBuffer {
-			return makeMemBuffer(mm.MakeBoundAccount(), &metrics)
+			return MakeMemBuffer(mm.MakeBoundAccount(), &metrics)
 		}
 		scans := make(chan physicalConfig)
 		sf := scannerFunc(func(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error {

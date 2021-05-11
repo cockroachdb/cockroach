@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
@@ -43,8 +42,7 @@ type Config struct {
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
-	Metrics            *Metrics
-	MM                 *mon.BytesMonitor
+	EventBufferFactory func() EventBuffer
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
 	SchemaChangePolicy changefeedbase.SchemaChangePolicy
@@ -79,9 +77,6 @@ func Run(ctx context.Context, cfg Config) error {
 		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 		pff = rangefeedFactory(distSender.RangeFeed)
 	}
-	bf := func() EventBuffer {
-		return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
-	}
 
 	f := newKVFeed(
 		cfg.Sink, cfg.Spans,
@@ -90,7 +85,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf)
+		sc, pff, cfg.EventBufferFactory)
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
