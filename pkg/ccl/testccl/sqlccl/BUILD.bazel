@@ -35,7 +35,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
-        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
