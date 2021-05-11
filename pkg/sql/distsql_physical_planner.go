@@ -2729,9 +2729,13 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForProjectSet(planCtx, n)
 
 	case *renderNode:
+		currentPlanDepth := planCtx.planDepth
 		plan, err = dsp.createPhysPlanForPlanNode(planCtx, n.source.plan)
 		if err != nil {
 			return nil, err
+		}
+		if currentPlanDepth == 1 && len(plan.MergeOrdering.Columns) > 0 {
+			plan.EnsureSingleStreamOnGateway()
 		}
 		err = dsp.selectRenders(plan, n, planCtx)
 		if err != nil {
