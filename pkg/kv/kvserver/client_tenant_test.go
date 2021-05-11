@@ -60,7 +60,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 	require.NoError(t, err)
 	defer store.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
@@ -162,7 +162,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
@@ -235,7 +235,7 @@ func TestTenantRateLimiter(t *testing.T) {
 		return string(read)
 	}
 	makeMetricStr := func(expCount int64) string {
-		const tenantMetricStr = `kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="10"}`
+		tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="%d"}`, tenantID.ToUint64())
 		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
 	}
 

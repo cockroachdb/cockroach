@@ -1446,7 +1446,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	if cfg.useTenant {
 		var err error
 		tenantArgs := base.TestTenantArgs{
-			TenantID:                    roachpb.MakeTenantID(10),
+			TenantID:                    serverutils.TestTenantID(),
 			AllowSettingClusterSettings: true,
 			TestingKnobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
