@@ -13,7 +13,10 @@ package main
 var rubyPGBlocklist = blocklistsForVersion{
 	{"v20.2", "rubyPGBlockList20_2", rubyPGBlockList20_2, "rubyPGIgnoreList20_2", rubyPGIgnoreList20_2},
 	{"v21.1", "rubyPGBlockList21_1", rubyPGBlockList21_1, "rubyPGIgnoreList21_1", rubyPGIgnoreList21_1},
+	{"v21.2", "rubyPGBlockList21_2", rubyPGBlockList21_2, "rubyPGIgnoreList21_2", rubyPGIgnoreList21_2},
 }
+
+var rubyPGBlockList21_2 = rubyPGBlockList21_1
 
 var rubyPGBlockList21_1 = rubyPGBlockList20_2
 
@@ -188,6 +191,8 @@ var rubyPGBlockList20_2 = blocklist{
 	"PG::Connection deprecated forms of methods should forward send_query to send_query_params":                                                                                                     "unknown",
 	"PG::Connection deprecated forms of methods should forward exec to exec_params":                                                                                                                 "unknown",
 }
+
+var rubyPGIgnoreList21_2 = rubyPGIgnoreList21_1
 
 var rubyPGIgnoreList21_1 = rubyPGIgnoreList20_2
 
