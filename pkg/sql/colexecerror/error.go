@@ -99,11 +99,12 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 // Multiple actual packages can have the same prefix as a single constant string
 // defined below, but all of such packages are allowed to be caught from.
 const (
-	colPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/col"
-	execinfraPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
-	sqlRowPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/row"
-	sqlSemPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/sem"
+	colPackagesPrefix         = "github.com/cockroachdb/cockroach/pkg/col"
+	execinfraPackagePrefix    = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	physicalPlanPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	sqlColPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/sql/col"
+	sqlRowPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/sql/row"
+	sqlSemPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/sql/sem"
 )
 
 // shouldCatchPanic checks whether the panic that was emitted from
@@ -130,6 +131,7 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 	}
 	return strings.HasPrefix(panicEmittedFrom, colPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
+		strings.HasPrefix(panicEmittedFrom, physicalPlanPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlRowPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlSemPackagesPrefix)
