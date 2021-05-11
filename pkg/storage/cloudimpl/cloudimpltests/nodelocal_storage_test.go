@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,18 +32,22 @@ func TestPutLocal(t *testing.T) {
 	p, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
+	testSettings := cluster.MakeTestingClusterSettings()
 	testSettings.ExternalIODir = p
 	dest := nodelocal.MakeLocalStorageURI(p)
 
-	testExportStore(t, dest, false, security.RootUserName(), nil, nil)
-	testListFiles(t, "nodelocal://0/listing-test/basepath",
-		security.RootUserName(), nil, nil)
+	cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), nil, nil, testSettings)
+	cloudtestutils.CheckListFiles(t, "nodelocal://0/listing-test/basepath",
+		security.RootUserName(), nil, nil, testSettings)
 }
 
 func TestLocalIOLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
+
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	const allowed = "/allowed"
 	testSettings.ExternalIODir = allowed
 

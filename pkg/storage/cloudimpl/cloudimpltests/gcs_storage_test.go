@@ -12,17 +12,77 @@ package cloudimpltests
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"io/ioutil"
+	"net/url"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/gcp"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2/google"
 )
+
+func TestPutGoogleCloud(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	bucket := os.Getenv("GS_BUCKET")
+	if bucket == "" {
+		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
+	}
+
+	user := security.RootUserName()
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	testutils.RunTrueAndFalse(t, "specified", func(t *testing.T, specified bool) {
+		credentials := os.Getenv("GS_JSONKEY")
+		if credentials == "" {
+			skip.IgnoreLint(t, "GS_JSONKEY env var must be set")
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
+			bucket,
+			"backup-test-specified",
+			gcp.CredentialsParam,
+			url.QueryEscape(encoded),
+		)
+		if specified {
+			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
+		}
+		t.Log(uri)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t,
+			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
+				bucket,
+				"backup-test-specified",
+				"listing-test",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				gcp.CredentialsParam,
+				url.QueryEscape(encoded),
+			),
+			security.RootUserName(), nil, nil, testSettings,
+		)
+	})
+	t.Run("implicit", func(t *testing.T) {
+		// Only test these if they exist.
+		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
+			skip.IgnoreLint(t, err)
+		}
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
+			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil, testSettings)
+	})
+}
 
 func requireImplicitGoogleCredentials(t *testing.T) {
 	t.Helper()
@@ -34,11 +94,13 @@ func TestAntagonisticGCSRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	requireImplicitGoogleCredentials(t)
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/region.tbl?AUTH=implicit"
 	conf, err := cloud.ExternalStorageConfFromURI(gsFile, security.RootUserName())
 	require.NoError(t, err)
 
-	testAntagonisticRead(t, conf)
+	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
 }
 
 // TestFileDoesNotExist ensures that the ReadFile method of google cloud storage
@@ -48,6 +110,8 @@ func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	requireImplicitGoogleCredentials(t)
 	user := security.RootUserName()
+
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	{
 		// Invalid gsFile.
@@ -86,6 +150,8 @@ func TestCompressedGCS(t *testing.T) {
 
 	user := security.RootUserName()
 	ctx := context.Background()
+
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	// gsutil cp /usr/share/dict/words gs://cockroach-fixtures/words-compressed.txt
 	gsFile1 := "gs://cockroach-fixtures/words.txt?AUTH=implicit"

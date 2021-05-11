@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -38,6 +39,8 @@ func TestPutUserFileTable(t *testing.T) {
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 	filename := "path/to/file"
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, _, kvDB := serverutils.StartServer(t, params)
@@ -46,19 +49,19 @@ func TestPutUserFileTable(t *testing.T) {
 	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-	testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
+	cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), ie, kvDB, testSettings)
 
-	testListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
-		security.RootUserName(), ie, kvDB)
+	cloudtestutils.CheckListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
+		security.RootUserName(), ie, kvDB, testSettings)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
 		dest := userfile.MakeUserFileStorageURI("", filename)
 
 		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-		testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
+		cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), ie, kvDB, testSettings)
 
-		testListFiles(t, "userfile:///listing-test/basepath",
-			security.RootUserName(), ie, kvDB)
+		cloudtestutils.CheckListFiles(t, "userfile:///listing-test/basepath",
+			security.RootUserName(), ie, kvDB, testSettings)
 	})
 
 	t.Run("reject-normalized-basename", func(t *testing.T) {
