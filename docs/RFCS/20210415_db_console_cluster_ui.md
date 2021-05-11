@@ -22,17 +22,17 @@ For local development, dependency management tools can create symlinks for depen
 
 # Proposal
 
-This leads me to how we might simplify this situation. Since the only code we are using from `@cockroachlabs/cluster-ui` are the presentational components, by moving the refactored components back into the CRDB codebase there will be no symlinks required to develop features there. By using the CRDB repository as the codebase for the cluster-ui pages used for CockroachCloud, the version of the pages and the underlying API (protos-js) will be controlled with versioned release branches and backports. This will create a great advantage for developing in DB Console as there will be no symlinked dependencies. Local development of CockroachCloud Console will still require symlinking to the CRDB repository, but it will be reduced to a single manageable symlink.
+This leads us to how we might simplify this situation. Since the only code we are using from `@cockroachlabs/cluster-ui` are the presentational components, by moving the refactored components back into the CRDB codebase there will be no symlinks required to develop features there. By using the CRDB repository as the codebase for the cluster-ui pages used for CockroachCloud, the version of the pages and the underlying API (protos-js) will be controlled with versioned release branches and backports. Developing code in place will create a great advantage as there will be no symlinked dependencies. Local development of CockroachCloud Console will still require symlinking to the CRDB repository, but it will be reduced to a single manageable symlink.
 
 ![no symlinks](http://www.plantuml.com/plantuml/png/NOynIySm44Vt-nH79lz3wUuWnRe8havjXpIvjh59BYGNGSJlRa7GuFQ3Uxp73KLqbXeyY1DFg4PVYr36rsUqb2XQYkO3NSIdHnmv5hwWkwrApNHJaBGvzKwesgjXSsRMvh1h_xlxTEvzTJU5dp2PdqXNtG9JoYnSkhUom1T45iALHJWWRzYIU7ybBE6MESonZVn1SmpyJXOFoWIj6hk7_x8NDjetJy9mZHhyDm00)
 
 ![CC-Console dependency](http://www.plantuml.com/plantuml/png/VP31IWCn48RlUOfXJ_OGzYuYrHL1KUd5Kzj3DfbjOvDCI2O5aRwxiOMwgz1R8F_CztyppwmI5-y4MtO8JUTAPapm_WG68mQ3GN-23T1rq578L4DNG-6ISDQ8gFHERUhOm_tlhoQzIwJqrlJj-Tt6tQOjTjR0brZg4qGMknRBc8Wfou-y5WSHY15wOYOFDC0u2TSLOH26H7uL9f1pQ1KyxT705XEA8IbVgvsJJlMvzIhKmaPcJ7khyLYdgZqc2bnjuIx6dnxQKJ7Gl2rUuLdjLTR9HeR5IJSVf-RJnMEdWnXhWRpzA_92MhdHWVztW1ifuH9Zib5Mn8Lm9IvAxspUeW4c2D6BUIKLxxu1)
 
-This also has the advantage of reducing the discussion of multiple versions to largely a discussion of the version of the database. DB Console will have no consideration of the version of Cluster UI as it will simply be the one in the codebase. Backports will be managed in the same way as other code changes in DB Console, using git branches.
+Storing code on release branches also has the advantage of reducing the discussion of multiple versions to largely a discussion of the version of the database. DB Console will have no consideration of the version of Cluster UI as it will simply be the one in the codebase. Backports will be managed in the same way as other code changes in DB Console, using git branches.
 
 ![release branches](http://www.plantuml.com/plantuml/png/VT313e8m3CRn-vwYuJuK7i3m7eH3ALMKmKWxJiPtTxf8ucAyBVzy-MLfem4bRBE3eRVa5_MEhR1ZLBQzu48Zgp5dmPcX84-JUAHnw0_xku2x0LYH9hp4JJkZ1fOkPMXNyS6hlIau3AoX0tk2bjpsMjdjkkUuVfWlwVEFkYgh7zuxvrgA_x1ZMISiqsBFjHGJ5hc6bo6UoZm1)
 
-And in support of multiple cluster versions in CockroachCloud, the published package (`@cockroachlabs/cluster-ui`) could be aligned to the version of the DB for convenience.
+And in support of multiple cluster versions in CockroachCloud, the published package (`@cockroachlabs/cluster-ui`) should be converted to [CalVer](https://calver.org/) versions (instead of there current [Semver](https://semver.org/) versions) based on the version of DB Console.
 
 ![aligned versions](http://www.plantuml.com/plantuml/png/ZP4nRyCW48LtViN9KpgG1F-0ofBdLjsj36UuDccmYG1tgVBVYuNY5brKPqDFxxx7lMj2H1-dmOBffNPZS9Qa9qiOIFOUHtsa8CIxnu6WqawVlKDzDFrkULVmBG0kgC_uaJpTW26IFsGPkejtqGNv6S1Yf10F89-XqtQQNN8wBN9oNqL1klsZLbjrXpVBZ9R5_s3xRPrX9MtMEMqMCopXj7MJWUhrxGKspRA_nJuyPU2VqQPMQPHhYcbpXBWk7RSjjFaEi2aoTWEEQHKZ0_clawPRPbEwVj6fDvdGQnQrPjdB_C5xHvFIfChutlmat9dRu7LpP-v8i9XiNQ-0fJuqgCh1udDhTJKqcccmuWS0)
 
@@ -50,7 +50,7 @@ After the code is moved, dependencies have been resolved, and the build is succe
 
 Once the move and cleanup has happened on master, an update will need to be made to `release-20.2` as this version also depends on the an external `cluster-ui` as well. The version supporting 20.2 is on a separate branch in the UI repository (`cluster-ui-20.2`) and so while the code move on master could be referenced I'm not confident it can be duplicated. Depending on the state of the release, the work on CRDB master may need to be backported to `release-21.1` as well.
 
-One benefit of having the components in the same repository as the protobufs, is that we will no long need to publish the protobuf clients as a dependency. After the build has configured to include these clients as a local dependency, the `@cockroachlabs/crdb-protobuf-client` package can be deprecated and the `package.json` (`/pkg/ui/src/js/package.json`) can be set to private.
+One benefit of having the components in the same repository as the protobufs, is that we will no longer need to publish the protobuf clients as a dependency. After the build has configured to include these clients as a local dependency, the `@cockroachlabs/crdb-protobuf-client` package can be deprecated and the `package.json` (`/pkg/ui/src/js/package.json`) can be set to private.
 
 ## Updating CC Console
 
