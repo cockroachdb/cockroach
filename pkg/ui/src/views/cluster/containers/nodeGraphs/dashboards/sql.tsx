@@ -124,6 +124,20 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="SQL Statement Contention"
+      sources={nodeSources}
+      tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
+    >
+      <Axis label="queries">
+        <Metric
+          name="cr.node.sql.distsql.contended_queries.count"
+          title="Contention"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Active Flows for Distributed SQL Statements"
       tooltip="The number of flows on each node contributing to currently running distributed SQL statements."
     >
@@ -140,14 +154,14 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Service Latency: SQL, 99th percentile"
+      title="Service Latency: SQL Statements, 99th percentile"
       tooltip={
         <div>
-          Over the last minute, this node executed 99% of queries within this
-          time.{" "}
+          Over the last minute, this node executed 99% of SQL statements within
+          this time.&nbsp;
           <em>
-            This time does not include network latency between the node and
-            client.
+            This time only includes SELECT, INSERT, UPDATE and DELETE statements
+            and does not include network latency between the node and client.
           </em>
         </div>
       }
@@ -166,14 +180,14 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Service Latency: SQL, 90th percentile"
+      title="Service Latency: SQL Statements, 90th percentile"
       tooltip={
         <div>
-          Over the last minute, this node executed 90% of queries within this
-          time.{" "}
+          Over the last minute, this node executed 90% of SQL statements within
+          this time.&nbsp;
           <em>
-            This time does not include network latency between the node and
-            client.
+            This time only includes SELECT, INSERT, UPDATE and DELETE statements
+            and does not include network latency between the node and client.
           </em>
         </div>
       }

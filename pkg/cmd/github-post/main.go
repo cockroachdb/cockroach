@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,31 +44,30 @@ const (
 	unknown = "(unknown)"
 )
 
-type formatter func(context.Context, failure) issues.PostRequest
+type formatter func(context.Context, failure) (issues.IssueFormatter, issues.PostRequest)
 
-var formatters = map[string]formatter{
-	"pebble-metamorphic": formatPebbleMetamorphicIssue,
-}
-
-func defaultFormatter(ctx context.Context, f failure) issues.PostRequest {
-	authorEmail, err := getAuthorEmail(ctx, f.packageName, f.testName)
-	if err != nil {
-		log.Printf("unable to determine test author email: %s\n", err)
-	}
+func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
+	teams, authorEmail := getOwner(ctx, f.packageName, f.testName)
 	repro := fmt.Sprintf("make stressrace TESTS=%s PKG=./pkg/%s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
 		f.testName, trimPkg(f.packageName))
 
-	return issues.PostRequest{
-		// TODO(tbg): actually use this as a template and not a hard-coded
-		// string.
-		TitleTemplate:       f.title,
-		BodyTemplate:        issues.UnitTestFailureBody,
+	var projColID int
+	var mentions []string
+	if len(teams) > 0 {
+		projColID = teams[0].TriageColumnID
+		for _, team := range teams {
+			mentions = append(mentions, "@"+string(team.Aliases[0]))
+		}
+	}
+	return issues.UnitTestFormatter, issues.PostRequest{
 		TestName:            f.testName,
 		PackageName:         f.packageName,
 		Message:             f.testMessage,
-		Artifacts:           "",
+		Artifacts:           "/", // best we can do for unit tests
 		AuthorEmail:         authorEmail,
 		ReproductionCommand: repro,
+		Mention:             mentions,
+		ProjectColumnID:     projColID,
 	}
 }
 
@@ -74,24 +75,22 @@ func main() {
 	formatterName := flag.String("formatter", "", "formatter to use to construct GitHub issues")
 	flag.Parse()
 
-	formatter := defaultFormatter
-	if *formatterName != "" {
-		var ok bool
-		formatter, ok = formatters[*formatterName]
-		if !ok {
-			log.Fatalf("Unknown formatter %q", *formatterName)
-		}
+	var reqFromFailure formatter
+	switch *formatterName {
+	case "pebble-metamorphic":
+		reqFromFailure = formatPebbleMetamorphicIssue
+	default:
+		reqFromFailure = defaultFormatter
 	}
 
 	fileIssue := func(ctx context.Context, f failure) error {
-		req := formatter(ctx, f)
-		log.Printf("filing issue with title: %s", req.TitleTemplate)
-		return issues.Post(ctx, req)
+		fmter, req := reqFromFailure(ctx, f)
+		return issues.Post(ctx, fmter, req)
 	}
 
 	ctx := context.Background()
 	if err := listFailures(ctx, os.Stdin, fileIssue); err != nil {
-		log.Fatal(err)
+		log.Println(err) // keep going
 	}
 }
 
@@ -482,7 +481,11 @@ func writeSlowTestsReport(report string) error {
 	return ioutil.WriteFile("artifacts/slow-tests-report.txt", []byte(report), 0644)
 }
 
-func getAuthorEmail(ctx context.Context, packageName, testName string) (string, error) {
+// getFileLine returns the file (relative to repo root) and line for the given test.
+// The package name is assumed relative to the repo root as well, i.e. pkg/foo/bar.
+func getFileLine(
+	ctx context.Context, packageName, testName string,
+) (_filename string, _linenum string, _ error) {
 	// Search the source code for the email address of the last committer to touch
 	// the first line of the source code that contains testName. Then, ask GitHub
 	// for the GitHub username of the user with that email address by searching
@@ -491,84 +494,69 @@ func getAuthorEmail(ctx context.Context, packageName, testName string) (string, 
 	testName = subtests[0]
 	packageName = strings.TrimPrefix(packageName, "github.com/cockroachdb/cockroach/")
 	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git grep -n "func %s" $(git rev-parse --show-toplevel)/%s/*_test.go`,
+		fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git grep -n 'func %s(' '%s/*_test.go'`,
 			testName, packageName))
 	// This command returns output such as:
 	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", errors.Errorf("couldn't find test %s in %s: %s %s",
+		return "", "", errors.Errorf("couldn't find test %s in %s: %s %s",
 			testName, packageName, err, string(out))
 	}
 	re := regexp.MustCompile(`(.*):(.*):`)
 	// The first 2 :-delimited fields are the filename and line number.
 	matches := re.FindSubmatch(out)
 	if matches == nil {
-		return "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s",
+		return "", "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s",
 			testName, packageName, string(out))
 	}
-	filename := matches[1]
-	linenum := matches[2]
+	return string(matches[1]), string(matches[2]), nil
+}
 
-	// Now run git blame.
-	cmd = exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git blame --porcelain -L%s,+1 %s | grep author-mail`,
+// getOwner looks up the file containing the given test and returns
+// the owning teams as well as the author email. It does not return
+// errors, but instead simply returns what it can.
+func getOwner(
+	ctx context.Context, packageName, testName string,
+) (_teams []team.Team, _authorEmail string) {
+	filename, linenum, err := getFileLine(ctx, packageName, testName)
+	if err != nil {
+		log.Printf("getting file:line for %s.%s: %s", packageName, testName, err)
+		return nil, ""
+	}
+	authorEmail, _ := getAuthorEmail(ctx, filename, linenum)
+	co, err := codeowners.DefaultLoadCodeOwners()
+	if err != nil {
+		log.Printf("loading codeowners: %s", err)
+		return nil, authorEmail
+	}
+	return co.Match(filename), authorEmail
+}
+
+func getAuthorEmail(ctx context.Context, filename, linenum string) (string, error) {
+	// Run git blame.
+	cmd := exec.Command(`/bin/bash`, `-c`,
+		fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git blame --porcelain -L%s,+1 '%s' | grep author-mail`,
 			linenum, filename))
 	// This command returns output such as:
 	// author-mail <jordan@cockroachlabs.com>
-	out, err = cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", errors.Errorf("couldn't find author of test %s in %s: %s %s",
-			testName, packageName, err, string(out))
+		return "", errors.Errorf("couldn't find author of %s:%s: %s\n%s",
+			filename, linenum, err, string(out))
 	}
-	re = regexp.MustCompile("author-mail <(.*)>")
-	matches = re.FindSubmatch(out)
+	re := regexp.MustCompile("author-mail <(.*)>")
+	matches := re.FindSubmatch(out)
 	if matches == nil {
-		return "", errors.Errorf("couldn't find author email of test %s in %s: %s",
-			testName, packageName, string(out))
+		return "", errors.Errorf("couldn't find author email of %s:%s: %s",
+			filename, linenum, string(out))
 	}
 	return string(matches[1]), nil
 }
 
-const pebbleBodyTemplate = `Pebble nightly metamorphic test failed on [{{.Commit}}]({{commiturl .Commit}}):
-
-{{ if (.CondensedMessage.FatalOrPanic 50).Error }}{{with $fop := .CondensedMessage.FatalOrPanic 50 -}}
-Fatal error:
-{{threeticks}}
-{{ .Error }}{{threeticks}}
-
-Stack:
-{{threeticks}}
-{{ $fop.FirstStack }}
-{{threeticks}}
-
-<details><summary>Log preceding fatal error</summary><p>
-
-{{threeticks}}
-{{ $fop.LastLines }}
-{{threeticks}}
-
-</p></details>{{end}}{{ else -}}
-{{threeticks}}
-{{ .CondensedMessage.Digest 50 }}
-{{ threeticks }}{{end}}
-
-<details><summary>More</summary><p>
-{{if .Parameters -}}
-Parameters:
-{{range .Parameters }}
-- {{ . }}{{end}}{{end}}
-
-{{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
-{{end -}}
-{{threeticks}}
-{{.ReproductionCommand}}
-{{threeticks}}
-
-<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub>
-</p></details>`
-
-func formatPebbleMetamorphicIssue(ctx context.Context, f failure) issues.PostRequest {
+func formatPebbleMetamorphicIssue(
+	ctx context.Context, f failure,
+) (issues.IssueFormatter, issues.PostRequest) {
 	var repro string
 	{
 		const seedHeader = "===== SEED =====\n"
@@ -582,9 +570,7 @@ func formatPebbleMetamorphicIssue(ctx context.Context, f failure) issues.PostReq
 				"-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s", s)
 		}
 	}
-	return issues.PostRequest{
-		TitleTemplate:       f.title,
-		BodyTemplate:        pebbleBodyTemplate,
+	return issues.UnitTestFormatter, issues.PostRequest{
 		TestName:            f.testName,
 		PackageName:         f.packageName,
 		Message:             f.testMessage,

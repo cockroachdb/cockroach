@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/url"
@@ -576,10 +577,24 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		return err
 	}
 
-	if version == versionCancel {
+	switch version {
+	case versionCancel:
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
 		return handleCancel(conn)
+
+	case versionGSSENC:
+		// This is a request for an unsupported feature: GSS encryption.
+		// https://github.com/cockroachdb/cockroach/issues/52184
+		//
+		// Ensure the right SQLSTATE is sent to the SQL client.
+		err := pgerror.New(pgcode.ProtocolViolation, "GSS encryption is not yet supported")
+		// Annotate a telemetry key. These objects
+		// are treated specially by sendErr: they increase a
+		// telemetry counter to indicate an attempt was made
+		// to use this feature.
+		err = errors.WithTelemetry(err, "#52184")
+		return s.sendErr(ctx, conn, err)
 	}
 
 	// If the server is shutting down, terminate the connection early.
@@ -619,8 +634,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 
 	default:
 		// We don't know this protocol.
-		return s.sendErr(ctx, conn,
-			pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version))
+		err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
+		err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
+		return s.sendErr(ctx, conn, err)
 	}
 
 	// Reserve some memory for this connection using the server's monitor. This

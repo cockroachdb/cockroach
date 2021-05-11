@@ -23,7 +23,11 @@ import (
 
 // MakeTableDesc makes a generic table descriptor with the provided properties.
 func MakeTableDesc(
-	tableID descpb.ID, version descpb.DescriptorVersion, modTime hlc.Timestamp, cols int,
+	tableID descpb.ID,
+	version descpb.DescriptorVersion,
+	modTime hlc.Timestamp,
+	cols int,
+	primaryKeyIndex int,
 ) catalog.TableDescriptor {
 	td := descpb.TableDescriptor{
 		Name:             "foo",
@@ -31,12 +35,15 @@ func MakeTableDesc(
 		Version:          version,
 		ModificationTime: modTime,
 		NextColumnID:     1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			ID: descpb.IndexID(primaryKeyIndex),
+		},
 	}
 	for i := 0; i < cols; i++ {
 		td.Columns = append(td.Columns, *MakeColumnDesc(td.NextColumnID))
 		td.NextColumnID++
 	}
-	return tabledesc.NewImmutable(td)
+	return tabledesc.NewBuilder(&td).BuildImmutableTable()
 }
 
 // MakeColumnDesc makes a generic column descriptor with the provided id.
@@ -49,6 +56,17 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 	}
 }
 
+// SetLocalityRegionalByRow sets the LocalityConfig of the table
+// descriptor such that desc.IsLocalityRegionalByRow will return true.
+func SetLocalityRegionalByRow(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
+		Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+			RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+		},
+	}
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
 // AddColumnDropBackfillMutation adds a mutation to desc to drop a column.
 // Yes, this does modify an immutable.
 func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
@@ -57,7 +75,7 @@ func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDe
 		Direction:   descpb.DescriptorMutation_DROP,
 		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID() - 1)},
 	})
-	return desc
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
 }
 
 // AddNewColumnBackfillMutation adds a mutation to desc to add a column.
@@ -70,5 +88,38 @@ func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDes
 		MutationID:  0,
 		Rollback:    false,
 	})
-	return desc
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// AddPrimaryKeySwapMutation adds a mutation to desc to do a primary key swap.
+// Yes, this does modify an immutable.
+func AddPrimaryKeySwapMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_ADD,
+		Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: &descpb.PrimaryKeySwap{}},
+	})
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// AddNewIndexMutation adds a mutation to desc to add an index.
+// Yes, this does modify an immutable.
+func AddNewIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_ADD,
+		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
+	})
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
+// AddDropIndexMutation adds a mutation to desc to drop an index.
+// Yes, this does modify an immutable.
+func AddDropIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
+		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		Direction:   descpb.DescriptorMutation_DROP,
+		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
+	})
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
 }

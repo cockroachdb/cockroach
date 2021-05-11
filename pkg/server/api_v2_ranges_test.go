@@ -56,7 +56,7 @@ func TestHotRangesV2(t *testing.T) {
 
 	for nodeID, nodeResp := range hotRangesResp.RangesByNodeID {
 		if len(nodeResp) == 0 {
-			t.Fatalf("didn't get hot range response from node n%d", nodeID)
+			t.Fatalf("didn't get hot range response from node n%s", nodeID)
 		}
 		// We don't check for ranges being sorted by QPS, as this hot ranges
 		// report does not use that as its sort key (for stability across multiple
@@ -99,8 +99,8 @@ func TestNodeRangesV2(t *testing.T) {
 		t.Errorf("didn't get any ranges")
 	}
 	for _, ri := range nodeRangesResp.Ranges {
-		require.Equal(t, roachpb.NodeID(1), ri.SourceNodeID)
-		require.Equal(t, roachpb.StoreID(1), ri.SourceStoreID)
+		require.Equal(t, int32(1), ri.SourceNodeID)
+		require.Equal(t, int32(1), ri.SourceStoreID)
 		require.GreaterOrEqual(t, len(ri.LeaseHistory), 1)
 		require.NotEmpty(t, ri.Span.StartKey)
 		require.NotEmpty(t, ri.Span.EndKey)
@@ -120,7 +120,7 @@ func TestNodeRangesV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 
 	require.Greater(t, len(rangeResp.Responses), 0)
-	nodeRangeResp := rangeResp.Responses[roachpb.NodeID(1)]
+	nodeRangeResp := rangeResp.Responses[roachpb.NodeID(1).String()]
 	require.NotZero(t, nodeRangeResp)
 	// The below comparison is from the response returned in the previous API call
 	// ("nodeRangesResp") vs the current one ("nodeRangeResp").

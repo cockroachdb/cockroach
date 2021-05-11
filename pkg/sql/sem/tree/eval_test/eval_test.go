@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -45,8 +46,16 @@ func TestEval(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
 
+	dir := filepath.Join("../testdata", "eval")
+	if bazel.BuiltWithBazel() {
+		runfile, err := bazel.Runfile("pkg/sql/sem/tree/testdata/eval/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir = runfile
+	}
 	walk := func(t *testing.T, getExpr func(*testing.T, *datadriven.TestData) string) {
-		datadriven.Walk(t, filepath.Join("../testdata", "eval"), func(t *testing.T, path string) {
+		datadriven.Walk(t, dir, func(t *testing.T, path string) {
 			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				if d.Cmd != "eval" {
 					t.Fatalf("unsupported command %s", d.Cmd)
@@ -165,9 +174,9 @@ func TestEval(t *testing.T) {
 					},
 					ResultTypes: []*types.T{typedExpr.ResolvedType()},
 				},
-				Inputs: []colexecop.Operator{
-					&colexecop.CallbackOperator{
-						NextCb: func(_ context.Context) coldata.Batch {
+				Inputs: []colexecargs.OpWithMetaInfo{{
+					Root: &colexecop.CallbackOperator{
+						NextCb: func() coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch
 							}
@@ -176,8 +185,8 @@ func TestEval(t *testing.T) {
 							batch.SetLength(1)
 							batchesReturned++
 							return batch
-						},
-					},
+						}},
+				},
 				},
 				StreamingMemAccount: &acc,
 				// Unsupported post processing specs are wrapped and run through the
@@ -191,12 +200,9 @@ func TestEval(t *testing.T) {
 			mat, err := colexec.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
-				result.Op,
+				result.OpWithMetaInfo,
 				[]*types.T{typedExpr.ResolvedType()},
 				nil, /* output */
-				result.MetadataSources,
-				nil, /* toClose */
-				nil, /* getStats */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -762,7 +763,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			&dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRoleName()).Immutable)
+			dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRoleName()))
 
 		for _, table := range db.tables {
 			tableID := objectCounter
@@ -863,7 +864,7 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 		var err error
 		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
 			nil, uuid.UUID{} /* clusterID */, keys.SystemSQLCodec,
-			tabledesc.NewImmutable(tableDesc), tableZone.Subzones, false /* hasNewSubzones */)
+			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), tableZone.Subzones, false /* hasNewSubzones */)
 		if err != nil {
 			return nil, errors.Wrap(err, "error generating subzone spans")
 		}
@@ -1086,7 +1087,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 	}
 	// Use a bogus timestamp for the descriptor modification time.
 	ts := hlc.Timestamp{WallTime: 123}
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), desc, ts)
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, ts)
 	var v roachpb.Value
 	if err := v.SetProto(desc); err != nil {
 		panic(err)
@@ -1095,7 +1096,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 }
 
 // addTableDesc adds a database descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *dbdesc.Immutable) {
+func (b *systemConfigBuilder) addDBDesc(id int, dbDesc catalog.DatabaseDescriptor) {
 	// Write the table to the SystemConfig, in the descriptors table.
 	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
 	var v roachpb.Value

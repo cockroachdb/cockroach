@@ -1,0 +1,225 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+user root
+
+statement ok
+CREATE DATABASE db;
+CREATE TABLE db.t();
+GRANT CREATE ON DATABASE db TO testuser;
+CREATE TABLE db.t2();
+ALTER USER testuser CREATEDB;
+
+user testuser
+
+statement error user testuser must be owner of t or have CREATE privilege on relation t
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+user root
+
+statement ok
+REVOKE CREATE ON TABLE db.t FROM testuser
+
+user testuser
+
+statement error user testuser must be owner of t or have CREATE privilege on relation t
+ALTER DATABASE db DROP REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db DROP REGION "us-east-1"
+
+# Same thing, but this time testuser is the owner of the table (and doesn't have
+# CREATE privileges on it).
+user root
+
+statement ok
+REVOKE CREATE ON TABLE db.t FROM testuser;
+ALTER TABLE db.t OWNER TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE db DROP REGION "us-east-1"
+
+subtest alter_table_locality_privs
+
+user root
+
+statement ok
+CREATE DATABASE alter_db PRIMARY REGION "us-east-1";
+CREATE TABLE alter_db.t();
+
+user testuser
+
+statement error pq: user testuser must be owner of t or have CREATE privilege on relation t
+ALTER TABLE alter_db.t SET LOCALITY GLOBAL
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE alter_db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE alter_db.t SET LOCALITY GLOBAL
+
+# Same thing, this time make testuser the owner.
+
+user root
+
+statement ok
+REVOKE CREATE ON TABLE alter_db.t FROM testuser
+
+# To be able to gain ownership of the table, testuser needs to have CREATE
+# privilege on the database.
+statement ok
+GRANT CREATE ON DATABASE alter_db to testuser;
+ALTER TABLE alter_db.t OWNER TO testuser
+
+user testuser
+
+statement ok
+ALTER TABLE alter_db.t SET LOCALITY REGIONAL
+
+subtest alter_database_privileges
+
+user root
+
+statement ok
+CREATE DATABASE alter_mr_db PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2"
+
+user testuser
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1"
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2"
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2"
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE alter_mr_db TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
+
+user root
+
+# Revoke CREATE from testuser but make it an admin user.
+statement ok
+REVOKE CREATE ON DATABASE alter_mr_db FROM testuser;
+GRANT root TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
+
+user root
+
+# Make it such that testuser is no longer an admin role, but make it the owner of the database.
+statement ok
+REVOKE root FROM testuser;
+ALTER DATABASE alter_mr_db OWNER TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
+
+subtest add_drop_region_repartitioning_privs
+
+user root
+
+statement ok
+CREATE DATABASE repartition_privs PRIMARY REGION "ca-central-1" REGIONS "us-east-1";
+CREATE TABLE repartition_privs.rbr () LOCALITY REGIONAL BY ROW;
+CREATE TABLE repartition_privs.regional() LOCALITY REGIONAL;
+CREATE TABLE repartition_privs.global() LOCALITY GLOBAL;
+CREATE VIEW repartition_privs.v AS SELECT 1;
+CREATE SEQUENCE repartition_privs.seq;
+GRANT CREATE ON DATABASE repartition_privs TO testuser;
+CREATE TABLE repartition_privs.rbr2 () LOCALITY REGIONAL BY ROW
+
+user testuser
+
+statement error cannot repartition regional by row table: user testuser must be owner of rbr or have CREATE privilege on relation rbr
+ALTER DATABASE repartition_privs ADD REGION "ap-southeast-2"
+
+statement error cannot repartition regional by row table: user testuser must be owner of rbr or have CREATE privilege on relation rbr
+ALTER DATABASE repartition_privs DROP REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT CREATE ON repartition_privs.rbr TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE repartition_privs ADD REGION "ap-southeast-2";
+ALTER DATABASE repartition_privs DROP REGION "us-east-1"
+
+user root
+
+# Revoke CREATE from testuser but make it an admin user.
+statement ok
+REVOKE CREATE ON repartition_privs.rbr FROM testuser;
+GRANT root TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE repartition_privs DROP REGION "ap-southeast-2";
+ALTER DATABASE repartition_privs ADD REGION "us-east-1"
+
+user root
+
+# Remove testuser as an admin, but make it the owner of rbr.
+statement ok
+REVOKE root FROM testuser;
+ALTER TABLE repartition_privs.rbr OWNER TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE repartition_privs ADD REGION "ap-southeast-2";
+ALTER DATABASE repartition_privs DROP REGION "us-east-1"

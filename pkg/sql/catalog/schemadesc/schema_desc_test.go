@@ -28,27 +28,27 @@ import (
 
 func TestSafeMessage(t *testing.T) {
 	for _, tc := range []struct {
-		desc catalog.SchemaDescriptor
+		desc catalog.Descriptor
 		exp  string
 	}{
 		{
-			desc: schemadesc.NewImmutable(descpb.SchemaDescriptor{
+			desc: schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 				ID:            12,
 				Version:       1,
 				ParentID:      2,
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "foo",
-			}),
-			exp: "schemadesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"foo\"}",
+			}).BuildImmutable(),
+			exp: "schemadesc.immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"foo\"}",
 		},
 		{
-			desc: schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
+			desc: schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 				ID:            42,
 				Version:       1,
 				ParentID:      2,
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "bar",
-			}),
+			}).BuildCreatedMutable(),
 			exp: "schemadesc.Mutable: {ID: 42, Version: 1, IsUncommitted: true, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"bar\"}",
 		},
 	} {
@@ -164,15 +164,16 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 
 	for i, test := range tests {
 		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
-		descs := catalog.MapDescGetter{}
+		descs := catalog.MakeMapDescGetter()
 		test.desc.Privileges = privilege
-		desc := schemadesc.NewImmutable(test.desc)
-		descs[test.desc.ID] = desc
+		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
+		descs.Descriptors[test.desc.ID] = desc
 		test.dbDesc.Privileges = privilege
-		descs[test.dbDesc.ID] = dbdesc.NewImmutable(test.dbDesc)
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.TypeName(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelSelfAndCrossReferences &^ (catalog.ValidationLevelSelfAndCrossReferences >> 1)
-		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
+		descs.Descriptors[test.dbDesc.ID] = dbdesc.NewBuilder(&test.dbDesc).BuildImmutable()
+		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+		results := catalog.Validate(ctx, descs, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
 			}

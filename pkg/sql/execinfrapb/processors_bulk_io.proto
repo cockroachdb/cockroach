@@ -58,8 +58,11 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
+  // WriteAsOf is the time that the backfill entries should be written.
+  // Note: Older nodes may also use this as the read time instead of readAsOf.
+  optional util.hlc.Timestamp writeAsOf = 7 [(gogoproto.nullable) = false];
   // The timestamp to perform index backfill historical scans at.
-  optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp readAsOf = 9 [(gogoproto.nullable) = false];
 
   // IndexesToBackfill is the set of indexes to backfill. This is populated only
   // starting in 21.1, prior to that the implied index set are those containing
@@ -142,12 +145,12 @@ message ReadImportDataSpec {
 
 message StreamIngestionDataSpec {
   // PartitionAddresses locate the partitions that produce events to be
-  // ingested.
-  repeated string partition_addresses = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.PartitionAddress",(gogoproto.nullable) = false];
+  // ingested. We don't set the casttype to avoid depending on ccl packages.
+  repeated string partition_addresses = 1;
   // The processor will ingest events from StartTime onwards.
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
   // StreamAddress locate the stream so that a stream client can be initialized.
-  optional string stream_address = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress",(gogoproto.nullable) = false];
+  optional string stream_address = 3 [(gogoproto.nullable) = false];
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 }
@@ -232,6 +235,8 @@ message CSVWriterSpec {
   optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
   // chunk_rows is num rows to write per file. 0 = no limit.
   optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+  // chunk_size is the target byte size per file.
+  optional int64 chunk_size = 7 [(gogoproto.nullable) = false];
 
   // compression_codec specifies compression used for exported file.
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];

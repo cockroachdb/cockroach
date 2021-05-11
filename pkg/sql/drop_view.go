@@ -138,7 +138,7 @@ func (p *planner) canRemoveDependentView(
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
-	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
+	return p.canRemoveDependentViewGeneric(ctx, string(from.DescriptorType()), from.Name, from.ParentID, ref, behavior)
 }
 
 func (p *planner) canRemoveDependentViewGeneric(
@@ -196,7 +196,7 @@ func (p *planner) dropViewImpl(
 		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
 		if err != nil {
 			return cascadeDroppedViews,
-				errors.Errorf("error resolving dependency relation ID %d: %v", depID, err)
+				errors.Wrapf(err, "error resolving dependency relation ID %d", depID)
 		}
 		// The dependency is also being deleted, so we don't have to remove the
 		// references.
@@ -211,14 +211,22 @@ func (p *planner) dropViewImpl(
 		); err != nil {
 			return cascadeDroppedViews, err
 		}
+
 	}
 	viewDesc.DependsOn = nil
+
+	// Remove back-references from the types this view depends on.
+	typesDependedOn := append([]descpb.ID(nil), viewDesc.DependsOnTypes...)
+	backRefJobDesc := fmt.Sprintf("updating type back references %v for table %d", typesDependedOn, viewDesc.ID)
+	if err := p.removeTypeBackReferences(ctx, typesDependedOn, viewDesc.ID, backRefJobDesc); err != nil {
+		return cascadeDroppedViews, err
+	}
 
 	if behavior == tree.DropCascade {
 		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
 		for _, ref := range dependedOnBy {
 			dependentDesc, err := p.getViewDescForCascade(
-				ctx, viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
+				ctx, string(viewDesc.DescriptorType()), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
 			)
 			if err != nil {
 				return cascadeDroppedViews, err

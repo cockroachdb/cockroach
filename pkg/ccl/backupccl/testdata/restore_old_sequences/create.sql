@@ -15,3 +15,8 @@ CREATE TABLE t1 (i SERIAL PRIMARY KEY, j INT NOT NULL DEFAULT nextval('test.publ
 
 INSERT INTO t1 VALUES (default, default);
 
+CREATE SEQUENCE s2;
+
+CREATE VIEW v AS (SELECT nextval('s2'));
+
+CREATE VIEW v2 AS (SELECT k FROM (SELECT nextval('s2') AS k));

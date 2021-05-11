@@ -33,6 +33,11 @@ def c_deps():
         build_file_content = BUILD_ALL_CONTENT,
     )
     native.new_local_repository(
+        name = "geos",
+        path = "c-deps/geos",
+        build_file_content = BUILD_ALL_CONTENT,
+    )
+    native.new_local_repository(
         name = "protobuf",
         path = "c-deps/protobuf",
         build_file_content = BUILD_PROTOBUF_CONTENT,

@@ -35,6 +35,7 @@ var showZoneConfigColumns = colinfo.ResultColumns{
 	{Name: "target", Typ: types.String},
 	{Name: "range_name", Typ: types.String, Hidden: true},
 	{Name: "database_name", Typ: types.String, Hidden: true},
+	{Name: "schema_name", Typ: types.String, Hidden: true},
 	{Name: "table_name", Typ: types.String, Hidden: true},
 	{Name: "index_name", Typ: types.String, Hidden: true},
 	{Name: "partition_name", Typ: types.String, Hidden: true},
@@ -52,6 +53,7 @@ const (
 	targetCol
 	rangeNameCol
 	databaseNameCol
+	schemaNameCol
 	tableNameCol
 	indexNameCol
 	partitionNameCol
@@ -64,7 +66,7 @@ const (
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
+		return nil, errorutil.UnsupportedWithMultiTenancy(MultitenancyZoneCfgIssueNo)
 	}
 
 	return &delayedNode{
@@ -179,7 +181,8 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 	constraints = strings.TrimSpace(constraints)
 	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.VoterConstraints,
-		Inherited:   zone.InheritedVoterConstraints})
+		Inherited:   zone.InheritedVoterConstraints(),
+	})
 	if err != nil {
 		return "", err
 	}
@@ -230,7 +233,7 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		maybeWriteComma(f)
 		f.Printf("\tconstraints = %s", lex.EscapeSQLString(constraints))
 	}
-	if !zone.InheritedVoterConstraints && zone.NumVoters != nil && *zone.NumVoters > 0 {
+	if !zone.InheritedVoterConstraints() && zone.NumVoters != nil && *zone.NumVoters > 0 {
 		maybeWriteComma(f)
 		f.Printf("\tvoter_constraints = %s", lex.EscapeSQLString(voterConstraints))
 	}
@@ -267,6 +270,7 @@ func generateZoneConfigIntrospectionValues(
 	values[targetCol] = tree.DNull
 	values[rangeNameCol] = tree.DNull
 	values[databaseNameCol] = tree.DNull
+	values[schemaNameCol] = tree.DNull
 	values[tableNameCol] = tree.DNull
 	values[indexNameCol] = tree.DNull
 	values[partitionNameCol] = tree.DNull
@@ -280,6 +284,7 @@ func generateZoneConfigIntrospectionValues(
 		}
 		if zs.TableOrIndex.Table.ObjectName != "" {
 			values[databaseNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.CatalogName))
+			values[schemaNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.SchemaName))
 			values[tableNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.ObjectName))
 		}
 		if zs.TableOrIndex.Index != "" {

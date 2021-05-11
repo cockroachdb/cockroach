@@ -200,7 +200,7 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}
@@ -289,7 +289,7 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}
@@ -391,7 +391,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mVal1Size += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}
@@ -521,7 +521,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mVal1Size += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}
@@ -657,7 +657,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}
@@ -813,7 +813,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				mValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}
@@ -1040,7 +1040,7 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 			if accountForTxnDidNotUpdateMeta(t, engine) {
 				// Account for TxnDidNotUpdateMeta
 				m1ValSize += 2
-				if engine.IsSeparatedIntentsEnabledForTesting() {
+				if engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 					separatedIntentCount = 1
 				}
 			}

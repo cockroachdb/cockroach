@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -71,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -604,6 +607,65 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"gen_random_ulid": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				entropy := ulid.Monotonic(rand.New(rand.NewSource(timeutil.Now().UnixNano())), 0)
+				uv := ulid.MustNew(ulid.Now(), entropy)
+				return tree.NewDUuid(tree.DUuid{UUID: uuid.UUID(uv)}), nil
+			},
+			Info:       "Generates a random ULID and returns it as a value of UUID type.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"uuid_to_ulid": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Uuid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				b := (*args[0].(*tree.DUuid)).GetBytes()
+				var ul ulid.ULID
+				if err := ul.UnmarshalBinary(b); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ul.String()), nil
+			},
+			Info:       "Converts a UUID-encoded ULID to its string representation.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"ulid_to_uuid": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := tree.MustBeDString(args[0])
+				u, err := ulid.Parse(string(s))
+				if err != nil {
+					return nil, err
+				}
+				b, err := u.MarshalBinary()
+				if err != nil {
+					return nil, err
+				}
+				uv, err := uuid.FromBytes(b)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info:       "Converts a ULID string to its UUID-encoded representation.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
@@ -3163,6 +3225,10 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_extract_path": makeBuiltin(jsonProps(), jsonExtractPathImpl),
 
+	"json_extract_path_text": makeBuiltin(jsonProps(), jsonExtractPathTextImpl),
+
+	"jsonb_extract_path_text": makeBuiltin(jsonProps(), jsonExtractPathTextImpl),
+
 	"json_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
 
 	"jsonb_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
@@ -3629,10 +3695,74 @@ may increase either contention or retry errors, or both.`,
 				if sp == nil {
 					return tree.DNull, nil
 				}
-				return tree.NewDInt(tree.DInt(sp.GetRecording()[0].TraceID)), nil
+
+				traceID := sp.TraceID()
+				if traceID == 0 {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(tree.DInt(traceID)), nil
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	// Toggles all spans of the requested trace to verbose or non-verbose.
+	"crdb_internal.set_trace_verbose": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"trace_id", types.Int},
+				{"verbosity", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The user must be an admin to use this builtin.
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					if err := checkPrivilegedUser(ctx); err != nil {
+						return nil, err
+					}
+				}
+
+				traceID := uint64(*(args[0].(*tree.DInt)))
+				verbosity := bool(*(args[1].(*tree.DBool)))
+
+				const query = `SELECT span_id
+  	 									FROM crdb_internal.node_inflight_trace_spans
+ 		 									WHERE trace_id = $1
+											AND parent_span_id = 0`
+
+				ie := ctx.InternalExecutor.(sqlutil.InternalExecutor)
+				row, err := ie.QueryRowEx(
+					ctx.Ctx(),
+					"crdb_internal.set_trace_verbose",
+					ctx.Txn,
+					sessiondata.NoSessionDataOverride,
+					query,
+					traceID,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if row == nil {
+					return tree.DBoolFalse, nil
+				}
+				rootSpanID := uint64(*row[0].(*tree.DInt))
+
+				rootSpan, found := ctx.Settings.Tracer.GetActiveSpanFromID(rootSpanID)
+				if !found {
+					return tree.DBoolFalse, nil
+				}
+
+				rootSpan.SetVerboseRecursively(verbosity)
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
@@ -3756,6 +3886,23 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.create_join_token": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				token, err := ctx.JoinTokenCreator.CreateJoinToken(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(token), nil
+			},
+			Info:       "Creates a join token for use when adding a new node to a secure cluster.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
@@ -3809,35 +3956,42 @@ may increase either contention or retry errors, or both.`,
 				}
 
 				// Get the referenced table and index.
-				// TODO(ajwerner): This is awful, we should be able to resolve this
-				// thing using the usual tools rather than going through the DB.
-				tableDesc, err := catalogkv.MustGetTableDescByID(ctx.Context, ctx.Txn, ctx.Codec, descpb.ID(tableID))
+				tableDescIntf, err := ctx.Planner.GetImmutableTableInterfaceByID(
+					ctx.Context,
+					tableID,
+				)
 				if err != nil {
 					return nil, err
 				}
+				tableDesc := tableDescIntf.(catalog.TableDescriptor)
 				index, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
 				if err != nil {
 					return nil, err
 				}
-				indexDesc := index.IndexDesc()
 				// Collect the index columns. If the index is a non-unique secondary
 				// index, it might have some extra key columns.
-				indexColIDs := indexDesc.ColumnIDs
-				if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique {
-					indexColIDs = append(indexColIDs, indexDesc.ExtraColumnIDs...)
+				indexColIDs := make([]descpb.ColumnID, index.NumColumns(), index.NumColumns()+index.NumExtraColumns())
+				for i := 0; i < index.NumColumns(); i++ {
+					indexColIDs[i] = index.GetColumnID(i)
+				}
+				if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() {
+					for i := 0; i < index.NumExtraColumns(); i++ {
+						indexColIDs = append(indexColIDs, index.GetExtraColumnID(i))
+					}
 				}
 
 				// Ensure that the input tuple length equals the number of index cols.
 				if len(rowDatums.D) != len(indexColIDs) {
 					err := errors.Newf(
 						"number of values must equal number of columns in index %q",
-						indexDesc.Name,
+						index.GetName(),
 					)
 					// If the index has some extra key columns, then output an error
 					// message with some extra information to explain the subtlety.
-					if indexDesc.ID != tableDesc.GetPrimaryIndexID() && !indexDesc.Unique && len(indexDesc.ExtraColumnIDs) > 0 {
+					if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() && index.NumExtraColumns() > 0 {
 						var extraColNames []string
-						for _, id := range indexDesc.ExtraColumnIDs {
+						for i := 0; i < index.NumExtraColumns(); i++ {
+							id := index.GetExtraColumnID(i)
 							col, colErr := tableDesc.FindColumnWithID(id)
 							if colErr != nil {
 								return nil, errors.CombineErrors(err, colErr)
@@ -3856,7 +4010,7 @@ may increase either contention or retry errors, or both.`,
 							err,
 							"columns %v are implicitly part of index %q's key, include columns %v in this order",
 							extraColNames,
-							indexDesc.Name,
+							index.GetName(),
 							allColNames,
 						)
 					}
@@ -3898,8 +4052,8 @@ may increase either contention or retry errors, or both.`,
 					colMap.Set(id, i)
 				}
 				// Finally, encode the index key using the provided datums.
-				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, indexDesc.ID)
-				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, indexDesc, len(datums), colMap, datums, keyPrefix)
+				keyPrefix := rowenc.MakeIndexKeyPrefix(ctx.Codec, tableDesc, index.GetID())
+				res, _, err := rowenc.EncodePartialIndexKey(tableDesc, index, len(datums), colMap, datums, keyPrefix)
 				if err != nil {
 					return nil, err
 				}
@@ -3990,6 +4144,12 @@ may increase either contention or retry errors, or both.`,
 					return nil, err
 				}
 				msg := string(*args[0].(*tree.DString))
+				// Use a special method to panic in order to go around the
+				// vectorized panic-catcher (which would catch the panic from
+				// Golang's 'panic' and would convert it into an internal
+				// error).
+				colexecerror.NonCatchablePanic(msg)
+				// This code is unreachable.
 				panic(msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -4253,6 +4413,25 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.get_vmodule": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				if err := checkPrivilegedUser(ctx); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(log.GetVModule()), nil
+			},
+			Info:       "Returns the vmodule configuration on the gateway node processing this request.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	// Returns the number of distinct inverted index entries that would be
 	// generated for a value.
 	"crdb_internal.num_geo_inverted_index_entries": makeBuiltin(
@@ -4286,7 +4465,7 @@ may increase either contention or retry errors, or both.`,
 				if index.GetGeoConfig().S2Geography == nil {
 					return nil, errors.Errorf("index_id %d is not a geography inverted index", indexID)
 				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.IndexDesc())
+				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
 				if err != nil {
 					return nil, err
 				}
@@ -4320,7 +4499,7 @@ may increase either contention or retry errors, or both.`,
 				if index.GetGeoConfig().S2Geometry == nil {
 					return nil, errors.Errorf("index_id %d is not a geometry inverted index", indexID)
 				}
-				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.IndexDesc())
+				keys, err := rowenc.EncodeGeoInvertedIndexTableKeys(g, nil, index.GetGeoConfig())
 				if err != nil {
 					return nil, err
 				}
@@ -4793,7 +4972,7 @@ may increase either contention or retry errors, or both.`,
 				storeID := int32(tree.MustBeDInt(args[1]))
 				startKey := []byte(tree.MustBeDBytes(args[2]))
 				endKey := []byte(tree.MustBeDBytes(args[3]))
-				if err := ctx.Planner.CompactEngineSpan(
+				if err := ctx.CompactEngineSpan(
 					ctx.Context, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err
 				}
@@ -4832,7 +5011,8 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryStreamIngestion,
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -4933,21 +5113,21 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig()
+				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig(evalCtx.Context)
 				if err != nil {
 					return nil, err
 				}
-				if regionConfig.IsValidRegionNameString(s) {
-					return tree.NewDString(s), nil
-				}
-				primaryRegion := regionConfig.PrimaryRegionString()
-				if primaryRegion == "" {
+				if regionConfig == nil {
 					return nil, pgerror.Newf(
 						pgcode.InvalidDatabaseDefinition,
 						"current database %s is not multi-region enabled",
 						evalCtx.SessionData.Database,
 					)
 				}
+				if regionConfig.IsValidRegionNameString(s) {
+					return tree.NewDString(s), nil
+				}
+				primaryRegion := regionConfig.PrimaryRegionString()
 				return tree.NewDString(primaryRegion), nil
 			},
 			types.String,
@@ -4957,8 +5137,28 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			tree.VolatilityStable,
 		),
 	),
+	"crdb_internal.validate_multi_region_zone_configs": makeBuiltin(
+		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.Sequence.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+					evalCtx.Context,
+				); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info: `Validates all multi-region zone configurations are correctly setup
+			for the current database, including all tables, indexes and partitions underneath.
+			Returns an error if validation fails. This builtin uses un-leased versions of the
+			each descriptor, requiring extra round trips.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 	"crdb_internal.filter_multiregion_fields_from_zone_config_sql": makeBuiltin(
-		tree.FunctionProperties{},
+		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 				stmt, err := parser.ParseOne(s)
@@ -4993,18 +5193,49 @@ table's zone configuration this will return NULL.`,
 		),
 	),
 
-	"crdb_internal.show_create_all_tables": makeBuiltin(
-		tree.FunctionProperties{},
+	"crdb_internal.reset_sql_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
 		tree.Overload{
-			Types: tree.ArgTypes{
-				{"dbName", types.String},
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SQLStatsResetter == nil {
+					return nil, errors.AssertionFailedf("sql stats resetter not set")
+				}
+				ctx := evalCtx.Ctx()
+				if err := evalCtx.SQLStatsResetter.ResetClusterSQLStats(ctx); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
 			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn:         showCreateAllTablesBuiltin,
-			Info: `Returns a flat log of CREATE table statements followed by
-ALTER table statements that add table constraints. The flat log can be used
-to recreate a database.'`,
-			Volatility: tree.VolatilityStable,
+			Info:       `This function is used to clear the collected SQL statistics.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+	// Deletes the underlying spans backing a table, only
+	// if the user provides explicit acknowledgement of the
+	// form "I acknowledge this will irrevocably delete all revisions
+	// for table %d"
+	"crdb_internal.force_delete_table_data": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemRepair,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+
+				err := ctx.Planner.ForceDeleteTableData(ctx.Context, id)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, err
+			},
+			Info:       "This function can be used to clear the data belonging to a table, when the table cannot be dropped.",
+			Volatility: tree.VolatilityVolatile,
 		},
 	),
 }
@@ -5510,18 +5741,7 @@ var jsonExtractPathImpl = tree.Overload{
 	Types:      tree.VariadicType{FixedTypes: []*types.T{types.Jsonb}, VarType: types.String},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		j := tree.MustBeDJSON(args[0])
-		path := make([]string, len(args)-1)
-		for i, v := range args {
-			if i == 0 {
-				continue
-			}
-			if v == tree.DNull {
-				return tree.DNull, nil
-			}
-			path[i-1] = string(tree.MustBeDString(v))
-		}
-		result, err := json.FetchPath(j.JSON, path)
+		result, err := jsonExtractPathHelper(args)
 		if err != nil {
 			return nil, err
 		}
@@ -5532,6 +5752,45 @@ var jsonExtractPathImpl = tree.Overload{
 	},
 	Info:       "Returns the JSON value pointed to by the variadic arguments.",
 	Volatility: tree.VolatilityImmutable,
+}
+
+var jsonExtractPathTextImpl = tree.Overload{
+	Types:      tree.VariadicType{FixedTypes: []*types.T{types.Jsonb}, VarType: types.String},
+	ReturnType: tree.FixedReturnType(types.String),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		result, err := jsonExtractPathHelper(args)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return tree.DNull, nil
+		}
+		text, err := result.AsText()
+		if err != nil {
+			return nil, err
+		}
+		if text == nil {
+			return tree.DNull, nil
+		}
+		return tree.NewDString(*text), nil
+	},
+	Info:       "Returns the JSON value as text pointed to by the variadic arguments.",
+	Volatility: tree.VolatilityImmutable,
+}
+
+func jsonExtractPathHelper(args tree.Datums) (json.JSON, error) {
+	j := tree.MustBeDJSON(args[0])
+	path := make([]string, len(args)-1)
+	for i, v := range args {
+		if i == 0 {
+			continue
+		}
+		if v == tree.DNull {
+			return nil, nil
+		}
+		path[i-1] = string(tree.MustBeDString(v))
+	}
+	return json.FetchPath(j.JSON, path)
 }
 
 // darrayToStringSlice converts an array of string datums to a Go array of
@@ -6867,6 +7126,8 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 	nsec := fromTime.Nanosecond()
 	loc := fromTime.Location()
 
+	_, origZoneOffset := fromTime.Zone()
+
 	monthTrunc := time.January
 	dayTrunc := 1
 	hourTrunc := 0
@@ -6946,6 +7207,24 @@ func truncateTimestamp(fromTime time.Time, timeSpan string) (*tree.DTimestampTZ,
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
+	_, newZoneOffset := toTime.Zone()
+	// If we have a mismatching zone offset, check whether the truncated timestamp
+	// can exist at both the new and original zone time offset.
+	// e.g. in Bucharest, 2020-10-25 has 03:00+02 and 03:00+03. Using time.Date
+	// automatically assumes 03:00+02.
+	if origZoneOffset != newZoneOffset {
+		// To remedy this, try set the time.Date to have the same fixed offset as the original timezone
+		// and force it to use the same location as the incoming time.
+		// If using the fixed offset in the given location gives us a timestamp that is the
+		// same as the original time offset, use that timestamp instead.
+		fixedOffsetLoc := timeutil.FixedOffsetTimeZoneToLocation(origZoneOffset, "date_trunc")
+		fixedOffsetTime := time.Date(year, month, day, hour, min, sec, nsec, fixedOffsetLoc)
+		locCorrectedOffsetTime := fixedOffsetTime.In(loc)
+
+		if _, zoneOffset := locCorrectedOffsetTime.Zone(); origZoneOffset == zoneOffset {
+			toTime = locCorrectedOffsetTime
+		}
+	}
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond)
 }
 
@@ -7099,12 +7378,7 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
 		ctx.ClientNoticeSender.BufferClientNotice(
 			ctx.Context,
-			pgnotice.Newf(
-				tree.FollowerReadTimestampFunctionName+
-					" does not returns a value that is less likely to read from the closest replica "+
-					"in a non-CCL distribution, using %s from statement time instead",
-				defaultFollowerReadDuration,
-			),
+			pgnotice.Newf("follower reads disabled because you are running a non-CCL distribution"),
 		)
 		return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 	}
@@ -7113,12 +7387,7 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
 			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
 			ctx.ClientNoticeSender.BufferClientNotice(
-				ctx.Context,
-				pgnotice.Newf(
-					"%s: using %s from current statement time instead",
-					defaultFollowerReadDuration,
-					err.Error(),
-				),
+				ctx.Context, pgnotice.Newf("follower reads disabled: %s", err.Error()),
 			)
 			return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 		}

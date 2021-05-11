@@ -587,6 +587,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 					}
 				}
 
+				// Fetch the colStat again since it may now have a different address due
+				// to calling stats.ColStats.Add() on any inverted column statistics
+				// created above.
+				colStat, _ = stats.ColStats.Lookup(cols)
+
 				// Make sure the distinct count is at least 1, for the same reason as
 				// the row count above.
 				colStat.DistinctCount = max(colStat.DistinctCount, 1)
@@ -609,13 +614,6 @@ func (sb *statisticsBuilder) colStatTable(
 	tableFD := MakeTableFuncDep(sb.md, tabID)
 	tableNotNullCols := tableNotNullCols(sb.md, tabID)
 	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
-}
-
-// GetCachedTableStatistics returns the statistics for the given table, if they
-// were calculated already.
-func (m *Memo) GetCachedTableStatistics(tabID opt.TableID) (_ *props.Statistics, ok bool) {
-	stats, ok := m.metadata.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
-	return stats, ok
 }
 
 // +------+

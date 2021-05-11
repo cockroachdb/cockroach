@@ -50,6 +50,32 @@ var (
 	AlterDatabaseDropPrimaryRegionCounter = telemetry.GetCounterOnce(
 		"sql.multiregion.drop_primary_region",
 	)
+
+	// ImportIntoMultiRegionDatabaseCounter is to be incremented when an import
+	// statement is run against a multi-region database.
+	ImportIntoMultiRegionDatabaseCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.import",
+	)
+
+	// OverrideMultiRegionZoneConfigurationUser is to be incremented when a
+	// multi-region zone configuration is overridden by the user.
+	OverrideMultiRegionZoneConfigurationUser = telemetry.GetCounterOnce(
+		"sql.multiregion.zone_configuration.override.user",
+	)
+
+	// OverrideMultiRegionDatabaseZoneConfigurationSystem is to be incremented
+	// when a multi-region database zone configuration is overridden by the
+	// system.
+	OverrideMultiRegionDatabaseZoneConfigurationSystem = telemetry.GetCounterOnce(
+		"sql.multiregion.zone_configuration.override.system.database",
+	)
+
+	// OverrideMultiRegionTableZoneConfigurationSystem is to be incremented when
+	// a multi-region table/index/partition zone configuration is overridden by
+	// the system.
+	OverrideMultiRegionTableZoneConfigurationSystem = telemetry.GetCounterOnce(
+		"sql.multiregion.zone_configuration.override.system.table",
+	)
 )
 
 // CreateDatabaseSurvivalGoalCounter is to be incremented when the survival goal

@@ -184,6 +184,7 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverhead := svcLat - processingLat
 
 	stmt := &planner.stmt
+	shouldIncludeInLatencyMetrics := shouldIncludeStmtInLatencyMetrics(stmt)
 	flags := planner.curPlan.flags
 	if automaticRetryCount == 0 {
 		ex.updateOptCounters(flags)
@@ -192,11 +193,15 @@ func (ex *connExecutor) recordStatementSummary(
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
-			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			if shouldIncludeInLatencyMetrics {
+				m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+				m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			}
 		}
-		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		if shouldIncludeInLatencyMetrics {
+			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		}
 	}
 
 	stmtID := ex.statsCollector.recordStatement(
@@ -205,7 +210,7 @@ func (ex *connExecutor) recordStatementSummary(
 		flags.IsSet(planFlagImplicitTxn),
 		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
 		automaticRetryCount, rowsAffected, err,
-		parseLat, planLat, runLat, svcLat, execOverhead, stats,
+		parseLat, planLat, runLat, svcLat, execOverhead, stats, planner,
 	)
 
 	// Do some transaction level accounting for the transaction this statement is
@@ -256,4 +261,9 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	} else if planFlags.IsSet(planFlagOptCacheMiss) {
 		m.SQLOptPlanCacheMisses.Inc(1)
 	}
+}
+
+// We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
+func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
+	return stmt.AST.StatementType() == tree.TypeDML
 }

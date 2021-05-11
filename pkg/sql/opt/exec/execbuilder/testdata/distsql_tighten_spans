@@ -250,7 +250,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM bytes_t WHERE a = 'a'] WHERE info LIKE '%spans%'
 ----
-  spans: /"a"-/"a"/#
+  spans: /"a"/0
 
 # No tightening.
 
@@ -262,7 +262,7 @@ SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM bytes_t WHERE a < 'aa'] WHERE 
 query T
 SELECT info FROM [EXPLAIN (VERBOSE) SELECT * FROM decimal_t WHERE a = 1.00] WHERE info LIKE '%spans%'
 ----
-  spans: /1-/1/#
+  spans: /1/0
 
 # No tightening.
 

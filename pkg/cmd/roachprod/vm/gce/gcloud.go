@@ -273,8 +273,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-1604-xenial-v20200129",
-		"Image to use to create the vm, ubuntu-2004-focal-v20210119a is a more modern image")
+	flags.StringVar(&o.Image, ProviderName+"-image", "ubuntu-2004-focal-v20210325",
+		"Image to use to create the vm, "+
+			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
@@ -493,6 +494,49 @@ func (p *Provider) Delete(vms vm.List) error {
 			args := []string{
 				"compute", "instances", "delete",
 				"--delete-disks", "all",
+			}
+
+			args = append(args, "--project", project)
+			args = append(args, "--zone", zone)
+			args = append(args, names...)
+
+			g.Go(func() error {
+				cmd := exec.CommandContext(ctx, "gcloud", args...)
+
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+				}
+				return nil
+			})
+		}
+	}
+
+	return g.Wait()
+}
+
+// Reset implements the vm.Provider interface.
+func (p *Provider) Reset(vms vm.List) error {
+	// Map from project to map of zone to list of machines in that project/zone.
+	projectZoneMap := make(map[string]map[string][]string)
+	for _, v := range vms {
+		if v.Provider != ProviderName {
+			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
+		}
+		if projectZoneMap[v.Project] == nil {
+			projectZoneMap[v.Project] = make(map[string][]string)
+		}
+
+		projectZoneMap[v.Project][v.Zone] = append(projectZoneMap[v.Project][v.Zone], v.Name)
+	}
+
+	var g errgroup.Group
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	for project, zoneMap := range projectZoneMap {
+		for zone, names := range zoneMap {
+			args := []string{
+				"compute", "instances", "reset",
 			}
 
 			args = append(args, "--project", project)

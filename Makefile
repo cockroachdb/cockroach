@@ -371,6 +371,8 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 	rm -rf pkg/ui/node_modules/@types/node
 	touch $@
 
+vendor/modules.txt: | bin/.submodules-initialized
+
 # Update the git hooks and install commands from dependencies whenever they
 # change.
 # These should be synced with `./pkg/cmd/import-tools/main.go`.
@@ -380,8 +382,10 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/cockroachdb/crlfmt \
 		github.com/cockroachdb/gostdlib/cmd/gofmt \
 		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/golang/mock/mockgen \
 		github.com/cockroachdb/stress \
 		github.com/goware/modvendor \
+		github.com/go-swagger/go-swagger/cmd/swagger \
 		github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
 		github.com/kevinburke/go-bindata/go-bindata \
 		github.com/kisielk/errcheck \
@@ -516,10 +520,11 @@ LIBGEOS     := $(DYN_LIB_DIR)/libgeos.$(DYN_EXT)
 C_LIBS_COMMON = \
 	$(if $(use-stdmalloc),,$(LIBJEMALLOC)) \
 	$(if $(target-is-windows),,$(LIBEDIT)) \
-	$(LIBPROJ) $(LIBGEOS) $(LIBROACH)
+	$(LIBPROJ) $(LIBROACH)
 C_LIBS_SHORT = $(C_LIBS_COMMON)
 C_LIBS_OSS = $(C_LIBS_COMMON) $(LIBPROTOBUF)
 C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBPROTOBUF)
+C_LIBS_DYNAMIC = $(LIBGEOS)
 
 # We only include krb5 on linux, non-musl builds.
 ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
@@ -825,6 +830,9 @@ WKTPARSER_TARGETS = \
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 
+SWAGGER_TARGETS := \
+  docs/generated/swagger/spec.json
+
 DOCGEN_TARGETS := \
 	bin/.docgen_bnfs \
 	bin/.docgen_functions \
@@ -936,7 +944,7 @@ go-targets := $(go-targets-ccl) $(COCKROACHOSS) $(COCKROACHSHORT)
 all: build
 
 .PHONY: c-deps
-c-deps: $(C_LIBS_CCL)
+c-deps: $(C_LIBS_CCL) | $(C_LIBS_DYNAMIC)
 
 build-mode = build -o $@
 
@@ -945,16 +953,16 @@ go-install: build-mode = install
 $(COCKROACH) go-install generate: pkg/ui/distccl/bindata.go
 
 $(COCKROACHOSS): BUILDTARGET = ./pkg/cmd/cockroach-oss
-$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go
+$(COCKROACHOSS): $(C_LIBS_OSS) pkg/ui/distoss/bindata.go | $(C_LIBS_DYNAMIC)
 
 $(COCKROACHSHORT): BUILDTARGET = ./pkg/cmd/cockroach-short
 $(COCKROACHSHORT): TAGS += short
-$(COCKROACHSHORT): $(C_LIBS_SHORT)
+$(COCKROACHSHORT): $(C_LIBS_SHORT) | $(C_LIBS_DYNAMIC)
 
 # For test targets, add a tag (used to enable extra assertions).
 $(test-targets): TAGS += crdb_test
 
-$(go-targets-ccl): $(C_LIBS_CCL)
+$(go-targets-ccl): $(C_LIBS_CCL) | $(C_LIBS_DYNAMIC)
 
 BUILDINFO = .buildinfo/tag .buildinfo/rev
 BUILD_TAGGED_RELEASE =
@@ -1083,7 +1091,7 @@ roachprod-stress roachprod-stressrace: bin/roachprod-stress
 		exit 1; \
 	fi
 	build/builder.sh make bin/.bootstrap
-	build/builder.sh mkrelease amd64-linux-gnu test GOFLAGS="$(GOFLAGS)" TESTFLAGS="-v -c -o $(notdir $(patsubst %/,%,$(PKG))).test" PKG=$(PKG)
+	build/builder.sh mkrelease amd64-linux-gnu test GOFLAGS="$(GOFLAGS)" TESTFLAGS="-v -c -o $(notdir $(patsubst %/,%,$(PKG))).test" PKG=$(PKG) TAGS="$(TAGS)"
 	bin/roachprod-stress $(CLUSTER) $(patsubst github.com/cockroachdb/cockroach/%,./%,$(PKG)) $(STRESSFLAGS) -- \
 	  -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
 
@@ -1153,7 +1161,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(WKTPARSER_TARGETS) $(SETTINGS_DOC_PAGES) bin/langgen bin/terraformgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(WKTPARSER_TARGETS) $(SETTINGS_DOC_PAGES) $(SWAGGER_TARGETS) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(MAKE) execgen
 
@@ -1259,9 +1267,10 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := ./vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
 # Map protobuf includes to the Go package containing the generated Go code.
 PROTO_MAPPINGS :=
-PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=google.golang.org/genproto/googleapis/api/annotations,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
 PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,
 
 GW_SERVER_PROTOS := ./pkg/server/serverpb/admin.proto ./pkg/server/serverpb/status.proto ./pkg/server/serverpb/authentication.proto
 GW_TS_PROTOS := ./pkg/ts/tspb/timeseries.proto
@@ -1569,7 +1578,8 @@ EVENTLOG_PROTOS = \
 	pkg/util/log/eventpb/zone_events.proto \
 	pkg/util/log/eventpb/session_events.proto \
 	pkg/util/log/eventpb/sql_audit_events.proto \
-	pkg/util/log/eventpb/cluster_events.proto
+	pkg/util/log/eventpb/cluster_events.proto \
+	pkg/util/log/eventpb/job_events.proto
 
 LOGSINKDOC_DEP = pkg/util/log/logconfig/config.go
 
@@ -1592,6 +1602,8 @@ pkg/util/log/eventpb/json_encode_generated.go: pkg/util/log/eventpb/gen.go $(EVE
 docs/generated/logging.md: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto
 	$(GO) run $(GOMODVENDORFLAGS) $^ logging.md $@.tmp || { rm -f $@.tmp; exit 1; }
 	mv -f $@.tmp $@
+
+docs/generated/swagger/spec.json: pkg/server/api*.go bin/.bootstrap
 
 pkg/util/log/severity/severity_generated.go: pkg/util/log/gen/main.go pkg/util/log/logpb/log.proto
 	$(GO) run $(GOMODVENDORFLAGS) $^ severity.go $@.tmp || { rm -f $@.tmp; exit 1; }
@@ -1679,11 +1691,12 @@ cleanshort:
 	rm -rf $(ARCHIVE) pkg/sql/parser/gen
 
 .PHONY: clean
-clean: ## Like cleanshort, but also includes C++ artifacts and the go build cache.
+clean: ## Like cleanshort, but also includes C++ artifacts, Bazel artifacts, and the go build cache.
 clean: cleanshort clean-c-deps
 	rm -rf build/defs.mk*
 	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f -name 'zcgo_flags*.go' -exec rm {} +
+	if command -v bazel &> /dev/null; then bazel clean --expunge; fi
 	rm -rf artifacts bin
 
 .PHONY: maintainer-clean
@@ -1721,6 +1734,7 @@ bins = \
   bin/publish-provisional-artifacts \
   bin/optfmt \
   bin/optgen \
+  bin/reduce \
   bin/returncheck \
   bin/roachvet \
   bin/roachprod \
@@ -1759,7 +1773,7 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # TODO(benesch): Derive this automatically. This is getting out of hand.
 bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(LOG_TARGETS) $(PROTOBUF_TARGETS)
 bin/workload bin/docgen bin/roachtest $(logictest-bins): $(LIBPROJ) $(CGO_FLAGS_FILES)
-bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS)
+bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(OPTGEN_TARGETS) | $(C_LIBS_DYNAMIC)
 
 $(bins): bin/%: bin/%.d | bin/prereqs bin/.submodules-initialized
 	@echo go install -v $*
@@ -1843,3 +1857,7 @@ include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
 
+# Cypress e2e tests
+.PHONY: db-console-e2e-test
+db-console-e2e-test: pkg/ui/yarn.opt.installed
+	cd pkg/ui && yarn cypress:run

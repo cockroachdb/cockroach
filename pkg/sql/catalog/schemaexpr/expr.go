@@ -46,16 +46,8 @@ func DequalifyAndValidateExpr(
 ) (string, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 	nonDropColumns := desc.NonDropColumns()
-	nonDropColumnDescs := make([]descpb.ColumnDescriptor, len(nonDropColumns))
-	for i, col := range nonDropColumns {
-		nonDropColumnDescs[i] = *col.ColumnDesc()
-	}
-
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColDescs(
-			desc.GetID(),
-			nonDropColumnDescs,
-		),
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
@@ -174,7 +166,12 @@ func FormatExprForDisplay(
 	if err != nil {
 		return "", err
 	}
-	return tree.AsStringWithFlags(expr, fmtFlags), nil
+	// Replace any IDs in the expr with their fully qualified names.
+	replacedExpr, err := ReplaceIDsWithFQNames(ctx, expr, semaCtx)
+	if err != nil {
+		return "", err
+	}
+	return tree.AsStringWithFlags(replacedExpr, fmtFlags), nil
 }
 
 func deserializeExprForFormatting(
@@ -189,15 +186,9 @@ func deserializeExprForFormatting(
 		return nil, err
 	}
 
-	// Replace any IDs in the expr with their fully qualified names.
-	seqReplacedExpr, err := replaceIDsWithFQNames(ctx, expr, semaCtx)
-	if err != nil {
-		return nil, err
-	}
-
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, seqReplacedExpr)
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -242,13 +233,13 @@ type nameResolver struct {
 
 // newNameResolver creates and returns a nameResolver.
 func newNameResolver(
-	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []*descpb.ColumnDescriptor,
+	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
-		colinfo.ResultColumnsFromColDescPtrs(tableID, cols),
+		colinfo.ResultColumnsFromColumns(tableID, cols),
 	)
-	nrc := &nameResolverIVarContainer{cols}
+	nrc := &nameResolverIVarContainer{append(make([]catalog.Column, 0, len(cols)), cols...)}
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
 
 	return &nameResolver{
@@ -269,10 +260,10 @@ func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
 // future calls to resolveNames.
-func (nr *nameResolver) addColumn(col *descpb.ColumnDescriptor) {
+func (nr *nameResolver) addColumn(col catalog.Column) {
 	nr.ivarHelper.AppendSlot()
 	nr.nrc.cols = append(nr.nrc.cols, col)
-	newCols := colinfo.ResultColumnsFromColDescs(nr.tableID, []descpb.ColumnDescriptor{*col})
+	newCols := colinfo.ResultColumnsFromColumns(nr.tableID, []catalog.Column{col})
 	nr.source.SourceColumns = append(nr.source.SourceColumns, newCols...)
 }
 
@@ -286,7 +277,7 @@ func (nr *nameResolver) addIVarContainerToSemaCtx(semaCtx *tree.SemaContext) {
 // tree.IndexedVarContainer. It is used to resolve and type check columns in
 // expressions. It does not support evaluation.
 type nameResolverIVarContainer struct {
-	cols []*descpb.ColumnDescriptor
+	cols []catalog.Column
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
@@ -299,7 +290,7 @@ func (nrc *nameResolverIVarContainer) IndexedVarEval(
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
-	return nrc.cols[idx].Type
+	return nrc.cols[idx].GetType()
 }
 
 // IndexVarNodeFormatter implements the tree.IndexedVarContainer interface.

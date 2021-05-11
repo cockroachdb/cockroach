@@ -37,7 +37,7 @@ LIMIT 1
 ----
 SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
 
-statement error duplicate constraint name: "foo"
+statement error pgcode 42P07 duplicate index name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -1688,3 +1688,127 @@ SELECT count(descriptor_id)
  WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
 ----
 0
+
+# Validation for #47719 where a mutation is canceled out by a drop.
+statement ok
+create table tColDrop (a int);
+
+statement ok
+begin;
+alter table tColDrop alter column a set not null;
+alter table tColDrop drop column a;
+commit;
+
+statement ok
+drop table tColDrop;
+
+statement ok
+begin;
+create table tColDrop (a int);
+alter table tColDrop alter column a set not null;
+alter table tColDrop drop column a;
+commit;
+
+# Validate that the schema_change_successful metric
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN ('job.schema_change.successful',
+'job.schema_change.failed') AND
+usage_count > 0
+ORDER BY feature_name DESC
+----
+job.schema_change.successful
+job.schema_change.failed
+
+# Regression test for #61762. Do not allow adding OIDVECTOR or INT2VECTOR
+# columns.
+subtest regression_61762
+
+statement ok
+CREATE TABLE t61762 ()
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v OIDVECTOR
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v INT2VECTOR
+
+# Regression test for #60786. Handle in-transaction constraint ADD+DROP correctly.
+subtest regression_60786
+
+statement ok
+CREATE TABLE t60786(i INT PRIMARY KEY);
+
+statement error pgcode 0A000 constraint "fk" in the middle of being added, try again later
+BEGIN;
+CREATE TABLE child_60786(i INT PRIMARY KEY);
+ALTER TABLE t60786 ADD CONSTRAINT fk FOREIGN KEY (i) REFERENCES child_60786(i) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT fk CASCADE
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 constraint "ck" in the middle of being added, try again later
+BEGIN;
+ALTER TABLE t60786 ADD CONSTRAINT ck CHECK(i > 0) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT ck CASCADE
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 constraint "uq" in the middle of being added, try again later
+BEGIN;
+ALTER TABLE t60786 ADD CONSTRAINT uq UNIQUE WITHOUT INDEX(i) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
+
+statement ok
+ROLLBACK
+
+# Visible values can be added and removed after table creation.
+statement ok
+CREATE TABLE visible_table (a int primary key)
+
+statement ok
+ALTER TABLE visible_table ALTER COLUMN a SET VISIBLE
+
+statement error column "non_existent_column" does not exist
+ALTER TABLE visible_table ALTER COLUMN non_existent_column SET VISIBLE
+
+query TT
+SHOW CREATE TABLE visible_table
+----
+visible_table  CREATE TABLE public.visible_table (
+               a INT8 NOT NULL,
+               CONSTRAINT "primary" PRIMARY KEY (a ASC),
+               FAMILY "primary" (a)
+)
+
+statement ok
+ALTER TABLE visible_table ALTER COLUMN a SET NOT VISIBLE
+
+query TT
+SHOW CREATE TABLE visible_table
+----
+visible_table  CREATE TABLE public.visible_table (
+               a INT8 NOT VISIBLE NOT NULL,
+               CONSTRAINT "primary" PRIMARY KEY (a ASC),
+               FAMILY "primary" (a)
+)
+
+subtest if_table_exists_already
+
+statement ok
+CREATE TABLE new_table()
+
+query T noticetrace
+CREATE TABLE IF NOT EXISTS new_table();
+----
+NOTICE: relation "new_table" already exists, skipping
+
+subtest unique_index_duplicate_name
+
+statement ok
+CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
+
+statement error pgcode 42P07 duplicate index name: \"idx\"
+ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)

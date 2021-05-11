@@ -453,6 +453,7 @@ CREATE TABLE interleave_parent (x INT PRIMARY KEY);
 statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
 CREATE TABLE interleave_create_notice (x INT, y INT, s STRING, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT interleave_parent(x);
 
+
 statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
 CREATE INDEX interleave_index ON interleave_create_notice (x, s) INTERLEAVE IN PARENT interleave_parent(x);
 
@@ -473,3 +474,57 @@ CREATE INDEX willfail ON interleave_create_notice (x, s) INTERLEAVE IN PARENT in
 
 statement error interleaved tables and interleaved indexes are disabled
 ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
+# Interleaved index as non-primary one check
+statement ok
+CREATE TABLE parent(x int, y int);
+
+statement ok
+CREATE TABLE child(x int, y int, z int );
+
+statement ok
+CREATE INDEX NIINDX ON PARENT(x,y);
+
+statement ok
+CREATE INDEX NIINDX2 ON CHILD(z);
+
+statement ok
+CREATE INDEX NIINDX3 ON CHILD(z);
+
+statement ok
+CREATE INDEX IINDX ON CHILD(rowid,x,y,z) INTERLEAVE IN PARENT PARENT(rowid);
+
+# Child in different schema then parent
+statement ok
+CREATE TABLE parentDS (k STRING PRIMARY KEY);
+
+statement ok
+CREATE SCHEMA child_schema;
+
+statement ok
+CREATE TABLE child_schema.child (ck INT8 PRIMARY KEY, k STRING NOT NULL UNIQUE);
+
+statement ok
+CREATE INDEX interl ON child_schema.child (k) INTERLEAVE IN PARENT parentDS (k);
+
+query TTTTTTT
+select * from "".crdb_internal.interleaved;
+----
+test  public        p1_1                      p1_id                    test   public  p1_1
+test  public        all_interleaves           primary                  test   public  p1_1
+test  public        all_interleaves           all_interleaves_c_d_idx  test   public  p1_1
+test  public        all_interleaves           all_interleaves_d_c_key  test   public  p1_1
+test  public        orders                    primary                  test   public  customers
+test  public        interdb                   primary                  other  public  foo
+test  public        c20067                    primary                  test   public  p20067
+test  public        documents                 primary                  test   public  users
+test  public        big_interleave_parent     primary                  test   public  big_interleave_grandparent
+test  public        big_interleave_child      primary                  test   public  big_interleave_parent
+test  public        interleave_create_notice  primary                  test   public  interleave_parent
+test  public        interleave_create_notice  interleave_index         test   public  interleave_parent
+test  public        interleave_pk_notice      primary                  test   public  interleave_parent
+test  public        child                     iindx                    test   public  parent
+test  child_schema  child                     interl                   test   public  parentds

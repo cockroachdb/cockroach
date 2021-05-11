@@ -62,7 +62,7 @@ go_library(
 
 go_test(
     name = "pgwire_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "auth_test.go",
         "conn_test.go",
@@ -75,7 +75,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":pgwire"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/security",
@@ -90,7 +89,7 @@ go_test(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgwirebase",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",

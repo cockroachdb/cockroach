@@ -193,7 +193,7 @@ func MakeSimpleTableDescriptor(
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
 func fixDescriptorFKState(tableDesc *tabledesc.Mutable) error {
-	tableDesc.State = descpb.DescriptorState_PUBLIC
+	tableDesc.SetPublic()
 	for i := range tableDesc.OutboundFKs {
 		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
 	}
@@ -217,11 +217,17 @@ func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
 }
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-func (so *importSequenceOperators) CurrentDatabaseRegionConfig() (
-	tree.DatabaseRegionConfig,
-	error,
-) {
+func (so *importSequenceOperators) CurrentDatabaseRegionConfig(
+	_ context.Context,
+) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errSequenceOperators)
+}
+
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+	_ context.Context,
+) error {
+	return errors.WithStack(errSequenceOperators)
 }
 
 // Implements the tree.EvalDatabase interface.
@@ -250,7 +256,14 @@ func (so *importSequenceOperators) LookupSchema(
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (so *importSequenceOperators) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errSequenceOperators)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errSequenceOperators)
 }
@@ -310,7 +323,7 @@ func (r *fkResolver) Txn() *kv.Txn {
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r *fkResolver) LogicalSchemaAccessor() catalog.Accessor {
+func (r *fkResolver) Accessor() catalog.Accessor {
 	return nil
 }
 

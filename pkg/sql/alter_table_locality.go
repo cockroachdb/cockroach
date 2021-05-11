@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -36,7 +35,7 @@ import (
 type alterTableSetLocalityNode struct {
 	n         tree.AlterTableLocality
 	tableDesc *tabledesc.Mutable
-	dbDesc    *dbdesc.Immutable
+	dbDesc    catalog.DatabaseDescriptor
 }
 
 // AlterTableLocality transforms a tree.AlterTableLocality into a plan node.
@@ -61,11 +60,8 @@ func (p *planner) AlterTableLocality(
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	// This check for CREATE privilege is kept for backwards compatibility.
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of table %s or have CREATE privilege on table %s",
-			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, tableDesc); err != nil {
+		return nil, err
 	}
 
 	// Ensure that the database is multi-region enabled.
@@ -73,7 +69,10 @@ func (p *planner) AlterTableLocality(
 		ctx,
 		p.txn,
 		tableDesc.GetParentID(),
-		tree.DatabaseLookupFlags{Required: true},
+		tree.DatabaseLookupFlags{
+			AvoidCached: true,
+			Required:    true,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -146,17 +145,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	return nil
 }
 
-func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
-	params runParams,
-) error {
-	const operation string = "alter table locality REGIONAL BY TABLE to GLOBAL"
-	if !n.tableDesc.IsLocalityRegionalByTable() {
-		return errors.AssertionFailedf(
-			"invalid call %q on incorrect table locality. %v",
-			operation,
-			n.tableDesc.LocalityConfig,
-		)
-	}
+func (n *alterTableSetLocalityNode) alterTableLocalityToGlobal(params runParams) error {
 	regionEnumID, err := n.dbDesc.MultiRegionEnumID()
 	if err != nil {
 		return err
@@ -251,9 +240,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		return interleaveOnRegionalByRowError()
 	}
 
-	for _, idx := range n.tableDesc.NonDropIndexes() {
+	for _, idx := range n.tableDesc.AllIndexes() {
 		if idx.IsSharded() {
-			return pgerror.New(pgcode.FeatureNotSupported, "cannot convert a table to REGIONAL BY ROW if table table contains hash sharded indexes")
+			return pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"cannot convert %s to REGIONAL BY ROW as the table contains hash sharded indexes",
+				tree.Name(n.tableDesc.GetName()),
+			)
 		}
 	}
 
@@ -348,7 +341,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		}
 
 		// Allow add column mutation to be on the same mutation ID in AlterPrimaryKey.
-		mutationIdx := len(n.tableDesc.GetMutations()) - 1
+		mutationIdx := len(n.tableDesc.Mutations) - 1
 		mutationIdxAllowedInSameTxn = &mutationIdx
 		newColumnName = &partColName
 
@@ -363,7 +356,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		// The primary_region default helps us also have a material value.
 		// This can be removed when the default_expr can serialize user defined
 		// functions.
-		col := n.tableDesc.GetMutations()[mutationIdx].GetColumn()
+		col := n.tableDesc.Mutations[mutationIdx].GetColumn()
 		finalDefaultExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			params.ctx,
 			regionalByRowGatewayRegionDefaultExpr(enumOID),
@@ -430,7 +423,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	if err := params.p.AlterPrimaryKey(
 		params.ctx,
 		n.tableDesc,
-		&tree.AlterTableAlterPrimaryKey{
+		tree.AlterTableAlterPrimaryKey{
 			Name:    tree.Name(n.tableDesc.PrimaryIndex.Name),
 			Columns: cols,
 		},
@@ -471,13 +464,24 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		),
 	)
 
+	// We should check index zone configs if moving to REGIONAL BY ROW.
+	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+		params.ctx,
+		n.dbDesc,
+		n.tableDesc,
+	); err != nil {
+		return err
+	}
+
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.
 	switch existingLocality.Locality.(type) {
 	case *descpb.TableDescriptor_LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			return nil
+			if err := n.alterTableLocalityToGlobal(params); err != nil {
+				return err
+			}
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityToRegionalByRow(
 				params,
@@ -495,7 +499,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			if err := n.alterTableLocalityRegionalByTableToGlobal(params); err != nil {
+			if err := n.alterTableLocalityToGlobal(params); err != nil {
 				return err
 			}
 		case tree.LocalityLevelRow:
@@ -564,7 +568,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 // writeNewTableLocalityAndZoneConfig writes the table descriptor with the newly
 // updated LocalityConfig and writes a new zone configuration for the table.
 func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
-	params runParams, dbDesc *dbdesc.Immutable,
+	params runParams, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
@@ -576,12 +580,16 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
+	if err != nil {
+		return err
+	}
 	// Update the zone configuration.
 	if err := ApplyZoneConfigForMultiRegionTable(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg(),
-		*dbDesc.RegionConfig,
+		regionConfig,
 		n.tableDesc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
@@ -598,7 +606,8 @@ func (p *planner) alterTableDescLocalityToRegionalByTable(
 	ctx context.Context, region tree.Name, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
 ) error {
 	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
-		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+		typesDependedOn := []descpb.ID{regionEnumID}
+		if err := p.removeTypeBackReferences(ctx, typesDependedOn, tableDesc.GetID(),
 			fmt.Sprintf("remove back ref on mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
 		); err != nil {
 			return err
@@ -621,7 +630,8 @@ func (p *planner) alterTableDescLocalityToGlobal(
 	ctx context.Context, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
 ) error {
 	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
-		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+		typesDependedOn := []descpb.ID{regionEnumID}
+		if err := p.removeTypeBackReferences(ctx, typesDependedOn, tableDesc.GetID(),
 			fmt.Sprintf("remove back ref no mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
 		); err != nil {
 			return err

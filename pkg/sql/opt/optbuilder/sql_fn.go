@@ -84,14 +84,14 @@ func (b *Builder) buildSQLFn(
 
 	id := b.factory.Memo().NextWithID()
 	b.factory.Metadata().AddWithBinding(id, innerScope.expr)
-	cte := cteSource{
+	cte := &cteSource{
 		name:         tree.AliasClause{},
 		cols:         innerScope.makePresentationWithHiddenCols(),
 		originalExpr: stmt.AST,
 		expr:         innerScope.expr,
 		id:           id,
 	}
-	b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+	b.addCTE(cte)
 
 	// Build and return the original function.
 	return b.buildScalar(info.FuncExpr, inScope, outScope, outCol, colRefs)

@@ -136,6 +136,13 @@ define Bind {
 }
 
 [HasType]
+define Let {
+    Labels Strings
+    Target Expr
+    Result Ref
+}
+
+[HasType]
 define Ref {
     Label String
 }
@@ -154,6 +161,12 @@ define Slice {
 [Value]
 define String {
     Value string
+}
+
+# type StringExpr string
+[Slice]
+define Strings {
+    Element String
 }
 
 # type NumberExpr int

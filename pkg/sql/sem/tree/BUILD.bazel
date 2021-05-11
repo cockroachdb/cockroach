@@ -1,6 +1,12 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/sql/sem/tree/eval_test:__subpackages__"],
+)
+
 go_library(
     name = "tree",
     srcs = [
@@ -55,7 +61,7 @@ go_library(
         "operators.go",
         "overload.go",
         "parse_array.go",
-        "parse_string.go",
+        "parse_string.go",  # keep
         "persistence.go",
         "pgwire_encode.go",
         "placeholders.go",
@@ -99,12 +105,14 @@ go_library(
         "with.go",
         "zone.go",
         ":gen-createtypevariety-stringer",  # keep
+        ":gen-statementreturntype-stringer",  # keep
         ":gen-statementtype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/geo",
         "//pkg/geo/geopb",
         "//pkg/keys",
@@ -192,11 +200,11 @@ go_test(
         "timeconv_test.go",
         "type_check_internal_test.go",
         "type_check_test.go",
+        "type_name_test.go",
         "window_funcs_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":tree"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/internal/rsg",
         "//pkg/kv",
@@ -210,7 +218,7 @@ go_test(
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -238,6 +246,12 @@ stringer(
     name = "gen-createtypevariety-stringer",
     src = "create.go",
     typ = "CreateTypeVariety",
+)
+
+stringer(
+    name = "gen-statementreturntype-stringer",
+    src = "stmt.go",
+    typ = "StatementReturnType",
 )
 
 stringer(

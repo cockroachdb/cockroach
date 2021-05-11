@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -203,14 +202,6 @@ func (b *chanBuffer) Get(ctx context.Context) (Event, error) {
 	}
 }
 
-// MemBufferDefaultCapacity is the default capacity for a memBuffer for a single
-// changefeed.
-//
-// TODO(dan): It would be better if all changefeeds shared a single capacity
-// that was given by the operater at startup, like we do for RocksDB and SQL.
-var MemBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
-	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
-
 var memBufferColTypes = []*types.T{
 	types.Bytes, // KV.Key
 	types.Bytes, // KV.Value
@@ -241,7 +232,9 @@ type memBuffer struct {
 	}
 }
 
-func makeMemBuffer(acc mon.BoundAccount, metrics *Metrics) *memBuffer {
+// MakeMemBuffer returns an EventBuffer backed by memory, limited
+// as specified by bound account.
+func MakeMemBuffer(acc mon.BoundAccount, metrics *Metrics) EventBuffer {
 	b := &memBuffer{
 		metrics:  metrics,
 		signalCh: make(chan struct{}, 1),

@@ -265,6 +265,11 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 			return err
 		}
 
+		t.Status("increasing snapshot_recovery rate")
+		if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_recovery.max_rate='512MiB'`); err != nil {
+			return err
+		}
+
 		t.Status("increasing range_max_bytes")
 		minBytes := 16 << 20 // 16 MB
 		setRangeMaxBytes := func(maxBytes int) {
@@ -308,7 +313,9 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 		expRC := size/rangeSize - 3 // -3 to tolerate a small inaccuracy in rowEstimate
 		expSplits := expRC - 1
 		t.Status(fmt.Sprintf("waiting for %d splits", expSplits))
-		waitDuration := time.Duration(expSplits) * time.Second // 1 second per split
+
+		// 1 second per split + a grace period.
+		waitDuration := time.Duration(expSplits)*time.Second + 100*time.Second
 		if err := retry.ForDuration(waitDuration, func() error {
 			if rc := rangeCount(); rc < expRC {
 				return errors.Errorf("bank table split over %d ranges, expected at least %d",

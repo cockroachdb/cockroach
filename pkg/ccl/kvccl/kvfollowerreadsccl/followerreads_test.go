@@ -10,6 +10,7 @@ package kvfollowerreadsccl
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -67,6 +69,19 @@ func TestEvalFollowerReadOffset(t *testing.T) {
 	}
 }
 
+func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	st := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(&st.SV, 0)
+	if offset, err := evalFollowerReadOffset(uuid.MakeV4(), st); err != nil {
+		t.Fatal(err)
+	} else if offset != math.MinInt64 {
+		t.Fatalf("expected %v, got %v", math.MinInt64, offset)
+	}
+}
+
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
@@ -99,6 +114,7 @@ func TestCanSendToFollower(t *testing.T) {
 		ctPolicy              roachpb.RangeClosedTimestampPolicy
 		disabledEnterprise    bool
 		disabledFollowerReads bool
+		zeroTargetDuration    bool
 		exp                   bool
 	}{
 		{
@@ -145,6 +161,12 @@ func TestCanSendToFollower(t *testing.T) {
 			name: "stale read with current-time uncertainty limit",
 			ba:   batch(withUncertaintyLimit(txn(stale), current), &roachpb.GetRequest{}),
 			exp:  false,
+		},
+		{
+			name:               "stale read when zero target_duration",
+			ba:                 batch(txn(stale), &roachpb.GetRequest{}),
+			zeroTargetDuration: true,
+			exp:                false,
 		},
 		{
 			name: "current-time read",
@@ -252,6 +274,9 @@ func TestCanSendToFollower(t *testing.T) {
 			}
 			st := cluster.MakeTestingClusterSettings()
 			kvserver.FollowerReadsEnabled.Override(&st.SV, !c.disabledFollowerReads)
+			if c.zeroTargetDuration {
+				closedts.TargetDuration.Override(&st.SV, 0)
+			}
 
 			can := canSendToFollower(uuid.MakeV4(), st, clock, c.ctPolicy, c.ba)
 			require.Equal(t, c.exp, can)
@@ -515,7 +540,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	n1.Exec(t, `CREATE DATABASE t`)
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,2], 1)`)
 	// Speed up closing of timestamps, as we'll in order to be able to use
 	// follower_read_timestamp().
 	// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt follower reads
@@ -548,8 +573,10 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 		{NodeID: 2, StoreID: 2, ReplicaID: 2},
 	}, entry.Desc().Replicas().Descriptors())
 
-	// Relocate the follower. n2 will no longer have a replica.
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,3], 1)`)
+	// Remove the follower and add a new non-voter to n3. n2 will no longer have a
+	// replica.
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[3], 1)`)
 
 	// Execute the query again and assert the cache is updated. This query will
 	// not be executed as a follower read since it attempts to use n2 which
@@ -558,7 +585,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n4.Exec(t, historicalQuery)
 	// As a sanity check, verify that this was not a follower read.
 	rec := <-recCh
-	require.False(t, kv.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
+	require.False(t, kv.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
 	// Check that the cache was properly updated.
 	entry = n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
@@ -566,7 +593,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
-		{NodeID: 3, StoreID: 3, ReplicaID: 3},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.ReplicaTypeNonVoter()},
 	}, entry.Desc().Replicas().Descriptors())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was

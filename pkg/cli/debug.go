@@ -41,8 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -107,6 +108,17 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 		return 0, err
 	}
 	return roachpb.RangeID(rangeIDInt), nil
+}
+
+func parsePositiveDuration(arg string) (time.Duration, error) {
+	duration, err := time.ParseDuration(arg)
+	if err != nil {
+		return 0, err
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("illegal val: %v <= 0", duration)
+	}
+	return duration, nil
 }
 
 // OpenEngineOptions tunes the behavior of OpenEngine.
@@ -189,7 +201,11 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 			return err
 		}
-		table := tabledesc.NewImmutable(*descpb.TableFromDescriptor(&desc, hlc.Timestamp{}))
+		b := catalogkv.NewBuilder(&desc)
+		if b == nil || b.DescriptorType() != catalog.Table {
+			return errors.Newf("expected a table descriptor")
+		}
+		table := b.BuildImmutable().(catalog.TableDescriptor)
 
 		fn := func(kv storage.MVCCKeyValue) (string, error) {
 			var v roachpb.Value
@@ -215,7 +231,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	results := 0
-	return db.MVCCIterate(debugCtx.startKey.Key, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind, func(kv storage.MVCCKeyValue) error {
+	iterFunc := func(kv storage.MVCCKeyValue) error {
 		done, err := printer(kv)
 		if err != nil {
 			return err
@@ -228,7 +244,27 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 			return iterutil.StopIteration()
 		}
 		return nil
-	})
+	}
+	endKey := debugCtx.endKey.Key
+	splitScan := false
+	// If the startKey is local and the endKey is global, split into two parts
+	// to do the scan. This is because MVCCKeyAndIntentsIterKind cannot span
+	// across the two key kinds.
+	if (len(debugCtx.startKey.Key) == 0 || keys.IsLocal(debugCtx.startKey.Key)) && !(keys.IsLocal(endKey) || bytes.Equal(endKey, keys.LocalMax)) {
+		splitScan = true
+		endKey = keys.LocalMax
+	}
+	if err := db.MVCCIterate(
+		debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind, iterFunc); err != nil {
+		return err
+	}
+	if splitScan {
+		if err := db.MVCCIterate(keys.LocalMax, debugCtx.endKey.Key, storage.MVCCKeyAndIntentsIterKind,
+			iterFunc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -549,7 +585,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds]",
+	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds] [intent-age-as-duration]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -558,9 +594,10 @@ work would be done (assuming all intent resolution and pushes succeed).
 Without a RangeID specified on the command line, runs the analysis for all
 ranges individually.
 
-Uses a configurable GC policy, with a default 24 hour TTL, for old versions.
+Uses a configurable GC policy, with a default 24 hour TTL, for old versions and
+2 hour intent resolution threshold.
 `,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.RangeArgs(1, 4),
 	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
 }
 
@@ -570,17 +607,21 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var rangeID roachpb.RangeID
 	gcTTLInSeconds := int64((24 * time.Hour).Seconds())
-	switch len(args) {
-	case 3:
+	intentAgeThreshold := gc.IntentAgeThreshold.Default()
+
+	if len(args) > 3 {
 		var err error
-		if rangeID, err = parseRangeID(args[1]); err != nil {
-			return errors.Wrapf(err, "unable to parse %v as range ID", args[1])
+		if intentAgeThreshold, err = parsePositiveDuration(args[3]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as intent age threshold", args[3])
 		}
+	}
+	if len(args) > 2 {
+		var err error
 		if gcTTLInSeconds, err = parsePositiveInt(args[2]); err != nil {
 			return errors.Wrapf(err, "unable to parse %v as TTL", args[2])
 		}
-
-	case 2:
+	}
+	if len(args) > 1 {
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
@@ -634,7 +675,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		info, err := gc.Run(
 			context.Background(),
 			&desc, snap,
-			now, thresh, policy,
+			now, thresh, intentAgeThreshold, policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
@@ -869,7 +910,8 @@ var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
 This command is UNSAFE and should only be used with the supervision of
 a Cockroach Labs engineer. It is a last-resort option to recover data
 after multiple node failures. The recovered data is not guaranteed to
-be consistent.
+be consistent. If a suitable backup exists, restore it instead of
+using this tool.
 
 The --dead-store-ids flag takes a comma-separated list of dead store
 IDs and scans this store for any ranges whose only live replica is on
@@ -877,11 +919,34 @@ this store. These range descriptors will be edited to forcibly remove
 the dead stores, allowing the range to recover from this single
 replica.
 
+This command will prompt for confirmation before committing its changes.
+
+It is safest to run this command while all nodes are stopped. In some
+circumstances it may be possible to run it while some nodes are still
+running provided all nodes containing replicas of nodes that have lost
+quorum are stopped.
+
+It is recommended to take a filesystem-level backup or snapshot of the
+nodes to be affected before running this command (remember that it is
+not safe to take a filesystem-level backup of a running node, but it is
+possible while the node is stopped)
+
+WARNINGS
+
+This tool will cause previously committed data to be lost. It does not
+preserve atomicity of transactions, so further inconsistencies and
+undefined behavior may result. Before proceeding at the yes/no prompt,
+review the ranges that are affected to consider the possible impact
+of inconsistencies. Further remediation may be necessary after running
+this tool, including dropping and recreating affected indexes, or in the
+worst case creating a new backup or export of this cluster's data for
+restoration into a brand new cluster. Because of the latter possibilities,
+this tool is a slower means of disaster recovery than restoring from
+a backup.
+
 Must only be used when the dead stores are lost and unrecoverable. If
 the dead stores were to rejoin the cluster after this command was
 used, data may be corrupted.
-
-This command will prompt for confirmation before committing its changes.
 
 After this command is used, the node should not be restarted until at
 least 10 seconds have passed since it was stopped. Restarting it too
@@ -1114,13 +1179,13 @@ var debugMergeLogsCommand = &cobra.Command{
 	Short: "merge multiple log files from different machines into a single stream",
 	Long: `
 Takes a list of glob patterns (not left exclusively to the shell because of
-MAX_ARG_STRLEN, usually 128kB) pointing to log files and merges them into a
-single stream printed to stdout. Files not matching the log file name pattern
-are ignored. If log lines appear out of order within a file (which happens), the
-timestamp is ratcheted to the highest value seen so far. The command supports
-efficient time filtering as well as multiline regexp pattern matching via flags.
-If the filter regexp contains captures, such as '^abc(hello)def(world)', only
-the captured parts will be printed.
+MAX_ARG_STRLEN, usually 128kB) which will be walked and whose contained log
+files and merged them into a single stream printed to stdout. Files not matching
+the log file name pattern are ignored. If log lines appear out of order within
+a file (which happens), the timestamp is ratcheted to the highest value seen so far.
+The command supports efficient time filtering as well as multiline regexp pattern
+matching via flags. If the filter regexp contains captures, such as
+'^abc(hello)def(world)', only the captured parts will be printed.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runDebugMergeLogs,
@@ -1138,7 +1203,7 @@ var debugMergeLogsOpts = struct {
 	keepRedactable bool
 	redactInput    bool
 }{
-	program:        regexp.MustCompile("^cockroach.*$"),
+	program:        nil, // match everything
 	file:           regexp.MustCompile(log.FilePattern),
 	keepRedactable: true,
 	redactInput:    false,
@@ -1185,6 +1250,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugEnvCmd,
 	debugZipCmd,
 	debugMergeLogsCommand,
+	debugListFilesCmd,
 	debugResetQuorumCmd,
 )
 
@@ -1253,7 +1319,9 @@ func init() {
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
-	debugDoctorCmd.AddCommand(debugDoctorCmds...)
+	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
+	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
+	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
 	f := debugSyncBenchCmd.Flags()

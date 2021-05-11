@@ -56,20 +56,20 @@ func NewRowBasedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup if part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, error) {
+) (context.Context, execinfra.OpChains, error) {
 	var err error
-	ctx, err = f.FlowBase.Setup(ctx, spec, opt)
+	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs, err := f.setupInputSyncs(ctx, spec, opt)
 	if err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 
 	// Then, populate processors.
-	return ctx, f.setupProcessors(ctx, spec, inputSyncs)
+	return ctx, nil, f.setupProcessors(ctx, spec, inputSyncs)
 }
 
 // setupProcessors creates processors for each spec in f.spec, fusing processors
@@ -131,15 +131,18 @@ func (f *rowBasedFlow) setupProcessors(
 					}
 					// ps has an input with multiple streams. This can be either a
 					// multiplexed RowChannel (in case of some unordered synchronizers)
-					// or an orderedSynchronizer (for other unordered synchronizers or
+					// or a serialSynchronizer (for other unordered synchronizers or
 					// ordered synchronizers). If it's a multiplexed RowChannel,
 					// then its inputs run in parallel, so there's no fusing with them.
-					// If it's an orderedSynchronizer, then we look inside it to see if
+					// If it's a serial synchronizer, then we look inside it to see if
 					// the processor we're trying to fuse feeds into it.
-					orderedSync, ok := inputSyncs[pIdx][inIdx].(*orderedSynchronizer)
+
+					sync, ok := inputSyncs[pIdx][inIdx].(serialSynchronizer)
+
 					if !ok {
 						continue
 					}
+
 					// See if we can find a stream attached to the processor we're
 					// trying to fuse.
 					for sIdx, sspec := range in.Streams {
@@ -150,8 +153,8 @@ func (f *rowBasedFlow) setupProcessors(
 						if input.ProcessorID != pspec.ProcessorID {
 							continue
 						}
-						// Fuse the processor with this orderedSynchronizer.
-						orderedSync.sources[sIdx].src = source
+						// Fuse the processor with this synchronizer.
+						sync.getSources()[sIdx].src = source
 						return true
 					}
 				}
@@ -304,7 +307,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 				// We have an ordered synchronizer or an unordered one that we really
 				// want to fuse because of the FuseAggressively option. We'll create a
 				// RowChannel for each input for now, but the inputs might be fused with
-				// the orderedSynchronizer later (in which case the RowChannels will be
+				// the synchronizer later (in which case the RowChannels will be
 				// dropped).
 				streams := make([]execinfra.RowSource, len(is.Streams))
 				for i, s := range is.Streams {
@@ -320,7 +323,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 				if is.Type == execinfrapb.InputSyncSpec_ORDERED {
 					ordering = execinfrapb.ConvertToColumnOrdering(is.Ordering)
 				}
-				sync, err = makeOrderedSync(ordering, f.EvalCtx, streams)
+				sync, err = makeSerialSync(ordering, f.EvalCtx, streams)
 				if err != nil {
 					return nil, err
 				}

@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -75,10 +76,18 @@ func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValu
 // rng is initialized to a rand.Rand if crdbTestBuild is enabled.
 var rng *rand.Rand
 
+// DisableMetamorphicEnvVar can be used to disable metamorhpic tests for
+// sub-processes. If it exists and is set to something truthy as defined by
+// strconv.ParseBool then metamorphic testing will not be enabled.
+const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
+
 func init() {
 	if CrdbTestBuild {
-		rng, _ = randutil.NewPseudoRand()
-		metamorphicBuild = rng.Float64() < metamorphicBuildProbability
+		disabled := envutil.EnvOrDefaultBool(DisableMetamorphicEnvVar, false)
+		if !disabled {
+			rng, _ = randutil.NewPseudoRand()
+			metamorphicBuild = rng.Float64() < metamorphicBuildProbability
+		}
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -35,9 +36,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/stretchr/testify/require"
 )
+
+func makeTopic(name string) tableDescriptorTopic {
+	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
+	return tableDescriptorTopic{desc}
+}
 
 func TestCloudStorageSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -52,7 +59,10 @@ func TestCloudStorageSink(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer r.Close()
+		defer func() {
+			require.NoError(t, r.Close())
+		}()
+
 		decompressed, err := ioutil.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
@@ -87,7 +97,7 @@ func TestCloudStorageSink(t *testing.T) {
 		return files
 	}
 
-	const unlimitedFileSize = math.MaxInt64
+	const unlimitedFileSize int64 = math.MaxInt64
 	var noKey []byte
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
@@ -109,22 +119,36 @@ func TestCloudStorageSink(t *testing.T) {
 	}
 
 	user := security.RootUserName()
+	memAcc, release := getBoundAccountWithBudget(memoryUnlimited)
+	defer release()
+
+	sinkURI := func(dir string, maxFileSize int64) sinkURL {
+		uri := `nodelocal://0/` + dir
+		if maxFileSize != unlimitedFileSize {
+			uri += fmt.Sprintf("?%s=%d", changefeedbase.SinkParamFileSize, maxFileSize)
+		}
+		u, err := url.Parse(uri)
+		require.NoError(t, err)
+		return sinkURL{URL: u}
+	}
 
 	t.Run(`golden`, func(t *testing.T) {
-		t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
+		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+sinkDir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(sinkDir, unlimitedFileSize), 1, settings,
+			opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		require.NoError(t, s.Flush(ctx))
+		require.EqualValues(t, 0, memAcc.Used())
 
 		require.Equal(t, []string{
 			"v1\n",
@@ -146,18 +170,19 @@ func TestCloudStorageSink(t *testing.T) {
 		for _, compression := range []string{"", "gzip"} {
 			opts[changefeedbase.OptCompression] = compression
 			t.Run("compress="+compression, func(t *testing.T) {
-				t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
-				t2 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t2`})}
+				t1 := makeTopic(`t1`)
+				t2 := makeTopic(`t2`)
 
 				testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 				sf := span.MakeFrontier(testSpan)
 				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 				dir := `single-node` + compression
 				s, err := makeCloudStorageSink(
-					ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-					settings, opts, timestampOracle, externalStorageFromURI, user,
+					ctx, sinkURI(dir, unlimitedFileSize), 1, settings,
+					opts, timestampOracle, externalStorageFromURI, user, memAcc,
 				)
 				require.NoError(t, err)
+				defer func() { require.NoError(t, s.Close()) }()
 				s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 				// Empty flush emits no files.
@@ -222,21 +247,23 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`multi-node`, func(t *testing.T) {
-		t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
+		t1 := makeTopic(`t1`)
 
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unlimitedFileSize), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s1.Close()) }()
 		s2, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 2, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unlimitedFileSize), 2,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
+		defer func() { require.NoError(t, s2.Close()) }()
 		require.NoError(t, err)
 		// Hack into the sinks to pretend each is the first sink created on two
 		// different nodes, which is the worst case for them conflicting.
@@ -263,15 +290,17 @@ func TestCloudStorageSink(t *testing.T) {
 		// this happens before checkpointing, some data is written again but
 		// this is unavoidable.
 		s1R, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unbuffered), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s1R.Close()) }()
 		s2R, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 2, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unbuffered), 2,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s2R.Close()) }()
 		// Nodes restart. s1 gets the same sink id it had last time but s2
 		// doesn't.
 		s1R.(*cloudStorageSink).sinkID = 0
@@ -303,23 +332,25 @@ func TestCloudStorageSink(t *testing.T) {
 	// This test is also sufficient for verifying the behavior of a multi-node
 	// changefeed using this sink. Ditto job restarts.
 	t.Run(`zombie`, func(t *testing.T) {
-		t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
+		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unlimitedFileSize), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s1.Close()) }()
 		s1.(*cloudStorageSink).sinkID = 7         // Force a deterministic sinkID.
 		s1.(*cloudStorageSink).jobSessionID = "a" // Force deterministic job session ID.
 		s2, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unlimitedFileSize), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s2.Close()) }()
 		s2.(*cloudStorageSink).sinkID = 8         // Force a deterministic sinkID.
 		s2.(*cloudStorageSink).jobSessionID = "b" // Force deterministic job session ID.
 
@@ -344,17 +375,18 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`bucketing`, func(t *testing.T) {
-		t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
+		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `bucketing`
 		const targetMaxFileSize = 6
 		s, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 1, targetMaxFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, targetMaxFileSize), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Writing more than the max file size chunks the file up and flushes it
@@ -432,17 +464,17 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`file-ordering`, func(t *testing.T) {
-		t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
+		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(
-			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			ctx, sinkURI(dir, unlimitedFileSize), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
-
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Simulate initial scan, which emits data at a timestamp, then an equal
@@ -491,15 +523,17 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`ordering-among-schema-versions`, func(t *testing.T) {
-		t1 := tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: `t1`})}
+		t1 := makeTopic(`t1`)
 		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
 		sf := span.MakeFrontier(testSpan)
 		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
 		dir := `ordering-among-schema-versions`
 		var targetMaxFileSize int64 = 10
-		s, err := makeCloudStorageSink(ctx, `nodelocal://0/`+dir, 1, targetMaxFileSize, settings,
-			opts, timestampOracle, externalStorageFromURI, user)
+		s, err := makeCloudStorageSink(
+			ctx, sinkURI(dir, targetMaxFileSize), 1, settings,
+			opts, timestampOracle, externalStorageFromURI, user, memAcc)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		t1.TableDesc().Version = 1
@@ -535,5 +569,65 @@ func TestCloudStorageSink(t *testing.T) {
 			"x1\n",
 			"w1\n",
 		}, slurpDir(t, dir))
+	})
+	t.Run(`memory-limit`, func(t *testing.T) {
+		t1 := makeTopic(`t1`)
+		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+		sf := span.MakeFrontier(testSpan)
+		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+		sinkDir := `memory-limit`
+		limitedMem, release := getBoundAccountWithBudget(100)
+		defer release()
+		s, err := makeCloudStorageSink(
+			ctx, sinkURI(sinkDir, 101), 1,
+			settings, opts, timestampOracle, externalStorageFromURI, user, limitedMem,
+		)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+
+		for err == nil {
+			err = s.EmitRow(ctx, t1, noKey, []byte("hello"), ts(1))
+		}
+		require.Regexp(t, "memory budget exceeded", err)
+	})
+	t.Run(`memory-accounting`, func(t *testing.T) {
+		before := opts[changefeedbase.OptCompression]
+		// Compression codecs include buffering that interferes with other tests,
+		// e.g. the bucketing test that configures very small flush sizes.
+		defer func() {
+			opts[changefeedbase.OptCompression] = before
+		}()
+
+		// A bit of magic constant: we're using bytes.Buffer internally, which
+		// allocates "small" buffer (64 bytes) initially.  We will try to target
+		// our file size to be less than that value; but we will write
+		// larger amount of data (thus, hopefully causing multiple bytes.Buffer
+		// reallocs, plus a file flush).
+		const targetFileSize = 63
+
+		rnd, _ := randutil.NewPseudoRand()
+		for _, compression := range []string{"", "gzip"} {
+			opts[changefeedbase.OptCompression] = compression
+			t.Run("compress="+compression, func(t *testing.T) {
+				t1 := makeTopic(`t1`)
+				testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+				sf := span.MakeFrontier(testSpan)
+				timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+				sinkDir := `memory-accounting`
+				s, err := makeCloudStorageSink(
+					ctx, sinkURI(sinkDir, targetFileSize), 1,
+					settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
+				)
+				require.NoError(t, err)
+				defer func() { require.NoError(t, s.Close()) }()
+				s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+
+				data := randutil.RandBytes(rnd, 1+rnd.Intn(targetFileSize))
+				require.NoError(t, s.EmitRow(ctx, t1, noKey, data, ts(0)))
+
+				require.NoError(t, s.Flush(ctx))
+			})
+		}
 	})
 }

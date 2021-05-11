@@ -649,7 +649,7 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeProblems"></a>
 #### RangeProblems
 
-
+RangeProblems describes issues reported by a range. For internal use only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -669,12 +669,13 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeStatistics"></a>
 #### RangeStatistics
 
-
+RangeStatistics describes statistics reported by a range. For internal use
+only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  |  | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
 
 
 
@@ -832,7 +833,7 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeProblems"></a>
 #### RangeProblems
 
-
+RangeProblems describes issues reported by a range. For internal use only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -852,12 +853,13 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeStatistics"></a>
 #### RangeStatistics
 
-
+RangeStatistics describes statistics reported by a range. For internal use
+only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  |  | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
 
 
 
@@ -1181,7 +1183,7 @@ ActiveQuery represents a query in flight on some Session.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
-| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  |  | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
 | sql_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
 
 
@@ -1309,7 +1311,7 @@ ActiveQuery represents a query in flight on some Session.
 | start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
 | is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
 | phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
-| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  |  | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
 | sql_anon | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
 
 
@@ -1369,7 +1371,7 @@ Support status: [reserved](#support-status)
 
 
 
-Request object for issing a query cancel request.
+Request object for issuing a query cancel request.
 
 
 | Field | Type | Label | Description | Support status |
@@ -1410,14 +1412,22 @@ Response returned by target query's gateway node.
 ListContentionEvents retrieves the contention events across the entire
 cluster.
 
-On the highest level, all IndexContentionEvents objects are ordered
-according to their importance (as defined by the number of contention
-events within each object).
-On the middle level, all SingleKeyContention objects are ordered by their
-keys lexicographically.
-On the lowest level, all SingleTxnContention objects are ordered by the
-number of times that transaction was observed to contend with other
-transactions.
+For SQL keys the following orderings are maintained:
+- on the highest level, all IndexContentionEvents objects are ordered
+  according to their importance (as defined by the number of contention
+  events within each object).
+- on the middle level, all SingleKeyContention objects are ordered by their
+  keys lexicographically.
+- on the lowest level, all SingleTxnContention objects are ordered by the
+  number of times that transaction was observed to contend with other
+  transactions.
+
+For non-SQL keys the following orderings are maintained:
+- on the top level, all SingleNonSQLKeyContention objects are ordered
+  by their keys lexicographically.
+- on the bottom level, all SingleTxnContention objects are ordered by the
+  number of times that transaction was observed to contend with other
+  transactions.
 
 Support status: [reserved](#support-status)
 
@@ -1445,7 +1455,7 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| events | [cockroach.sql.contentionpb.IndexContentionEvents](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.IndexContentionEvents) | repeated | A list of contention events on this node or cluster. | [reserved](#support-status) |
+| events | [cockroach.sql.contentionpb.SerializedRegistry](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.SerializedRegistry) |  | All available contention information on this node or cluster. | [reserved](#support-status) |
 | errors | [ListContentionEventsError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
 
@@ -1474,14 +1484,22 @@ An error wrapper object for ListContentionEventsResponse.
 
 ListLocalContentionEvents retrieves the contention events on this node.
 
-On the highest level, all IndexContentionEvents objects are ordered
-according to their importance (as defined by the number of contention
-events within each object).
-On the middle level, all SingleKeyContention objects are ordered by their
-keys lexicographically.
-On the lowest level, all SingleTxnContention objects are ordered by the
-number of times that transaction was observed to contend with other
-transactions.
+For SQL keys the following orderings are maintained:
+- on the highest level, all IndexContentionEvents objects are ordered
+  according to their importance (as defined by the number of contention
+  events within each object).
+- on the middle level, all SingleKeyContention objects are ordered by their
+  keys lexicographically.
+- on the lowest level, all SingleTxnContention objects are ordered by the
+  number of times that transaction was observed to contend with other
+  transactions.
+
+For non-SQL keys the following orderings are maintained:
+- on the top level, all SingleNonSQLKeyContention objects are ordered
+  by their keys lexicographically.
+- on the bottom level, all SingleTxnContention objects are ordered by the
+  number of times that transaction was observed to contend with other
+  transactions.
 
 Support status: [reserved](#support-status)
 
@@ -1509,7 +1527,7 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| events | [cockroach.sql.contentionpb.IndexContentionEvents](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.IndexContentionEvents) | repeated | A list of contention events on this node or cluster. | [reserved](#support-status) |
+| events | [cockroach.sql.contentionpb.SerializedRegistry](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.SerializedRegistry) |  | All available contention information on this node or cluster. | [reserved](#support-status) |
 | errors | [ListContentionEventsError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
 
@@ -2325,7 +2343,7 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeProblems"></a>
 #### RangeProblems
 
-
+RangeProblems describes issues reported by a range. For internal use only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
@@ -2345,12 +2363,13 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 <a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeStatistics"></a>
 #### RangeStatistics
 
-
+RangeStatistics describes statistics reported by a range. For internal use
+only.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
-| writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  |  | [reserved](#support-status) |
+| queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Queries per second served by this range.<br><br>Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Writes per second served by this range. | [reserved](#support-status) |
 
 
 
@@ -2710,7 +2729,6 @@ Support status: [reserved](#support-status)
 | id | [int64](#cockroach.server.serverpb.StatementDiagnosticsResponse-int64) |  |  | [reserved](#support-status) |
 | statement_fingerprint | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  | [reserved](#support-status) |
 | collected_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
-| trace | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -2812,6 +2830,136 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | job | [cockroach.sql.jobs.jobspb.Job](#cockroach.server.serverpb.JobStatusResponse-cockroach.sql.jobs.jobspb.Job) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## ResetSQLStats
+
+`POST /_status/resetsqlstats`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing a SQL stats reset request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.ResetSQLStatsRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object returned by ResetSQLStats.
+
+
+
+
+
+
+
+
+## RequestCA
+
+`GET /_join/v1/ca`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+CARequest requests the CA cert anchoring this service.
+
+No information needed.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+CAResponse contains a PEM encoded copy of the CA cert for this service.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ca_cert | [bytes](#cockroach.server.serverpb.CAResponse-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## RequestCertBundle
+
+`GET /_join/v1/requestbundle`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+CertBundleRequest requests the bundle of initialization CAs for a new node.
+It provides authentication in the form of a joinToken containing a
+sharedSecret.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| token_id | [string](#cockroach.server.serverpb.CertBundleRequest-string) |  |  | [reserved](#support-status) |
+| shared_secret | [bytes](#cockroach.server.serverpb.CertBundleRequest-bytes) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+CertBundleResponse contains a copy of all CAs needed to intialize TLS for
+a new node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| bundle | [bytes](#cockroach.server.serverpb.CertBundleResponse-bytes) |  |  | [reserved](#support-status) |
 
 
 

@@ -1,0 +1,14 @@
+genrule(
+    name = "gen-logging-md",
+    srcs = [
+        "//pkg/util/log/logpb:log.proto",
+    ],
+    outs = ["logging.md"],
+    cmd = """
+        $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
+          logging.md $(location logging.md)
+       """,
+    exec_tools = [
+        "//pkg/util/log/gen",
+    ],
+)

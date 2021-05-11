@@ -253,7 +253,7 @@ limit
  │         │    │    │    │    │    │    │    └── ca_tax_st:5 IN (0, 1, 2) [outer=(5), constraints=(/5: [/0 - /0] [/1 - /1] [/2 - /2]; tight)]
  │         │    │    │    │    │    │    ├── key: (1)
  │         │    │    │    │    │    │    ├── fd: (1)-->(3,6)
- │         │    │    │    │    │    │    └── ordering: +1 opt(3) [actual: +1]
+ │         │    │    │    │    │    │    └── ordering: +1
  │         │    │    │    │    │    └── filters
  │         │    │    │    │    │         └── ca_c_id:3 = 0 [outer=(3), constraints=(/3: [/0 - /0]; tight), fd=()-->(3)]
  │         │    │    │    │    └── filters (true)
@@ -344,27 +344,27 @@ UPDATE last_trade
 ----
 update last_trade
  ├── columns: <none>
- ├── fetch columns: lt_s_symb:7 lt_dts:8 last_trade.lt_price:9 lt_open_price:10 lt_vol:11
+ ├── fetch columns: lt_s_symb:7 lt_dts:8 lt_price:9 lt_open_price:10 lt_vol:11
  ├── update-mapping:
  │    ├── lt_dts_new:15 => lt_dts:2
- │    ├── lt_price:16 => last_trade.lt_price:3
+ │    ├── lt_price_new:16 => lt_price:3
  │    └── lt_vol_new:14 => lt_vol:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: lt_price:16!null lt_vol_new:14!null lt_dts_new:15!null lt_s_symb:7!null lt_dts:8!null last_trade.lt_price:9!null lt_open_price:10!null lt_vol:11!null
+      ├── columns: lt_price_new:16!null lt_vol_new:14!null lt_dts_new:15!null lt_s_symb:7!null lt_dts:8!null lt_price:9!null lt_open_price:10!null lt_vol:11!null
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(7-11,14-16)
       ├── scan last_trade
-      │    ├── columns: lt_s_symb:7!null lt_dts:8!null last_trade.lt_price:9!null lt_open_price:10!null lt_vol:11!null
+      │    ├── columns: lt_s_symb:7!null lt_dts:8!null lt_price:9!null lt_open_price:10!null lt_vol:11!null
       │    ├── constraint: /7: [/'SYMB' - /'SYMB']
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(7-11)
       └── projections
-           ├── 1E+2 [as=lt_price:16]
+           ├── 1E+2 [as=lt_price_new:16]
            ├── lt_vol:11 + 20 [as=lt_vol_new:14, outer=(11), immutable]
            └── '2020-06-17 22:27:42.148484' [as=lt_dts_new:15]
 
@@ -731,42 +731,42 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,34-36,38-44,46-50,52-54)
+ │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,34-36,38-44,46-50,52-54), (24)==(28), (28)==(24), (6)==(18), (18)==(6), (31)==(34), (49)==(52), (52)==(49), (44)==(46), (46)==(44), (5)==(38), (38)==(5), (34)==(31)
  │    ├── inner-join (lookup address [as=ca])
  │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:18!null co_st_id:19!null co_name:20!null co_sp_rate:22!null co_ceo:23!null co_ad_id:24!null co_desc:25!null co_open_date:26!null ca.ad_id:28!null ca.ad_line1:29 ca.ad_line2:30 ca.ad_zc_code:31!null ca.ad_ctry:32 ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    ├── key columns: [24] = [28]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,38-44,46-50,52-54)
+ │    │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,38-44,46-50,52-54), (46)==(44), (5)==(38), (38)==(5), (49)==(52), (6)==(18), (18)==(6), (52)==(49), (24)==(28), (28)==(24), (44)==(46)
  │    │    ├── inner-join (lookup company)
  │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:18!null co_st_id:19!null co_name:20!null co_sp_rate:22!null co_ceo:23!null co_ad_id:24!null co_desc:25!null co_open_date:26!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    │    ├── key columns: [6] = [18]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,4-16,18-20,22-26,38-44,46-50,52-54)
+ │    │    │    ├── fd: ()-->(1,4-16,18-20,22-26,38-44,46-50,52-54), (44)==(46), (46)==(44), (5)==(38), (38)==(5), (49)==(52), (6)==(18), (18)==(6), (52)==(49)
  │    │    │    ├── inner-join (lookup zip_code [as=zea])
  │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    │    │    ├── key columns: [49] = [52]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50,52-54)
+ │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50,52-54), (52)==(49), (44)==(46), (46)==(44), (5)==(38), (38)==(5), (49)==(52)
  │    │    │    │    ├── inner-join (lookup address [as=ea])
  │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50
  │    │    │    │    │    ├── key columns: [44] = [46]
  │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50)
+ │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50), (46)==(44), (5)==(38), (38)==(5), (44)==(46)
  │    │    │    │    │    ├── inner-join (lookup exchange)
  │    │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null
  │    │    │    │    │    │    ├── key columns: [5] = [38]
  │    │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44)
+ │    │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44), (38)==(5), (5)==(38)
  │    │    │    │    │    │    ├── scan security
  │    │    │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null
  │    │    │    │    │    │    │    ├── constraint: /1: [/'SYMB' - /'SYMB']
@@ -1017,7 +1017,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,4,5,8,10,11,17,20)
+ │    ├── fd: ()-->(1,4,5,8,10,11,17,20), (17)==(4), (4)==(17)
  │    ├── scan trade
  │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8 t_exec_name:10!null trade.t_trade_price:11
  │    │    ├── constraint: /1: [/0 - /0]
@@ -2551,26 +2551,26 @@ UPDATE trade SET t_tax = '0.00':::FLOAT8::DECIMAL WHERE t_id = 0
 ----
 update trade
  ├── columns: <none>
- ├── fetch columns: t_id:17 t_dts:18 t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 t_trade_price:27 t_chrg:28 t_comm:29 trade.t_tax:30 t_lifo:31
+ ├── fetch columns: t_id:17 t_dts:18 t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 t_trade_price:27 t_chrg:28 t_comm:29 t_tax:30 t_lifo:31
  ├── update-mapping:
- │    └── t_tax:34 => trade.t_tax:14
+ │    └── t_tax_new:34 => t_tax:14
  ├── check columns: check5:39
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: check5:39!null t_tax:34!null t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null trade.t_tax:30!null t_lifo:31!null
+      ├── columns: check5:39!null t_tax_new:34!null t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(17-31,34,39)
       ├── scan trade
-      │    ├── columns: t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null trade.t_tax:30!null t_lifo:31!null
+      │    ├── columns: t_id:17!null t_dts:18!null t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
       │    ├── constraint: /17: [/0 - /0]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(17-31)
       └── projections
            ├── true [as=check5:39]
-           └── 0 [as=t_tax:34]
+           └── 0 [as=t_tax_new:34]
 
 # Q19
 opt
@@ -2655,31 +2655,31 @@ UPDATE trade
 ----
 update trade
  ├── columns: <none>
- ├── fetch columns: t_id:17 t_dts:18 trade.t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 trade.t_trade_price:27 t_chrg:28 trade.t_comm:29 t_tax:30 t_lifo:31
+ ├── fetch columns: t_id:17 t_dts:18 trade.t_st_id:19 t_tt_id:20 t_is_cash:21 t_s_symb:22 t_qty:23 t_bid_price:24 t_ca_id:25 t_exec_name:26 t_trade_price:27 t_chrg:28 t_comm:29 t_tax:30 t_lifo:31
  ├── update-mapping:
  │    ├── t_dts_new:34 => t_dts:2
  │    ├── t_st_id_new:35 => trade.t_st_id:3
- │    ├── t_trade_price:37 => trade.t_trade_price:11
- │    └── t_comm:38 => trade.t_comm:13
+ │    ├── t_trade_price_new:37 => t_trade_price:11
+ │    └── t_comm_new:38 => t_comm:13
  ├── check columns: check4:42
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: check4:42!null t_comm:38!null t_trade_price:37!null t_dts_new:34!null t_st_id_new:35!null t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null trade.t_trade_price:27 t_chrg:28!null trade.t_comm:29!null t_tax:30!null t_lifo:31!null
+ │    ├── columns: check4:42!null t_comm_new:38!null t_trade_price_new:37!null t_dts_new:34!null t_st_id_new:35!null t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(17-31,34,35,37,38,42)
  │    ├── scan trade
- │    │    ├── columns: t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null trade.t_trade_price:27 t_chrg:28!null trade.t_comm:29!null t_tax:30!null t_lifo:31!null
+ │    │    ├── columns: t_id:17!null t_dts:18!null trade.t_st_id:19!null t_tt_id:20!null t_is_cash:21!null t_s_symb:22!null t_qty:23!null t_bid_price:24 t_ca_id:25!null t_exec_name:26!null t_trade_price:27 t_chrg:28!null t_comm:29!null t_tax:30!null t_lifo:31!null
  │    │    ├── constraint: /17: [/0 - /0]
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(17-31)
  │    └── projections
  │         ├── true [as=check4:42]
- │         ├── 0 [as=t_comm:38]
- │         ├── 1E+2 [as=t_trade_price:37]
+ │         ├── 0 [as=t_comm_new:38]
+ │         ├── 1E+2 [as=t_trade_price_new:37]
  │         ├── '2020-06-17 22:27:42.148484' [as=t_dts_new:34]
  │         └── 'SBMT' [as=t_st_id_new:35]
  └── f-k-checks
@@ -2763,26 +2763,26 @@ UPDATE broker
 ----
 update broker
  ├── columns: <none>
- ├── fetch columns: b_id:7 b_st_id:8 b_name:9 b_num_trades:10 broker.b_comm_total:11
+ ├── fetch columns: b_id:7 b_st_id:8 b_name:9 b_num_trades:10 b_comm_total:11
  ├── update-mapping:
  │    ├── b_num_trades_new:14 => b_num_trades:4
- │    └── b_comm_total:15 => broker.b_comm_total:5
+ │    └── b_comm_total_new:15 => b_comm_total:5
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: b_comm_total:15 b_num_trades_new:14!null b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null broker.b_comm_total:11!null
+      ├── columns: b_comm_total_new:15 b_num_trades_new:14!null b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null b_comm_total:11!null
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── key: ()
       ├── fd: ()-->(7-11,14,15)
       ├── scan broker
-      │    ├── columns: b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null broker.b_comm_total:11!null
+      │    ├── columns: b_id:7!null b_st_id:8!null b_name:9!null b_num_trades:10!null b_comm_total:11!null
       │    ├── constraint: /7: [/0 - /0]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(7-11)
       └── projections
-           ├── crdb_internal.round_decimal_values(broker.b_comm_total:11::DECIMAL, 2) [as=b_comm_total:15, outer=(11), immutable]
+           ├── crdb_internal.round_decimal_values(b_comm_total:11::DECIMAL, 2) [as=b_comm_total_new:15, outer=(11), immutable]
            └── b_num_trades:10 + 1 [as=b_num_trades_new:14, outer=(10), immutable]
 
 # Q25
@@ -2841,13 +2841,13 @@ project
  │    ├── columns: ca_id:1!null customer_account.ca_bal:6!null
  │    ├── fetch columns: ca_id:8 ca_b_id:9 ca_c_id:10 ca_name:11 ca_tax_st:12 customer_account.ca_bal:13
  │    ├── update-mapping:
- │    │    └── ca_bal:16 => customer_account.ca_bal:6
+ │    │    └── ca_bal_new:16 => customer_account.ca_bal:6
  │    ├── cardinality: [0 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1,6)
  │    └── project
- │         ├── columns: ca_bal:16 ca_id:8!null ca_b_id:9!null ca_c_id:10!null ca_name:11 ca_tax_st:12!null customer_account.ca_bal:13!null
+ │         ├── columns: ca_bal_new:16 ca_id:8!null ca_b_id:9!null ca_c_id:10!null ca_name:11 ca_tax_st:12!null customer_account.ca_bal:13!null
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
@@ -2859,7 +2859,7 @@ project
  │         │    ├── key: ()
  │         │    └── fd: ()-->(8-13)
  │         └── projections
- │              └── crdb_internal.round_decimal_values(customer_account.ca_bal:13::DECIMAL + 1E+2, 2) [as=ca_bal:16, outer=(13), immutable]
+ │              └── crdb_internal.round_decimal_values(customer_account.ca_bal:13::DECIMAL + 1E+2, 2) [as=ca_bal_new:16, outer=(13), immutable]
  └── projections
       └── customer_account.ca_bal:6::FLOAT8 [as=ca_bal:18, outer=(6), immutable]
 
@@ -3025,14 +3025,14 @@ project
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-3,8,11,12,33,35)
+      ├── fd: ()-->(1-3,8,11,12,33,35), (3)==(8), (2)==(33), (33)==(2), (8)==(3)
       ├── inner-join (lookup customer)
       │    ├── columns: ca_id:1!null ca_b_id:2!null ca_c_id:3!null c_id:8!null c_l_name:11!null c_f_name:12!null
       │    ├── key columns: [3] = [8]
       │    ├── lookup columns are key
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    ├── fd: ()-->(1-3,8,11,12)
+      │    ├── fd: ()-->(1-3,8,11,12), (8)==(3), (3)==(8)
       │    ├── scan customer_account
       │    │    ├── columns: ca_id:1!null ca_b_id:2!null ca_c_id:3!null
       │    │    ├── constraint: /1: [/0 - /0]
@@ -3125,7 +3125,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,4,5,8,10,11,17,20)
+ │    ├── fd: ()-->(1,4,5,8,10,11,17,20), (17)==(4), (4)==(17)
  │    ├── scan trade
  │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8 t_exec_name:10!null trade.t_trade_price:11
  │    │    ├── constraint: /1: [/0 - /0]
@@ -3496,7 +3496,7 @@ project
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1,3,7,16)
+      ├── fd: ()-->(1,3,7,16), (16)==(1), (1)==(16)
       ├── scan customer
       │    ├── columns: c_id:7!null c_ad_id:16!null
       │    ├── constraint: /7: [/0 - /0]
@@ -3522,7 +3522,7 @@ project
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1,3,7,13)
+      ├── fd: ()-->(1,3,7,13), (13)==(1), (1)==(13)
       ├── scan company
       │    ├── columns: co_id:7!null co_ad_id:13!null
       │    ├── constraint: /7: [/0 - /0]

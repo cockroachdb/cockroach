@@ -432,6 +432,14 @@ func TestShowCreateSequence(t *testing.T) {
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0`,
 			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
 		},
+		{
+			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0 CACHE 1`,
+			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
+		},
+		{
+			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0 CACHE 10`,
+			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10 CACHE 10`,
+		},
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
@@ -901,17 +909,17 @@ func TestLintClusterSettingNames(t *testing.T) {
 				"sql.metrics.statement_details.sample_logical_plans": `sql.metrics.statement_details.sample_logical_plans: use .enabled for booleans`,
 				"sql.trace.log_statement_execute":                    `sql.trace.log_statement_execute: use .enabled for booleans`,
 				"trace.debug.enable":                                 `trace.debug.enable: use .enabled for booleans`,
-				"cloudstorage.gs.default.key":                        `cloudstorage.gs.default.key: part "default" is a reserved keyword`,
 				// These two settings have been deprecated in favor of a new (better named) setting
 				// but the old name is still around to support migrations.
 				// TODO(knz): remove these cases when these settings are retired.
 				"timeseries.storage.10s_resolution_ttl": `timeseries.storage.10s_resolution_ttl: part "10s_resolution_ttl" has invalid structure`,
 				"timeseries.storage.30m_resolution_ttl": `timeseries.storage.30m_resolution_ttl: part "30m_resolution_ttl" has invalid structure`,
 
-				// sql.defaults.idle_in_session_timeout uses the _timeout suffix stay
-				// consistent with the corresponding session variable
-				// idle_in_session_timeout.
-				"sql.defaults.idle_in_session_timeout": `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
+				// These use the _timeout suffix to stay consistent with the
+				// corresponding session variables.
+				"sql.defaults.statement_timeout":                   `sql.defaults.statement_timeout: use ".timeout" instead of "_timeout"`,
+				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
+				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
 			}
 			expectedErr, found := grandFathered[varName]
 			if !found || expectedErr != nameErr.Error() {

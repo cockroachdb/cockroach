@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -214,32 +216,6 @@ func (s *Store) ClearClosedTimestampStorage() {
 // relevant node to publish its MLAI for the provided range.
 func (s *Store) RequestClosedTimestamp(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
 	s.cfg.ClosedTimestamp.Clients.Request(nodeID, rangeID)
-}
-
-// AssertInvariants verifies that the store's bookkeping is self-consistent. It
-// is only valid to call this method when there is no in-flight traffic to the
-// store (e.g., after the store is shut down).
-func (s *Store) AssertInvariants() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	s.mu.replicas.Range(func(_ int64, p unsafe.Pointer) bool {
-		ctx := s.cfg.AmbientCtx.AnnotateCtx(context.Background())
-		repl := (*Replica)(p)
-		// We would normally need to hold repl.raftMu. Otherwise we can observe an
-		// initialized replica that is not in s.replicasByKey, e.g., if we race with
-		// a goroutine that is currently initializing repl. The lock ordering makes
-		// acquiring repl.raftMu challenging; instead we require that this method is
-		// called only when there is no in-flight traffic to the store, at which
-		// point acquiring repl.raftMu is unnecessary.
-		if repl.IsInitialized() {
-			if rbkRepl := s.mu.replicasByKey.LookupReplica(ctx, repl.Desc().StartKey); rbkRepl != repl {
-				log.Fatalf(ctx, "%v misplaced in replicasByKey; found %+v instead", repl, rbkRepl)
-			}
-		} else if _, ok := s.mu.uninitReplicas[repl.RangeID]; !ok {
-			log.Fatalf(ctx, "%v missing from uninitReplicas", repl)
-		}
-		return true // keep iterating
-	})
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {
@@ -416,6 +392,12 @@ func (r *Replica) LargestPreviousMaxRangeSizeBytes() int64 {
 	return r.mu.largestPreviousMaxRangeSizeBytes
 }
 
+// LoadBasedSplitter returns the replica's split.Decider, which is used to
+// assist load-based split (and merge) decisions.
+func (r *Replica) LoadBasedSplitter() *split.Decider {
+	return &r.loadBasedSplitter
+}
+
 func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
 	sst := storage.MakeIngestionSSTWriter(sstFile)
@@ -571,4 +553,12 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
+}
+
+// AcquireLease is redirectOnOrAcquireLease exposed for tests.
+func (r *Replica) AcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
+	ctx = r.AnnotateCtx(ctx)
+	ctx = logtags.AddTag(ctx, "lease-acq", nil)
+	l, pErr := r.redirectOnOrAcquireLease(ctx)
+	return l, pErr.GoError()
 }

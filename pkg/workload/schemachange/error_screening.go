@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 )
 
@@ -55,26 +56,13 @@ func columnExistsOnTable(tx *pgx.Tx, tableName *tree.TableName, columnName strin
    )`, tableName.Schema(), tableName.Object(), columnName)
 }
 
-func typeExists(tx *pgx.Tx, typ *tree.TypeName) (bool, error) {
-	if !strings.Contains(typ.Object(), "enum") {
-		return true, nil
-	}
-
-	return scanBool(tx, `SELECT EXISTS (
-	SELECT ns.nspname, t.typname
-  FROM pg_catalog.pg_namespace AS ns
-  JOIN pg_catalog.pg_type AS t ON t.typnamespace = ns.oid
- WHERE ns.nspname = $1 AND t.typname = $2
-	)`, typ.Schema(), typ.Object())
-}
-
 func tableHasRows(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
 	return scanBool(tx, fmt.Sprintf(`SELECT EXISTS (SELECT * FROM %s)`, tableName.String()))
 }
 
 func scanBool(tx *pgx.Tx, query string, args ...interface{}) (b bool, err error) {
 	err = tx.QueryRow(query, args...).Scan(&b)
-	return b, err
+	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
 }
 
 func schemaExists(tx *pgx.Tx, schemaName string) (bool, error) {
@@ -98,6 +86,8 @@ func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
                             ns.oid = c.relnamespace
                      WHERE c.relname = $1 AND ns.nspname = $2
                 )
+           AND fd.descriptor_id != fd.dependedonby_id
+           AND fd.dependedonby_type != 'sequence'
        )
 	`, tableName.Object(), tableName.Schema())
 }
@@ -133,6 +123,7 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 			                   AS fd
 			            WHERE fd.descriptor_id
 			                  = $1::REGCLASS
+                    AND fd.dependedonby_type != 'sequence'
 			          )
 			   UNION  (
 			           SELECT unnest(confkey) AS column_id
@@ -151,20 +142,7 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 }
 
 func colIsPrimaryKey(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
-	return scanBool(tx, `
-	SELECT EXISTS(
-				SELECT column_name
-				  FROM information_schema.table_constraints AS c
-				  JOIN information_schema.constraint_column_usage
-								AS ccu ON ccu.table_name = c.table_name
-				      AND ccu.table_schema = c.table_schema
-				      AND ccu.constraint_name = c.constraint_name
-				 WHERE c.table_schema = $1
-				   AND c.table_name = $2
-				   AND ccu.column_name = $3
-				   AND c.constraint_type = 'PRIMARY KEY'
-       );
-	`, tableName.Schema(), tableName.Object(), columnName)
+	return columnsStoredInPrimaryIdx(tx, tableName, tree.NameList([]tree.Name{tree.Name(columnName)}))
 }
 
 // valuesViolateUniqueConstraints determines if any unique constraints (including primary constraints)
@@ -306,7 +284,7 @@ func violatesUniqueConstraintsHelper(
 func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]string, error) {
 	rows, err := tx.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "scanStringArrayRows: %q %q", query, args)
 	}
 	defer rows.Close()
 
@@ -315,12 +293,12 @@ func scanStringArrayRows(tx *pgx.Tx, query string, args ...interface{}) ([][]str
 		var columnNames []string
 		err := rows.Scan(&columnNames)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "scan: %q, args %q, scanArgs %q", query, columnNames, args)
 		}
 		results = append(results, columnNames)
 	}
 
-	return results, err
+	return results, nil
 }
 
 func indexExists(tx *pgx.Tx, tableName *tree.TableName, indexName string) (bool, error) {
@@ -342,7 +320,7 @@ func columnsStoredInPrimaryIdx(
 	}
 
 	primaryColumns, err := scanStringArray(tx, `
-	SELECT array_agg(column_name)
+		SELECT array_agg(column_name)
 	  FROM (
 	        SELECT DISTINCT column_name
 	          FROM information_schema.statistics
@@ -366,7 +344,7 @@ func columnsStoredInPrimaryIdx(
 
 func scanStringArray(tx *pgx.Tx, query string, args ...interface{}) (b []string, err error) {
 	err = tx.QueryRow(query, args...).Scan(&b)
-	return b, err
+	return b, errors.Wrapf(err, "scanStringArray %q %q", query, args)
 }
 
 // canApplyUniqueConstraint checks if the rows in a table are unique with respect
@@ -470,17 +448,36 @@ func constraintIsUnique(
 	`, tableName.String(), constraintName))
 }
 
-func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+func columnIsStoredComputed(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	// Note that we COALESCE because the column may not exist.
 	return scanBool(tx, `
-     SELECT (
-			 SELECT is_generated
-				 FROM information_schema.columns
-				WHERE table_schema = $1
-				  AND table_name = $2
-				  AND column_name = $3
-            )
-	         = 'YES'
-`, tableName.Schema(), tableName.Object(), columnName)
+SELECT COALESCE(
+        (
+            SELECT attgenerated
+              FROM pg_catalog.pg_attribute
+             WHERE attrelid = $1:::REGCLASS AND attname = $2
+        )
+        = 's',
+        false
+       );
+`, tableName.String(), columnName)
+}
+
+func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
+	// Note that we COALESCE because the column may not exist.
+	return scanBool(tx, `
+SELECT COALESCE(
+        (
+            SELECT attgenerated
+              FROM pg_catalog.pg_attribute
+             WHERE attrelid = $1:::REGCLASS AND attname = $2
+        )
+        != '',
+        false
+       );
+`, tableName.String(), columnName)
 }
 
 func constraintExists(tx *pgx.Tx, constraintName string) (bool, error) {
@@ -604,4 +601,366 @@ func violatesFkConstraintsHelper(
 	    WHERE %s = %s
 	)
 	`, parentTableSchema, parentTableName, parentColumn, childValue))
+}
+
+func columnIsInDroppingIndex(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(tx, `
+SELECT EXISTS(
+        SELECT index_id
+          FROM (
+                SELECT DISTINCT index_id
+                  FROM crdb_internal.index_columns
+                 WHERE descriptor_id = $1::REGCLASS AND column_name = $2
+               ) AS indexes
+          JOIN crdb_internal.schema_changes AS sc ON sc.target_id
+                                                     = indexes.index_id
+                                                 AND table_id = $1::REGCLASS
+                                                 AND type = 'INDEX'
+                                                 AND direction = 'DROP'
+       );
+`, tableName.String(), columnName)
+}
+
+// A pair of CTE definitions that expect the first argument to be a table name.
+const descriptorsAndConstraintMutationsCTE = `descriptors AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'cockroach.sql.sqlbase.Descriptor',
+                            descriptor
+                           )->'table' AS d
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                   ),
+       constraint_mutations AS (
+                                SELECT mut
+                                  FROM (
+                                        SELECT json_array_elements(
+                                                d->'mutations'
+                                               ) AS mut
+                                          FROM descriptors
+                                       )
+                                 WHERE (mut->'constraint') IS NOT NULL
+                            )`
+
+func constraintInDroppingState(
+	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+) (bool, error) {
+	// TODO(ajwerner): Figure out how to plumb the column name into this query.
+	return scanBool(tx, `
+  WITH `+descriptorsAndConstraintMutationsCTE+`
+SELECT true
+       IN (
+            SELECT (t.f).value @> json_set('{"validity": "Dropping"}', ARRAY['name'], to_json($2:::STRING))
+              FROM (
+                    SELECT json_each(mut->'constraint') AS f
+                      FROM constraint_mutations
+                   ) AS t
+        );
+`, tableName.String(), constraintName)
+}
+
+func columnNotNullConstraintInMutation(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(tx, `
+  WITH `+descriptorsAndConstraintMutationsCTE+`,
+       col AS (
+            SELECT (c->>'id')::INT8 AS id
+              FROM (
+                    SELECT json_array_elements(d->'columns') AS c
+                      FROM descriptors
+                   )
+             WHERE c->>'name' = $2
+           )
+SELECT EXISTS(
+        SELECT *
+          FROM constraint_mutations
+          JOIN col ON mut->'constraint'->>'constraintType' = 'NOT_NULL'
+                  AND (mut->'constraint'->>'notNullColumn')::INT8 = id
+       );
+`, tableName.String(), columnName)
+}
+
+func schemaContainsTypesWithCrossSchemaReferences(tx *pgx.Tx, schemaName string) (bool, error) {
+	return scanBool(tx, `
+  WITH database_id AS (
+                    SELECT id
+                      FROM system.namespace
+                     WHERE "parentID" = 0
+                       AND "parentSchemaID" = 0
+                       AND name = current_database()
+                   ),
+       schema_id AS (
+                    SELECT nsp.id
+                      FROM system.namespace AS nsp
+                      JOIN database_id ON "parentID" = database_id.id
+                                      AND "parentSchemaID" = 0
+                                      AND name = $1
+                 ),
+       descriptor_ids AS (
+                        SELECT nsp.id
+                          FROM system.namespace AS nsp,
+                               schema_id,
+                               database_id
+                         WHERE nsp."parentID" = database_id.id
+                           AND nsp."parentSchemaID" = schema_id.id
+                      ),
+       descriptors AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'cockroach.sql.sqlbase.Descriptor',
+                            descriptor
+                           ) AS descriptor
+                      FROM system.descriptor AS descriptors
+                      JOIN descriptor_ids ON descriptors.id
+                                             = descriptor_ids.id
+                   ),
+       types AS (
+                SELECT descriptor
+                  FROM descriptors
+                 WHERE (descriptor->'type') IS NOT NULL
+             ),
+       table_references AS (
+                            SELECT json_array_elements(
+                                    descriptor->'table'->'dependedOnBy'
+                                   ) AS ref
+                              FROM descriptors
+                             WHERE (descriptor->'table') IS NOT NULL
+                        ),
+       dependent AS (
+                    SELECT (ref->>'id')::INT8 AS id FROM table_references
+                 ),
+       referenced_descriptors AS (
+                                SELECT json_array_elements_text(
+                                        descriptor->'type'->'referencingDescriptorIds'
+                                       )::INT8 AS id
+                                  FROM types
+                              )
+SELECT EXISTS(
+        SELECT *
+          FROM system.namespace
+         WHERE id IN (SELECT id FROM referenced_descriptors)
+           AND "parentSchemaID" NOT IN (SELECT id FROM schema_id)
+           AND id NOT IN (SELECT id FROM dependent)
+       );`, schemaName)
+}
+
+// enumMemberPresent determines whether val is a member of the enum.
+// This includes non-public members.
+func enumMemberPresent(tx *pgx.Tx, enum string, val string) (bool, error) {
+	return scanBool(tx, `
+WITH enum_members AS (
+	SELECT
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+						)->'type'->'enumMembers'
+				)->>'logicalRepresentation'
+				AS v
+		FROM
+				system.descriptor
+		WHERE
+				id = ($1::REGTYPE::INT8 - 100000)
+)
+SELECT
+	CASE WHEN EXISTS (
+		SELECT v FROM enum_members WHERE v = $2::string
+	) THEN true
+	ELSE false
+	END AS exists
+`,
+		enum,
+		val,
+	)
+}
+
+// tableHasOngoingSchemaChanges returns whether the table has any mutations lined up.
+func tableHasOngoingSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+		SELECT json_array_length(
+        crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'mutations'
+       )
+       > 0
+		FROM system.descriptor
+	  WHERE id = $1::REGCLASS
+		`,
+		tableName.String(),
+	)
+}
+
+// tableHasOngoingAlterPKSchemaChanges checks whether a given table has an ALTER
+// PRIMARY KEY related change in progress.
+func tableHasOngoingAlterPKSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	EXISTS(
+		SELECT
+			mut
+		FROM
+			(
+				SELECT
+					json_array_elements(d->'mutations')
+						AS mut
+				FROM
+					descriptors
+			)
+		WHERE
+			(mut->'primaryKeySwap') IS NOT NULL
+	);
+		`,
+		tableName.String(),
+	)
+}
+
+// tableIsRegionalByRow checks whether the given table is a REGIONAL BY ROW table.
+func tableIsRegionalByRow(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id = $1::REGCLASS
+		)
+SELECT
+	EXISTS(
+		SELECT
+			1
+		FROM
+			descriptors
+		WHERE
+			d->'localityConfig'->'regionalByRow' IS NOT NULL
+	);
+		`,
+		tableName.String(),
+	)
+}
+
+// databaseHasRegionChange determines whether the database is currently undergoing
+// a region change.
+func databaseHasRegionChange(tx *pgx.Tx) (bool, error) {
+	isMultiRegion, err := scanBool(
+		tx,
+		`SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE])`,
+	)
+	if err != nil || (!isMultiRegion && err == nil) {
+		return false, err
+	}
+	return scanBool(
+		tx,
+		`
+WITH enum_members AS (
+	SELECT
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+						)->'type'->'enumMembers'
+				)
+				AS v
+		FROM
+				system.descriptor
+		WHERE
+				id = ('public.crdb_internal_region'::REGTYPE::INT8 - 100000)
+)
+SELECT EXISTS (
+	SELECT 1 FROM enum_members
+	WHERE v->>'direction' <> 'NONE'
+)
+		`,
+	)
+}
+
+// databaseHasOngoingAlterPKChanges checks whether a given database has any tables
+// which are currently undergoing a change to or from REGIONAL BY ROW, or
+// REGIONAL BY ROW tables with schema changes on it.
+func databaseHasRegionalByRowChange(tx *pgx.Tx) (bool, error) {
+	return scanBool(
+		tx,
+		`
+WITH
+	descriptors
+		AS (
+			SELECT
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)->'table'
+					AS d
+			FROM
+				system.descriptor
+			WHERE
+				id IN (
+					SELECT id FROM system.namespace
+					WHERE "parentID" = (
+						SELECT id FROM system.namespace
+						WHERE name = (SELECT database FROM [SHOW DATABASE])
+						AND "parentID" = 0
+					) AND "parentSchemaID" <> 0
+				)
+		)
+SELECT (
+	EXISTS(
+		SELECT
+			mut
+		FROM
+			(
+				-- no schema changes on regional by row tables
+				SELECT
+					json_array_elements(d->'mutations')
+						AS mut
+				FROM (
+					SELECT
+						d
+					FROM
+						descriptors
+					WHERE
+						d->'localityConfig'->'regionalByRow' IS NOT NULL
+				)
+			)
+	) OR EXISTS (
+		-- no primary key swaps in the current database
+		SELECT mut FROM (
+			SELECT
+				json_array_elements(d->'mutations')
+					AS mut
+			FROM descriptors
+		)
+		WHERE
+			(mut->'primaryKeySwap') IS NOT NULL
+	)
+);
+		`,
+	)
 }

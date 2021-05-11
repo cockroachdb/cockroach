@@ -121,6 +121,18 @@ func TestCompareTimestamps(t *testing.T) {
 			right:    NewDTimeTZFromOffset(timeofday.New(5, 0, 0, 0), pacificTimeZone),
 			expected: 1,
 		},
+		{
+			desc:     "positive infinite date",
+			left:     dMaxDate,
+			right:    MakeDTime(timeofday.New(12, 0, 0, 0)),
+			expected: 1,
+		},
+		{
+			desc:     "negative infinite date",
+			left:     dMinDate,
+			right:    MakeDTime(timeofday.New(12, 0, 0, 0)),
+			expected: -1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -137,6 +149,8 @@ func TestCompareTimestamps(t *testing.T) {
 			},
 		)
 	}
+
+	assert.Panics(t, func() { compareTimestamps(nil /* ctx */, dMaxDate, dMinDate) })
 }
 
 func TestCastStringToRegClassTableName(t *testing.T) {

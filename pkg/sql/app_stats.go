@@ -26,9 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -43,6 +45,7 @@ type stmtKey struct {
 	anonymizedStmt string
 	failed         bool
 	implicitTxn    bool
+	database       string
 }
 
 const invalidStmtID = 0
@@ -94,6 +97,10 @@ type stmtStats struct {
 		// fullScan records whether the last instance of this statement used a
 		// full table index scan.
 		fullScan bool
+
+		// database records the database from the session the statement
+		// was executed from
+		database string
 
 		data roachpb.StatementStatistics
 	}
@@ -195,6 +202,7 @@ func (a *appStats) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
+	planner *planner,
 ) roachpb.StmtID {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
@@ -207,7 +215,7 @@ func (a *appStats) recordStatement(
 
 	// Get the statistics object.
 	s, stmtID := a.getStatsForStmt(
-		stmt.AnonymizedStr, implicitTxn,
+		stmt.AnonymizedStr, implicitTxn, planner.SessionData().Database,
 		err, createIfNonExistent,
 	)
 
@@ -217,6 +225,16 @@ func (a *appStats) recordStatement(
 	// transaction level metrics collection.
 	if !createIfNonExistent {
 		return stmtID
+	}
+
+	// Retrieve the list of all nodes which the statement was executed on.
+	var nodes []int64
+	if planner.instrumentation.sp != nil {
+		trace := planner.instrumentation.sp.GetRecording()
+		// ForEach returns nodes in order.
+		execinfrapb.ExtractNodesFromSpans(trace).ForEach(func(i int) {
+			nodes = append(nodes, int64(i))
+		})
 	}
 
 	// Collect the per-statement statistics.
@@ -235,6 +253,7 @@ func (a *appStats) recordStatement(
 	} else if int64(automaticRetryCount) > s.mu.data.MaxRetries {
 		s.mu.data.MaxRetries = int64(automaticRetryCount)
 	}
+	s.mu.data.SQLType = stmt.AST.StatementType().String()
 	s.mu.data.NumRows.Record(s.mu.data.Count, float64(numRows))
 	s.mu.data.ParseLat.Record(s.mu.data.Count, parseLat)
 	s.mu.data.PlanLat.Record(s.mu.data.Count, planLat)
@@ -243,6 +262,8 @@ func (a *appStats) recordStatement(
 	s.mu.data.OverheadLat.Record(s.mu.data.Count, ovhLat)
 	s.mu.data.BytesRead.Record(s.mu.data.Count, float64(stats.bytesRead))
 	s.mu.data.RowsRead.Record(s.mu.data.Count, float64(stats.rowsRead))
+	s.mu.data.LastExecTimestamp = timeutil.Now()
+	s.mu.data.Nodes = util.CombinesUniqueInt64(s.mu.data.Nodes, nodes)
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -251,6 +272,7 @@ func (a *appStats) recordStatement(
 	s.mu.vectorized = vectorized
 	s.mu.distSQLUsed = distSQLUsed
 	s.mu.fullScan = fullScan
+	s.mu.database = planner.CurrentDatabase()
 	s.mu.Unlock()
 
 	return s.ID
@@ -260,7 +282,7 @@ func (a *appStats) recordStatement(
 // stat object is returned or not, we always return the correct stmtID
 // for the given stmt.
 func (a *appStats) getStatsForStmt(
-	anonymizedStmt string, implicitTxn bool, err error, createIfNonexistent bool,
+	anonymizedStmt string, implicitTxn bool, database string, err error, createIfNonexistent bool,
 ) (*stmtStats, roachpb.StmtID) {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
@@ -268,6 +290,7 @@ func (a *appStats) getStatsForStmt(
 		anonymizedStmt: anonymizedStmt,
 		failed:         err != nil,
 		implicitTxn:    implicitTxn,
+		database:       database,
 	}
 
 	// We first try and see if we can get by without creating a new entry for this
@@ -480,18 +503,15 @@ func (a *appStats) recordTransaction(
 	}
 }
 
-// shouldSaveLogicalPlanDescription returns whether we should save this as a
-// sample logical plan for its corresponding fingerprint. We use
-// `logicalPlanCollectionPeriod` to assess how frequently to sample logical
-// plans.
-func (a *appStats) shouldSaveLogicalPlanDescription(anonymizedStmt string, implicitTxn bool) bool {
+// shouldSaveLogicalPlanDescription returns whether we should save the sample
+// logical plan for a fingerprint (represented implicitly by the corresponding
+// stmtStats object). stats is nil if it is the first time we see the
+// fingerprint. We use `logicalPlanCollectionPeriod` to assess how frequently to
+// sample logical plans.
+func (a *appStats) shouldSaveLogicalPlanDescription(stats *stmtStats) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
-	// We don't know yet if we will hit an error, so we assume we don't. The worst
-	// that can happen is that for statements that always error out, we will
-	// always save the tree plan.
-	stats, _ := a.getStatsForStmt(anonymizedStmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -623,7 +643,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 
 func constructStatementIDFromStmtKey(key stmtKey) roachpb.StmtID {
 	return roachpb.ConstructStatementID(
-		key.anonymizedStmt, key.failed, key.implicitTxn,
+		key.anonymizedStmt, key.failed, key.implicitTxn, key.database,
 	)
 }
 
@@ -709,6 +729,7 @@ func (s *sqlStats) getStmtStats(
 				distSQLUsed := stats.mu.distSQLUsed
 				vectorized := stats.mu.vectorized
 				fullScan := stats.mu.fullScan
+				database := stats.mu.database
 				stats.mu.Unlock()
 
 				k := roachpb.StatementStatisticsKey{
@@ -720,6 +741,7 @@ func (s *sqlStats) getStmtStats(
 					FullScan:    fullScan,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,
+					Database:    database,
 				}
 
 				if scrub {

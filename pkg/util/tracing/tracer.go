@@ -41,17 +41,18 @@ import (
 const verboseTracingBaggageKey = "sb"
 
 const (
-	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable
-	// limit.
-	maxLogsPerSpan = 1000
-	// maxStructuredEventsPerSpan limits the number of structured events in a
-	// span; use a comfortable limit.
-	maxStructuredEventsPerSpan = 50
+	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
+	// use a comfortable limit.
+	maxLogBytesPerSpan        = 256 * (1 << 10) // 256 KiB
+	maxStructuredBytesPerSpan = 10 * (1 << 10)  // 10 KiB
 	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
 	maxChildrenPerSpan = 1000
 	// maxSpanRegistrySize limits the number of local root spans tracked in
 	// a Tracer's registry.
 	maxSpanRegistrySize = 5000
+	// maxLogsPerSpanExternal limits the number of logs in a Span for external
+	// tracers (net/trace, lightstep); use a comfortable limit.
+	maxLogsPerSpanExternal = 1000
 )
 
 // These constants are used to form keys to represent tracing context
@@ -85,8 +86,23 @@ var lightstepToken = settings.RegisterStringSetting(
 // to send traces to, if any.
 var ZipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
-	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set",
+	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'). "+
+		"Only one tracer can be configured at a time.",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
+).WithPublic()
+
+var dataDogAgentAddr = settings.RegisterStringSetting(
+	"trace.datadog.agent",
+	"if set, traces will be sent to this DataDog agent; use <host>:<port> or \"default\" for localhost:8126. "+
+		"Only one tracer can be configured at a time.",
+	envutil.EnvOrDefaultString("COCKROACH_DATADOG_AGENT", ""),
+).WithPublic()
+
+var dataDogProjectName = settings.RegisterStringSetting(
+	"trace.datadog.project",
+	"the project under which traces will be reported to the DataDog agent if trace.datadog.agent is set. "+
+		"Only one tracer can be configured at a time.",
+	envutil.EnvOrDefaultString("COCKROACH_DATADOG_PROJECT", "CockroachDB"),
 ).WithPublic()
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
@@ -120,7 +136,6 @@ type Tracer struct {
 
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithLocalParent(<non-nil>) option was supplied.
-	// It also elides spans created using WithBypassRegistry.
 	// The map is keyed on the span ID, which is deterministically unique.
 	//
 	// In normal operation, a local root Span is inserted on creation and
@@ -145,7 +160,10 @@ type Tracer struct {
 	// to a function that returns `true`.
 	TracingVerbosityIndependentSemanticsIsActive func() bool
 
-	includeAsyncSpansInRecordings bool // see TestingIncludeAsyncSpansInRecordings
+	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
+	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
+
+	testing *testingKnob
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -169,6 +187,8 @@ func (t *Tracer) Configure(sv *settings.Values) {
 			t.setShadowTracer(createLightStepTracer(lsToken))
 		} else if zipkinAddr := ZipkinCollector.Get(sv); zipkinAddr != "" {
 			t.setShadowTracer(createZipkinTracer(zipkinAddr))
+		} else if ddAddr := dataDogAgentAddr.Get(sv); ddAddr != "" {
+			t.setShadowTracer(createDataDogTracer(ddAddr, dataDogProjectName.Get(sv)))
 		} else {
 			t.setShadowTracer(nil, nil)
 		}
@@ -184,6 +204,8 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	lightstepToken.SetOnChange(sv, reconfigure)
 	ZipkinCollector.SetOnChange(sv, reconfigure)
+	dataDogAgentAddr.SetOnChange(sv, reconfigure)
+	dataDogProjectName.SetOnChange(sv, reconfigure)
 }
 
 // HasExternalSink returns whether the tracer is configured to report
@@ -267,14 +289,14 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	if opts.LogTags == nil {
-		opts.LogTags = logtags.FromContext(ctx)
-	}
-
 	// Are we tracing everything, or have a parent, or want a real span? Then
 	// we create a real trace span. In all other cases, a noop span will do.
 	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
+	}
+
+	if opts.LogTags == nil {
+		opts.LogTags = logtags.FromContext(ctx)
 	}
 
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
@@ -303,11 +325,7 @@ func (t *Tracer) startSpanGeneric(
 		// for the new span to avoid compat issues between the
 		// two underlying tracers.
 		if ok2 && (!ok1 || typ1 == typ2) {
-			var shadowCtx opentracing.SpanContext
-			if opts.Parent != nil && opts.Parent.i.ot.shadowSpan != nil {
-				shadowCtx = opts.Parent.i.ot.shadowSpan.Context()
-			}
-			ot = makeShadowSpan(shadowTr, shadowCtx, opts.RefType, opName, startTime)
+			ot = makeShadowSpan(shadowTr, opts.shadowContext(), opts.RefType, opName, startTime)
 			// If LogTags are given, pass them as tags to the shadow span.
 			// Regular tags are populated later, via the top-level Span.
 			if opts.LogTags != nil {
@@ -321,7 +339,7 @@ func (t *Tracer) startSpanGeneric(
 	var netTr trace.Trace
 	if t.useNetTrace() {
 		netTr = trace.New("tracing", opName)
-		netTr.SetMaxEvents(maxLogsPerSpan)
+		netTr.SetMaxEvents(maxLogsPerSpanExternal)
 
 		// If LogTags are given, pass them as tags to the shadow span.
 		// Regular tags are populated later, via the top-level Span.
@@ -367,8 +385,10 @@ func (t *Tracer) startSpanGeneric(
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
+		testing: t.testing,
 	}
-	helper.crdbSpan.mu.structured.Reserve(maxStructuredEventsPerSpan)
+	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
+	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
 	helper.span.i = spanInner{
 		tracer: t,
 		crdb:   &helper.crdbSpan,
@@ -412,27 +432,25 @@ func (t *Tracer) startSpanGeneric(
 			opts.Parent.i.crdb.mu.Unlock()
 		}
 	} else {
-		if !opts.BypassRegistry {
-			// Local root span - put it into the registry of active local root
-			// spans. `Span.Finish` takes care of deleting it again.
-			t.activeSpans.Lock()
+		// Local root span - put it into the registry of active local root
+		// spans. `Span.Finish` takes care of deleting it again.
+		t.activeSpans.Lock()
 
-			// Ensure that the registry does not grow unboundedly in case there
-			// is a leak. When the registry reaches max size, each new span added
-			// kicks out some old span. We rely on map iteration order here to
-			// make this cheap.
-			if toDelete := len(t.activeSpans.m) - maxSpanRegistrySize + 1; toDelete > 0 {
-				for k := range t.activeSpans.m {
-					delete(t.activeSpans.m, k)
-					toDelete--
-					if toDelete <= 0 {
-						break
-					}
+		// Ensure that the registry does not grow unboundedly in case there
+		// is a leak. When the registry reaches max size, each new span added
+		// kicks out some old span. We rely on map iteration order here to
+		// make this cheap.
+		if toDelete := len(t.activeSpans.m) - maxSpanRegistrySize + 1; toDelete > 0 {
+			for k := range t.activeSpans.m {
+				delete(t.activeSpans.m, k)
+				toDelete--
+				if toDelete <= 0 {
+					break
 				}
 			}
-			t.activeSpans.m[spanID] = s
-			t.activeSpans.Unlock()
 		}
+		t.activeSpans.m[spanID] = s
+		t.activeSpans.Unlock()
 
 		if opts.RemoteParent != nil {
 			for k, v := range opts.RemoteParent.Baggage {
@@ -692,11 +710,24 @@ func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	return nil
 }
 
-// TestingIncludeAsyncSpansInRecordings is a test-only helper that configures
+// TestingRecordAsyncSpans is a test-only helper that configures
 // the tracer to include recordings from forked/async child spans, when
 // retrieving the recording for a parent span.
-func (t *Tracer) TestingIncludeAsyncSpansInRecordings() {
-	t.includeAsyncSpansInRecordings = true
+func (t *Tracer) TestingRecordAsyncSpans() {
+	t.testingMu.Lock()
+	defer t.testingMu.Unlock()
+
+	t.testingRecordAsyncSpans = true
+}
+
+// ShouldRecordAsyncSpans returns whether or not we should include recordings
+// from async child spans in the parent span. See TestingRecordAsyncSpans, this
+// mode is only used in tests.
+func (t *Tracer) ShouldRecordAsyncSpans() bool {
+	t.testingMu.Lock()
+	defer t.testingMu.Unlock()
+
+	return t.testingRecordAsyncSpans
 }
 
 // ForkSpan forks the current span, if any[1]. Forked spans "follow from" the
@@ -713,14 +744,14 @@ func (t *Tracer) TestingIncludeAsyncSpansInRecordings() {
 //
 // [1]: Looking towards the provided context to see if one exists.
 // [2]: Unless configured differently by tests, see
-//      TestingIncludeAsyncSpansInRecordings.
+//      TestingRecordAsyncSpans.
 func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
 	collectionOpt := WithParentAndManualCollection(sp.Meta())
-	if sp.Tracer().includeAsyncSpansInRecordings {
+	if sp.Tracer().ShouldRecordAsyncSpans() {
 		// Using auto collection here ensures that recordings from async spans
 		// also show up at the parent.
 		collectionOpt = WithParentAndAutoCollection(sp)

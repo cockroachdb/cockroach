@@ -69,12 +69,12 @@ func (v *ComputedColumnValidator) Validate(
 
 	var depColIDs catalog.TableColSet
 	// First, check that no column in the expression is a computed column.
-	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c *descpb.ColumnDescriptor) error {
+	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c catalog.Column) error {
 		if c.IsComputed() {
 			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
 		}
-		depColIDs.Add(c.ID)
+		depColIDs.Add(c.GetID())
 
 		return nil
 	})
@@ -171,7 +171,7 @@ func (v *ComputedColumnValidator) Validate(
 // computed column. The function errs if any existing computed columns or
 // computed columns being added reference the given column.
 // TODO(mgartner): Add unit tests for ValidateNoDependents.
-func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescriptor) error {
+func (v *ComputedColumnValidator) ValidateNoDependents(col catalog.Column) error {
 	for _, c := range v.desc.NonDropColumns() {
 		if !c.IsComputed() {
 			continue
@@ -183,12 +183,12 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 			return errors.WithAssertionFailure(err)
 		}
 
-		err = iterColDescriptors(v.desc, expr, func(colVar *descpb.ColumnDescriptor) error {
-			if colVar.ID == col.ID {
+		err = iterColDescriptors(v.desc, expr, func(colVar catalog.Column) error {
+			if colVar.GetID() == col.GetID() {
 				return pgerror.Newf(
 					pgcode.InvalidColumnReference,
 					"column %q is referenced by computed column %q",
-					col.Name,
+					col.GetName(),
 					c.GetName(),
 				)
 			}
@@ -214,7 +214,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col *descpb.ColumnDescrip
 // columns that come after them in input.
 func MakeComputedExprs(
 	ctx context.Context,
-	input, sourceColumns []descpb.ColumnDescriptor,
+	input, sourceColumns []catalog.Column,
 	tableDesc catalog.TableDescriptor,
 	tn *tree.TableName,
 	evalCtx *tree.EvalContext,
@@ -237,10 +237,9 @@ func MakeComputedExprs(
 	// Build the computed expressions map from the parsed statement.
 	computedExprs := make([]tree.TypedExpr, 0, len(input))
 	exprStrings := make([]string, 0, len(input))
-	for i := range input {
-		col := &input[i]
+	for _, col := range input {
 		if col.IsComputed() {
-			exprStrings = append(exprStrings, *col.ComputeExpr)
+			exprStrings = append(exprStrings, col.GetComputeExpr())
 		}
 	}
 
@@ -249,13 +248,12 @@ func MakeComputedExprs(
 		return nil, catalog.TableColSet{}, err
 	}
 
-	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, columnDescriptorsToPtrs(sourceColumns))
+	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, sourceColumns)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
 	compExprIdx := 0
-	for i := range input {
-		col := &input[i]
+	for _, col := range input {
 		if !col.IsComputed() {
 			computedExprs = append(computedExprs, tree.DNull)
 			nr.addColumn(col)
@@ -275,7 +273,7 @@ func MakeComputedExprs(
 			return nil, catalog.TableColSet{}, err
 		}
 
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.Type)
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.GetType())
 		if err != nil {
 			return nil, catalog.TableColSet{}, err
 		}

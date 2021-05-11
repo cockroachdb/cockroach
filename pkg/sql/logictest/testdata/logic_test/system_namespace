@@ -16,6 +16,7 @@ SELECT * FROM system.namespace
 1   29  descriptor                       3
 1   29  eventlog                         12
 1   29  jobs                             15
+1   29  join_tokens                      41
 1   29  lease                            11
 1   29  locations                        21
 1   29  migrations                       40

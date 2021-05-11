@@ -186,7 +186,11 @@ func distRestore(
 
 	for _, srcProc := range splitAndScatterProcs {
 		slot := 0
-		for _, destProc := range restoreDataProcs {
+		for _, destNode := range nodes {
+			// Streams were added to the range router in the same order that the
+			// nodes appeared in `nodes`. Make sure that the `slot`s here are
+			// ordered the same way.
+			destProc := restoreDataProcs[destNode]
 			p.Streams = append(p.Streams, physicalplan.Stream{
 				SourceProcessor:  srcProc,
 				SourceRouterSlot: slot,
@@ -218,6 +222,7 @@ func distRestore(
 		nil,   /* clockUpdater */
 		evalCtx.Tracing,
 		evalCtx.ExecCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

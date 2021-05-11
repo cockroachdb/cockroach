@@ -20,8 +20,6 @@
 package colexecbase
 
 import (
-	"context"
-
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -31,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,6 +38,7 @@ import (
 var (
 	_ apd.Context
 	_ duration.Duration
+	_ json.JSON
 )
 
 // {{/*
@@ -73,10 +73,10 @@ func NewConstOp(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &const_TYPEOp{
-				OneInputNode: colexecop.NewOneInputNode(input),
-				allocator:    allocator,
-				outputIdx:    outputIdx,
-				constVal:     constVal.(_GOTYPE),
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				allocator:      allocator,
+				outputIdx:      outputIdx,
+				constVal:       constVal.(_GOTYPE),
 			}, nil
 			// {{end}}
 		}
@@ -89,19 +89,15 @@ func NewConstOp(
 // {{range .WidthOverloads}}
 
 type const_TYPEOp struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 
 	allocator *colmem.Allocator
 	outputIdx int
 	constVal  _GOTYPE
 }
 
-func (c const_TYPEOp) Init() {
-	c.Input.Init()
-}
-
-func (c const_TYPEOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.Input.Next(ctx)
+func (c const_TYPEOp) Next() coldata.Batch {
+	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -148,24 +144,20 @@ func NewConstNullOp(
 ) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		outputIdx:    outputIdx,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		outputIdx:      outputIdx,
 	}
 }
 
 type constNullOp struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	outputIdx int
 }
 
 var _ colexecop.Operator = &constNullOp{}
 
-func (c constNullOp) Init() {
-	c.Input.Init()
-}
-
-func (c constNullOp) Next(ctx context.Context) coldata.Batch {
-	batch := c.Input.Next(ctx)
+func (c constNullOp) Next() coldata.Batch {
+	batch := c.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

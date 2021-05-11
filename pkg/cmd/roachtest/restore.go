@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -208,19 +210,131 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 		logger.Printf("%s\n", strings.Join(s, ", "))
 	}
 }
+func registerRestoreNodeShutdown(r *testRegistry) {
+	makeRestoreStarter := func(ctx context.Context, t *test, c *cluster, gatewayNode int) jobStarter {
+		return func(c *cluster) (string, error) {
+			t.l.Printf("connecting to gateway")
+			gatewayDB := c.Conn(ctx, gatewayNode)
+			defer gatewayDB.Close()
+
+			t.l.Printf("creating bank database")
+			if _, err := gatewayDB.Exec("CREATE DATABASE bank"); err != nil {
+				return "", err
+			}
+
+			errCh := make(chan error, 1)
+			go func() {
+				defer close(errCh)
+
+				// 10 GiB restore.
+				restoreQuery := `RESTORE bank.bank FROM
+					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
+
+				t.l.Printf("starting to run the restore job")
+				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
+					errCh <- err
+				}
+				t.l.Printf("done running restore job")
+			}()
+
+			// Wait for the job.
+			retryOpts := retry.Options{
+				MaxRetries:     50,
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     5 * time.Second,
+			}
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+				var jobCount int
+				if err := gatewayDB.QueryRowContext(ctx, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE'").Scan(&jobCount); err != nil {
+					return "", err
+				}
+
+				select {
+				case err := <-errCh:
+					// We got an error when starting the job.
+					return "", err
+				default:
+				}
+
+				if jobCount == 0 {
+					t.l.Printf("waiting for restore job")
+				} else if jobCount == 1 {
+					t.l.Printf("found restore job")
+					break
+				} else {
+					t.l.Printf("found multiple restore jobs -- erroring")
+					return "", errors.New("unexpectedly found multiple restore jobs")
+				}
+			}
+
+			var jobID string
+			if err := gatewayDB.QueryRowContext(ctx, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'").Scan(&jobID); err != nil {
+				return "", errors.Wrap(err, "querying the job ID")
+			}
+			return jobID, nil
+		}
+	}
+
+	r.Add(testSpec{
+		Name:       "restore/nodeShutdown/worker",
+		Owner:      OwnerBulkIO,
+		Cluster:    makeClusterSpec(4),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 3
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx, t)
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
+		},
+	})
+
+	r.Add(testSpec{
+		Name:       "restore/nodeShutdown/coordinator",
+		Owner:      OwnerBulkIO,
+		Cluster:    makeClusterSpec(4),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 2
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx, t)
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
+		},
+	})
+}
 
 func registerRestore(r *testRegistry) {
+	largeVolumeSize := 2500 // the size in GB of disks in large volume configs
+
 	for _, item := range []struct {
-		nodes   int
+		nodes        int
+		cpus         int
+		largeVolumes bool
+
 		timeout time.Duration
 	}{
-		{10, 6 * time.Hour},
-		{32, 3 * time.Hour},
+		{nodes: 10, timeout: 6 * time.Hour},
+		{nodes: 32, timeout: 3 * time.Hour},
+		{nodes: 6, timeout: 4 * time.Hour, cpus: 16, largeVolumes: true},
 	} {
+		clusterOpts := make([]createOption, 0)
+		testName := fmt.Sprintf("restore2TB/nodes=%d", item.nodes)
+		if item.cpus != 0 {
+			clusterOpts = append(clusterOpts, cpu(item.cpus))
+			testName += fmt.Sprintf("/cpus=%d", item.cpus)
+		}
+		if item.largeVolumes {
+			clusterOpts = append(clusterOpts, volumeSize(largeVolumeSize))
+			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
+		}
+
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
+			Name:    testName,
 			Owner:   OwnerBulkIO,
-			Cluster: makeClusterSpec(item.nodes),
+			Cluster: makeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				// Randomize starting with encryption-at-rest enabled.
@@ -247,18 +361,27 @@ func registerRestore(r *testRegistry) {
 				// 	})
 				// })
 
+				tick := initBulkJobPerfArtifacts(ctx, testName, item.timeout)
 				m.Go(func(ctx context.Context) error {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
-					// TODO(dan): It'd be nice if we could keep track over time of how
-					// long this next line took.
+					// Tick once before starting the restore, and once after to capture the
+					// total elapsed time. This is used by roachperf to compute and display
+					// the average MB/sec per node.
+					tick()
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank'
+				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
 				WITH into_db = 'restore2tb'"`)
+					tick()
 
+					// Upload the perf artifacts to any one of the nodes so that the test
+					// runner copies it into an appropriate directory path.
+					if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+						log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					}
 					return nil
 				})
 				m.Wait()

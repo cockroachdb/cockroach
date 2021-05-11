@@ -14,8 +14,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -43,7 +43,7 @@ type upsertRun struct {
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted/upserted into.
-	insertCols []descpb.ColumnDescriptor
+	insertCols []catalog.Column
 
 	// done informs a new call to BatchedNext() that the previous call to
 	// BatchedNext() has completed the work already.

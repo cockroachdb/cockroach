@@ -73,7 +73,7 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ ops $(locations :ops)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )
 
 # Define the generator for the enumeration of rulenames.
@@ -89,7 +89,7 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ rulenames \
           $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )
 
 # Define the generator for the stringification of rulenames.
@@ -116,7 +116,7 @@ genrule(
       $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
       -type=RuleName `dirname $(location :gen-rulenames)`/rule_name.go $(location :gen-rulenames)
     """,
-    tools = [
+    exec_tools = [
         "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/stringer",
     ],

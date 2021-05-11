@@ -16,7 +16,6 @@ package hlc
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -129,38 +128,48 @@ func (m *ManualClock) Set(nanos int64) {
 // ticks with the wall clock, but that can be moved arbitrarily
 // into the future or paused. HybridManualClock is thread safe.
 type HybridManualClock struct {
-	nanos         int64
-	physicalClock func() int64
-	// nanosAtPause records the timestamp of the clock if it was paused. A 0 value
-	// indicates the clock was never paused.
-	nanosAtPause int64
+	mu struct {
+		syncutil.RWMutex
+		// nanos, if not 0, is the amount of time the clock was manually incremented
+		// by; it is added to physicalClock.
+		nanos int64
+		// nanosAtPause records the timestamp of the physical clock when it gets
+		// paused. 0 means that the clock is not paused.
+		nanosAtPause int64
+	}
 }
 
 // NewHybridManualClock returns a new instance, initialized with
 // specified timestamp.
 func NewHybridManualClock() *HybridManualClock {
-	return &HybridManualClock{nanos: 0, physicalClock: UnixNano, nanosAtPause: 0}
+	return &HybridManualClock{}
 }
 
 // UnixNano returns the underlying hybrid manual clock's timestamp.
 func (m *HybridManualClock) UnixNano() int64 {
-	nanosAtPause := atomic.LoadInt64(&m.nanosAtPause)
-	nanos := atomic.LoadInt64(&m.nanos)
+	m.mu.RLock()
+	nanosAtPause := m.mu.nanosAtPause
+	nanos := m.mu.nanos
+	m.mu.RUnlock()
 	if nanosAtPause > 0 {
 		return nanos + nanosAtPause
 	}
-	return nanos + m.physicalClock()
+	return nanos + UnixNano()
 }
 
-// Increment atomically increments the hybrid manual clock's timestamp.
-func (m *HybridManualClock) Increment(incr int64) {
-	atomic.AddInt64(&m.nanos, incr)
+// Increment increments the hybrid manual clock's timestamp.
+func (m *HybridManualClock) Increment(nanos int64) {
+	m.mu.Lock()
+	m.mu.nanos += nanos
+	m.mu.Unlock()
 }
 
-// Pause pauses the hybrid manual clock and forces it to always return the
-// current timestamp.
+// Pause pauses the hybrid manual clock; the passage of time no longer causes
+// the clock to tick. Increment can still be used, though.
 func (m *HybridManualClock) Pause() {
-	atomic.StoreInt64(&m.nanosAtPause, m.physicalClock())
+	m.mu.Lock()
+	m.mu.nanosAtPause = UnixNano()
+	m.mu.Unlock()
 }
 
 // UnixNano returns the local machine's physical nanosecond
@@ -410,17 +419,32 @@ func (c *Clock) Update(rt ClockTimestamp) {
 	c.enforceWallTimeWithinBoundLocked()
 }
 
+// NB: don't change the string here; this will cause cross-version issues
+// since this singleton is used as a marker.
+var errUntrustworthyRemoteWallTimeErr = errors.New("remote wall time is too far ahead to be trustworthy")
+
+// IsUntrustworthyRemoteWallTimeError returns true if the error came resulted
+// from a call to Clock.UpdateAndCheckMaxOffset due to the passed ClockTimestamp
+// being too far in the future.
+func IsUntrustworthyRemoteWallTimeError(err error) bool {
+	return errors.Is(err, errUntrustworthyRemoteWallTimeErr)
+}
+
 // UpdateAndCheckMaxOffset is like Update, but also takes the wall time into account and
 // returns an error in the event that the supplied remote timestamp exceeds
 // the wall clock time by more than the maximum clock offset.
+//
+// If an error is returned, it will be detectable with
+// IsUntrustworthyRemoteWallTimeError.
 func (c *Clock) UpdateAndCheckMaxOffset(ctx context.Context, rt ClockTimestamp) error {
-	var err error
 	physicalClock := c.getPhysicalClockAndCheck(ctx)
 
 	offset := time.Duration(rt.WallTime - physicalClock)
 	if c.maxOffset > 0 && offset > c.maxOffset {
-		err = fmt.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset)
-		return err
+		return errors.Mark(
+			errors.Errorf("remote wall time is too far ahead (%s) to be trustworthy", offset),
+			errUntrustworthyRemoteWallTimeErr,
+		)
 	}
 
 	if physicalClock > rt.WallTime {
@@ -493,16 +517,23 @@ func (c *Clock) WallTimeUpperBound() int64 {
 // sleeping for longer or shorter, depending on the HLC clock's relation to its
 // physical time source (it may lead it) and whether it advances more rapidly
 // due to updates from other nodes.
-func (c *Clock) SleepUntil(t Timestamp) {
+//
+// If the provided context is canceled, the method will return the cancellation
+// error immediately. If an error is returned, no guarantee is made that the HLC
+// will have reached the specified timestamp.
+func (c *Clock) SleepUntil(ctx context.Context, t Timestamp) error {
 	// Don't busy loop if the HLC clock is out ahead of the system's
 	// physical clock.
 	const minSleep = 25 * time.Microsecond
 	// Refresh every second in case there was a clock jump.
 	const maxSleep = 1 * time.Second
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		now := c.Now()
 		if t.LessEq(now) {
-			return
+			return nil
 		}
 		d := now.GoTime().Sub(t.GoTime())
 		if d < minSleep {
@@ -510,6 +541,17 @@ func (c *Clock) SleepUntil(t Timestamp) {
 		} else if d > maxSleep {
 			d = maxSleep
 		}
-		time.Sleep(d)
+		// If we're going to sleep for at least 1ms, listen for context
+		// cancellation. Otherwise, don't bother with the select and the
+		// more expensive use of time.After.
+		if d < 1*time.Millisecond {
+			time.Sleep(d)
+		} else {
+			select {
+			case <-time.After(d):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 	}
 }

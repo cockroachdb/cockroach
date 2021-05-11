@@ -295,7 +295,7 @@ inner-join (hash)
  ├── cardinality: [0 - 1]
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
- ├── fd: ()-->(1-5,7-11)
+ ├── fd: ()-->(1-5,7-11), (7)==(1), (1)==(7)
  ├── select
  │    ├── columns: a.k:1!null a.i:2 f:3 s:4 j:5
  │    ├── cardinality: [0 - 1]

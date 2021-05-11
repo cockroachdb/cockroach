@@ -21,13 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -298,17 +296,13 @@ func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
 	return nil
 }
 
-// Run starts previously unstarted jobs from a list of scheduled
-// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
-func (r *Registry) Run(
+// WaitForJobs waits for a given list of jobs to reach some sort
+// of terminal state.
+func (r *Registry) WaitForJobs(
 	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
 ) error {
 	if len(jobs) == 0 {
 		return nil
-	}
-	log.Infof(ctx, "scheduled jobs %+v", jobs)
-	if err := r.NotifyToAdoptJobs(ctx); err != nil {
-		return err
 	}
 	buf := bytes.Buffer{}
 	for i, id := range jobs {
@@ -371,6 +365,25 @@ func (r *Registry) Run(
 	return nil
 }
 
+// Run starts previously unstarted jobs from a list of scheduled
+// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
+func (r *Registry) Run(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
+) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+	log.Infof(ctx, "scheduled jobs %+v", jobs)
+	if err := r.NotifyToAdoptJobs(ctx); err != nil {
+		return err
+	}
+	err := r.WaitForJobs(ctx, ex, jobs)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // NewJob creates a new Job.
 func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
 	job := &Job{
@@ -380,7 +393,7 @@ func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
 	}
 	job.mu.payload = jobspb.Payload{
 		Description:   record.Description,
-		Statement:     record.Statement,
+		Statement:     record.Statements,
 		UsernameProto: record.Username.EncodeProto(),
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),
@@ -855,40 +868,6 @@ func (r *Registry) maybeCancelJobsDeprecated(
 	}
 }
 
-// isOrphaned tries to detect if there are no mutations left to be done for the
-// job which will make it a candidate for garbage collection. Jobs can be left
-// in such inconsistent state if they fail before being removed from the jobs table.
-func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (bool, error) {
-	if payload.Type() != jobspb.TypeSchemaChange {
-		return false, nil
-	}
-	for _, id := range payload.DescriptorIDs {
-		pendingMutations := false
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			td, err := catalogkv.MustGetTableDescByID(ctx, txn, keys.TODOSQLCodec, id)
-			if err != nil {
-				return err
-			}
-			hasAnyMutations := len(td.GetMutations()) != 0 || len(td.GetGCMutations()) != 0
-			hasDropJob := td.TableDesc().DropJobID != 0
-			pendingMutations = hasAnyMutations || hasDropJob
-			return nil
-		}); err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				// Treat missing table descriptors as no longer relevant for the
-				// job payload. See
-				// https://github.com/cockroachdb/cockroach/45399.
-				continue
-			}
-			return false, err
-		}
-		if pendingMutations {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
 const cleanupPageSize = 100
 
 func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) error {
@@ -934,12 +913,6 @@ func (r *Registry) cleanupOldJobsPage(
 		}
 		remove := false
 		switch Status(*row[2].(*tree.DString)) {
-		case StatusRunning, StatusPending:
-			done, err := r.isOrphaned(ctx, payload)
-			if err != nil {
-				return false, 0, err
-			}
-			remove = done && row[3].(*tree.DTimestamp).Time.Before(olderThan)
 		case StatusSucceeded, StatusCanceled, StatusFailed:
 			remove = payload.FinishedMicros < oldMicros
 		}
@@ -1199,7 +1172,7 @@ func (r *Registry) stepThroughStateMachine(
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
-				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				return errors.NewAssertionErrorWithWrappedErrf(sErr,
 					"job %d: unexpected status %s provided for a running job", job.ID(), sErr.status)
 			}
 			return sErr
@@ -1218,6 +1191,7 @@ func (r *Registry) stepThroughStateMachine(
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as canceled: %v", job.ID(), jobErr)
 		}
+		telemetry.Inc(TelemetryMetrics[jobType].Canceled)
 		return errors.WithSecondaryError(errors.Errorf("job %s", status), jobErr)
 	case StatusSucceeded:
 		if jobErr != nil {
@@ -1232,6 +1206,7 @@ func (r *Registry) stepThroughStateMachine(
 			// better.
 			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusReverting, errors.Wrapf(err, "could not mark job %d as succeeded", job.ID()))
 		}
+		telemetry.Inc(TelemetryMetrics[jobType].Successful)
 		return nil
 	case StatusReverting:
 		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
@@ -1278,14 +1253,14 @@ func (r *Registry) stepThroughStateMachine(
 			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: has StatusFailed but no error was provided", job.ID())
+			return errors.AssertionFailedf("job %d: has StatusFailed but no error was provided", job.ID())
 		}
 		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
 		}
+		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		return jobErr
 	default:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,

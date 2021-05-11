@@ -390,39 +390,39 @@ root
  │    ├── insert-mapping:
  │    │    ├── column1:5 => pk:1
  │    │    ├── column2:6 => p:2
- │    │    └── column7:7 => q:3
+ │    │    └── q_default:7 => q:3
  │    ├── update-mapping:
  │    │    └── column2:6 => p:2
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: upsert_pk:12 upsert_q:13 column1:5!null column2:6!null column7:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         ├── columns: upsert_pk:12 upsert_q:13 column1:5!null column2:6!null q_default:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         ├── left-join (hash)
- │         │    ├── columns: column1:5!null column2:6!null column7:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── columns: column1:5!null column2:6!null q_default:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         │    ├── ensure-upsert-distinct-on
- │         │    │    ├── columns: column1:5!null column2:6!null column7:7
+ │         │    │    ├── columns: column1:5!null column2:6!null q_default:7
  │         │    │    ├── grouping columns: column1:5!null
  │         │    │    ├── project
- │         │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+ │         │    │    │    ├── columns: q_default:7 column1:5!null column2:6!null
  │         │    │    │    ├── values
  │         │    │    │    │    ├── columns: column1:5!null column2:6!null
  │         │    │    │    │    ├── (1, 10)
  │         │    │    │    │    └── (2, 20)
  │         │    │    │    └── projections
- │         │    │    │         └── NULL::INT8 [as=column7:7]
+ │         │    │    │         └── NULL::INT8 [as=q_default:7]
  │         │    │    └── aggregations
  │         │    │         ├── first-agg [as=column2:6]
  │         │    │         │    └── column2:6
- │         │    │         └── first-agg [as=column7:7]
- │         │    │              └── column7:7
+ │         │    │         └── first-agg [as=q_default:7]
+ │         │    │              └── q_default:7
  │         │    ├── scan parent_multi
  │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         │    └── filters
  │         │         └── column1:5 = pk:8
  │         └── projections
  │              ├── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:12]
- │              └── CASE WHEN pk:8 IS NULL THEN column7:7 ELSE q:10 END [as=upsert_q:13]
+ │              └── CASE WHEN pk:8 IS NULL THEN q_default:7 ELSE q:10 END [as=upsert_q:13]
  └── cascade
       ├── update child_multi
       │    ├── columns: <none>

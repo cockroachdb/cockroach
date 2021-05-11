@@ -73,13 +73,18 @@ type backfiller struct {
 	processorID int32
 }
 
-// OutputTypes is part of the processor interface.
+// OutputTypes is part of the execinfra.Processor interface.
 func (*backfiller) OutputTypes() []*types.T {
 	// No output types.
 	return nil
 }
 
-// Run is part of the Processor interface.
+// MustBeStreaming is part of the execinfra.Processor interface.
+func (*backfiller) MustBeStreaming() bool {
+	return false
+}
+
+// Run is part of the execinfra.Processor interface.
 func (b *backfiller) Run(ctx context.Context) {
 	opName := fmt.Sprintf("%sBackfiller", b.name)
 	ctx = logtags.AddTag(ctx, opName, int(b.spec.Table.ID))
@@ -199,8 +204,8 @@ func GetResumeSpans(
 	// Find the index of the first mutation that is being worked on.
 	const noIndex = -1
 	mutationIdx := noIndex
-	for i, m := range tableDesc.GetMutations() {
-		if m.MutationID != mutationID {
+	for i, m := range tableDesc.AllMutations() {
+		if m.MutationID() != mutationID {
 			break
 		}
 		if mutationIdx == noIndex && filter(m) {

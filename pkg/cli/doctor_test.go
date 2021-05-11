@@ -21,8 +21,8 @@ import (
 // This test doctoring a secure cluster.
 func TestDoctorCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	// Introduce a corruption in the descriptor table by adding a table and
 	// removing its parent.
@@ -36,30 +36,58 @@ func TestDoctorCluster(t *testing.T) {
 	}, ";\n"),
 	})
 
-	out, err := c.RunWithCapture("debug doctor cluster")
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine cluster")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t, "testdata/doctor/testcluster", func(t *testing.T, td *datadriven.TestData) string {
-		return out
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, "testdata/doctor/test_examine_cluster", func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
 	})
 }
 
 // This test the operation of zip over secure clusters.
 func TestDoctorZipDir(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	c := newCLITest(cliTestParams{t: t, noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip")
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Using datadriven allows TESTFLAGS=-rewrite.
-	datadriven.RunTest(t, "testdata/doctor/testzipdir", func(t *testing.T, td *datadriven.TestData) string {
-		return out
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, "testdata/doctor/test_examine_zipdir", func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("recreate", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor recreate zipdir testdata/doctor/debugzip")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, "testdata/doctor/test_recreate_zipdir", func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("deprecated doctor zipdir with verbose", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip --verbose")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, "testdata/doctor/test_examine_zipdir_verbose", func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
 	})
 }

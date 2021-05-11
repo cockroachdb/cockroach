@@ -90,3 +90,27 @@ func TestBatchRequestString(t *testing.T) {
 		require.EqualValues(t, exp, act)
 	}
 }
+
+func TestKeyString(t *testing.T) {
+	require.Equal(t,
+		`/Table/53/42/"=\xbc ⌘"`,
+		roachpb.Key("\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98").String())
+}
+
+func TestRangeDescriptorStringRedact(t *testing.T) {
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("c"),
+		EndKey:   roachpb.RKey("g"),
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 2, StoreID: 2},
+			{NodeID: 3, StoreID: 3},
+		},
+	}
+
+	require.EqualValues(t,
+		`r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
+		redact.Sprint(desc),
+	)
+}

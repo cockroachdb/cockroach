@@ -62,7 +62,7 @@ func TestPrefixRewriter(t *testing.T) {
 func TestKeyRewriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := tabledesc.NewCreatedMutable(*systemschema.NamespaceTable.TableDesc())
+	desc := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildCreatedMutableTable()
 	oldID := desc.ID
 	newID := desc.ID + 1
 	desc.ID = newID
@@ -120,7 +120,7 @@ func TestKeyRewriter(t *testing.T) {
 
 	t.Run("multi", func(t *testing.T) {
 		desc.ID = oldID + 10
-		desc2 := tabledesc.NewCreatedMutable(desc.TableDescriptor)
+		desc2 := tabledesc.NewBuilder(&desc.TableDescriptor).BuildCreatedMutableTable()
 		desc2.ID += 10
 		newKr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, []roachpb.ImportRequest_TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
@@ -195,9 +195,9 @@ func TestKeyRewriter(t *testing.T) {
 }
 
 func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
-	desc := tabledesc.NewImmutable(*tableDesc).DescriptorProto()
+	desc := tabledesc.NewBuilder(tableDesc).BuildImmutable().DescriptorProto()
 	// Set the timestamp to a non-zero value.
-	descpb.TableFromDescriptor(desc, hlc.Timestamp{WallTime: 1})
+	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, hlc.Timestamp{WallTime: 1})
 	bytes, err := protoutil.Marshal(desc)
 	if err != nil {
 		t.Fatal(err)

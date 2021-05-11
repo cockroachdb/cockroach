@@ -1150,18 +1150,18 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 
 func TestEncodeDecodeBox2D(t *testing.T) {
 	testCases := []struct {
-		ordered []geo.CartesianBoundingBox
+		ordered []geopb.BoundingBox
 	}{
 		{
-			ordered: []geo.CartesianBoundingBox{
-				{BoundingBox: geopb.BoundingBox{LoX: -100, HiX: 99, LoY: -100, HiY: 100}},
-				{BoundingBox: geopb.BoundingBox{LoX: -100, HiX: 100, LoY: -100, HiY: 100}},
-				{BoundingBox: geopb.BoundingBox{LoX: -50, HiX: 100, LoY: -100, HiY: 100}},
-				{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 100, LoY: 0, HiY: 100}},
-				{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 100, LoY: 50, HiY: 100}},
-				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -100, HiY: 100}},
-				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -10, HiY: 50}},
-				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -10, HiY: 100}},
+			ordered: []geopb.BoundingBox{
+				{LoX: -100, HiX: 99, LoY: -100, HiY: 100},
+				{LoX: -100, HiX: 100, LoY: -100, HiY: 100},
+				{LoX: -50, HiX: 100, LoY: -100, HiY: 100},
+				{LoX: 0, HiX: 100, LoY: 0, HiY: 100},
+				{LoX: 0, HiX: 100, LoY: 50, HiY: 100},
+				{LoX: 10, HiX: 100, LoY: -100, HiY: 100},
+				{LoX: 10, HiX: 100, LoY: -10, HiY: 50},
+				{LoX: 10, HiX: 100, LoY: -10, HiY: 100},
 			},
 		},
 	}
@@ -1173,7 +1173,7 @@ func TestEncodeDecodeBox2D(t *testing.T) {
 					for j := range tc.ordered {
 						var b []byte
 						var err error
-						var decoded geo.CartesianBoundingBox
+						var decoded geopb.BoundingBox
 
 						if dir == Ascending {
 							b, err = EncodeBox2DAscending(b, tc.ordered[j])
@@ -1231,13 +1231,15 @@ func TestEncodeDecodeGeometry(t *testing.T) {
 
 						var b []byte
 						var decoded geopb.SpatialObject
+						spaceCurveIndex, err := parsed.SpaceCurveIndex()
+						require.NoError(t, err)
 						if dir == Ascending {
-							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							b, err = EncodeGeoAscending(b, spaceCurveIndex, &spatialObject)
 							require.NoError(t, err)
 							_, err = DecodeGeoAscending(b, &decoded)
 							require.NoError(t, err)
 						} else {
-							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							b, err = EncodeGeoDescending(b, spaceCurveIndex, &spatialObject)
 							require.NoError(t, err)
 							_, err = DecodeGeoDescending(b, &decoded)
 							require.NoError(t, err)

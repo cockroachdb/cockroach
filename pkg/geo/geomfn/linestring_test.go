@@ -168,6 +168,11 @@ func TestLineLocatePoint(t *testing.T) {
 			point:      geom.NewPointFlat(geom.XY, []float64{3, 1}),
 			expected:   0.87,
 		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XYZ, []float64{0, 0, 5, 1, 1, 26}),
+			point:      geom.NewPointFlat(geom.XYZ, []float64{0, 1, -1}),
+			expected:   0.5,
+		},
 	}
 
 	for index, tc := range testCases {

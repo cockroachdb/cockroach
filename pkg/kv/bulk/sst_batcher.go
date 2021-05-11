@@ -76,6 +76,10 @@ type SSTBatcher struct {
 	// data provided to it.
 	ingestAll bool
 
+	// batchTS is the timestamp that will be set on batch requests used to send
+	// produced SSTs.
+	batchTS hlc.Timestamp
+
 	// The rest of the fields accumulated state as opposed to configuration. Some,
 	// like totalRows, are accumulated _across_ batches and are not reset between
 	// batches when Reset() is called.
@@ -306,7 +310,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings, b.batchTS)
 	if err != nil {
 		return err
 	}
@@ -363,7 +367,13 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 // SSTSender is an interface to send SST data to an engine.
 type SSTSender interface {
 	AddSSTable(
-		ctx context.Context, begin, end interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats, ingestAsWrites bool,
+		ctx context.Context,
+		begin, end interface{},
+		data []byte,
+		disallowShadowing bool,
+		stats *enginepb.MVCCStats,
+		ingestAsWrites bool,
+		batchTs hlc.Timestamp,
 	) error
 	SplitAndScatter(ctx context.Context, key roachpb.Key, expirationTime hlc.Timestamp) error
 }
@@ -386,6 +396,7 @@ func AddSSTable(
 	disallowShadowing bool,
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
+	batchTs hlc.Timestamp,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
@@ -431,7 +442,7 @@ func AddSSTable(
 					ingestAsWriteBatch = true
 				}
 				// This will fail if the range has split but we'll check for that below.
-				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch)
+				err = db.AddSSTable(ctx, item.start, item.end, item.sstBytes, item.disallowShadowing, &item.stats, ingestAsWriteBatch, batchTs)
 				if err == nil {
 					log.VEventf(ctx, 3, "adding %s AddSSTable [%s,%s) took %v", sz(len(item.sstBytes)), item.start, item.end, timeutil.Since(before))
 					return nil

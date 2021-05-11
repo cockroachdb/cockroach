@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,6 +54,8 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 		return int64(vec.Bytes().Size())
 	case types.DecimalFamily:
 		return int64(sizeOfDecimals(vec.Decimal()))
+	case types.JsonFamily:
+		return int64(vec.JSON().Size())
 	case typeconv.DatumVecCanonicalTypeFamily:
 		return int64(vec.Datum().Size())
 	}
@@ -98,8 +101,8 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 		proportionalBatchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
 	}
 	for _, vec := range b.ColVecs() {
-		if vec.CanonicalTypeFamily() == types.BytesFamily {
-			proportionalBatchMemSize += int64(vec.Bytes().ProportionalSize(length))
+		if vec.IsBytesLike() {
+			proportionalBatchMemSize += int64(coldata.ProportionalSize(vec, length))
 		} else {
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
@@ -156,17 +159,18 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
 // old batch.
-// Note: the method assumes that minCapacity is at least 1 and will "truncate"
-// minCapacity if it is larger than coldata.BatchSize().
+// Note: the method assumes that minCapacity is at least 0 and will clamp
+// minCapacity to be between 1 and coldata.BatchSize() inclusive.
 // TODO(yuzefovich): change the contract so that maxBatchMemSize takes priority
 // over minCapacity.
 func (a *Allocator) ResetMaybeReallocate(
 	typs []*types.T, oldBatch coldata.Batch, minCapacity int, maxBatchMemSize int64,
 ) (newBatch coldata.Batch, reallocated bool) {
-	if minCapacity < 1 {
+	if minCapacity < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minCapacity %d", minCapacity))
-	}
-	if minCapacity > coldata.BatchSize() {
+	} else if minCapacity == 0 {
+		minCapacity = 1
+	} else if minCapacity > coldata.BatchSize() {
 		minCapacity = coldata.BatchSize()
 	}
 	reallocated = true
@@ -259,10 +263,10 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				b.ReplaceCol(a.NewMemColumn(t, desiredCapacity), colIdx)
 				return
 			}
-			if presentVec.CanonicalTypeFamily() == types.BytesFamily {
+			if presentVec.IsBytesLike() {
 				// Flat bytes vector needs to be reset before the vector can be
 				// reused.
-				presentVec.Bytes().Reset()
+				coldata.Reset(presentVec)
 			}
 			return
 		}
@@ -369,12 +373,19 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	// (excluding any Bytes vectors, those are tracked separately).
 	acc := 0
 	numBytesVectors := 0
+	// We will track Uuid vectors separately because they use smaller initial
+	// allocation factor.
+	numUUIDVectors := 0
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
 			acc += sizeOfBool
 		case types.BytesFamily:
-			numBytesVectors++
+			if t.Family() == types.UuidFamily {
+				numUUIDVectors++
+			} else {
+				numBytesVectors++
+			}
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
@@ -401,6 +412,8 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			acc += sizeOfTime
 		case types.IntervalFamily:
 			acc += sizeOfDuration
+		case types.JsonFamily:
+			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
 			// In datum vec we need to account for memory underlying the struct
 			// that is the implementation of tree.Datum interface (for example,
@@ -415,15 +428,20 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 		}
 	}
-	// For byte arrays, we initially allocate BytesInitialAllocationFactor
-	// number of bytes (plus an int32 for the offset) for each row, so we use
-	// the sum of two values as the estimate. However, later, the exact
-	// memory footprint will be used: whenever a modification of Bytes takes
-	// place, the Allocator will measure the old footprint and the updated
-	// one and will update the memory account accordingly. We also account for
-	// the overhead and for the additional offset value that are needed for
-	// Bytes vectors (to be in line with coldata.Bytes.Size() method).
-	bytesVectorsSize := numBytesVectors * (int(coldata.FlatBytesOverhead) +
-		coldata.BytesInitialAllocationFactor*batchLength + sizeOfInt32*(batchLength+1))
+	// For byte arrays, we initially allocate a constant number of bytes (plus
+	// an int32 for the offset) for each row, so we use the sum of two values as
+	// the estimate. However, later, the exact memory footprint will be used:
+	// whenever a modification of Bytes takes place, the Allocator will measure
+	// the old footprint and the updated one and will update the memory account
+	// accordingly. We also account for the overhead and for the additional
+	// offset value that are needed for Bytes vectors (to be in line with
+	// coldata.Bytes.Size() method).
+	var bytesVectorsSize int
+	// Add the overhead.
+	bytesVectorsSize += (numBytesVectors + numUUIDVectors) * (int(coldata.FlatBytesOverhead))
+	// Add the data for both Bytes and Uuids.
+	bytesVectorsSize += (numBytesVectors*coldata.BytesInitialAllocationFactor + numUUIDVectors*uuid.Size) * batchLength
+	// Add the offsets.
+	bytesVectorsSize += (numBytesVectors + numUUIDVectors) * sizeOfInt32 * (batchLength + 1)
 	return acc*batchLength + bytesVectorsSize
 }

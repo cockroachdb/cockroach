@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -70,6 +71,12 @@ func HasAddingTableError(err error) bool {
 // NewInactiveDescriptorError wraps an error in a new inactiveDescriptorError.
 func NewInactiveDescriptorError(err error) error {
 	return &inactiveDescriptorError{err}
+}
+
+// HasInactiveDescriptorError returns true if the error contains an
+// inactiveDescriptorError.
+func HasInactiveDescriptorError(err error) bool {
+	return errors.HasType(err, (*inactiveDescriptorError)(nil))
 }
 
 // ErrDescriptorNotFound is returned to signal that a descriptor could not be
@@ -156,4 +163,17 @@ func WrapTableDescRefErr(id descpb.ID, err error) error {
 // WrapTypeDescRefErr wraps an error pertaining to a type descriptor id.
 func WrapTypeDescRefErr(id descpb.ID, err error) error {
 	return errors.Wrapf(err, "referenced type ID %d", errors.Safe(id))
+}
+
+// NewMutableAccessToVirtualSchemaError is returned when trying to mutably
+// access a virtual schema object.
+func NewMutableAccessToVirtualSchemaError(entry VirtualSchema, object string) error {
+	switch entry.Desc().GetName() {
+	case "pg_catalog":
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"%s is a system catalog", tree.ErrNameString(object))
+	default:
+		return pgerror.Newf(pgcode.WrongObjectType,
+			"%s is a virtual object and cannot be modified", tree.ErrNameString(object))
+	}
 }

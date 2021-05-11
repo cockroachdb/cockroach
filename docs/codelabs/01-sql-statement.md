@@ -191,18 +191,18 @@ appropriate semantics.  We'll need an AST node to communicate the structure of
 the statement from the parser to the runtime.  Remember when we said our
 statement is of `%type <tree.Statement>`?  That means it needs to implement the
 `tree.Statement` interface, which can be found in `pkg/sql/sem/tree/stmt.go`.
-There are four functions we need to write: two for the `Statement` interface
-itself (`StatementType` and `StatementTag`), one for
+There are four functions we need to write: three for the `Statement` interface
+itself (`StatementReturnType`, `StatementType` and `StatementTag`), one for
 `NodeFormatter` (`Format`), and the standard `fmt.Stringer`.
 
 Make a new file for our statement type: `pkg/sql/sem/tree/frobnicate.go`.  In
 it, put the implementation of our AST node.
 
 ```go
-package tree 
+package tree
 
 type Frobnicate struct {
-    Mode FrobnicateMode
+  Mode FrobnicateMode
 }
 
 var _ Statement = &Frobnicate{}
@@ -210,28 +210,29 @@ var _ Statement = &Frobnicate{}
 type FrobnicateMode int
 
 const (
-    FrobnicateModeAll FrobnicateMode = iota
-    FrobnicateModeCluster
-    FrobnicateModeSession
+  FrobnicateModeAll FrobnicateMode = iota
+  FrobnicateModeCluster
+  FrobnicateModeSession
 )
 
-func (node *Frobnicate) StatementType() StatementType { return Ack }
-func (node *Frobnicate) StatementTag() string { return "FROBNICATE" }
+func (node *Frobnicate) StatementReturnType() StatementReturnType { return Ack }
+func (node *Frobnicate) StatementTag() string               { return "FROBNICATE" }
 
 func (node *Frobnicate) Format(ctx *FmtCtx) {
-    ctx.WriteString("FROBNICATE ")
-    switch node.Mode {
-    case FrobnicateModeAll:
-        ctx.WriteString("ALL")
-    case FrobnicateModeCluster:
-        ctx.WriteString("CLUSTER")
-    case FrobnicateModeSession:
-        ctx.WriteString("SESSION")
-}
+  ctx.WriteString("FROBNICATE ")
+  switch node.Mode {
+  case FrobnicateModeAll:
+    ctx.WriteString("ALL")
+  case FrobnicateModeCluster:
+    ctx.WriteString("CLUSTER")
+  case FrobnicateModeSession:
+    ctx.WriteString("SESSION")
+  }
 
-func (node *Frobnicate) String() string {
+  func(node *Frobnicate) String()
+  string{
     return AsString(node)
-}
+  }
 ```
 
 Now we need to update the parser to return a `Frobnicate` node with the

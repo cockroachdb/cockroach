@@ -35,12 +35,11 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.insideViewDef = false
 		b.trackViewDeps = false
 		b.viewDeps = nil
+		b.viewTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
 	}()
 
-	b.pushWithFrame()
-	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */, inScope)
-	b.popWithFrame(defScope)
+	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
 
 	p := defScope.makePhysicalProps().Presentation
 	if len(cv.ColumnNames) != 0 {
@@ -57,6 +56,24 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		}
 	}
 
+	// If the type of any column that this view references is user
+	// defined, add a type dependency between this view and the UDT.
+	if b.trackViewDeps {
+		for _, d := range b.viewDeps {
+			if !d.ColumnOrdinals.Empty() {
+				d.ColumnOrdinals.ForEach(func(ord int) {
+					ids, err := d.DataSource.CollectTypes(ord)
+					if err != nil {
+						panic(err)
+					}
+					for _, id := range ids {
+						b.viewTypeDeps.Add(int(id))
+					}
+				})
+			}
+		}
+	}
+
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
@@ -69,6 +86,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:      p,
 			Deps:         b.viewDeps,
+			TypeDeps:     b.viewTypeDeps,
 		},
 	)
 	return outScope

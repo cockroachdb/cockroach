@@ -14,11 +14,13 @@ genrule(
     name = "gen-severity",
     srcs = [
         "//pkg/util/log/logpb:log.proto",
-        "//pkg/util/log/gen",
     ],
     outs = ["severity_generated.go"],
     cmd = """
       $(location //pkg/util/log/gen) $(location //pkg/util/log/logpb:log.proto) \
         severity.go $(location severity_generated.go)
        """,
+    exec_tools = [
+        "//pkg/util/log/gen",
+    ],
 )

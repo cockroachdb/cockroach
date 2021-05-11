@@ -64,9 +64,11 @@ go_test(
         "general_funcs_test.go",
         "norm_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
+    ],
     embed = [":norm"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
@@ -102,5 +104,5 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ factory $(locations //pkg/sql/opt:ops) $(locations :rules)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
 )

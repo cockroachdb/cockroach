@@ -77,6 +77,9 @@ var retiredSettings = map[string]struct{}{
 	"sql.testing.mutations.max_batch_size":  {},
 	"sql.testing.mock_contention.enabled":   {},
 	"kv.atomic_replication_changes.enabled": {},
+	// removed as of 21.2.
+	"sql.defaults.vectorize_row_count_threshold": {},
+	"cloudstorage.gs.default.key":                {},
 }
 
 // register adds a setting to the registry.

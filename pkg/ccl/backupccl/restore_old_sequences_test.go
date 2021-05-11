@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRestoreOldVersions ensures that we can successfully restore tables
-// and databases exported by old version.
+// TestRestoreOldSequences ensures that we can successfully restore tables
+// and views created in older versions into a newer version.
 //
 // The files being restored live in testdata and are all made from the same
 // input SQL which lives in <testdataBase>/create.sql.
@@ -73,7 +73,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, LocalFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused,
 		)
-		const totalRows = 3
+		const totalRows = 4
 		if importedRows != totalRows {
 			t.Fatalf("expected %d rows, got %d", totalRows, importedRows)
 		}
@@ -96,9 +96,17 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 		}
 
 		// Verify that tables with old sequences aren't corrupted.
-		//sqlDB.Exec(t, `SET database = test`)
-		//sqlDB.Exec(t, `USE test`)
 		sqlDB.Exec(t, `SET database = test; INSERT INTO test.t1 VALUES (default, default)`)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY i`, sequenceResults)
+
+		// Verify that the views are okay, and the sequences it depends on cannot be renamed.
+		sqlDB.CheckQueryResults(t, `SET database = test; SELECT * FROM test.v`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SET database = test; SELECT * FROM test.v2`, [][]string{{"2"}})
+		sqlDB.ExpectErr(t,
+			`pq: cannot rename relation "s2" because view "v" depends on it`,
+			`ALTER SEQUENCE s2 RENAME TO s3`)
+		sqlDB.CheckQueryResults(t, `SET database = test; SHOW CREATE VIEW test.v`, [][]string{{
+			"test.public.v", `CREATE VIEW public.v (nextval) AS (SELECT nextval('s2':::STRING))`,
+		}})
 	}
 }

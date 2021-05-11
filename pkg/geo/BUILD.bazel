@@ -52,7 +52,6 @@ go_test(
         "parse_test.go",
     ],
     embed = [":geo"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo/geopb",
         "@com_github_cockroachdb_errors//:errors",

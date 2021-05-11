@@ -413,9 +413,7 @@ func TestLimitScans(t *testing.T) {
 
 		// Simulate what the DistSQLReceiver does and ingest the trace.
 		if meta != nil && len(meta.TraceData) > 0 {
-			if err := sp.ImportRemoteSpans(meta.TraceData); err != nil {
-				t.Fatal(err)
-			}
+			sp.ImportRemoteSpans(meta.TraceData)
 		}
 
 		if row == nil && meta == nil {

@@ -1928,6 +1928,37 @@ SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
+query IB
+SELECT length(gen_random_ulid()::BYTES), gen_random_ulid() = gen_random_ulid()
+----
+16 false
+
+query TTTT
+SELECT uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858'),
+       ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'),
+       ulid_to_uuid(uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858')),
+       uuid_to_ulid(ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'))
+----
+01F2AHSDK562KHK8N1H6CR6J2R  0178951c-b665-30a7-19a2-a18999834858  0178951c-b665-30a7-19a2-a18999834858  01F2AHSDK562KHK8N1H6CR6J2R
+
+let $ulid1
+SELECT gen_random_ulid()
+
+# Proper sorting of ULIDs inside the same millisecond is not guaranteed, we need this to enforce correct behavior.
+statement ok
+SELECT pg_sleep(0.001)
+
+let $ulid2
+SELECT gen_random_ulid()
+
+query BBBB
+SELECT '$ulid1' < '$ulid2',
+       '$ulid1' > '$ulid2',
+       uuid_to_ulid('$ulid1') < uuid_to_ulid('$ulid2'),
+       uuid_to_ulid('$ulid1') > uuid_to_ulid('$ulid2')
+----
+true  false  true  false
+
 query TTTTTT
 SELECT to_uuid('63616665-6630-3064-6465-616462656566'),
        to_uuid('{63616665-6630-3064-6465-616462656566}'),
@@ -1946,7 +1977,7 @@ cafef00ddeadbeef
 query error uuid: incorrect UUID length
 SELECT to_uuid('63616665-6630-3064-6465')
 
-query error uuid: incorrect UUID length
+query error uuid: incorrect UUID format
 SELECT to_uuid('63616665-6630-3064-6465-616462656566-123')
 
 query error uuid: incorrect UUID format
@@ -2651,7 +2682,7 @@ NULL
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x2805500158017801
+\x2805500158017800
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2701,7 +2732,7 @@ SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_te
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
 ----
-\x2805500158017801
+\x2805500158017800
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't'))::string
@@ -2960,3 +2991,94 @@ SELECT * FROM crdb_internal.payloads_for_trace(0)
 WHERE false
 ----
 span_id payload_type  payload_jsonb
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error insufficient privilege
+SELECT * FROM crdb_internal.set_trace_verbose(0, false)
+
+user root
+
+query B
+SELECT * FROM crdb_internal.set_trace_verbose(0, false)
+WHERE false
+----
+
+# set timezone to something other then UTC
+statement ok
+SET timezone = 'Europe/Berlin'
+
+query T
+select generate_series('2021-07-05'::timestamptz, '2021-07-06'::timestamptz, '1day'::interval)
+----
+2021-07-05 00:00:00 +0200 CEST
+2021-07-06 00:00:00 +0200 CEST
+
+statement ok
+SET TIME ZONE +0
+
+statement ok
+set timezone = 'Europe/Bucharest';
+
+# the following two queries should provide the same output
+query T
+select '2020-10-25 00:00'::TIMESTAMPTZ + (i::text || ' hour')::interval from generate_series(0, 24) AS g(i);
+----
+2020-10-25 00:00:00 +0300 EEST
+2020-10-25 01:00:00 +0300 EEST
+2020-10-25 02:00:00 +0300 EEST
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+2020-10-25 05:00:00 +0200 EET
+2020-10-25 06:00:00 +0200 EET
+2020-10-25 07:00:00 +0200 EET
+2020-10-25 08:00:00 +0200 EET
+2020-10-25 09:00:00 +0200 EET
+2020-10-25 10:00:00 +0200 EET
+2020-10-25 11:00:00 +0200 EET
+2020-10-25 12:00:00 +0200 EET
+2020-10-25 13:00:00 +0200 EET
+2020-10-25 14:00:00 +0200 EET
+2020-10-25 15:00:00 +0200 EET
+2020-10-25 16:00:00 +0200 EET
+2020-10-25 17:00:00 +0200 EET
+2020-10-25 18:00:00 +0200 EET
+2020-10-25 19:00:00 +0200 EET
+2020-10-25 20:00:00 +0200 EET
+2020-10-25 21:00:00 +0200 EET
+2020-10-25 22:00:00 +0200 EET
+2020-10-25 23:00:00 +0200 EET
+
+query T
+select generate_series('2020-10-25 00:00'::TIMESTAMPTZ, '2020-10-25 23:00'::TIMESTAMPTZ, '1 hour');
+----
+2020-10-25 00:00:00 +0300 EEST
+2020-10-25 01:00:00 +0300 EEST
+2020-10-25 02:00:00 +0300 EEST
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+2020-10-25 05:00:00 +0200 EET
+2020-10-25 06:00:00 +0200 EET
+2020-10-25 07:00:00 +0200 EET
+2020-10-25 08:00:00 +0200 EET
+2020-10-25 09:00:00 +0200 EET
+2020-10-25 10:00:00 +0200 EET
+2020-10-25 11:00:00 +0200 EET
+2020-10-25 12:00:00 +0200 EET
+2020-10-25 13:00:00 +0200 EET
+2020-10-25 14:00:00 +0200 EET
+2020-10-25 15:00:00 +0200 EET
+2020-10-25 16:00:00 +0200 EET
+2020-10-25 17:00:00 +0200 EET
+2020-10-25 18:00:00 +0200 EET
+2020-10-25 19:00:00 +0200 EET
+2020-10-25 20:00:00 +0200 EET
+2020-10-25 21:00:00 +0200 EET
+2020-10-25 22:00:00 +0200 EET
+2020-10-25 23:00:00 +0200 EET
+
+statement ok
+SET TIME ZONE +0

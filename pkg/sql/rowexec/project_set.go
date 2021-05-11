@@ -92,7 +92,13 @@ func newProjectSetProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{ps.input}},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{ps.input},
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				ps.close()
+				return nil
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -276,6 +282,21 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDa
 	generatedColIdx := colIdx - len(ps.input.OutputTypes())
 	ctyp := ps.spec.GeneratedColumns[generatedColIdx]
 	return rowenc.DatumToEncDatum(ctyp, d)
+}
+
+func (ps *projectSetProcessor) close() {
+	if ps.InternalClose() {
+		for _, gen := range ps.gens {
+			if gen != nil {
+				gen.Close(ps.Ctx)
+			}
+		}
+	}
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (ps *projectSetProcessor) ConsumerClosed() {
+	ps.close()
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

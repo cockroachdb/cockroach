@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -112,13 +112,19 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		}
 		eventLogDone = true // done inside alterTypeOwner().
 	case *tree.AlterTypeDropValue:
-		if params.p.SessionData().SafeUpdates {
-			err = pgerror.DangerousStatementf(
-				"DROP VALUE may cause view/default/computed expressions to stop working if the " +
-					"enum value is used inside them")
-		} else {
-			err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
+		if !params.p.SessionData().DropEnumValueEnabled {
+			return pgerror.WithCandidateCode(
+				errors.WithHint(
+					errors.WithIssueLink(
+						errors.New("ALTER TYPE ... DROP VALUE ... is only supported as an alpha feature "+
+							"since view, default, or computed expressions will stop working if they reference the "+
+							"ENUM value"),
+						errors.IssueLink{IssueURL: build.MakeIssueURL(61594)}),
+					"you can enable alter type drop value by running "+
+						"`SET enable_drop_enum_value = true`"),
+				pgcode.FeatureNotSupported)
 		}
+		err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -207,23 +213,15 @@ func (p *planner) dropEnumValue(
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
-	// See if there is a name collision with the new name.
-	exists, id, err := catalogkv.LookupObjectID(
+	err := catalogkv.CheckObjectCollision(
 		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
 		n.desc.ParentID,
 		n.desc.ParentSchemaID,
-		newName,
+		tree.NewUnqualifiedTypeName(tree.Name(newName)),
 	)
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newName)
-	} else if err != nil {
+	if err != nil {
 		return err
 	}
 

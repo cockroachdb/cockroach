@@ -141,7 +141,7 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 				val := c.f.ConstructConstVal(vals[0], vals[0].ResolvedType())
 				addValToOutRows(val, j, i)
 			}
-			generator.Close()
+			generator.Close(c.f.evalCtx.Context)
 
 		default:
 			panic(errors.AssertionFailedf("invalid parameter type"))

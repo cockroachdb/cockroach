@@ -10,8 +10,6 @@
 
 package sqlsmith
 
-import "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-
 func (s *Smither) coin() bool {
 	return s.rnd.Intn(2) == 0
 }
@@ -62,12 +60,4 @@ func (s *Smither) sample(n, mean int, fn func(i int)) {
 	for ki := 0; ki < k; ki++ {
 		fn(perms[ki])
 	}
-}
-
-const letters = "abcdefghijklmnopqrstuvwxyz"
-
-// randString generates a random string with a target length using characters
-// from the input alphabet string.
-func (s *Smither) randString(length int, alphabet string) string {
-	return rowenc.RandString(s.rnd, length, alphabet)
 }

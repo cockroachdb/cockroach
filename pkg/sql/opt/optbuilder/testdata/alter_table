@@ -129,7 +129,17 @@ alter-table-unsplit abc@bc
 build
 ALTER TABLE abc EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
 ----
-alter-table-relocate abc
+alter-table-relocate abc [voters]
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:3 column2:4!null
+      ├── (ARRAY[1,2,3], 1)
+      └── (ARRAY[4], 2)
+
+build
+ALTER TABLE abc EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[1,2,3], 1), (ARRAY[4], 2)
+----
+alter-table-relocate abc [non-voters]
  ├── columns: key:1 pretty:2
  └── values
       ├── columns: column1:3 column2:4!null
@@ -149,7 +159,17 @@ error (42601): too many columns in EXPERIMENTAL_RELOCATE LEASE data
 build
 ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
 ----
-alter-table-relocate abc@bc
+alter-table-relocate abc@bc [voters]
+ ├── columns: key:1 pretty:2
+ └── values
+      ├── columns: column1:3 column2:4!null column3:5!null
+      ├── (ARRAY[5], 1, 'foo')
+      └── (ARRAY[6,7,8], 2, 'bar')
+
+build
+ALTER INDEX abc@bc EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[5], 1, 'foo'), (ARRAY[6,7,8], 2, 'bar')
+----
+alter-table-relocate abc@bc [non-voters]
  ├── columns: key:1 pretty:2
  └── values
       ├── columns: column1:3 column2:4!null column3:5!null

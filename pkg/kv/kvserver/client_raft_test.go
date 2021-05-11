@@ -1763,36 +1763,6 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	}
 }
 
-// TestUnreplicateFirstRange verifies that multiTestContext still functions in
-// the case where the first range (which contains range metadata) is
-// unreplicated from the first store. This situation can arise occasionally in
-// tests, as can a similar situation where the first store is no longer the lease holder of
-// the first range; this verifies that those tests will not be affected.
-// TODO(lunevalex): Remove this test when removing MTC, no need to convert it
-func TestUnreplicateFirstRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	cfg := kvserver.TestStoreConfig(nil)
-	cfg.TestingKnobs.DisableReplicateQueue = true
-	mtc := &multiTestContext{storeConfig: &cfg}
-	defer mtc.Stop()
-	mtc.Start(t, 3)
-
-	const rangeID = roachpb.RangeID(1)
-	// Replicate the range to store 1.
-	mtc.replicateRange(rangeID, 1)
-	// Move the lease away from store 0 before removing its replica.
-	mtc.transferLease(context.Background(), rangeID, 0, 1)
-	// Unreplicate the from from store 0.
-	mtc.unreplicateRange(rangeID, 0)
-	require.NoError(t, mtc.waitForUnreplicated(rangeID, 0))
-	// Replicate the range to store 2. The first range is no longer available on
-	// store 1, and this command will fail if that situation is not properly
-	// supported.
-	mtc.replicateRange(rangeID, 2)
-}
-
 // TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
@@ -3140,9 +3110,11 @@ func TestDecommission(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	k := tc.ScratchRange(t)
-	admin := tc.GetAdminClient(ctx, t, 0)
+	admin, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err)
+
 	// Decommission the first node, which holds most of the leases.
-	_, err := admin.Decommission(
+	_, err = admin.Decommission(
 		ctx, &serverpb.DecommissionRequest{
 			NodeIDs:          []roachpb.NodeID{1},
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
@@ -3330,7 +3302,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	replicaDesc, ok := rep.Desc().GetReplicaDescriptor(tc.Target(2).StoreID)
 	require.True(t, ok)
 
-	go func() {
+	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "send-req", func(ctx context.Context) {
 		incArgs := incrementArgs(key, 23)
 		startWG.Done()
 		defer finishWG.Done()
@@ -3342,11 +3314,18 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 				Timestamp: tc.Servers[2].Clock().Now(),
 			}, incArgs,
 		)
-		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
-			// We're on a goroutine, so cannot fatal.
+		detail := pErr.GetDetail()
+		switch detail.(type) {
+		case *roachpb.RangeNotFoundError:
+			// The typical case.
+		case *roachpb.NotLeaseHolderError:
+			// The atypical case - the lease may have expired and the
+			// lease acquisition may be refused.
+		default:
+			// NB: cannot fatal on a goroutine.
 			t.Errorf("unexpected error: %v", pErr)
 		}
-	}()
+	}))
 	startWG.Wait()
 	if t.Failed() {
 		t.FailNow()
@@ -4725,7 +4704,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 			blockPreApplication, blockPostApplication := make(chan struct{}), make(chan struct{})
 			applyFilterFn := func(ch chan struct{}) kvserverbase.ReplicaApplyFilter {
 				return func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
-					if atomic.LoadInt32(&filterActive) == 1 && filterArgs.Timestamp == magicTS {
+					if atomic.LoadInt32(&filterActive) == 1 && filterArgs.WriteTimestamp == magicTS {
 						<-ch
 					}
 					return 0, nil

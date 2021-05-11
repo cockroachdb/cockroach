@@ -84,7 +84,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 	}
 
 	requiredFrontier := ba.Txn.RequiredFrontier()
-	maxClosed, _ := r.maxClosedRLocked(ctx)
+	maxClosed, _ := r.maxClosedRLocked(ctx, requiredFrontier /* sufficient */)
 	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
 	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -131,29 +131,53 @@ func (r *Replica) canServeFollowerReadRLocked(
 // uses an expiration-based lease. Expiration-based leases do not support the
 // closed timestamp subsystem. A zero-value timestamp will be returned if ok
 // is false.
+//
+// TODO(andrei): Remove the bool retval once we remove the old closed timestamp
+// mechanism.
 func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.maxClosedRLocked(ctx)
+	return r.maxClosedRLocked(ctx, hlc.Timestamp{} /* sufficient */)
 }
 
-func (r *Replica) maxClosedRLocked(ctx context.Context) (_ hlc.Timestamp, ok bool) {
-	lai := r.mu.state.LeaseAppliedIndex
-	lease := *r.mu.state.Lease
+// maxClosedRLocked is like maxClosed, except that it requires r.mu to be
+// rlocked. It also optionally takes a hint: if sufficient is not
+// empty, maxClosedRLocked might return a timestamp that's lower than the
+// maximum closed timestamp that we know about, as long as the returned
+// timestamp is still >= sufficient. This is a performance optimization because
+// we can avoid consulting the ClosedTimestampReceiver.
+func (r *Replica) maxClosedRLocked(
+	ctx context.Context, sufficient hlc.Timestamp,
+) (_ hlc.Timestamp, ok bool) {
+	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
+	lease := r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
-	replicaStateClosed := r.mu.state.RaftClosedTimestamp
+	raftClosed := r.mu.state.RaftClosedTimestamp
+	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, lease.Replica.NodeID, appliedLAI, sufficient)
 
+	// TODO(andrei): In 21.1 we added support for closed timestamps on ranges with
+	// expiration-based leases. Once the old closed timestamp transport is gone in
+	// 21.2, this can go away.
 	if lease.Expiration != nil {
 		return hlc.Timestamp{}, false
 	}
 	// Look at the legacy closed timestamp propagation mechanism.
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
-		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
-	maxClosed.Forward(lease.Start.ToTimestamp())
+		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), appliedLAI)
 	maxClosed.Forward(initialMaxClosed)
 
+	// If the range has not upgraded to the new closed timestamp system,
+	// continue using the lease start time as an input to the range's closed
+	// timestamp. Otherwise, ignore it. We expect to delete this code soon, but
+	// we keep it around for now to avoid a regression in follower read
+	// availability in mixed v20.2/v21.1 clusters.
+	if raftClosed.IsEmpty() {
+		maxClosed.Forward(lease.Start.ToTimestamp())
+	}
+
 	// Look at the "new" closed timestamp propagation mechanism.
-	maxClosed.Forward(replicaStateClosed)
+	maxClosed.Forward(raftClosed)
+	maxClosed.Forward(sideTransportClosed)
 
 	return maxClosed, true
 }
@@ -165,13 +189,16 @@ func (r *Replica) maxClosedRLocked(ctx context.Context) (_ hlc.Timestamp, ok boo
 // timestamps is synchronized with lease transfers and subsumption requests.
 // Callers who need that property should be prepared to get an empty result
 // back, meaning that the closed timestamp cannot be known.
-func (r *Replica) ClosedTimestampV2() hlc.Timestamp {
+//
+// TODO(andrei): Remove this in favor of maxClosed() once the old closed
+// timestamp mechanism is deleted. At that point, the two should be equivalent.
+func (r *Replica) ClosedTimestampV2(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.closedTimestampV2RLocked()
-}
-
-func (r *Replica) closedTimestampV2RLocked() hlc.Timestamp {
-	// TODO(andrei,nvanbenschoten): include sideTransportClosedTimestamp.
-	return r.mu.state.RaftClosedTimestamp
+	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
+	leaseholder := r.mu.state.Lease.Replica.NodeID
+	raftClosed := r.mu.state.RaftClosedTimestamp
+	r.mu.RUnlock()
+	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, hlc.Timestamp{} /* sufficient */)
+	raftClosed.Forward(sideTransportClosed)
+	return raftClosed
 }

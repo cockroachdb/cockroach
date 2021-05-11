@@ -189,6 +189,9 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
 			return nil, false
 		}
+		if sel.Relational().HasSubquery {
+			return nil, false
+		}
 		filters = sel.Filters
 
 	case opt.ScanOp:
@@ -858,10 +861,12 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		outScope.expr, mutationInput, on, memo.EmptyJoinPrivate,
 	)
 	// Append the columns from the right-hand side to the scope.
-	for _, col := range outCols {
+	for i, col := range outCols {
 		colMeta := md.ColumnMeta(col)
+		ord := fk.OriginColumnOrdinal(childTable, i%numFKCols)
+		c := childTable.Column(ord)
 		outScope.cols = append(outScope.cols, scopeColumn{
-			name: tree.Name(colMeta.Alias),
+			name: scopeColName(c.ColName()),
 			id:   col,
 			typ:  colMeta.Type,
 		})

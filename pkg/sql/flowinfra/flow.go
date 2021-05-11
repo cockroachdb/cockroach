@@ -36,7 +36,7 @@ const (
 
 // Startable is any component that can be started (a router or an outbox).
 type Startable interface {
-	Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc)
+	Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc)
 }
 
 // StartableFn is an adapter when a customer function (i.e. a custom goroutine)
@@ -44,8 +44,10 @@ type Startable interface {
 type StartableFn func(context.Context, *sync.WaitGroup, context.CancelFunc)
 
 // Start is a part of the Startable interface.
-func (f StartableFn) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
-	f(ctx, wg, ctxCancel)
+func (f StartableFn) Start(
+	ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc,
+) {
+	f(ctx, wg, flowCtxCancel)
 }
 
 // FuseOpt specifies options for processor fusing at Flow.Setup() time.
@@ -68,7 +70,11 @@ type Flow interface {
 	// with a context cancellation function) is derived. The new context must be
 	// used when running a flow so that all components running in their own
 	// goroutines could listen for a cancellation on the same context.
-	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, error)
+	//
+	// The second return argument contains all operator chains planned on the
+	// gateway node if the flow is vectorized and the physical plan is fully
+	// local (in all other cases the second return argument is nil).
+	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, execinfra.OpChains, error)
 
 	// SetTxn is used to provide the transaction in which the flow will run.
 	// It needs to be called after Setup() and before Start/Run.
@@ -175,11 +181,11 @@ type FlowBase struct {
 // Setup is part of the Flow interface.
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
-) (context.Context, error) {
+) (context.Context, execinfra.OpChains, error) {
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 	f.spec = spec
-	return ctx, nil
+	return ctx, nil, nil
 }
 
 // SetTxn is part of the Flow interface.
@@ -428,11 +434,14 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		f.TypeResolverFactory.CleanupFunc(ctx)
 	}
 
-	if f.Gateway {
-		// If this is the gateway node, output the maximum memory usage to the flow
-		// span. Note that non-gateway nodes use the last outbox to send this
-		// information over.
-		if sp := tracing.SpanFromContext(ctx); sp != nil {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		defer sp.Finish()
+		if f.Gateway && f.CollectStats {
+			// If this is the gateway node and we're collecting execution stats,
+			// output the maximum memory usage to the flow span. Note that
+			// non-gateway nodes use the last outbox to send this information
+			// over.
 			sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
@@ -455,7 +464,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
-	sp := tracing.SpanFromContext(ctx)
 	// Local flows do not get registered.
 	if !f.IsLocal() && f.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.ID)
@@ -464,9 +472,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	f.ctxCancel()
 	if f.doneFn != nil {
 		f.doneFn()
-	}
-	if sp != nil {
-		sp.Finish()
 	}
 }
 

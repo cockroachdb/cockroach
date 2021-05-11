@@ -61,10 +61,8 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 			b.qualifyDataSourceNamesInAST = false
 		}()
 
-		b.pushWithFrame()
 		// Build the input query.
-		outScope = b.buildStmt(ct.AsSource, nil /* desiredTypes */, inScope)
-		b.popWithFrame(outScope)
+		outScope = b.buildStmtAtRoot(ct.AsSource, nil /* desiredTypes */)
 
 		numColNames := 0
 		for i := 0; i < len(ct.Defs); i++ {
@@ -91,7 +89,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 				Overload:   &overloads[0],
 			}
 			fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
-			scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
+			scopeCol := b.synthesizeColumn(outScope, scopeColName("rowid"), types.Int, nil /* expr */, fn)
 			input = b.factory.CustomFuncs().ProjectExtraCol(outScope.expr, fn, scopeCol.id)
 		}
 		inputCols = outScope.makePhysicalProps().Presentation

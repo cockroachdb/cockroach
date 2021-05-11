@@ -102,7 +102,7 @@ func evalExport(
 
 	if makeExternalStorage {
 		if _, ok := roachpb.TenantFromContext(ctx); ok {
-			if args.Storage.Provider == roachpb.ExternalStorageProvider_FileTable {
+			if args.Storage.Provider == roachpb.ExternalStorageProvider_userfile {
 				return result.Result{}, errors.Errorf("requests to userfile on behalf of tenants must be made by the tenant's SQL process")
 			}
 		}
@@ -163,11 +163,13 @@ func evalExport(
 	useTBI := args.EnableTimeBoundIteratorOptimization && !args.StartTime.IsEmpty()
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
-		data, summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
-			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI)
+		destFile := &storage.MemFile{}
+		summary, resume, err := e.ExportMVCCToSst(start, args.EndKey, args.StartTime,
+			h.Timestamp, exportAllRevisions, targetSize, maxSize, useTBI, destFile)
 		if err != nil {
 			return result.Result{}, err
 		}
+		data := destFile.Data()
 
 		// NB: This should only happen on the first page of results. If there were
 		// more data to be read that lead to pagination then we'd see it in this
@@ -186,7 +188,6 @@ func evalExport(
 		}
 
 		if args.Encryption != nil {
-			// TODO(dt): cluster version gate use EncryptFileChunked.
 			data, err = EncryptFile(data, args.Encryption.Key)
 			if err != nil {
 				return result.Result{}, err

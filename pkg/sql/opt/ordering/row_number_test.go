@@ -78,12 +78,12 @@ func TestOrdinalityProvided(t *testing.T) {
 			input := &testexpr.Instance{
 				Rel: &props.Relational{OutputCols: opt.MakeColSet(1, 2, 3, 4, 5)},
 				Provided: &physical.Provided{
-					Ordering: physical.ParseOrdering(tc.input),
+					Ordering: props.ParseOrdering(tc.input),
 				},
 			}
 			r := f.Memo().MemoizeOrdinality(input, &memo.OrdinalityPrivate{ColID: 10})
 			r.Relational().FuncDeps = tc.fds
-			req := physical.ParseOrderingChoice(tc.required)
+			req := props.ParseOrderingChoice(tc.required)
 			res := ordinalityBuildProvided(r, &req).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)

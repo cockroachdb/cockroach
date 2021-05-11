@@ -10,8 +10,6 @@
 
 package execinfra
 
-import "time"
-
 // OpNode is an interface to operator-like structures with children.
 type OpNode interface {
 	// ChildCount returns the number of children (inputs) of the operator.
@@ -21,13 +19,6 @@ type OpNode interface {
 	Child(nth int, verbose bool) OpNode
 }
 
-// KVReader is an operator that performs KV reads.
-type KVReader interface {
-	// GetBytesRead returns the number of bytes read from KV by this operator.
-	GetBytesRead() int64
-	// GetRowsRead returns the number of rows read from KV by this operator.
-	GetRowsRead() int64
-	// GetCumulativeContentionTime returns the amount of time KV reads spent
-	// contending.
-	GetCumulativeContentionTime() time.Duration
-}
+// OpChains describes a forest of OpNodes that represent a single physical plan.
+// Each entry in the slice is a root of a separate OpNode tree.
+type OpChains []OpNode

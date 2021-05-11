@@ -13,15 +13,24 @@ package fmtsafe_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/fmtsafe"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
+func init() {
+	if bazel.BuiltWithBazel() {
+		bazel.SetGoEnv()
+	}
+}
+
 func Test(t *testing.T) {
 	skip.UnderStress(t)
 	fmtsafe.Tip = ""
-	testdata := analysistest.TestData()
+	testdata := testutils.TestDataPath(t)
+	analysistest.TestData = func() string { return testdata }
 	results := analysistest.Run(t, testdata, fmtsafe.Analyzer, "a")
 	for _, r := range results {
 		for _, d := range r.Diagnostics {

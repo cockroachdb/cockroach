@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -92,7 +93,7 @@ func TestSpillingQueue(t *testing.T) {
 				NumBatches: numBatches,
 				BatchSize:  inputBatchSize,
 				Nulls:      true,
-				BatchAccumulator: func(b coldata.Batch, typs []*types.T) {
+				BatchAccumulator: func(_ context.Context, b coldata.Batch, typs []*types.T) {
 					if b.Length() == 0 {
 						return
 					}
@@ -102,6 +103,7 @@ func TestSpillingQueue(t *testing.T) {
 					tuples.AppendTuples(b, 0 /* startIdx */, b.Length())
 				},
 			})
+			op.Init(ctx)
 			typs := op.Typs()
 
 			queueCfg.CacheMode = diskQueueCacheMode
@@ -179,8 +181,8 @@ func TestSpillingQueue(t *testing.T) {
 			}
 
 			for {
-				b = op.Next(ctx)
-				require.NoError(t, q.Enqueue(ctx, b))
+				b = op.Next()
+				q.Enqueue(ctx, b)
 				if b.Length() == 0 {
 					break
 				}
@@ -269,6 +271,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 		BatchSize:         1 + rng.Intn(coldata.BatchSize()),
 		Nulls:             true,
 	})
+	op.Init(ctx)
 
 	typs := op.Typs()
 	// Choose a memory limit such that at most two batches can be kept in the
@@ -298,8 +301,8 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	)
 
 	for {
-		b := op.Next(ctx)
-		require.NoError(t, q.Enqueue(ctx, b))
+		b := op.Next()
+		q.Enqueue(ctx, b)
 		b, err := q.Dequeue(ctx)
 		require.NoError(t, err)
 		if b.Length() == 0 {
@@ -318,8 +321,6 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, len(directories))
 }
-
-const defaultMemoryLimit = 64 << 20 /* 64 MiB */
 
 // TestSpillingQueueMemoryAccounting is a simple check of the memory accounting
 // of the spilling queue that performs a series of Enqueue() and Dequeue()
@@ -358,7 +359,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 			newQueueArgs := &NewSpillingQueueArgs{
 				UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 				Types:              typs,
-				MemoryLimit:        defaultMemoryLimit,
+				MemoryLimit:        execinfra.DefaultMemoryLimit,
 				DiskQueueCfg:       queueCfg,
 				FDSemaphore:        colexecop.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
@@ -388,7 +389,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				return int64(batchesAccountedFor) * batchSize
 			}
 			for numEnqueuedBatches := 1; numEnqueuedBatches <= numInputBatches; numEnqueuedBatches++ {
-				require.NoError(t, q.Enqueue(ctx, batch))
+				q.Enqueue(ctx, batch)
 				if rng.Float64() < dequeueProbability {
 					b, err := q.Dequeue(ctx)
 					require.NoError(t, err)
@@ -397,7 +398,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				}
 				require.Equal(t, getExpectedMemUsage(numEnqueuedBatches), q.unlimitedAllocator.Used())
 			}
-			require.NoError(t, q.Enqueue(ctx, coldata.ZeroBatch))
+			q.Enqueue(ctx, coldata.ZeroBatch)
 			for {
 				b, err := q.Dequeue(ctx)
 				require.NoError(t, err)
@@ -476,7 +477,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			sequenceValue := rng.Int63()
 			batch.ColVec(0).Int64()[0] = sequenceValue
 			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
-			require.NoError(t, q.Enqueue(ctx, batch))
+			q.Enqueue(ctx, batch)
 		}
 		// All enqueued batches should fit under the memory limit (to be
 		// precise, the last enqueued batch has just crossed the limit, but
@@ -488,7 +489,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			sequenceValue := rng.Int63()
 			batch.ColVec(0).Int64()[0] = sequenceValue
 			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
-			require.NoError(t, q.Enqueue(ctx, batch))
+			q.Enqueue(ctx, batch)
 			numExtraInputBatches = 1
 		} else {
 			require.NoError(t, q.maybeSpillToDisk(ctx))
@@ -501,7 +502,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 		require.Equal(t, int64(0), q.unlimitedAllocator.Used())
 		require.Equal(t, numInputBatches+numExtraInputBatches, q.numOnDiskItems)
 
-		require.NoError(t, q.Enqueue(ctx, coldata.ZeroBatch))
+		q.Enqueue(ctx, coldata.ZeroBatch)
 
 		// Now check that all the batches are in the correct order.
 		batchCount := 0

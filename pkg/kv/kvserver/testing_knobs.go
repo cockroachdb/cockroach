@@ -47,6 +47,11 @@ type StoreTestingKnobs struct {
 
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter kvserverbase.ReplicaProposalFilter
+	// TestingProposalSubmitFilter can be used by tests to observe and optionally
+	// drop Raft proposals before they are handed to etcd/raft to begin the
+	// process of replication. Dropped proposals are still eligible to be
+	// reproposed due to ticks.
+	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
@@ -190,20 +195,29 @@ type StoreTestingKnobs struct {
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
 	ReceiveSnapshot func(*SnapshotRequest_Header) error
-	// ReplicaAddSkipRollback causes replica addition to skip the learner rollback
-	// that happens when promotion to a voter fails.
+	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
+	// rollback that happens when either the initial snapshot or the promotion of
+	// a learner to a voter fails.
 	ReplicaAddSkipLearnerRollback func() bool
-	// ReplicaAddStopAfterLearnerSnapshot causes replica addition to return early
+	// VoterAddStopAfterLearnerSnapshot causes voter addition to return early
 	// if the func returns true. Specifically, after the learner txn is successful
 	// and after the LEARNER type snapshot, but before promoting it to a voter.
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
-	ReplicaAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
-	// ReplicaSkipLearnerSnapshot causes snapshots to never be sent to learners
-	// if the func returns true. Adding replicas proceeds as usual, though if
-	// the added replica has no prior state which can be caught up from the raft
-	// log, the result will be an voter that is unable to participate in quorum.
-	ReplicaSkipLearnerSnapshot func() bool
+	VoterAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
+	// NonVoterAfterInitialization is called after a newly added non-voting
+	// replica receives its initial snapshot. Note that this knob _can_ be used in
+	// conjunction with ReplicaSkipInitialSnapshot.
+	NonVoterAfterInitialization func()
+	// ReplicaSkipInitialSnapshot causes snapshots to never be sent to learners or
+	// non-voters if the func returns true. Adding replicas proceeds as usual,
+	// though if an added voter has no prior state which can be caught up from the
+	// raft log, the result will be an voter that is unable to participate in
+	// quorum.
+	ReplicaSkipInitialSnapshot func() bool
+	// RaftSnapshotQueueSkipReplica causes the raft snapshot queue to skip sending
+	// a snapshot to a follower replica.
+	RaftSnapshotQueueSkipReplica func() bool
 	// VoterAddStopAfterJointConfig causes voter addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means
@@ -221,6 +235,10 @@ type StoreTestingKnobs struct {
 	// BeforeRelocateOne intercepts the return values of s.relocateOne before
 	// they're being put into effect.
 	BeforeRelocateOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget, _ error)
+	// DontIgnoreFailureToTransferLease makes `AdminRelocateRange` return an error
+	// to its client if it failed to transfer the lease to the first voting
+	// replica in the set of relocation targets.
+	DontIgnoreFailureToTransferLease bool
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.
@@ -256,10 +274,17 @@ type StoreTestingKnobs struct {
 	// If set, use the given truncated state type when bootstrapping ranges.
 	// This is used for testing the truncated state migration.
 	TruncatedStateTypeOverride *stateloader.TruncatedStateType
+	// If set, use the given version as the initial replica version when
+	// bootstrapping ranges. This is used for testing the migration
+	// infrastructure.
+	InitialReplicaVersionOverride *roachpb.Version
 	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity values which need be exceeded before the store will
 	// gossip immediately without waiting for the periodic gossip interval.
 	GossipWhenCapacityDeltaExceedsFraction float64
+	// TimeSeriesDataStore is an interface used by the store's time series
+	// maintenance queue to dispatch individual maintenance tasks.
+	TimeSeriesDataStore TimeSeriesDataStore
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -274,6 +299,9 @@ type NodeLivenessTestingKnobs struct {
 	// RenewalDuration specifies how long before the expiration a record is
 	// heartbeated. If LivenessDuration is set, this should probably be set too.
 	RenewalDuration time.Duration
+	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
+	// whether a node is live or not.
+	StorePoolNodeLivenessFn NodeLivenessFunc
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}

@@ -20,61 +20,45 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type mutationSelector func(descriptor catalog.TableDescriptor) (mut *descpb.DescriptorMutation, sliceIdx int, err error)
-
 func mutationStateChange(
 	ctx context.Context,
 	table *tabledesc.Mutable,
-	f mutationSelector,
+	f descriptorutils.MutationSelector,
 	exp, next descpb.DescriptorMutation_State,
 ) error {
-	mut, _, err := f(table)
+	mut, err := descriptorutils.FindMutation(table, f)
 	if err != nil {
 		return err
 	}
-	if mut.State != exp {
+	m := &table.TableDesc().Mutations[mut.MutationOrdinal()]
+	if m.State != exp {
 		return errors.AssertionFailedf("update mutation for %d from %v to %v: unexpected state: %v",
-			table.GetID(), exp, mut.State, table)
+			table.GetID(), exp, m.State, table)
 	}
-	mut.State = next
+	m.State = next
 	return nil
 }
 
 func removeMutation(
 	ctx context.Context,
 	table *tabledesc.Mutable,
-	f mutationSelector,
+	f descriptorutils.MutationSelector,
 	exp descpb.DescriptorMutation_State,
 ) (descpb.DescriptorMutation, error) {
-	mut, foundIdx, err := f(table)
+	mut, err := descriptorutils.FindMutation(table, f)
 	if err != nil {
 		return descpb.DescriptorMutation{}, err
 	}
-	cpy := *mut
-	if mut.State != exp {
+	foundIdx := mut.MutationOrdinal()
+	cpy := table.Mutations[foundIdx]
+	if cpy.State != exp {
 		return descpb.DescriptorMutation{}, errors.AssertionFailedf(
 			"remove mutation from %d: unexpected state: got %v, expected %v: %v",
-			table.GetID(), mut.State, exp, table,
+			table.GetID(), cpy.State, exp, table,
 		)
 	}
 	table.Mutations = append(table.Mutations[:foundIdx], table.Mutations[foundIdx+1:]...)
 	return cpy, nil
-}
-
-func getIndexMutation(
-	idxID descpb.IndexID,
-) func(table catalog.TableDescriptor) (mut *descpb.DescriptorMutation, sliceIdx int, err error) {
-	return func(table catalog.TableDescriptor) (mut *descpb.DescriptorMutation, sliceIdx int, err error) {
-		return descriptorutils.GetIndexMutation(table, idxID)
-	}
-}
-
-func getColumnMutation(
-	colID descpb.ColumnID,
-) func(table catalog.TableDescriptor) (mut *descpb.DescriptorMutation, sliceIdx int, err error) {
-	return func(table catalog.TableDescriptor) (mut *descpb.DescriptorMutation, sliceIdx int, err error) {
-		return descriptorutils.GetColumnMutation(table, colID)
-	}
 }
 
 // findFamilyOrdinalForColumnID finds a family which contains the needle column

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -121,7 +120,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	tbDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	var dbDesc *dbdesc.Immutable
+	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		dbDesc, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, tbDesc.GetParentID())
 		return err
@@ -181,7 +180,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	dbNameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec, 0, 0, dbDesc.Name)
+	dbNameKey := catalogkeys.MakeNameMetadataKey(keys.SystemSQLCodec, 0, 0, dbDesc.GetName())
 	if gr, err := kvDB.Get(ctx, dbNameKey); err != nil {
 		t.Fatal(err)
 	} else if gr.Exists() {
@@ -286,7 +285,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	tbDesc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tb2Desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
-	var dbDesc *dbdesc.Immutable
+	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		dbDesc, err = catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, tbDesc.GetParentID())
 		return err
@@ -885,14 +884,9 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID,
-			catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
-		if err != nil {
-			return err
-		}
-		tableDesc = desc.(*tabledesc.Mutable)
-		return nil
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		tableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
+		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1337,6 +1331,7 @@ WHERE
 // entire database.
 func TestDropDatabaseWithForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())

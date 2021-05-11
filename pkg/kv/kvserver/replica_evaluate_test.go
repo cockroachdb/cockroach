@@ -127,17 +127,9 @@ func TestEvaluateBatch(t *testing.T) {
 				verifyResumeSpans(t, r, "", "")
 			},
 		}, {
-			// A batch limited to return only one key. Throw in a Get which is
-			// not subject to limitation and should thus have returned a value.
-			// However, the second scan comes up empty because there's no quota left.
-			//
-			// Note that there is currently a lot of undesirable behavior in the KV
-			// API for pretty much any batch that's not a nonoverlapping sorted run
-			// of only scans or only reverse scans. For example, in the example
-			// below, one would get a response for get(f) even though the resume
-			// span on the first scan is `[c,...)`. The higher layers of KV don't
-			// handle that correctly. Right now we just trust that nobody will
-			// send such requests.
+			// A batch limited to return only one key. Throw in a Get which will come
+			// up empty because there's no quota left. The second scan will also
+			// return nothing due to lack of quota.
 			name: "scans with MaxSpanRequestKeys=1",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
@@ -147,11 +139,8 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, []string{"f"}, nil)
-				verifyResumeSpans(t, r, "b-c", "", "d-f")
-				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
-				require.NoError(t, err)
-				require.Equal(t, "value-f", string(b))
+				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyResumeSpans(t, r, "b-c", "f-", "d-f")
 			},
 		}, {
 			// Ditto in reverse.
@@ -164,23 +153,20 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 1
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"e"}, []string{"f"}, nil)
-				verifyResumeSpans(t, r, "d-d\x00", "", "a-c")
-				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
-				require.NoError(t, err)
-				require.Equal(t, "value-f", string(b))
+				verifyScanResult(t, r, []string{"e"}, nil, nil)
+				verifyResumeSpans(t, r, "d-d\x00", "f-", "a-c")
 			},
 		}, {
 			// Similar, but this time the request allows the second scan to
-			// return one (but not more) remaining key. Again there's a Get
-			// that isn't counted against the limit.
-			name: "scans with MaxSpanRequestKeys=3",
+			// return one (but not more) remaining key. Again there's a Get, which
+			// uses up one quota.
+			name: "scans with MaxSpanRequestKeys=4",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
 				d.ba.Add(scanArgsString("a", "c"))
 				d.ba.Add(getArgsString("e"))
 				d.ba.Add(scanArgsString("c", "e"))
-				d.ba.MaxSpanRequestKeys = 3
+				d.ba.MaxSpanRequestKeys = 4
 			},
 			check: func(t *testing.T, r resp) {
 				verifyScanResult(t, r, []string{"a", "b"}, []string{"e"}, []string{"c"})
@@ -191,13 +177,13 @@ func TestEvaluateBatch(t *testing.T) {
 			},
 		}, {
 			// Ditto in reverse.
-			name: "reverse scans with MaxSpanRequestKeys=3",
+			name: "reverse scans with MaxSpanRequestKeys=4",
 			setup: func(t *testing.T, d *data) {
 				writeABCDEF(t, d)
 				d.ba.Add(revScanArgsString("c", "e"))
 				d.ba.Add(getArgsString("e"))
 				d.ba.Add(revScanArgsString("a", "c"))
-				d.ba.MaxSpanRequestKeys = 3
+				d.ba.MaxSpanRequestKeys = 4
 			},
 			check: func(t *testing.T, r resp) {
 				verifyScanResult(t, r, []string{"d", "c"}, []string{"e"}, []string{"b"})
@@ -205,6 +191,36 @@ func TestEvaluateBatch(t *testing.T) {
 				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
 				require.NoError(t, err)
 				require.Equal(t, "value-e", string(b))
+			},
+		}, {
+			// GetRequests that come before scans.
+			name: "gets and scans with MaxSpanRequestKeys=2, the second uses up the limit.",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(getArgsString("a"))
+				d.ba.Add(getArgsString("b"))
+				d.ba.Add(getArgsString("c"))
+				d.ba.Add(scanArgsString("d", "e"))
+				d.ba.MaxSpanRequestKeys = 2
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
+				verifyResumeSpans(t, r, "", "", "c-", "d-e")
+			},
+		}, {
+			// GetRequests that come before revscans.
+			name: "gets and revscans with MaxSpanRequestKeys=2, the second uses up the limit.",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(getArgsString("a"))
+				d.ba.Add(getArgsString("b"))
+				d.ba.Add(getArgsString("c"))
+				d.ba.Add(revScanArgsString("d", "e"))
+				d.ba.MaxSpanRequestKeys = 2
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
+				verifyResumeSpans(t, r, "", "", "c-", "d-e")
 			},
 		},
 		//
@@ -226,11 +242,8 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"a"}, []string{"e"}, nil)
-				verifyResumeSpans(t, r, "b-c", "", "c-e")
-				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
-				require.NoError(t, err)
-				require.Equal(t, "value-e", string(b))
+				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyResumeSpans(t, r, "b-c", "e-", "c-e")
 			},
 		}, {
 			// Ditto in reverse.
@@ -244,11 +257,36 @@ func TestEvaluateBatch(t *testing.T) {
 				d.ba.MaxSpanRequestKeys = 3
 			},
 			check: func(t *testing.T, r resp) {
-				verifyScanResult(t, r, []string{"d"}, []string{"e"}, nil)
-				verifyResumeSpans(t, r, "c-c\x00", "", "a-c")
-				b, err := r.br.Responses[1].GetGet().Value.GetBytes()
-				require.NoError(t, err)
-				require.Equal(t, "value-e", string(b))
+				verifyScanResult(t, r, []string{"d"}, nil, nil)
+				verifyResumeSpans(t, r, "c-c\x00", "e-", "a-c")
+			},
+		}, {
+			// GetRequests that come before scans.
+			name: "gets and scans with TargetBytes=1, the first uses up the limit.",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(getArgsString("a"))
+				d.ba.Add(getArgsString("b"))
+				d.ba.Add(scanArgsString("c", "e"))
+				d.ba.TargetBytes = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyResumeSpans(t, r, "", "b-", "c-e")
+			},
+		}, {
+			// GetRequests that come before revscans.
+			name: "gets and revscans with TargetBytes=1, the first uses up the limit.",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(getArgsString("a"))
+				d.ba.Add(getArgsString("b"))
+				d.ba.Add(revScanArgsString("c", "e"))
+				d.ba.TargetBytes = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyScanResult(t, r, []string{"a"}, nil, nil)
+				verifyResumeSpans(t, r, "", "b-", "c-e")
 			},
 		},
 		//
@@ -681,7 +719,6 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 	require.NotNil(t, r.br)
 	require.Len(t, r.br.Responses, len(keysPerResp))
 	for i, keys := range keysPerResp {
-		var isGet bool
 		scan := r.br.Responses[i].GetInner()
 		var rows []roachpb.KeyValue
 		switch req := scan.(type) {
@@ -690,7 +727,6 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 		case *roachpb.ReverseScanResponse:
 			rows = req.Rows
 		case *roachpb.GetResponse:
-			isGet = true
 			if req.Value != nil {
 				rows = []roachpb.KeyValue{{
 					Key:   r.d.ba.Requests[i].GetGet().Key,
@@ -700,11 +736,7 @@ func verifyScanResult(t *testing.T, r resp, keysPerResp ...[]string) {
 		default:
 		}
 
-		if !isGet {
-			require.EqualValues(t, len(keys), scan.Header().NumKeys, "in response #%d", i+1)
-		} else {
-			require.Zero(t, scan.Header().NumKeys, "in response #%d", i+1)
-		}
+		require.EqualValues(t, len(keys), scan.Header().NumKeys, "in response #%d", i+1)
 		var actKeys []string
 		for _, row := range rows {
 			actKeys = append(actKeys, string(row.Key))

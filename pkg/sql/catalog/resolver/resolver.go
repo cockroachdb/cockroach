@@ -42,8 +42,10 @@ type SchemaResolver interface {
 	tree.ObjectNameTargetResolver
 	tree.QualifiedNameResolver
 
+	// Accessor is a crufty name and interface that wraps the *descs.Collection.
+	Accessor() catalog.Accessor
+
 	Txn() *kv.Txn
-	LogicalSchemaAccessor() catalog.Accessor
 	CurrentDatabase() string
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
@@ -58,10 +60,10 @@ type SchemaResolver interface {
 var ErrNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
 	"requested table does not have a primary key")
 
-// GetObjectNames retrieves the names of all objects in the target database/
-// schema. If explicitPrefix is set, the returned table names will have an
-// explicit schema and catalog name.
-func GetObjectNames(
+// GetObjectNamesAndIDs retrieves the names and IDs of all objects in the
+// target database/schema. If explicitPrefix is set, the returned
+// table names will have an explicit schema and catalog name.
+func GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
 	sc SchemaResolver,
@@ -69,12 +71,11 @@ func GetObjectNames(
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
-) (res tree.TableNames, err error) {
-	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, codec, dbDesc, scName,
-		tree.DatabaseListFlags{
-			CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
-			ExplicitPrefix:    explicitPrefix,
-		})
+) (tree.TableNames, descpb.IDs, error) {
+	return sc.Accessor().GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, tree.DatabaseListFlags{
+		CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
+		ExplicitPrefix:    explicitPrefix,
+	})
 }
 
 // ResolveExistingTableObject looks up an existing object.
@@ -169,14 +170,14 @@ func ResolveExistingObject(
 	obj := descI.(catalog.Descriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
-		_, isType := obj.(catalog.TypeDescriptor)
+		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
 		}
 		if lookupFlags.RequireMutable {
 			return obj.(*typedesc.Mutable), prefix, nil
 		}
-		return obj.(*typedesc.Immutable), prefix, nil
+		return typ, prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {

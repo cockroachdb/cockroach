@@ -69,7 +69,10 @@ func InjectDescriptors(ctx context.Context, db *gosql.DB, input []*descpb.Descri
 		// Pick out the databases and inject them.
 		databases, others := findDatabases(descriptors)
 		for _, db := range databases {
-			id, _, name, _ := descpb.GetDescriptorMetadata(db)
+			id, _, name, _, _, err := descpb.GetDescriptorMetadata(db)
+			if err != nil {
+				return err
+			}
 			if err := injectDescriptor(tx, id, db); err != nil {
 				return errors.Wrapf(err, "failed to inject database descriptor %d", id)
 			}
@@ -85,14 +88,20 @@ func InjectDescriptors(ctx context.Context, db *gosql.DB, input []*descpb.Descri
 		// Inject the other descriptors - this won't do much in the way of
 		// validation.
 		for _, d := range others {
-			id, _, _, _ := descpb.GetDescriptorMetadata(d)
+			id, _, _, _, _, err := descpb.GetDescriptorMetadata(d)
+			if err != nil {
+				return err
+			}
 			if err := injectDescriptor(tx, id, d); err != nil {
 				return errors.Wrapf(err, "failed to inject descriptor %d", id)
 			}
 		}
 		// Inject the namespace entries.
 		for _, d := range others {
-			id, _, name, _ := descpb.GetDescriptorMetadata(d)
+			id, _, name, _, _, err := descpb.GetDescriptorMetadata(d)
+			if err != nil {
+				return err
+			}
 			parent, schema := getDescriptorParentAndSchema(d)
 			if err := injectNamespaceEntry(tx, parent, schema, name, id); err != nil {
 				return errors.Wrapf(err, "failed to inject namespace entry (%d, %d, %s) %d",

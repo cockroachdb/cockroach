@@ -465,11 +465,6 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
-// NodeDialer returns a Dialer.
-func (ds *DistSender) NodeDialer() *nodedialer.Dialer {
-	return ds.nodeDialer
-}
-
 // getNodeID attempts to return the local node ID. It returns 0 if the DistSender
 // does not have access to the Gossip network.
 func (ds *DistSender) getNodeID() roachpb.NodeID {
@@ -613,7 +608,7 @@ func (ds *DistSender) initAndVerifyBatch(
 			case *roachpb.ReverseScanRequest:
 				// Accepted reverse range requests.
 
-			case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest:
+			case *roachpb.QueryIntentRequest, *roachpb.EndTxnRequest, *roachpb.GetRequest:
 				// Accepted point requests that can be in batches with limit.
 
 			default:
@@ -659,17 +654,6 @@ func splitBatchAndCheckForRefreshSpans(
 		}()
 		if hasRefreshSpans {
 			ba.CanForwardReadTimestamp = false
-
-			// If the final part contains an EndTxn request, unset its
-			// DeprecatedCanCommitAtHigherTimestamp flag as well.
-			lastPart := parts[len(parts)-1]
-			if et := lastPart[len(lastPart)-1].GetEndTxn(); et != nil {
-				etCopy := *et
-				etCopy.DeprecatedCanCommitAtHigherTimestamp = false
-				lastPart = append([]roachpb.RequestUnion(nil), lastPart...)
-				lastPart[len(lastPart)-1].MustSetInner(&etCopy)
-				parts[len(parts)-1] = lastPart
-			}
 		}
 	}
 	return parts
@@ -692,19 +676,6 @@ func unsetCanForwardReadTimestampFlag(ctx context.Context, ba *roachpb.BatchRequ
 		if roachpb.NeedsRefresh(req.GetInner()) {
 			// Unset the flag.
 			ba.CanForwardReadTimestamp = false
-
-			// We would need to also unset the DeprecatedCanCommitAtHigherTimestamp
-			// flag on any EndTxn request in the batch, but it turns out that
-			// because we call this function when a batch is split across
-			// ranges, we'd already have bailed if the EndTxn wasn't a parallel
-			// commit — and if it was a parallel commit then we must not have
-			// any requests that need to refresh (see
-			// txnCommitter.canCommitInParallel). Assert this for our own
-			// sanity.
-			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
-				log.Fatalf(ctx, "batch unexpected contained requests "+
-					"that need to refresh and an EndTxn request: %s", ba.String())
-			}
 			return
 		}
 	}
@@ -1482,7 +1453,7 @@ func (ds *DistSender) sendPartialBatch(
 				// order to return the most recent error when we are out of retries.
 				pErr = roachpb.NewError(err)
 				if !rangecache.IsRangeLookupErrorRetryable(err) {
-					return response{pErr: roachpb.NewError(err)}
+					return response{pErr: pErr}
 				}
 				continue
 			}
@@ -1804,6 +1775,8 @@ func (ds *DistSender) sendToReplicas(
 			// we created replicas.
 			log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
 		}
+	} else {
+		log.VEvent(ctx, 2, "routing to nearest replica")
 	}
 
 	opts := SendOptions{
@@ -2155,4 +2128,9 @@ func newSendError(msg string) error {
 
 func (s sendError) Error() string {
 	return "failed to send RPC: " + s.message
+}
+
+// IsSendError returns true if err is a sendError.
+func IsSendError(err error) bool {
+	return errors.HasType(err, sendError{})
 }

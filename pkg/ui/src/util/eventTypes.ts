@@ -24,6 +24,14 @@ export const DROP_DATABASE = "drop_database";
 export const RENAME_DATABASE = "rename_database";
 // Recorded when a database's owner is changed.
 export const ALTER_DATABASE_OWNER = "alter_database_owner";
+// Recorded when a region is added to a database.
+export const ALTER_DATABASE_ADD_REGION = "alter_database_add_region";
+// Recorded when a region is dropped from a database.
+export const ALTER_DATABASE_DROP_REGION = "alter_database_drop_region";
+// Recorded when the primary region of a database is altered.
+export const ALTER_DATABASE_PRIMARY_REGION = "alter_database_primary_region";
+// Recorded when the survival goal of a database is altered.
+export const ALTER_DATABASE_SURVIVAL_GOAL = "alter_database_survival_goal";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
@@ -44,6 +52,12 @@ export const ALTER_INDEX = "alter_index";
 export const CREATE_VIEW = "create_view";
 // Recorded when a view is dropped.
 export const DROP_VIEW = "drop_view";
+// Recorded when a type is created.
+export const CREATE_TYPE = "create_type";
+// Recorded when a type is altered.
+export const ALTER_TYPE = "alter_type";
+// Recorded when a type is dropped.
+export const DROP_TYPE = "drop_type";
 // Recorded when a sequence is created.
 export const CREATE_SEQUENCE = "create_sequence";
 // Recorded when a sequence is altered.
@@ -99,6 +113,10 @@ export const CREATE_ROLE = "create_role";
 export const DROP_ROLE = "drop_role";
 // Recorded when a role is altered.
 export const ALTER_ROLE = "alter_role";
+// Recorded when an import job is in different stages of execution.
+export const IMPORT = "import";
+// Recorded when a restore job is in different stages of execution.
+export const RESTORE = "restore";
 
 // Node Event Types
 export const nodeEvents = [
@@ -128,17 +146,20 @@ export const settingsEvents = [
   SET_ZONE_CONFIG,
   REMOVE_ZONE_CONFIG,
 ];
+export const jobEvents = [IMPORT, RESTORE];
 export const allEvents = [
   ...nodeEvents,
   ...databaseEvents,
   ...tableEvents,
   ...settingsEvents,
+  ...jobEvents,
 ];
 
 const nodeEventSet = _.invert(nodeEvents);
 const databaseEventSet = _.invert(databaseEvents);
 const tableEventSet = _.invert(tableEvents);
 const settingsEventSet = _.invert(settingsEvents);
+const jobsEventSet = _.invert(jobEvents);
 
 export function isNodeEvent(e: Event): boolean {
   return !_.isUndefined(nodeEventSet[e.event_type]);
@@ -154,4 +175,8 @@ export function isTableEvent(e: Event): boolean {
 
 export function isSettingsEvent(e: Event): boolean {
   return !_.isUndefined(settingsEventSet[e.event_type]);
+}
+
+export function isJobsEvent(e: Event): boolean {
+  return !_.isUndefined(jobsEventSet[e.event_type]);
 }

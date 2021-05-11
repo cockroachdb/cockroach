@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -28,20 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
-var _ catalog.TypeDescriptor = (*Immutable)(nil)
+var _ catalog.TypeDescriptor = (*immutable)(nil)
 var _ catalog.TypeDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
 // MakeSimpleAlias creates a type descriptor that is an alias for the input
 // type. It is intended to be used as an intermediate for name resolution, and
 // should not be serialized and stored on disk.
-func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) *Immutable {
-	return NewImmutable(descpb.TypeDescriptor{
+func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) catalog.TypeDescriptor {
+	return NewBuilder(&descpb.TypeDescriptor{
 		// TODO(#sql-features): this should be attached to the current database.
 		// We don't have a way of doing this yet (and virtual tables use some
 		// fake magic).
@@ -52,26 +52,26 @@ func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) *Immutable {
 		ID:    descpb.InvalidID,
 		Kind:  descpb.TypeDescriptor_ALIAS,
 		Alias: typ,
-	})
+	}).BuildImmutableType()
 }
 
 // NameResolutionResult implements the NameResolutionResult interface.
-func (desc *Immutable) NameResolutionResult() {}
+func (desc *immutable) NameResolutionResult() {}
 
 // Mutable is a custom type for TypeDescriptors undergoing
 // any types of modifications.
 type Mutable struct {
 
 	// TODO(ajwerner): Decide whether we're okay embedding the
-	// Immutable or whether we should be embedding some other base
+	// immutable or whether we should be embedding some other base
 	// struct that implements the various methods. For now we have the trap that
 	// the code really wants direct field access and moving all access to
 	// getters on an interface is a bigger task.
-	Immutable
+	immutable
 
 	// ClusterVersion represents the version of the type descriptor read
 	// from the store.
-	ClusterVersion *Immutable
+	ClusterVersion *immutable
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
@@ -79,9 +79,9 @@ func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.ClusterVersion.GetVersion() != desc.GetVersion()
 }
 
-// Immutable is a custom type for wrapping TypeDescriptors
+// immutable is a custom type for wrapping TypeDescriptors
 // when used in a read only way.
-type Immutable struct {
+type immutable struct {
 	descpb.TypeDescriptor
 
 	// The fields below are used to fill user defined type metadata for ENUMs.
@@ -94,67 +94,18 @@ type Immutable struct {
 	isUncommittedVersion bool
 }
 
-// NewCreatedMutable returns a Mutable from the given type descriptor with the
-// cluster version being the zero type. This is for a type that is created in
-// the same transaction.
-func NewCreatedMutable(desc descpb.TypeDescriptor) *Mutable {
-	return &Mutable{
-		Immutable: makeImmutable(desc),
-	}
-}
-
-// NewExistingMutable returns a Mutable from the given type descriptor with the
-// cluster version also set to the descriptor. This is for types that already
-// exist.
-func NewExistingMutable(desc descpb.TypeDescriptor) *Mutable {
-	return &Mutable{
-		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.TypeDescriptor)),
-		ClusterVersion: NewImmutable(desc),
-	}
-}
-
-// UpdateCachedFieldsOnModifiedMutable refreshes the Immutable field by
+// UpdateCachedFieldsOnModifiedMutable refreshes the immutable field by
 // reconstructing it. This means that the fields used to fill enumMetadata
 // (readOnly, logicalReps, physicalReps) are reconstructed to reflect the
 // modified Mutable's state. This allows us to hydrate tables correctly even
 // when preceded by a type descriptor modification in the same transaction.
 func UpdateCachedFieldsOnModifiedMutable(desc catalog.TypeDescriptor) (*Mutable, error) {
-	imm := makeImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
-	imm.isUncommittedVersion = desc.IsUncommittedVersion()
-
 	mutable, ok := desc.(*Mutable)
 	if !ok {
 		return nil, errors.AssertionFailedf("type descriptor was not mutable")
 	}
-	mutable.Immutable = imm
+	mutable.immutable = *mutable.ImmutableCopy().(*immutable)
 	return mutable, nil
-}
-
-// NewImmutable returns an Immutable from the given TypeDescriptor.
-func NewImmutable(desc descpb.TypeDescriptor) *Immutable {
-	m := makeImmutable(desc)
-	return &m
-}
-
-func makeImmutable(desc descpb.TypeDescriptor) Immutable {
-	immutDesc := Immutable{TypeDescriptor: desc}
-
-	// Initialize metadata specific to the TypeDescriptor kind.
-	switch immutDesc.Kind {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		immutDesc.logicalReps = make([]string, len(desc.EnumMembers))
-		immutDesc.physicalReps = make([][]byte, len(desc.EnumMembers))
-		immutDesc.readOnlyMembers = make([]bool, len(desc.EnumMembers))
-		for i := range desc.EnumMembers {
-			member := &desc.EnumMembers[i]
-			immutDesc.logicalReps[i] = member.LogicalRepresentation
-			immutDesc.physicalReps[i] = member.PhysicalRepresentation
-			immutDesc.readOnlyMembers[i] =
-				member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY
-		}
-	}
-
-	return immutDesc
 }
 
 // TypeIDToOID converts a type descriptor ID into a type OID.
@@ -180,37 +131,37 @@ func GetArrayTypeDescID(t *types.T) descpb.ID {
 }
 
 // TypeDesc implements the Descriptor interface.
-func (desc *Immutable) TypeDesc() *descpb.TypeDescriptor {
+func (desc *immutable) TypeDesc() *descpb.TypeDescriptor {
 	return &desc.TypeDescriptor
 }
 
 // Public implements the Descriptor interface.
-func (desc *Immutable) Public() bool {
+func (desc *immutable) Public() bool {
 	return desc.State == descpb.DescriptorState_PUBLIC
 }
 
 // Adding implements the Descriptor interface.
-func (desc *Immutable) Adding() bool {
+func (desc *immutable) Adding() bool {
 	return false
 }
 
 // Offline implements the Descriptor interface.
-func (desc *Immutable) Offline() bool {
+func (desc *immutable) Offline() bool {
 	return desc.State == descpb.DescriptorState_OFFLINE
 }
 
 // Dropped implements the Descriptor interface.
-func (desc *Immutable) Dropped() bool {
+func (desc *immutable) Dropped() bool {
 	return desc.State == descpb.DescriptorState_DROP
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
-func (desc *Immutable) IsUncommittedVersion() bool {
+func (desc *immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
 }
 
 // DescriptorProto returns a Descriptor for serialization.
-func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
+func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
 		Union: &descpb.Descriptor_Type{
 			Type: &desc.TypeDescriptor,
@@ -219,7 +170,7 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 }
 
 // PrimaryRegionName returns the primary region for a multi-region enum.
-func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
+func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return "", errors.AssertionFailedf(
 			"can not get primary region of a non multi-region enum")
@@ -227,10 +178,70 @@ func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	return desc.RegionConfig.PrimaryRegion, nil
 }
 
-// RegionNames returns all the regions on the multi-region enum.
-// This includes regions that are in `READ_ONLY` state as well, if they've just
-// been added or are in the process of being removed (pre-validation).
-func (desc *Immutable) RegionNames() (descpb.RegionNames, error) {
+// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
+// that are in the process of being added/removed (`READ_ONLY`) are omitted.
+func (desc *immutable) RegionNames() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
+			continue
+		}
+		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+	}
+	return regions, nil
+}
+
+// TransitioningRegionNames returns regions which are transitioning to PUBLIC
+// or are being removed.
+func (desc *immutable) TransitioningRegionNames() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
+			regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+		}
+	}
+	return regions, nil
+}
+
+// RegionNamesForValidation returns all regions on the multi-region
+// enum to make validation with the public zone configs and partitons
+// possible.
+// Since the partitions and zone configs are only updated when a transaction
+// commits, this must ignore all regions being added (since they will not be
+// reflected in the zone configuration yet), but it must include all region
+// being dropped (since they will not be dropped from the zone configuration
+// until they are fully removed from the type descriptor, again, at the end
+// of the transaction).
+func (desc *immutable) RegionNamesForValidation() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+			member.Direction == descpb.TypeDescriptor_EnumMember_ADD {
+			continue
+		}
+		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+	}
+	return regions, nil
+}
+
+// RegionNamesIncludingTransitioning returns all the regions on a multi-region
+// enum, including `READ ONLY` regions which are in the process of transitioning.
+func (desc *immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
@@ -249,13 +260,13 @@ func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
+func (desc *immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
-// TypeName implements the DescriptorProto interface.
-func (desc *Immutable) TypeName() string {
-	return "type"
+// DescriptorType implements the catalog.Descriptor interface.
+func (desc *immutable) DescriptorType() catalog.DescriptorType {
+	return catalog.Type
 }
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
@@ -294,10 +305,8 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	// TODO (lucy): Should the immutable descriptor constructors always make a
-	// copy, so we don't have to do it here?
-	imm := NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
-	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	imm := NewBuilder(desc.TypeDesc()).BuildImmutableType()
+	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }
 
@@ -446,13 +455,8 @@ func (e EnumMembers) Less(i, j int) bool {
 }
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
-func isBeingDropped(member *descpb.TypeDescriptor_EnumMember) bool {
-	return member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
-		member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE
-}
-
 // ValidateSelf performs validation on the TypeDescriptor.
-func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
 	vea.Report(catalog.ValidateName(desc.Name, "type"))
 	if desc.GetID() == descpb.InvalidID {
@@ -508,7 +512,7 @@ func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 // validateEnumMembers performs enum member checks.
 // Returns true iff the enums are sorted.
-func (desc *Immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulator) (isSorted bool) {
+func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulator) (isSorted bool) {
 	// All of the enum members should be in sorted order.
 	isSorted = sort.IsSorted(EnumMembers(desc.EnumMembers))
 	if !isSorted {
@@ -550,7 +554,7 @@ func (desc *Immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulato
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	ids := catalog.MakeDescriptorIDSet(desc.GetReferencingDescriptorIDs()...)
 	ids.Add(desc.GetParentID())
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
@@ -563,7 +567,7 @@ func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 }
 
 // ValidateCrossReferences performs cross reference checks on the type descriptor.
-func (desc *Immutable) ValidateCrossReferences(
+func (desc *immutable) ValidateCrossReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Validate the parentID.
@@ -616,7 +620,7 @@ func (desc *Immutable) ValidateCrossReferences(
 	}
 }
 
-func (desc *Immutable) validateMultiRegion(
+func (desc *immutable) validateMultiRegion(
 	dbDesc catalog.DatabaseDescriptor, vea catalog.ValidationErrorAccumulator,
 ) {
 	// Parent database must be a multi-region database if it includes a
@@ -626,37 +630,23 @@ func (desc *Immutable) validateMultiRegion(
 		return
 	}
 
-	dbRegions, err := dbDesc.RegionNames()
+	primaryRegion, err := desc.PrimaryRegionName()
 	if err != nil {
 		vea.Report(err)
-		return
 	}
 
-	// Count the number of regions that aren't being dropped.
-	numRegions := 0
-	for _, member := range desc.EnumMembers {
-		if !isBeingDropped(&member) {
-			numRegions++
+	{
+		found := false
+		for _, member := range desc.EnumMembers {
+			if descpb.RegionName(member.LogicalRepresentation) == primaryRegion {
+				found = true
+			}
 		}
-	}
-	if numRegions != len(dbRegions) {
-		vea.Report(errors.AssertionFailedf(
-			"unexpected number of regions on db desc: %d expected %d",
-			len(dbRegions), len(desc.EnumMembers)))
-	}
-
-	regions := make(map[descpb.RegionName]struct{}, len(dbRegions))
-	for _, region := range dbRegions {
-		regions[region] = struct{}{}
-	}
-
-	for _, member := range desc.EnumMembers {
-		if isBeingDropped(&member) {
-			continue
-		}
-		enumRegion := descpb.RegionName(member.LogicalRepresentation)
-		if _, ok := regions[enumRegion]; !ok {
-			vea.Report(errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion))
+		if !found {
+			vea.Report(
+				errors.AssertionFailedf("primary region %q not found in list of enum members",
+					primaryRegion,
+				))
 		}
 	}
 
@@ -664,18 +654,30 @@ func (desc *Immutable) validateMultiRegion(
 	if err != nil {
 		vea.Report(err)
 	}
-	primaryRegion, err := desc.PrimaryRegionName()
-	if err != nil {
-		vea.Report(err)
-	}
 	if dbPrimaryRegion != primaryRegion {
 		vea.Report(errors.AssertionFailedf("unexpected primary region on db desc: %q expected %q",
 			dbPrimaryRegion, primaryRegion))
 	}
+
+	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		regionNames, err := desc.RegionNames()
+		if err != nil {
+			vea.Report(err)
+		}
+		if len(regionNames) < 3 {
+			vea.Report(
+				errors.AssertionFailedf(
+					"expected >= 3 regions, got %d: %s",
+					len(regionNames),
+					strings.Join(regionNames.ToStrings(), ","),
+				),
+			)
+		}
+	}
 }
 
 // ValidateTxnCommit implements the catalog.Descriptor interface.
-func (desc *Immutable) ValidateTxnCommit(
+func (desc *immutable) ValidateTxnCommit(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 	// No-op.
@@ -692,7 +694,7 @@ func (t TypeLookupFunc) GetTypeDescriptor(
 }
 
 // MakeTypesT creates a types.T from the input type descriptor.
-func (desc *Immutable) MakeTypesT(
+func (desc *immutable) MakeTypesT(
 	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
@@ -755,7 +757,7 @@ func HydrateTypesInTableDescriptor(
 //
 // Note that if the passed type is already hydrated, regardless of the version
 // with which it has been hydrated, this is a no-op.
-func (desc *Immutable) HydrateTypeInfoWithName(
+func (desc *immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
 	if typ.IsHydrated() {
@@ -803,28 +805,65 @@ func (desc *Immutable) HydrateTypeInfoWithName(
 	}
 }
 
+// NumEnumMembers returns the number of enum members if the type is an
+// enumeration type, 0 otherwise.
+func (desc *immutable) NumEnumMembers() int {
+	return len(desc.EnumMembers)
+}
+
+// GetMemberPhysicalRepresentation returns the physical representation of the
+// enum member at ordinal enumMemberOrdinal.
+func (desc *immutable) GetMemberPhysicalRepresentation(enumMemberOrdinal int) []byte {
+	return desc.physicalReps[enumMemberOrdinal]
+}
+
+// GetMemberLogicalRepresentation returns the logical representation of the enum
+// member at ordinal enumMemberOrdinal.
+func (desc *immutable) GetMemberLogicalRepresentation(enumMemberOrdinal int) string {
+	return desc.logicalReps[enumMemberOrdinal]
+}
+
+// IsMemberReadOnly returns true iff the enum member at ordinal
+// enumMemberOrdinal is read-only.
+func (desc *immutable) IsMemberReadOnly(enumMemberOrdinal int) bool {
+	return desc.readOnlyMembers[enumMemberOrdinal]
+}
+
+// NumReferencingDescriptors returns the number of descriptors referencing this
+// type, directly or indirectly.
+func (desc *immutable) NumReferencingDescriptors() int {
+	return len(desc.ReferencingDescriptorIDs)
+}
+
+// GetReferencingDescriptorID returns the ID of the referencing descriptor at
+// ordinal refOrdinal.
+func (desc *immutable) GetReferencingDescriptorID(refOrdinal int) descpb.ID {
+	return desc.ReferencingDescriptorIDs[refOrdinal]
+}
+
 // IsCompatibleWith returns whether the type "desc" is compatible with "other".
 // As of now "compatibility" entails that disk encoded data of "desc" can be
 // interpreted and used by "other".
-func (desc *Immutable) IsCompatibleWith(other *Immutable) error {
+func (desc *immutable) IsCompatibleWith(other catalog.TypeDescriptor) error {
+
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		if other.Kind != desc.Kind {
+		if other.GetKind() != desc.Kind {
 			return errors.Newf("%q of type %q is not compatible with type %q",
-				other.Name, other.Kind, desc.Kind)
+				other.GetName(), other.GetKind(), desc.Kind)
 		}
 		// Every enum value in desc must be present in other, and all of the
 		// physical representations must be the same.
 		for _, thisMember := range desc.EnumMembers {
 			found := false
-			for _, otherMember := range other.EnumMembers {
-				if thisMember.LogicalRepresentation == otherMember.LogicalRepresentation {
+			for i := 0; i < other.NumEnumMembers(); i++ {
+				if thisMember.LogicalRepresentation == other.GetMemberLogicalRepresentation(i) {
 					// We've found a match. Now the physical representations must be
 					// the same, otherwise the enums are incompatible.
-					if !bytes.Equal(thisMember.PhysicalRepresentation, otherMember.PhysicalRepresentation) {
+					if !bytes.Equal(thisMember.PhysicalRepresentation, other.GetMemberPhysicalRepresentation(i)) {
 						return errors.Newf(
 							"%q has differing physical representation for value %q",
-							other.Name,
+							other.GetName(),
 							thisMember.LogicalRepresentation,
 						)
 					}
@@ -833,7 +872,7 @@ func (desc *Immutable) IsCompatibleWith(other *Immutable) error {
 			}
 			if !found {
 				return errors.Newf(
-					"could not find enum value %q in %q", thisMember.LogicalRepresentation, other.Name)
+					"could not find enum value %q in %q", thisMember.LogicalRepresentation, other.GetName())
 			}
 		}
 		return nil
@@ -844,7 +883,7 @@ func (desc *Immutable) IsCompatibleWith(other *Immutable) error {
 
 // HasPendingSchemaChanges returns whether or not this descriptor has schema
 // changes that need to be completed.
-func (desc *Immutable) HasPendingSchemaChanges() bool {
+func (desc *immutable) HasPendingSchemaChanges() bool {
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// If there are any non-public enum members, then a type schema change is
@@ -862,7 +901,7 @@ func (desc *Immutable) HasPendingSchemaChanges() bool {
 
 // GetIDClosure returns all type descriptor IDs that are referenced by this
 // type descriptor.
-func (desc *Immutable) GetIDClosure() map[descpb.ID]struct{} {
+func (desc *immutable) GetIDClosure() map[descpb.ID]struct{} {
 	ret := make(map[descpb.ID]struct{})
 	// Collect the descriptor's own ID.
 	ret[desc.ID] = struct{}{}

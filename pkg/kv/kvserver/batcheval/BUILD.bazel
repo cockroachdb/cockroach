@@ -89,6 +89,7 @@ go_test(
         "cmd_add_sstable_test.go",
         "cmd_clear_range_test.go",
         "cmd_end_transaction_test.go",
+        "cmd_get_test.go",
         "cmd_lease_test.go",
         "cmd_recover_txn_test.go",
         "cmd_refresh_range_test.go",

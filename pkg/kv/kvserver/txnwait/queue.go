@@ -34,7 +34,7 @@ import (
 const maxWaitForQueryTxn = 50 * time.Millisecond
 
 // TxnLivenessHeartbeatMultiplier specifies what multiple the transaction
-// liveness threshold should be of the transaction heartbeat internval.
+// liveness threshold should be of the transaction heartbeat interval.
 var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
 	"COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER", 5)
 
@@ -919,6 +919,7 @@ func (q *Queue) forcePushAbort(
 	forcePush.PushType = roachpb.PUSH_ABORT
 	b := &kv.Batch{}
 	b.Header.Timestamp = q.cfg.Clock.Now()
+	b.Header.Timestamp.Forward(req.PushTo)
 	b.AddRawRequest(&forcePush)
 	if err := q.cfg.DB.Run(ctx, b); err != nil {
 		return nil, b.MustPErr()

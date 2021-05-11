@@ -12,14 +12,19 @@ package catalog
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
-// DescGetter is an interface to retrieve descriptors. In general the interface
-// is used to look up other descriptors during validation.
+// DescGetter is an interface to retrieve descriptors and namespace entries.
+// In general the interface is used to look up other descriptors during
+// validation.
+// Lookups are performed on a best-effort basis. When a descriptor or namespace
+// entry cannot be found, the zero-value is returned, with no error.
 type DescGetter interface {
 	GetDesc(ctx context.Context, id descpb.ID) (Descriptor, error)
+	GetNamespaceEntry(ctx context.Context, parentID, parentSchemaID descpb.ID, name string) (descpb.ID, error)
 }
 
 // BatchDescGetter is like DescGetter but retrieves batches of descriptors,
@@ -27,6 +32,7 @@ type DescGetter interface {
 type BatchDescGetter interface {
 	DescGetter
 	GetDescs(ctx context.Context, reqs []descpb.ID) ([]Descriptor, error)
+	GetNamespaceEntries(ctx context.Context, requests []descpb.NameInfo) ([]descpb.ID, error)
 }
 
 // GetTableDescFromID retrieves the table descriptor for the table
@@ -44,12 +50,44 @@ func GetTableDescFromID(ctx context.Context, dg DescGetter, id descpb.ID) (Table
 	return table, nil
 }
 
-// MapDescGetter is a protoGetter that has a hard-coded map of keys to proto
-// messages.
-type MapDescGetter map[descpb.ID]Descriptor
+// MapDescGetter is an in-memory DescGetter implementation.
+type MapDescGetter struct {
+	Descriptors map[descpb.ID]Descriptor
+	Namespace   map[descpb.NameInfo]descpb.ID
+}
 
-// GetDesc implements the catalog.DescGetter interface.
-func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (Descriptor, error) {
-	desc := m[id]
+// MakeMapDescGetter returns an initialized MapDescGetter.
+func MakeMapDescGetter() MapDescGetter {
+	return MapDescGetter{
+		Descriptors: make(map[descpb.ID]Descriptor),
+		Namespace:   make(map[descpb.NameInfo]descpb.ID),
+	}
+}
+
+// OrderedDescriptors returns the descriptors ordered by ID.
+func (m MapDescGetter) OrderedDescriptors() []Descriptor {
+	ret := make([]Descriptor, 0, len(m.Descriptors))
+	for _, d := range m.Descriptors {
+		ret = append(ret, d)
+	}
+	sort.Sort(Descriptors(ret))
+	return ret
+}
+
+// GetDesc implements the DescGetter interface.
+func (m MapDescGetter) GetDesc(_ context.Context, id descpb.ID) (Descriptor, error) {
+	desc := m.Descriptors[id]
 	return desc, nil
+}
+
+// GetNamespaceEntry implements the DescGetter interface.
+func (m MapDescGetter) GetNamespaceEntry(
+	_ context.Context, parentID, parentSchemaID descpb.ID, name string,
+) (descpb.ID, error) {
+	id := m.Namespace[descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}]
+	return id, nil
 }

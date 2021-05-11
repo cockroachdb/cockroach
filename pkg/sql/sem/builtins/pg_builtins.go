@@ -679,6 +679,21 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
 	),
 
+	// pg_get_partkeydef is only provided for compatibility and always returns
+	// NULL. It is supposed to return the PARTITION BY clause of a table's
+	// CREATE statement.
+	"pg_get_partkeydef": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
+			},
+			Info:       notUsableInfo,
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	// pg_get_function_result returns the types of the result of an builtin
 	// function. Multi-return builtins currently are returned as anyelement, which
 	// is a known incompatibility with Postgres.
@@ -1085,9 +1100,9 @@ SELECT description
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				oid := tree.MustBeDOid(args[0])
+				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := ctx.Planner.IsTableVisible(
-					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, int64(oid.DInt),
+					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, oid.Oid(oidArg.DInt),
 				)
 				if err != nil {
 					return nil, err
@@ -1113,16 +1128,19 @@ SELECT description
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				oidArg := args[0]
-				if oidArg == tree.DNull {
+				oidArg := tree.MustBeDOid(args[0])
+				isVisible, exists, err := ctx.Planner.IsTypeVisible(
+					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, oid.Oid(oidArg.DInt),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if !exists {
 					return tree.DNull, nil
 				}
-				if _, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]; ok {
-					return tree.DBoolTrue, nil
-				}
-				return tree.DNull, nil
+				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
-			Info:       notUsableInfo,
+			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
 			Volatility: tree.VolatilityStable,
 		},
 	),

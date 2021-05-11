@@ -125,7 +125,10 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 		func(descriptor *descpb.Descriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			id, version, name, _ := descpb.GetDescriptorMetadata(descriptor)
+			id, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if waitTableID != id {
 				return
 			}
@@ -193,7 +196,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// name is not deleted from the database until the async schema changer checks
 	// that there's no more leases on the old version).
 	if _, err := db.Exec("CREATE TABLE test.t (a INT PRIMARY KEY)"); !testutils.IsError(
-		err, `relation "t" already exists`) {
+		err, `relation "test.public.t" already exists`) {
 		t.Fatal(err)
 	}
 

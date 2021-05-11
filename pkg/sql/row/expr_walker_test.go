@@ -39,10 +39,10 @@ func createAndIncrementSeqDescriptor(
 	seqOpts descpb.TableDescriptor_SequenceOpts,
 	db *kv.DB,
 ) catalog.TableDescriptor {
-	desc := tabledesc.NewImmutable(descpb.TableDescriptor{
+	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{
 		ID:           descpb.ID(id),
 		SequenceOpts: &seqOpts,
-	})
+	}).BuildImmutableTable()
 	seqValueKey := codec.SequenceKey(uint32(desc.GetID()))
 	_, err := kv.IncrementValRetryable(
 		ctx, db, seqValueKey, incrementBy)

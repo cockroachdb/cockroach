@@ -415,12 +415,13 @@
         $item:(AggregationsItem
                 (RegressionCount $arg1:* $arg2:*)
             ) &
-            (Succeeded
-                $newArg:(SingleRegressionCountArgument
+            (Let
+                ($newArg $ok):(SingleRegressionCountArgument
                     $arg1
                     $arg2
                     $input
                 )
+                $ok
             )
         ...
     ]

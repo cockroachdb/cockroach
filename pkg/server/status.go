@@ -100,20 +100,11 @@ const (
 	// paginated request. This should be much lower than maxConcurrentRequests
 	// as too much concurrency here can result in wasted results.
 	maxConcurrentPaginatedRequests = 4
-
-	// omittedKeyStr is the string returned in place of a key when keys aren't
-	// permitted in responses.
-	omittedKeyStr = "omitted (due to the 'server.remote_debugging.mode' setting)"
 )
 
 var (
 	// Pattern for local used when determining the node ID.
 	localRE = regexp.MustCompile(`(?i)local`)
-
-	// Error used to convey that remote debugging is needs to be enabled for an
-	// endpoint to be usable.
-	remoteDebuggingErr = status.Error(
-		codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
 
 	// Counter to count accesses to the prometheus vars endpoint /_status/vars .
 	telemetryPrometheusVars = telemetry.GetCounterOnce("monitoring.prometheus.vars")
@@ -142,6 +133,7 @@ type baseStatusServer struct {
 	sessionRegistry    *sql.SessionRegistry
 	contentionRegistry *contention.Registry
 	st                 *cluster.Settings
+	sqlServer          *SQLServer
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -323,12 +315,12 @@ func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) e
 
 func (b *baseStatusServer) getLocalContentionEvents(
 	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
-) ([]contentionpb.IndexContentionEvents, error) {
+) (contentionpb.SerializedRegistry, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
 	if err := b.hasContentionEventsPermissions(ctx); err != nil {
-		return nil, err
+		return contentionpb.SerializedRegistry{}, err
 	}
 
 	return b.contentionRegistry.Serialize(), nil
@@ -469,10 +461,6 @@ func (s *statusServer) Gossip(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -538,12 +526,6 @@ func (s *statusServer) Allocator(
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
-	}
-
-	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
-	// logging range start/end keys in the simulated allocator runs.
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -649,12 +631,6 @@ func (s *statusServer) AllocatorRange(
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
-	}
-
-	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
-	// logging range start/end keys in the simulated allocator runs.
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
@@ -904,10 +880,6 @@ func (s *statusServer) GetFiles(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1010,10 +982,6 @@ func (s *statusServer) LogFile(
 		return nil, err
 	}
 
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
@@ -1094,10 +1062,6 @@ func (s *statusServer) Logs(
 
 	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
-	}
-
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -1617,8 +1581,6 @@ func (s *statusServer) rangesHelper(
 		return state
 	}
 
-	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
-
 	constructRangeInfo := func(
 		desc roachpb.RangeDescriptor, rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
@@ -1626,18 +1588,9 @@ func (s *statusServer) rangesHelper(
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
 		var span serverpb.PrettySpan
-		if includeRawKeys {
-			span.StartKey = desc.StartKey.String()
-			span.EndKey = desc.EndKey.String()
-		} else {
-			span.StartKey = omittedKeyStr
-			span.EndKey = omittedKeyStr
-		}
-		state := rep.State()
-		if !includeRawKeys {
-			state.ReplicaState.Desc.StartKey = nil
-			state.ReplicaState.Desc.EndKey = nil
-		}
+		span.StartKey = desc.StartKey.String()
+		span.EndKey = desc.EndKey.String()
+		state := rep.State(ctx)
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1802,7 +1755,6 @@ func (s *statusServer) HotRanges(
 
 func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
-	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
 	err := s.stores.VisitStores(func(store *kvserver.Store) error {
 		ranges := store.HottestReplicas()
 		storeResp := &serverpb.HotRangesResponse_StoreResponse{
@@ -1811,10 +1763,6 @@ func (s *statusServer) localHotRanges(ctx context.Context) serverpb.HotRangesRes
 		}
 		for i, r := range ranges {
 			storeResp.HotRanges[i].Desc = *r.Desc
-			if !includeRawKeys {
-				storeResp.HotRanges[i].Desc.StartKey = nil
-				storeResp.HotRanges[i].Desc.EndKey = nil
-			}
 			storeResp.HotRanges[i].QueriesPerSecond = r.QPS
 		}
 		resp.Stores = append(resp.Stores, storeResp)
@@ -1898,15 +1846,6 @@ func (s *statusServer) ListLocalSessions(
 }
 
 // ListLocalContentionEvents returns a list of contention events on this node.
-//
-// On the highest level, all IndexContentionEvents objects are ordered according
-// to their importance (as defined by the number of contention events within
-// each object).
-// On the middle level, all SingleKeyContention objects are ordered by their
-// keys lexicographically.
-// On the lowest level, all SingleTxnContention objects are ordered by the
-// number of times that transaction was observed to contend with other
-// transactions.
 func (s *statusServer) ListLocalContentionEvents(
 	ctx context.Context, req *serverpb.ListContentionEventsRequest,
 ) (*serverpb.ListContentionEventsResponse, error) {
@@ -2206,15 +2145,6 @@ func (s *statusServer) CancelQuery(
 
 // ListContentionEvents returns a list of contention events on all nodes in the
 // cluster.
-//
-// On the highest level, all IndexContentionEvents objects are ordered according
-// to their importance (as defined by the number of contention events within
-// each object).
-// On the middle level, all SingleKeyContention objects are ordered by their
-// keys lexicographically.
-// On the lowest level, all SingleTxnContention objects are ordered by the
-// number of times that transaction was observed to contend with other
-// transactions.
 func (s *statusServer) ListContentionEvents(
 	ctx context.Context, req *serverpb.ListContentionEventsRequest,
 ) (*serverpb.ListContentionEventsResponse, error) {
@@ -2226,9 +2156,7 @@ func (s *statusServer) ListContentionEvents(
 		return nil, err
 	}
 
-	response := &serverpb.ListContentionEventsResponse{
-		Events: make([]contentionpb.IndexContentionEvents, 0),
-	}
+	var response serverpb.ListContentionEventsResponse
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
 		client, err := s.dialNode(ctx, nodeID)
 		return client, err
@@ -2259,7 +2187,7 @@ func (s *statusServer) ListContentionEvents(
 	if err := s.iterateNodes(ctx, "contention events list", dialFn, nodeFn, responseFn, errorFn); err != nil {
 		return nil, err
 	}
-	return response, nil
+	return &response, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key
@@ -2541,23 +2469,4 @@ func (s *statusServer) JobStatus(
 	*res.Progress = j.Progress()
 
 	return &serverpb.JobStatusResponse{Job: res}, nil
-}
-
-// GenerateJoinToken generates a new ephemeral join token. For use by the sql
-// subsystem directly. The response is a base64 marshaled form of the join token
-// that can be shared to new nodes that want to join this cluster.
-func (s *statusServer) GenerateJoinToken(ctx context.Context) (string, error) {
-	if !sql.FeatureTLSAutoJoinEnabled.Get(&s.st.SV) {
-		return "", errors.New("join token generation disabled")
-	}
-
-	jt, err := generateJoinToken(s.cfg.SSLCertsDir)
-	if err != nil {
-		return "", errors.Wrap(err, "error when generating join token")
-	}
-	token, err := jt.MarshalText()
-	if err != nil {
-		return "", errors.Wrap(err, "error when marshaling join token")
-	}
-	return string(token), nil
 }

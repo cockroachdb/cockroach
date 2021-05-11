@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -35,7 +36,7 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newOutboxFn func(*colmem.Allocator, colexecop.Operator, []*types.T, []colexecop.MetadataSource) (*colrpc.Outbox, error)
 	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
@@ -43,15 +44,15 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	typs []*types.T,
-	metadataSources []execinfrapb.MetadataSource,
-	_ []colexecop.Closer,
 	_ func() []*execinfrapb.ComponentStats,
+	metadataSources []colexecop.MetadataSource,
+	_ []colexecop.Closer,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
@@ -193,7 +194,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			allocator *colmem.Allocator,
 			op colexecop.Operator,
 			typs []*types.T,
-			sources []execinfrapb.MetadataSource,
+			sources []colexecop.MetadataSource,
 		) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
 			outboxCreated = true
@@ -202,11 +203,11 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// number of metadata sources and then that the input types are what we
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
-			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
-			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */, nil /* getStats */)
+			require.Len(t, inboxToNumInputTypes[sources[0].(*colexec.InvariantsChecker).Input.(*colrpc.Inbox)], numInputTypesToOutbox)
+			return colrpc.NewOutbox(allocator, op, typs, nil /* getStats */, sources, nil /* toClose */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(context.Background(), allocator, typs, streamID)
+			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},
@@ -293,7 +294,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 			creator = c
 		}
 
-		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
+		_, _, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
 		require.NoError(t, err)
 
 		// No directory should have been created.
@@ -327,7 +328,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 			creator = c
 		}
 
-		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
+		_, _, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
 		require.NoError(t, err)
 
 		createTempDir := creator.diskQueueCfg.GetPather.GetPath

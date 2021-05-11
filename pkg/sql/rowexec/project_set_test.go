@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestProjectSet(t *testing.T) {
@@ -29,9 +31,9 @@ func TestProjectSet(t *testing.T) {
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.IntEncDatum(i)
+		v[i] = randgen.IntEncDatum(i)
 	}
-	null := rowenc.NullEncDatum()
+	null := randgen.NullEncDatum()
 
 	testCases := []struct {
 		description string
@@ -46,13 +48,13 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "@1 + 1"},
 				},
-				GeneratedColumns: rowenc.OneIntCol,
+				GeneratedColumns: types.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: rowenc.EncDatumRows{
 				{v[2]},
 			},
-			inputTypes: rowenc.OneIntCol,
+			inputTypes: types.OneIntCol,
 			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -63,14 +65,14 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(@1, 2)"},
 				},
-				GeneratedColumns: rowenc.OneIntCol,
+				GeneratedColumns: types.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: rowenc.EncDatumRows{
 				{v[0]},
 				{v[1]},
 			},
-			inputTypes: rowenc.OneIntCol,
+			inputTypes: types.OneIntCol,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -94,7 +96,7 @@ func TestProjectSet(t *testing.T) {
 			input: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: rowenc.OneIntCol,
+			inputTypes: types.OneIntCol,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0], v[0], v[0]},
 				{v[0], null, null, v[1], v[1]},
@@ -121,6 +123,7 @@ func TestProjectSet(t *testing.T) {
 
 func BenchmarkProjectSet(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -128,7 +131,7 @@ func BenchmarkProjectSet(b *testing.B) {
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.IntEncDatum(i)
+		v[i] = randgen.IntEncDatum(i)
 	}
 
 	benchCases := []struct {
@@ -143,13 +146,13 @@ func BenchmarkProjectSet(b *testing.B) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(1, 100000)"},
 				},
-				GeneratedColumns: rowenc.OneIntCol,
+				GeneratedColumns: types.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: rowenc.OneIntCol,
+			inputTypes: types.OneIntCol,
 		},
 	}
 

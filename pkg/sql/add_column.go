@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // addColumnImpl performs the logic of adding a column within an ALTER TABLE.
@@ -37,6 +38,13 @@ func (p *planner) addColumnImpl(
 	toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
+	}
+	switch toType.Oid() {
+	case oid.T_int2vector, oid.T_oidvector:
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"VECTOR column types are unsupported",
+		)
 	}
 	if supported, err := isTypeSupportedInVersion(version, toType); err != nil {
 		return err
@@ -55,7 +63,6 @@ func (p *planner) addColumnImpl(
 	if seqName != nil {
 		if err := doCreateSequence(
 			params,
-			n.n.String(),
 			seqDbDesc,
 			n.tableDesc.GetParentSchemaID(),
 			seqName,
@@ -73,6 +80,29 @@ func (p *planner) addColumnImpl(
 		return err
 	}
 	incTelemetryForNewColumn(d, col)
+
+	// Ensure all new indexes are partitioned appropriately.
+	if idx != nil {
+		if n.tableDesc.IsLocalityRegionalByRow() {
+			if err := params.p.checkNoRegionChangeUnderway(
+				params.ctx,
+				n.tableDesc.GetParentID(),
+				"add an UNIQUE COLUMN on a REGIONAL BY ROW table",
+			); err != nil {
+				return err
+			}
+		}
+
+		*idx, err = p.configureIndexDescForNewIndexPartitioning(
+			params.ctx,
+			desc,
+			*idx,
+			nil, /* PartitionByIndex */
+		)
+		if err != nil {
+			return err
+		}
+	}
 
 	// If the new column has a DEFAULT expression that uses a sequence, add references between
 	// its descriptor and this column descriptor.

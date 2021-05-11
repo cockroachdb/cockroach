@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -488,17 +489,19 @@ func (s *Schema) Name() *cat.SchemaName {
 }
 
 // GetDataSourceNames is part of the cat.Schema interface.
-func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
+func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, descpb.IDs, error) {
 	var keys []string
 	for k := range s.dataSources {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	var res []cat.DataSourceName
+	names := make([]cat.DataSourceName, 0, len(keys))
+	IDs := make(descpb.IDs, 0, len(keys))
 	for _, k := range keys {
-		res = append(res, s.dataSources[k].fqName())
+		names = append(names, s.dataSources[k].fqName())
+		IDs = append(IDs, descpb.ID(s.dataSources[k].ID()))
 	}
-	return res, nil
+	return names, IDs, nil
 }
 
 // View implements the cat.View interface for testing purposes.
@@ -568,6 +571,11 @@ func (tv *View) ColumnNameCount() int {
 // ColumnName is part of the cat.View interface.
 func (tv *View) ColumnName(i int) tree.Name {
 	return tv.ColumnNames[i]
+}
+
+// CollectTypes is part of the cat.DataSource interface.
+func (tv *View) CollectTypes(ord int) (descpb.IDs, error) {
+	return nil, nil
 }
 
 // Table implements the cat.Table interface for testing purposes.
@@ -752,6 +760,43 @@ func (tt *Table) FindOrdinal(name string) int {
 		tree.ErrString((*tree.Name)(&name)),
 		tree.ErrString(&tt.TabName),
 	))
+}
+
+// CollectTypes is part of the cat.DataSource interface.
+func (tt *Table) CollectTypes(ord int) (descpb.IDs, error) {
+	visitor := &tree.TypeCollectorVisitor{
+		OIDs: make(map[oid.Oid]struct{}),
+	}
+	addOIDsInExpr := func(exprStr string) error {
+		expr, err := parser.ParseExpr(exprStr)
+		if err != nil {
+			return err
+		}
+		tree.WalkExpr(visitor, expr)
+		return nil
+	}
+
+	// Collect UDTs in default expression, computed column and the column type itself.
+	col := tt.Columns[ord]
+	if col.HasDefault() {
+		if err := addOIDsInExpr(col.DefaultExprStr()); err != nil {
+			return nil, err
+		}
+	}
+	if col.IsComputed() {
+		if err := addOIDsInExpr(col.ComputedExprStr()); err != nil {
+			return nil, err
+		}
+	}
+	if col.DatumType() != nil && col.DatumType().UserDefined() {
+		visitor.OIDs[col.DatumType().Oid()] = struct{}{}
+	}
+
+	ids := make(descpb.IDs, 0, len(visitor.OIDs))
+	for collectedOid := range visitor.OIDs {
+		ids = append(ids, typedesc.UserDefinedTypeOIDToID(collectedOid))
+	}
+	return ids, nil
 }
 
 // Index implements the cat.Index interface for testing purposes.
@@ -1227,6 +1272,11 @@ func (ts *Sequence) String() string {
 	tp := treeprinter.New()
 	cat.FormatSequence(ts.Catalog, ts, tp)
 	return tp.String()
+}
+
+// CollectTypes is part of the cat.DataSource interface.
+func (ts *Sequence) CollectTypes(ord int) (descpb.IDs, error) {
+	return nil, nil
 }
 
 // Family implements the cat.Family interface for testing purposes.

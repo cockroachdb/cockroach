@@ -155,7 +155,8 @@ func distanceLineStringInternal(
 	default:
 		return geo.Geometry{}, errors.Newf("programmer error: unknown behavior")
 	}
-	lineString := geom.NewLineStringFlat(geom.XY, append(coordA, coordB...)).SetSRID(int(a.SRID()))
+	lineCoords := []float64{coordA.X(), coordA.Y(), coordB.X(), coordB.Y()}
+	lineString := geom.NewLineStringFlat(geom.XY, lineCoords).SetSRID(int(a.SRID()))
 	return geo.MakeGeometryFromGeomT(lineString)
 }
 
@@ -615,10 +616,17 @@ func findPointSide(p geom.Coord, eV0 geom.Coord, eV1 geom.Coord) pointSide {
 	}
 }
 
-// PointInLinearRing implements geodist.DistanceCalculator.
-func (c *geomDistanceCalculator) PointInLinearRing(
-	point geodist.Point, polygon geodist.LinearRing,
-) bool {
+type linearRingSide int
+
+const (
+	outsideLinearRing linearRingSide = -1
+	onLinearRing      linearRingSide = 0
+	insideLinearRing  linearRingSide = 1
+)
+
+// findPointSideOfLinearRing returns whether a point is outside, on, or inside a
+// linear ring.
+func findPointSideOfLinearRing(point geodist.Point, linearRing geodist.LinearRing) linearRingSide {
 	// This is done using the winding number algorithm, also known as the
 	// "non-zero rule".
 	// See: https://en.wikipedia.org/wiki/Point_in_polygon for intro.
@@ -627,8 +635,8 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 	// See also: https://en.wikipedia.org/wiki/Nonzero-rule
 	windingNumber := 0
 	p := point.GeomPoint
-	for edgeIdx := 0; edgeIdx < polygon.NumEdges(); edgeIdx++ {
-		e := polygon.Edge(edgeIdx)
+	for edgeIdx, numEdges := 0, linearRing.NumEdges(); edgeIdx < numEdges; edgeIdx++ {
+		e := linearRing.Edge(edgeIdx)
 		eV0 := e.V0.GeomPoint
 		eV1 := e.V1.GeomPoint
 		// Same vertex; none of these checks will pass.
@@ -644,10 +652,8 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 		side := findPointSide(p, eV0, eV1)
 		// If the point is on the line if the edge was infinite, and the point is within the bounds
 		// of the line segment denoted by the edge, there is a covering.
-		if side == pointSideOn &&
-			((eV0.X() <= p.X() && p.X() < eV1.X()) || (eV1.X() <= p.X() && p.X() < eV0.X()) ||
-				(eV0.Y() <= p.Y() && p.Y() < eV1.Y()) || (eV1.Y() <= p.Y() && p.Y() < eV0.Y())) {
-			return true
+		if side == pointSideOn && (eV0.X() <= p.X() && p.X() <= eV1.X()) {
+			return onLinearRing
 		}
 		// If the point is left of the segment and the line is rising
 		// we have a circle going CCW, so increment.
@@ -664,7 +670,22 @@ func (c *geomDistanceCalculator) PointInLinearRing(
 			windingNumber--
 		}
 	}
-	return windingNumber != 0
+	if windingNumber != 0 {
+		return insideLinearRing
+	}
+	return outsideLinearRing
+}
+
+// PointIntersectsLinearRing implements geodist.DistanceCalculator.
+func (c *geomDistanceCalculator) PointIntersectsLinearRing(
+	point geodist.Point, linearRing geodist.LinearRing,
+) bool {
+	switch findPointSideOfLinearRing(point, linearRing) {
+	case insideLinearRing, onLinearRing:
+		return true
+	default:
+		return false
+	}
 }
 
 // ClosestPointToEdge implements geodist.DistanceCalculator.
@@ -813,4 +834,73 @@ func verifyDensifyFrac(f float64) error {
 		return errors.Newf("fraction %f is too small, must be at least %f", f, fracTooSmall)
 	}
 	return nil
+}
+
+// findPointSideOfPolygon returns whether a point intersects with a polygon.
+func findPointSideOfPolygon(point geom.T, polygon geom.T) (linearRingSide, error) {
+	// Convert point from a geom.T to a *geodist.Point.
+	_, ok := point.(*geom.Point)
+	if !ok {
+		return outsideLinearRing, errors.Newf("first geometry passed to findPointSideOfPolygon must be a point")
+	}
+	pointGeodistShape, err := geomToGeodist(point)
+	if err != nil {
+		return outsideLinearRing, err
+	}
+	pointGeodistPoint, ok := pointGeodistShape.(*geodist.Point)
+	if !ok {
+		return outsideLinearRing, errors.Newf("geomToGeodist failed to convert a *geom.Point to a *geodist.Point")
+	}
+
+	// Convert polygon from a geom.T to a geodist.Polygon.
+	_, ok = polygon.(*geom.Polygon)
+	if !ok {
+		return outsideLinearRing, errors.Newf("second geometry passed to findPointSideOfPolygon must be a polygon")
+	}
+	polygonGeodistShape, err := geomToGeodist(polygon)
+	if err != nil {
+		return outsideLinearRing, err
+	}
+	polygonGeodistPolygon, ok := polygonGeodistShape.(geodist.Polygon)
+	if !ok {
+		return outsideLinearRing, errors.Newf("geomToGeodist failed to convert a *geom.Polygon to a geodist.Polygon")
+	}
+
+	// Point cannot be inside an empty polygon.
+	if polygonGeodistPolygon.NumLinearRings() == 0 {
+		return outsideLinearRing, nil
+	}
+
+	// Find which side the point is relative to the main outer boundary of
+	// the polygon. If it outside or on the boundary, we can conclude
+	// that the point is on that side of the overall polygon as well.
+	mainRing := polygonGeodistPolygon.LinearRing(0)
+	switch pointSide := findPointSideOfLinearRing(*pointGeodistPoint, mainRing); pointSide {
+	case insideLinearRing:
+	case outsideLinearRing, onLinearRing:
+		return pointSide, nil
+	default:
+		return outsideLinearRing, errors.Newf("unknown linearRingSide %d", pointSide)
+	}
+
+	// If the point is inside the main outer boundary of the polygon, we must
+	// determine which side it is relative to every hole in the polygon.
+	// If it is inside any hole, it is outside the polygon. If it is on the
+	// ring of any hole, it is on the boundary of the polygon. Otherwise,
+	// it is inside the polygon.
+	for ringNum := 1; ringNum < polygonGeodistPolygon.NumLinearRings(); ringNum++ {
+		polygonHole := polygonGeodistPolygon.LinearRing(ringNum)
+		switch pointSide := findPointSideOfLinearRing(*pointGeodistPoint, polygonHole); pointSide {
+		case insideLinearRing:
+			return outsideLinearRing, nil
+		case onLinearRing:
+			return onLinearRing, nil
+		case outsideLinearRing:
+			continue
+		default:
+			return outsideLinearRing, errors.Newf("unknown linearRingSide %d", pointSide)
+		}
+	}
+
+	return insideLinearRing, nil
 }

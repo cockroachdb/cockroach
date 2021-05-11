@@ -8,7 +8,11 @@
 
 package changefeedccl
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+)
 
 // TestingKnobs are the testing knobs for changefeed.
 type TestingKnobs struct {
@@ -17,8 +21,13 @@ type TestingKnobs struct {
 	// AfterSinkFlush is called after a sink flush operation has returned without
 	// error.
 	AfterSinkFlush func() error
-	// MemBufferCapacity, if non-zero, overrides memBufferDefaultCapacity.
-	MemBufferCapacity int64
+	// MemMonitor, if non-nil, overrides memory monitor to use for changefeed..
+	MemMonitor *mon.BytesMonitor
+	// Dial, if set, is a function that overrides normal sink "dial" functionality.
+	Dial func(s Sink)
+	// HandleDistChangfeedError is called with the result error from
+	// the distributed changefeed.
+	HandleDistChangefeedError func(error) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

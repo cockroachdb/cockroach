@@ -21,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,7 +56,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 
 	db := s0.DB()
 
-	descriptors := descs.NewCollection(s0.ClusterSettings(), s0.LeaseManager().(*lease.Manager), nil /* hydratedTables */)
+	descriptors := descs.NewCollection(
+		s0.ClusterSettings(),
+		s0.LeaseManager().(*lease.Manager),
+		nil, // hydratedTables
+		nil, // virtualSchemas
+	)
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -66,7 +74,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.NotNil(t, mut)
 		// We want to create some descriptors and then ensure that writing them to a
 		// batch works as expected.
-		newTable := tabledesc.NewCreatedMutable(descpb.TableDescriptor{
+		newTable := tabledesc.NewBuilder(&descpb.TableDescriptor{
 			ID:                      142,
 			Name:                    "table2",
 			Version:                 1,
@@ -97,7 +105,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 			NextIndexID:    2,
 			NextMutationID: 1,
 			FormatVersion:  descpb.FamilyFormatVersion,
-		})
+		}).BuildCreatedMutableTable()
 		b := txn.NewBatch()
 
 		// Ensure that there are no errors and that the version is incremented.
@@ -246,6 +254,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 				Name: "db",
 			}})
 
+			b := &kv.Batch{}
+			b.CPut(catalogkeys.NewDatabaseKey(mut.Name).Key(lm.Codec()), mut.GetID(), nil)
+			err = txn.Run(ctx, b)
+			require.NoError(t, err)
+
 			// Try to get the database descriptor by the old name and fail.
 			_, failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
 			require.Regexp(t, `database "db" does not exist`, err)
@@ -373,7 +386,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		// Resolve the descriptor so we can mutate it.
-		tn := tree.MakeTableName("db", "tbl")
+		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "tbl")
 		found, desc, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
 		require.True(t, found)
 		require.NoError(t, err)
@@ -405,4 +418,36 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		return nil
 	}),
 	)
+}
+
+// Regression test to ensure that resolving a type descriptor which is not a
+// type using the DistSQLTypeResolver is properly handled.
+func TestDistSQLTypeResolver_GetTypeDescriptor_WrongType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE t()`)
+	var id descpb.ID
+	tdb.QueryRow(t, "SELECT $1::regclass::int", "t").Scan(&id)
+
+	err := descs.Txn(
+		ctx,
+		s.ClusterSettings(),
+		s.LeaseManager().(*lease.Manager),
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+		s.DB(),
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			tr := descs.NewDistSQLTypeResolver(descriptors, txn)
+			_, _, err := tr.GetTypeDescriptor(ctx, id)
+			return err
+		})
+	require.Regexp(t, `descriptor \d+ is a relation not a type`, err)
+	require.Equal(t, pgcode.WrongObjectType, pgerror.GetPGCode(err))
 }

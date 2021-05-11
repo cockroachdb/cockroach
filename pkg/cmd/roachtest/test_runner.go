@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"math/rand"
 	"net"
@@ -29,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -136,6 +138,10 @@ func (c clustersOpt) validate() error {
 	return nil
 }
 
+type testOpts struct {
+	versionsBinaryOverride map[string]string
+}
+
 // Run runs tests.
 //
 // Args:
@@ -153,13 +159,21 @@ func (r *testRunner) Run(
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
-	artifactsDir string,
+	topt testOpts,
 	lopt loggingOpt,
 ) error {
 	// Validate options.
 	if len(tests) == 0 {
 		return fmt.Errorf("no test matched filters")
 	}
+
+	hasDevLicense := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "") != ""
+	for _, t := range tests {
+		if t.RequiresLicense && !hasDevLicense {
+			return fmt.Errorf("test %q requires an enterprise license, set COCKROACH_DEV_LICENSE", t.Name)
+		}
+	}
+
 	if err := clustersOpt.validate(); err != nil {
 		return err
 	}
@@ -278,6 +292,7 @@ func (r *testRunner) Run(
 				clustersOpt.keepClustersOnTestFailure,
 				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
 				allocateCluster,
+				topt,
 				l,
 			); err != nil {
 				// A worker returned an error. Let's shut down.
@@ -359,6 +374,7 @@ func (r *testRunner) runWorker(
 	teeOpt teeOptType,
 	stdout io.Writer,
 	allocateCluster clusterAllocatorFn,
+	topt testOpts,
 	l *logger,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
@@ -453,11 +469,12 @@ func (r *testRunner) runWorker(
 			return err
 		}
 		t := &test{
-			spec:          &testToRun.spec,
-			buildVersion:  r.buildVersion,
-			artifactsDir:  artifactsDir,
-			artifactsSpec: artifactsSpec,
-			l:             testL,
+			spec:                   &testToRun.spec,
+			buildVersion:           r.buildVersion,
+			artifactsDir:           artifactsDir,
+			artifactsSpec:          artifactsSpec,
+			l:                      testL,
+			versionsBinaryOverride: topt.versionsBinaryOverride,
 		}
 		// Tell the cluster that, from now on, it will be run "on behalf of this
 		// test".
@@ -635,11 +652,8 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-			if issues.CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				projectColumnID := 0
-				if info, ok := roachtestOwners[t.spec.Owner]; ok {
-					projectColumnID = info.TriageColumnID
-				}
+			if issues.DefaultOptionsFromEnv().CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
+				owner := roachtestOwners[t.spec.Owner]
 
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -658,19 +672,22 @@ func (r *testRunner) runTest(
 				}
 
 				req := issues.PostRequest{
-					// TODO(tbg): actually use this as a template.
-					TitleTemplate: fmt.Sprintf("roachtest: %s failed", t.Name()),
-					// TODO(tbg): make a template better adapted to roachtest.
-					BodyTemplate:    issues.UnitTestFailureBody,
+					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
+					Mention:         owner.Mention,
+					ProjectColumnID: owner.TriageColumnID,
 					PackageName:     "roachtest",
 					TestName:        t.Name(),
 					Message:         msg,
 					Artifacts:       artifacts,
 					ExtraLabels:     labels,
-					ProjectColumnID: projectColumnID,
+					ReproductionCommand: fmt.Sprintf(
+						`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
+caffeinate ./roachstress.sh %s
+`, t.Name()),
 				}
 				if err := issues.Post(
 					context.Background(),
+					issues.UnitTestFormatter,
 					req,
 				); err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
@@ -1081,17 +1098,26 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 				clusterReused = "no"
 			}
 		}
-		var clusterName string
+		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
+			addrs, err := w.Cluster().ExternalAdminUIAddrE(
+				req.Context(),
+				w.Cluster().Node(1),
+			)
+			// We drop the error on the floor; it's unclear what to do with it and we
+			// don't have a logger handy.
+			if err == nil {
+				clusterAdminUIAddr = addrs[0]
+			}
 		}
 		t := w.Test()
 		testStatus := "N/A"
 		if t != nil {
 			testStatus = t.GetStatus()
 		}
-		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-			w.name, w.Status(), testName, clusterName, clusterReused, testStatus)
+		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='//%s'>%s</a></td><td>%s</td><td>%s</td></tr>\n",
+			w.name, w.Status(), testName, clusterAdminUIAddr, clusterName, clusterReused, testStatus)
 	}
 	fmt.Fprintf(wr, "</table>")
 
@@ -1107,7 +1133,7 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		name := fmt.Sprintf("%s (run %d)", t.test, t.run)
 		status := "PASS"
 		if !t.pass {
-			status = "FAIL " + t.failure
+			status = "FAIL " + strings.ReplaceAll(html.EscapeString(t.failure), "\n", "<br>")
 		}
 		duration := fmt.Sprintf("%s (%s - %s)", t.end.Sub(t.start), t.start, t.end)
 		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><tr/>", name, status, duration)
@@ -1183,8 +1209,9 @@ func PredecessorVersion(buildVersion version.Version) (string, error) {
 	// (see runVersionUpgrade). The same is true for adding a new key to this
 	// map.
 	verMap := map[string]string{
-		"21.1": "20.2.5",
-		"20.2": "20.1.12",
+		"21.2": "21.1.0-beta.5",
+		"21.1": "20.2.9",
+		"20.2": "20.1.16",
 		"20.1": "19.2.11",
 		"19.2": "19.1.11",
 		"19.1": "2.1.9",

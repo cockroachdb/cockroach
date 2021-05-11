@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -143,5 +145,123 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 			}
 		}
 		return nil
+	})
+}
+
+// TestDropIndexPartitionedByUserDefinedTypeCCL is a regression test to ensure
+// that dropping an index partitioned by a user-defined types is safe.
+func TestDropIndexPartitionedByUserDefinedTypeCCL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	waitForJobDone := func(t *testing.T, tdb *sqlutils.SQLRunner, description string) {
+		t.Helper()
+		var id int
+		tdb.QueryRow(t, `
+SELECT job_id 
+  FROM crdb_internal.jobs
+ WHERE description LIKE $1
+`, description).Scan(&id)
+		testutils.SucceedsSoon(t, func() error {
+			var status string
+			tdb.QueryRow(t,
+				`SELECT status FROM [SHOW JOB $1]`,
+				id,
+			).Scan(&status)
+			if status != string(jobs.StatusSucceeded) {
+				return errors.Errorf("expected %q, got %q", jobs.StatusSucceeded, status)
+			}
+			return nil
+		})
+	}
+
+	// This is a regression test for a bug which was caused by not using hydrated
+	// descriptors in the index gc job to re-write zone config subzone spans.
+	// This test ensures that subzone spans can be re-written by creating a
+	// table partitioned by user-defined types and then dropping an index and
+	// ensuring that the drop job for the index completes successfully.
+	t.Run("drop index, type-partitioned table", func(t *testing.T) {
+		// Sketch of the test:
+		//
+		//  * Set up a partitioned table partitioned by an enum.
+		//  * Create an index.
+		//  * Set a short GC TTL on the index.
+		//  * Drop the index.
+		//  * Wait for the index to be cleaned up, which would have crashed before the
+		//    this fix
+
+		defer log.Scope(t).Close(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		defer tc.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		tdb.Exec(t, `
+	  CREATE TYPE typ AS ENUM ('a', 'b', 'c');
+	  CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
+	              PARTITION a VALUES IN ('a'),
+	              PARTITION b VALUES IN ('b'),
+	              PARTITION c VALUES IN ('c')
+	  );
+	  CREATE INDEX idx ON t (e);
+	  ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
+	  ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+	  DROP INDEX t@idx;
+	  `)
+
+		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
+	})
+
+	// This is a regression test for a hazardous scenario whereby a drop index gc
+	// job may attempt to rewrite subzone spans for a dropped table which used types
+	// which no longer exist.
+	t.Run("drop table and type", func(t *testing.T) {
+
+		// Sketch of the test:
+		//
+		//  * Set up a partitioned table and index which are partitioned by an enum.
+		//  * Set a short GC TTL on the index.
+		//  * Drop the index.
+		//  * Drop the table.
+		//  * Drop the type.
+		//  * Wait for the index to be cleaned up, which would have crashed before the
+		//    this fix.
+		//  * Set a short GC TTL on everything.
+		//  * Wait for the table to be cleaned up.
+		//
+
+		defer log.Scope(t).Close(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		defer tc.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		tdb.Exec(t, `
+	  CREATE TYPE typ AS ENUM ('a', 'b', 'c');
+	  CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
+	              PARTITION a VALUES IN ('a'),
+	              PARTITION b VALUES IN ('b'),
+	              PARTITION c VALUES IN ('c')
+	  );
+	  CREATE INDEX idx
+	      ON t (e)
+	      PARTITION BY LIST (e)
+	          (
+	              PARTITION ai VALUES IN ('a'),
+	              PARTITION bi VALUES IN ('b'),
+	              PARTITION ci VALUES IN ('c')
+	          );
+	  ALTER PARTITION ai OF INDEX t@idx CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
+	  ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
+	  ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+	  DROP INDEX t@idx;
+	  DROP TABLE t;
+	  DROP TYPE typ;
+	  `)
+
+		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
+		tdb.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1`)
+		waitForJobDone(t, tdb, "GC for DROP TABLE%t")
 	})
 }

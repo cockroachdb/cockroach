@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -49,7 +50,8 @@ func init() {
 
 	// BNF vars.
 	var (
-		addr string
+		addr          string
+		bnfAPITimeout time.Duration
 	)
 
 	cmdBNF := &cobra.Command{
@@ -58,7 +60,7 @@ func init() {
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			bnfDir := args[0]
-			bnf, err := runBNF(addr)
+			bnf, err := runBNF(addr, bnfAPITimeout)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -129,11 +131,14 @@ func init() {
 	}
 
 	cmdBNF.Flags().StringVar(&addr, "addr", "./pkg/sql/parser/sql.y", "Location of sql.y file. Can also specify an http address.")
+	cmdBNF.Flags().DurationVar(&bnfAPITimeout, "timeout", time.Second*120, "Timeout in seconds for bnf HTTP Api, "+
+		"only relevant when the web api is used; default 120s.")
 
 	// SVG vars.
 	var (
-		maxWorkers  int
-		railroadJar string
+		maxWorkers         int
+		railroadJar        string
+		railroadAPITimeout time.Duration
 	)
 
 	cmdSVG := &cobra.Command{
@@ -195,7 +200,7 @@ func init() {
 					}
 					defer f.Close()
 
-					rr, err := runRR(f, railroadJar)
+					rr, err := runRR(f, railroadJar, railroadAPITimeout)
 					if err != nil {
 						log.Fatalf("%s: %s\n", m, err)
 					}
@@ -246,6 +251,8 @@ func init() {
 
 	cmdSVG.Flags().IntVar(&maxWorkers, "max-workers", 1, "maximum number of concurrent workers")
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
+	cmdSVG.Flags().DurationVar(&railroadAPITimeout, "timeout", time.Second*120, "Timeout in seconds for railroad HTTP Api, "+
+		"only relevant when the web api is used; default 120s.")
 
 	diagramCmd := &cobra.Command{
 		Use:   "grammar",
@@ -274,8 +281,8 @@ type stmtSpec struct {
 	nosplit        bool
 }
 
-func runBNF(addr string) ([]byte, error) {
-	return extract.GenerateBNF(addr)
+func runBNF(addr string, bnfAPITimeout time.Duration) ([]byte, error) {
+	return extract.GenerateBNF(addr, bnfAPITimeout)
 }
 
 func runParse(
@@ -298,14 +305,14 @@ func runParse(
 	return b, err
 }
 
-func runRR(r io.Reader, railroadJar string) ([]byte, error) {
+func runRR(r io.Reader, railroadJar string, railroadAPITimeout time.Duration) ([]byte, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 	var html []byte
 	if railroadJar == "" {
-		html, err = extract.GenerateRRNet(b)
+		html, err = extract.GenerateRRNet(b, railroadAPITimeout)
 	} else {
 		html, err = extract.GenerateRRJar(railroadJar, b)
 	}
@@ -375,8 +382,15 @@ var specs = []stmtSpec{
 		unlink: []string{"name", "password"},
 	},
 	{
-		name:    "alter_sequence_options_stmt",
-		inline:  []string{"sequence_option_list", "sequence_option_elem"},
+		name:    "alter_schema",
+		stmt:    "alter_schema_stmt",
+		inline:  []string{"qualifiable_schema_name"},
+		nosplit: true,
+	},
+	{
+		name:    "alter_sequence",
+		stmt:    "alter_sequence_stmt",
+		inline:  []string{"alter_rename_sequence_stmt", "alter_sequence_options_stmt", "alter_sequence_set_schema_stmt", "alter_sequence_owner_stmt", "sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer", "column_path": "column_name"},
 		unlink:  []string{"integer", "sequence_name", "column_path"},
 		nosplit: true,
@@ -401,8 +415,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "alter_view",
-		stmt:    "alter_rename_view_stmt",
-		inline:  []string{"opt_transaction"},
+		stmt:    "alter_view_stmt",
+		inline:  []string{"alter_rename_view_stmt", "alter_view_set_schema_stmt", "alter_view_owner_stmt", "opt_transaction"},
 		replace: map[string]string{"relation_expr": "view_name", "qualified_name": "name"}, unlink: []string{"view_name", "name"},
 	},
 	{
@@ -441,21 +455,17 @@ var specs = []stmtSpec{
 	{
 		name:   "backup",
 		stmt:   "backup_stmt",
-		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options", "as_of_clause", "opt_with_backup_options"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
+		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
-			"opt_backup_":                                     "",
-			"non_reserved_word_or_sconst":                     "destination",
-			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr":                "'AS OF SYSTEM TIME' timestamp",
-			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
-			"'WITH' 'OPTIONS' '(' kv_option_list ')'":         "",
-			"targets":                        "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder_opt_list": "destination",
-			"scont_or_placeholder":           "destination",
+			"targets":                        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
 			"sconst_or_placeholder":          "subdirectory",
+			"a_expr":                         "timestamp",
 		},
-		unlink:  []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location", "destination"},
-		exclude: []*regexp.Regexp{regexp.MustCompile("'INTO'")},
+		unlink:  []string{"targets", "subdirectory", "destination", "timestamp", "partitioned_backup_location"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
 		name: "begin_transaction",
@@ -519,6 +529,11 @@ var specs = []stmtSpec{
 		stmt:   "commit_stmt",
 		inline: []string{"opt_transaction"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
+	},
+	{
+		name:    "copy_from_stmt",
+		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
 		name:    "cancel_job",
@@ -617,6 +632,11 @@ var specs = []stmtSpec{
 			"string_or_placeholder 'FOR'":       "label 'FOR'",
 			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
 			"targets":                           "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
+	},
+	{
+		name:    "create_schema_stmt",
+		inline:  []string{"qualifiable_schema_name", "opt_schema_name", "opt_name"},
+		nosplit: true,
 	},
 	{
 		name:    "create_sequence_stmt",
@@ -736,6 +756,12 @@ var specs = []stmtSpec{
 		unlink: []string{"sequence_name"},
 	},
 	{
+		name:    "drop_schema",
+		stmt:    "drop_schema_stmt",
+		inline:  []string{"opt_drop_behavior", "qualifiable_schema_name"},
+		nosplit: true,
+	},
+	{
 		name:   "drop_stmt",
 		inline: []string{"table_name_list", "drop_ddl_stmt"},
 	},
@@ -811,7 +837,7 @@ var specs = []stmtSpec{
 		stmt:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'DISTSQL' | 'DEBUG' )",
+			"explain_option_name": "( 'PLAN' | 'DISTSQL' | 'DEBUG' )",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
@@ -896,7 +922,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"table_option":          "table_name",
 			"insert_column_item":    "column_name",
-			"import_format":         "'CSV'",
+			"import_format":         "( 'CSV' | 'AVRO' | 'DELIMITED' )",
 			"string_or_placeholder": "file_location",
 			"kv_option":             "option '=' value"},
 		unlink: []string{"table_name", "column_name", "file_location", "option", "value"},
@@ -1034,14 +1060,18 @@ var specs = []stmtSpec{
 		name:   "restore",
 		stmt:   "restore_stmt",
 		inline: []string{"opt_as_of_clause", "as_of_clause", "opt_with_restore_options"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'FROM'")},
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"targets":                                "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"targets":                                "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"string_or_placeholder":                  "subdirectory",
-			"list_of_string_or_placeholder_opt_list": "full_backup_location ( | partitioned_backup_location ( ',' partitioned_backup_location )*)",
+			"list_of_string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
 		},
-		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
+		unlink: []string{"subdirectory", "timestamp", "destination", "partitioned_backup_location"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
+		},
 	},
 	{
 		name:    "resume_job",
@@ -1263,13 +1293,20 @@ var specs = []stmtSpec{
 		unlink:  []string{"job_id"},
 	},
 	{
-		name:   "show_grants_stmt",
-		inline: []string{"name_list", "opt_on_targets_roles", "for_grantee_clause", "name_list"},
-		replace: map[string]string{
-			"targets_roles":                "( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*",
+		name: "show_grants_stmt",
+		inline: []string{
+			"opt_on_targets_roles",
+			"for_grantee_clause",
+			"targets_roles",
+			"name_list",
+			"schema_name_list",
+			"type_name_list",
 		},
-		unlink: []string{"role_name", "table_name", "database_name", "user_name"},
+		replace: map[string]string{
+			"targets":                 "( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"qualifiable_schema_name": "schema_name",
+		},
+		unlink: []string{"table_name", "database_name", "schema_name", "name"},
 	},
 	{
 		name:   "show_indexes",
@@ -1296,6 +1333,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "show_partitions_stmt",
+	},
+	{
+		name: "show_regions",
+		stmt: "show_regions_stmt",
 	},
 	{
 		name:   "show_statements",
@@ -1366,7 +1407,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "show_zone_stmt",
-		inline: []string{"opt_partition", "table_index_name", "partition"},
+		inline: []string{"opt_partition", "table_index_name", "partition", "from_with_implicit_for_alias"},
 	},
 	{
 		name:   "sort_clause",

@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -192,6 +194,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ScanExpr:
 		ep, err = b.buildScan(t)
 
+	case *memo.PlaceholderScanExpr:
+		ep, err = b.buildPlaceholderScan(t)
+
 	case *memo.SelectExpr:
 		ep, err = b.buildSelect(t)
 
@@ -353,9 +358,15 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			Cost:                float64(e.Cost()),
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
-			tableStats, ok := b.mem.GetCachedTableStatistics(scan.Table)
-			if ok {
-				val.TableRowCount = tableStats.RowCount
+			tab := b.mem.Metadata().Table(scan.Table)
+			if tab.StatisticCount() > 0 {
+				// The first stat is the most recent one.
+				stat := tab.Statistic(0)
+				val.TableStatsRowCount = stat.RowCount()
+				if val.TableStatsRowCount == 0 {
+					val.TableStatsRowCount = 1
+				}
+				val.TableStatsCreatedAt = stat.CreatedAt()
 			}
 		}
 		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
@@ -386,17 +397,13 @@ func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
 func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, error) {
 	numCols := len(values.Cols)
 
-	rows := make([][]tree.TypedExpr, len(values.Rows))
-	rowBuf := make([]tree.TypedExpr, len(rows)*numCols)
+	rows := makeTypedExprMatrix(len(values.Rows), numCols)
 	scalarCtx := buildScalarCtx{}
 	for i := range rows {
 		tup := values.Rows[i].(*memo.TupleExpr)
 		if len(tup.Elems) != numCols {
 			return nil, fmt.Errorf("inconsistent row length %d vs %d", len(tup.Elems), numCols)
 		}
-		// Chop off prefix of rowBuf and limit its capacity.
-		rows[i] = rowBuf[:numCols:numCols]
-		rowBuf = rowBuf[numCols:]
 		var err error
 		for j := 0; j < numCols; j++ {
 			rows[i][j], err = b.buildScalar(&scalarCtx, tup.Elems[j])
@@ -406,6 +413,18 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 		}
 	}
 	return rows, nil
+}
+
+// makeTypedExprMatrix allocates a TypedExpr matrix of the given size.
+func makeTypedExprMatrix(numRows, numCols int) [][]tree.TypedExpr {
+	rows := make([][]tree.TypedExpr, numRows)
+	rowBuf := make([]tree.TypedExpr, numRows*numCols)
+	for i := range rows {
+		// Chop off prefix of rowBuf and limit its capacity.
+		rows[i] = rowBuf[:numCols:numCols]
+		rowBuf = rowBuf[numCols:]
+	}
+	return rows
 }
 
 func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (execPlan, error) {
@@ -454,7 +473,9 @@ func (b *Builder) getColumns(
 // indexConstraintMaxResults returns the maximum number of results for a scan;
 // if successful (ok=true), the scan is guaranteed never to return more results
 // than maxRows.
-func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64, ok bool) {
+func (b *Builder) indexConstraintMaxResults(
+	scan *memo.ScanPrivate, relProps *props.Relational,
+) (maxRows uint64, ok bool) {
 	c := scan.Constraint
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
 		return 0, false
@@ -465,16 +486,16 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64
 	for i := 0; i < numCols; i++ {
 		indexCols.Add(c.Columns.Get(i).ID())
 	}
-	rel := scan.Relational()
-	if !rel.FuncDeps.ColsAreLaxKey(indexCols) {
+	if !relProps.FuncDeps.ColsAreLaxKey(indexCols) {
 		return 0, false
 	}
 
-	return c.CalculateMaxResults(b.evalCtx, indexCols, rel.NotNullCols)
+	return c.CalculateMaxResults(b.evalCtx, indexCols, relProps.NotNullCols)
 }
 
+// scanParams populates ScanParams and the output column mapping.
 func (b *Builder) scanParams(
-	tab cat.Table, scan *memo.ScanExpr,
+	tab cat.Table, scan *memo.ScanPrivate, relProps *props.Relational, reqProps *physical.Required,
 ) (exec.ScanParams, opt.ColMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
@@ -521,28 +542,29 @@ func (b *Builder) scanParams(
 
 	needed, outputMap := b.getColumns(scan.Cols, scan.Table)
 
-	// Get the estimated row count from the statistics.
+	// Get the estimated row count from the statistics. When there are no
+	// statistics available, we construct a scan node with
+	// the estimated row count of zero rows.
+	//
 	// Note: if this memo was originally created as part of a PREPARE
 	// statement or was stored in the query cache, the column stats would have
 	// been removed by DetachMemo. Update that function if the column stats are
 	// needed here in the future.
-	rowCount := scan.Relational().Stats.RowCount
-	if !scan.Relational().Stats.Available {
-		// When there are no statistics available, we construct a scan node with
-		// the estimated row count of zero rows.
-		rowCount = 0
+	var rowCount float64
+	if relProps.Stats.Available {
+		rowCount = relProps.Stats.RowCount
 	}
 
 	if scan.PartitionConstrainedScan {
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
-	softLimit := int64(math.Ceil(scan.RequiredPhysical().LimitHint))
+	softLimit := int64(math.Ceil(reqProps.LimitHint))
 	hardLimit := scan.HardLimit.RowCount()
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
-		maxResults, ok := b.indexConstraintMaxResults(scan)
+		maxResults, ok := b.indexConstraintMaxResults(scan, relProps)
 		if ok && maxResults < ParallelScanResultThreshold {
 			// Don't set the flag when we have a single span which returns a single
 			// row: it does nothing in this case except litter EXPLAINs.
@@ -554,18 +576,28 @@ func (b *Builder) scanParams(
 		}
 	}
 
+	// Figure out if we need to scan in reverse (ScanPrivateCanProvide takes
+	// HardLimit.Reverse() into account).
+	ok, reverse := ordering.ScanPrivateCanProvide(
+		b.mem.Metadata(),
+		scan,
+		&reqProps.Ordering,
+	)
+	if !ok {
+		return exec.ScanParams{}, opt.ColMap{}, errors.AssertionFailedf("scan can't provide required ordering")
+	}
+
 	return exec.ScanParams{
 		NeededCols:         needed,
 		IndexConstraint:    scan.Constraint,
 		InvertedConstraint: scan.InvertedConstraint,
 		HardLimit:          hardLimit,
 		SoftLimit:          softLimit,
-		// HardLimit.Reverse() is taken into account by ScanIsReverse.
-		Reverse:           ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
-		Parallelize:       parallelize,
-		Locking:           locking,
-		EstimatedRowCount: rowCount,
-		LocalityOptimized: scan.LocalityOptimized,
+		Reverse:            reverse,
+		Parallelize:        parallelize,
+		Locking:            locking,
+		EstimatedRowCount:  rowCount,
+		LocalityOptimized:  scan.LocalityOptimized,
 	}, outputMap, nil
 }
 
@@ -577,7 +609,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
 	}
 
-	params, outputCols, err := b.scanParams(tab, scan)
+	params, outputCols, err := b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -600,6 +632,72 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		} else {
 			b.ContainsFullIndexScan = true
 		}
+	}
+
+	res.root = root
+	return res, nil
+}
+
+func (b *Builder) buildPlaceholderScan(scan *memo.PlaceholderScanExpr) (execPlan, error) {
+	if scan.Constraint != nil || scan.InvertedConstraint != nil {
+		return execPlan{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(scan.Table)
+	idx := tab.Index(scan.Index)
+
+	// Build the index constraint.
+	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
+	for i := range spanColumns {
+		col := idx.Column(i)
+		ordinal := col.Ordinal()
+		colID := scan.Table.ColumnID(ordinal)
+		spanColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+	}
+	var columns constraint.Columns
+	columns.Init(spanColumns)
+	keyCtx := constraint.MakeKeyContext(&columns, b.evalCtx)
+
+	values := make([]tree.Datum, len(scan.Span))
+	for i, expr := range scan.Span {
+		// The expression is either a placeholder or a constant.
+		if p, ok := expr.(*memo.PlaceholderExpr); ok {
+			val, err := p.Value.(*tree.Placeholder).Eval(b.evalCtx)
+			if err != nil {
+				return execPlan{}, err
+			}
+			values[i] = val
+		} else {
+			values[i] = memo.ExtractConstDatum(expr)
+		}
+	}
+
+	key := constraint.MakeCompositeKey(values...)
+	var span constraint.Span
+	span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+	var spans constraint.Spans
+	spans.InitSingleSpan(&span)
+
+	var c constraint.Constraint
+	c.Init(&keyCtx, &spans)
+
+	private := scan.ScanPrivate
+	private.SetConstraint(b.evalCtx, &c)
+
+	params, outputCols, err := b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
+	if err != nil {
+		return execPlan{}, err
+	}
+	res := execPlan{outputCols: outputCols}
+	root, err := b.factory.ConstructScan(
+		tab,
+		tab.Index(scan.Index),
+		params,
+		res.reqOrdering(scan),
+	)
+	if err != nil {
+		return execPlan{}, err
 	}
 
 	res.root = root
@@ -1327,6 +1425,10 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 
 	hardLimit := uint64(0)
 	if set.Op() == opt.LocalityOptimizedSearchOp {
+		if !b.disableTelemetry {
+			telemetry.Inc(sqltelemetry.LocalityOptimizedSearchUseCounter)
+		}
+
 		// If we are performing locality optimized search, set a limit equal to
 		// the maximum possible number of rows. This will tell the execution engine
 		// not to execute the right child if the limit is reached by the left
@@ -1339,13 +1441,22 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 			))
 		}
 	}
-	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root, hardLimit)
-	if err != nil {
-		return execPlan{}, err
-	}
-	ep := execPlan{root: node}
+
+	ep := execPlan{}
 	for i, col := range private.OutCols {
 		ep.outputCols.Set(int(col), i)
+	}
+	// TODO(rytaft): This ordering may be stronger than the required output
+	// ordering in order to guarantee the use of a streaming (merge join or
+	// distinct) operation. We should probably pass both orderings to
+	// ConstructSetOp, similar to ConstructGroupBy.
+	reqOrdering := exec.OutputOrdering(
+		ep.sqlOrdering(ordering.StreamingSetOpOrdering(set, &set.RequiredPhysical().Ordering)),
+	)
+
+	ep.root, err = b.factory.ConstructSetOp(typ, all, left.root, right.root, reqOrdering, hardLimit)
+	if err != nil {
+		return execPlan{}, err
 	}
 	return ep, nil
 }
@@ -2207,7 +2318,7 @@ func (b *Builder) buildSequenceSelect(seqSel *memo.SequenceSelectExpr) (execPlan
 func (b *Builder) applySaveTable(
 	input execPlan, e memo.RelExpr, saveTableName string,
 ) (execPlan, error) {
-	name := tree.NewTableName(tree.Name(opt.SaveTablesDatabase), tree.Name(saveTableName))
+	name := tree.NewTableNameWithSchema(tree.Name(opt.SaveTablesDatabase), tree.PublicSchemaName, tree.Name(saveTableName))
 
 	// Ensure that the column names are unique and match the names used by the
 	// opttester.

@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // MergeQueueEnabled is a setting that controls whether the merge queue is
@@ -39,8 +41,19 @@ var MergeQueueEnabled = settings.RegisterBoolSetting(
 // larger than the heartbeat interval used by the coordinator.
 const TxnCleanupThreshold = time.Hour
 
-// CmdIDKey is a Raft command id.
+// CmdIDKey is a Raft command id. This will be logged unredacted - keep it random.
 type CmdIDKey string
+
+// SafeFormat implements redact.SafeFormatter.
+func (s CmdIDKey) SafeFormat(sp redact.SafePrinter, verb rune) {
+	sp.Printf("%q", redact.SafeString(s))
+}
+
+func (s CmdIDKey) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+var _ redact.SafeFormatter = CmdIDKey("")
 
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
 type FilterArgs struct {
@@ -193,3 +206,17 @@ func IntersectSpan(
 	}
 	return
 }
+
+// SplitByLoadMergeDelay wraps "kv.range_split.by_load_merge_delay".
+var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
+	"kv.range_split.by_load_merge_delay",
+	"the delay that range splits created due to load will wait before considering being merged away",
+	5*time.Minute,
+	func(v time.Duration) error {
+		const minDelay = 5 * time.Second
+		if v < minDelay {
+			return errors.Errorf("cannot be set to a value below %s", minDelay)
+		}
+		return nil
+	},
+)

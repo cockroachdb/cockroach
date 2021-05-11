@@ -24,7 +24,7 @@ import "util/log/eventpb/events.proto";
 //
 // They are relative to a particular SQL tenant.
 // In a multi-tenant setup, copies of DDL-related events are preserved
-// in each tenant's own system.eventlog table.
+// in each tenant's own `system.eventlog` table.
 
 // Notes to CockroachDB maintainers: refer to doc.go at the package
 // level for more details. Beware that JSON compatibility rules apply
@@ -497,5 +497,11 @@ message UnsafeDeleteNamespaceEntry {
   string name = 5 [(gogoproto.jsontag) = ",omitempty"];
   bool force = 6 [(gogoproto.jsontag) = ",omitempty"];
   string force_notice = 7 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+message ForceDeleteTableDataEntry {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 desc_id = 3 [(gogoproto.customname) = "DescriptorID", (gogoproto.jsontag) = ",omitempty"];
 }
 

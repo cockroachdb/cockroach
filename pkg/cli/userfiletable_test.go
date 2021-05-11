@@ -30,8 +30,8 @@ import (
 )
 
 func Example_userfile_upload() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	file, cleanUp := createTestFile("test.csv", "content")
 	defer cleanUp()
@@ -101,8 +101,9 @@ func checkUserFileContent(
 func TestUserFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+	c.omitArgs = true
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
@@ -138,42 +139,64 @@ func TestUserFileUpload(t *testing.T) {
 		err := ioutil.WriteFile(filePath, tc.fileContent, 0666)
 		require.NoError(t, err)
 		t.Run(tc.name, func(t *testing.T) {
-			destination := fmt.Sprintf("/test/file%d.csv", i)
+			t.Run("destination-not-full-URI", func(t *testing.T) {
+				destination := fmt.Sprintf("/test/file%d.csv", i)
 
-			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
-				destination))
-			require.NoError(t, err)
+				_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
+					destination))
+				require.NoError(t, err)
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
-				constructUserfileDestinationURI("", destination, security.RootUserName()),
-				tc.fileContent)
-		})
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+					constructUserfileDestinationURI("", destination, security.RootUserName()),
+					tc.fileContent)
+			})
 
-		t.Run(tc.name+"_fullURI", func(t *testing.T) {
-			destination := fmt.Sprintf("userfile://defaultdb.public.foo/test/file%d.csv", i)
-			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
-				destination))
-			require.NoError(t, err)
+			t.Run("full-URI", func(t *testing.T) {
+				destination := fmt.Sprintf("userfile://defaultdb.public.foo/test/file%d.csv", i)
+				_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
+					destination))
+				require.NoError(t, err)
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
-				destination, tc.fileContent)
-		})
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+					destination, tc.fileContent)
+			})
 
-		// Not specifying a qualified table name should default to writing to
-		// `defaultdb.public.userfiles_username`.
-		t.Run(tc.name+"_no-host-uri", func(t *testing.T) {
-			destination := fmt.Sprintf("userfile:///test/file%d.csv", i)
-			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
-				destination))
-			require.NoError(t, err)
+			// Not specifying a qualified table name should default to writing to
+			// `defaultdb.public.userfiles_username`.
+			t.Run("no-host-uri", func(t *testing.T) {
+				destination := fmt.Sprintf("userfile:///test/nohost/file%d.csv", i)
+				_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
+					destination))
+				require.NoError(t, err)
 
-			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
-				destination, tc.fileContent)
+				checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUserName(),
+					destination, tc.fileContent)
+			})
+
+			t.Run("get", func(t *testing.T) {
+				dest := filepath.Join(dir, fmt.Sprintf("tc-%d", i))
+				destination := fmt.Sprintf("userfile://defaultdb.public.foo/test/file%d.csv", i)
+				cmd := []string{"userfile", "get", destination, dest}
+				cliOutput, err := c.RunWithCaptureArgs(cmd)
+				require.NoError(t, err)
+				if strings.Contains(cliOutput, "ERROR") {
+					t.Fatalf("unexpected error: %q", cliOutput)
+				} else {
+					lines := strings.Split(strings.TrimSpace(cliOutput), "\n")
+
+					var downloaded []string
+					for i := range lines {
+						downloaded = append(downloaded, strings.Fields(lines[i])[3])
+					}
+					require.Equal(t, []string{fmt.Sprintf("test/file%d.csv", i)}, downloaded,
+						"get files from %v returned %q", cmd, cliOutput)
+				}
+			})
 		})
 	}
 }
 
-func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expectedFiles []string) {
+func checkListedFiles(t *testing.T, c TestCLI, uri string, args string, expectedFiles []string) {
 	cmd := []string{"userfile", "list", uri, args}
 	cliOutput, err := c.RunWithCaptureArgs(cmd)
 	require.NoError(t, err)
@@ -188,7 +211,7 @@ func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expected
 	require.Equal(t, expectedFiles, listedFiles, "listed files from %v", cmd)
 }
 
-func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles []string) {
+func checkDeletedFiles(t *testing.T, c TestCLI, uri, args string, expectedFiles []string) {
 	cmd := []string{"userfile", "delete", uri, args}
 	cliOutput, err := c.RunWithCaptureArgs(cmd)
 	require.NoError(t, err)
@@ -209,9 +232,9 @@ func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles 
 func TestUserfile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
+	c := NewCLITest(TestCLIParams{T: t})
 	c.omitArgs = true
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
@@ -392,9 +415,9 @@ func TestUserfile(t *testing.T) {
 func TestUsernameUserfileInteraction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
+	c := NewCLITest(TestCLIParams{T: t})
 	c.omitArgs = true
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()

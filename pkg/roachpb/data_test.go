@@ -12,7 +12,6 @@ package roachpb
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -1022,6 +1021,7 @@ func TestLeaseEqual(t *testing.T) {
 		ProposedTS            *hlc.ClockTimestamp
 		Epoch                 int64
 		Sequence              LeaseSequence
+		AcquisitionType       LeaseAcquisitionType
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -1620,17 +1620,6 @@ func TestValuePrettyPrint(t *testing.T) {
 		}
 	}
 }
-
-func TestKeyFormat(t *testing.T) {
-	const sample = "\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98"
-	k := Key(sample)
-	expected := ` /Table/53/42/"=\xbc ⌘"`
-	actual := fmt.Sprintf(" %s", k)
-	if expected != actual {
-		t.Errorf("String formatting of key: got %q expected %q", actual, expected)
-	}
-}
-
 func TestUpdateObservedTimestamps(t *testing.T) {
 	f := func(nodeID NodeID, walltime int64) ObservedTimestamp {
 		return ObservedTimestamp{

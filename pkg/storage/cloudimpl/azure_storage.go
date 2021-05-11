@@ -21,11 +21,32 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/errors"
 )
+
+func parseAzureURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_azure
+	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
+		Container:   uri.Host,
+		Prefix:      uri.Path,
+		AccountName: uri.Query().Get(AzureAccountNameParam),
+		AccountKey:  uri.Query().Get(AzureAccountKeyParam),
+		/* NB: additions here should also update azureQueryParams() serializer */
+	}
+	if conf.AzureConfig.AccountName == "" {
+		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
+	}
+	if conf.AzureConfig.AccountKey == "" {
+		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+	}
+	conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
+	return conf, nil
+}
 
 func azureQueryParams(conf *roachpb.ExternalStorage_Azure) string {
 	q := make(url.Values)
@@ -49,8 +70,10 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	conf *roachpb.ExternalStorage_Azure, settings *cluster.Settings, ioConf base.ExternalIODirConfig,
+	_ context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.azure")
+	conf := dest.AzureConfig
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
@@ -66,10 +89,10 @@ func makeAzureStorage(
 	serviceURL := azblob.NewServiceURL(*u, p)
 	return &azureStorage{
 		conf:      conf,
-		ioConf:    ioConf,
+		ioConf:    args.IOConf,
 		container: serviceURL.NewContainerURL(conf.Container),
 		prefix:    conf.Prefix,
-		settings:  settings,
+		settings:  args.Settings,
 	}, nil
 }
 
@@ -80,7 +103,7 @@ func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
 
 func (s *azureStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:    roachpb.ExternalStorageProvider_Azure,
+		Provider:    roachpb.ExternalStorageProvider_azure,
 		AzureConfig: s.conf,
 	}
 }
@@ -96,7 +119,7 @@ func (s *azureStorage) Settings() *cluster.Settings {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	err := contextutil.RunWithTimeout(ctx, "write azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "write azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			_, err := blob.Upload(
@@ -127,7 +150,7 @@ func (s *azureStorage) ReadFileAt(
 			switch azerr.ServiceCode() {
 			// TODO(adityamaru): Investigate whether both these conditions are required.
 			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
-				return nil, 0, errors.Wrapf(ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
+				return nil, 0, errors.Wrapf(cloud.ErrFileDoesNotExist, "azure blob does not exist: %s", err.Error())
 			}
 		}
 		return nil, 0, errors.Wrap(err, "failed to create azure reader")
@@ -149,7 +172,7 @@ func (s *azureStorage) ReadFileAt(
 func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	pattern := s.prefix
 	if patternSuffix != "" {
-		if containsGlob(s.prefix) {
+		if cloud.ContainsGlob(s.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -157,7 +180,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
 		azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Prefix: getPrefixBeforeWildcard(s.prefix)},
+		azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to list files for specified blob")
@@ -191,7 +214,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
-	err := contextutil.RunWithTimeout(ctx, "delete azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
@@ -202,7 +225,7 @@ func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var props *azblob.BlobGetPropertiesResponse
-	err := contextutil.RunWithTimeout(ctx, "size azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			var err error

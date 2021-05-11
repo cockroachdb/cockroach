@@ -10,7 +10,11 @@
 
 package cat
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+)
 
 // Schema is an interface to a database schema, which is a namespace that
 // contains other database objects, like tables and views. Examples of schema
@@ -24,7 +28,7 @@ type Schema interface {
 	// name are always specified.
 	Name() *SchemaName
 
-	// GetDataSourceNames returns the list of names for the data sources that the
-	// schema contains.
-	GetDataSourceNames(ctx context.Context) ([]DataSourceName, error)
+	// GetDataSourceNames returns the list of names and IDs for the data sources
+	// that the schema contains.
+	GetDataSourceNames(ctx context.Context) ([]DataSourceName, descpb.IDs, error)
 }

@@ -146,14 +146,14 @@ insert order
  │    ├── column3:12 => "order".o_w_id:3
  │    ├── column4:13 => "order".o_c_id:4
  │    ├── column5:14 => o_entry_d:5
- │    ├── column17:17 => o_carrier_id:6
+ │    ├── o_carrier_id_default:17 => o_carrier_id:6
  │    ├── column6:15 => o_ol_cnt:7
  │    └── column7:16 => o_all_local:8
  ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column7:16!null column17:17
+ │    ├── columns: column1:10!null column2:11!null column3:12!null column4:13!null column5:14!null column6:15!null column7:16!null o_carrier_id_default:17
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(10-17)
@@ -364,7 +364,7 @@ insert order_line
  │    ├── column4:15 => ol_number:4
  │    ├── column5:16 => order_line.ol_i_id:5
  │    ├── column6:17 => order_line.ol_supply_w_id:6
- │    ├── column21:21 => ol_delivery_d:7
+ │    ├── ol_delivery_d_default:21 => ol_delivery_d:7
  │    ├── column7:18 => ol_quantity:8
  │    ├── ol_amount:22 => order_line.ol_amount:9
  │    └── column9:20 => ol_dist_info:10
@@ -372,7 +372,7 @@ insert order_line
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: ol_amount:22 column21:21 column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column9:20!null
+ │    ├── columns: ol_amount:22 ol_delivery_d_default:21 column1:12!null column2:13!null column3:14!null column4:15!null column5:16!null column6:17!null column7:18!null column9:20!null
  │    ├── cardinality: [6 - 6]
  │    ├── immutable
  │    ├── fd: ()-->(21)
@@ -387,7 +387,7 @@ insert order_line
  │    │    └── (3045, 2, 10, 6, 92966, 0, 4, 366.760000, 'saCXoEzmssaF9m9cdLXe0Yhg')
  │    └── projections
  │         ├── crdb_internal.round_decimal_values(column8:19, 2) [as=ol_amount:22, outer=(19), immutable]
- │         └── CAST(NULL AS TIMESTAMP) [as=column21:21]
+ │         └── CAST(NULL AS TIMESTAMP) [as=ol_delivery_d_default:21]
  └── f-k-checks
       ├── f-k-checks-item: order_line(ol_w_id,ol_d_id,ol_o_id) -> order(o_w_id,o_d_id,o_id)
       │    └── anti-join (lookup order)
@@ -438,27 +438,27 @@ project
  ├── fd: ()-->(2-7)
  └── update warehouse
       ├── columns: w_id:1!null w_name:2 w_street_1:3 w_street_2:4 w_city:5 w_state:6 w_zip:7
-      ├── fetch columns: w_id:11 w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
+      ├── fetch columns: w_id:11 w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 w_ytd:19
       ├── update-mapping:
-      │    └── w_ytd:22 => warehouse.w_ytd:9
+      │    └── w_ytd_new:22 => w_ytd:9
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-7)
       └── project
-           ├── columns: w_ytd:22 w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
+           ├── columns: w_ytd_new:22 w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 w_ytd:19
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
            ├── fd: ()-->(11-19,22)
            ├── scan warehouse
-           │    ├── columns: w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 warehouse.w_ytd:19
+           │    ├── columns: w_id:11!null w_name:12 w_street_1:13 w_street_2:14 w_city:15 w_state:16 w_zip:17 w_tax:18 w_ytd:19
            │    ├── constraint: /11: [/10 - /10]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
            │    └── fd: ()-->(11-19)
            └── projections
-                └── crdb_internal.round_decimal_values(warehouse.w_ytd:19::DECIMAL + 3860.61, 2) [as=w_ytd:22, outer=(19), immutable]
+                └── crdb_internal.round_decimal_values(w_ytd:19::DECIMAL + 3860.61, 2) [as=w_ytd_new:22, outer=(19), immutable]
 
 opt format=hide-qual
 UPDATE district SET d_ytd = d_ytd + 3860.61 WHERE (d_w_id = 10) AND (d_id = 5)
@@ -472,27 +472,27 @@ project
  ├── fd: ()-->(3-8)
  └── update district
       ├── columns: d_id:1!null d_w_id:2!null d_name:3 d_street_1:4 d_street_2:5 d_city:6 d_state:7 d_zip:8
-      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
+      ├── fetch columns: d_id:13 d_w_id:14 d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
       ├── update-mapping:
-      │    └── d_ytd:26 => district.d_ytd:10
+      │    └── d_ytd_new:26 => d_ytd:10
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
       ├── fd: ()-->(1-8)
       └── project
-           ├── columns: d_ytd:26 d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
+           ├── columns: d_ytd_new:26 d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
            ├── cardinality: [0 - 1]
            ├── immutable
            ├── key: ()
            ├── fd: ()-->(13-23,26)
            ├── scan district
-           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 district.d_ytd:22 d_next_o_id:23
+           │    ├── columns: d_id:13!null d_w_id:14!null d_name:15 d_street_1:16 d_street_2:17 d_city:18 d_state:19 d_zip:20 d_tax:21 d_ytd:22 d_next_o_id:23
            │    ├── constraint: /14/13: [/10/5 - /10/5]
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
            │    └── fd: ()-->(13-23)
            └── projections
-                └── crdb_internal.round_decimal_values(district.d_ytd:22::DECIMAL + 3860.61, 2) [as=d_ytd:26, outer=(22), immutable]
+                └── crdb_internal.round_decimal_values(d_ytd:22::DECIMAL + 3860.61, 2) [as=d_ytd_new:26, outer=(22), immutable]
 
 opt format=hide-qual
 SELECT c_id
@@ -560,11 +560,11 @@ project
  ├── key: ()
  ├── fd: ()-->(4-17,51)
  ├── update customer
- │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 customer.c_balance:17 c_data:21
- │    ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+ │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_street_1:7 c_street_2:8 c_city:9 c_state:10 c_zip:11 c_phone:12 c_since:13 c_credit:14 c_credit_lim:15 c_discount:16 c_balance:17 c_data:21
+ │    ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │    ├── update-mapping:
- │    │    ├── c_balance:49 => customer.c_balance:17
- │    │    ├── c_ytd_payment:50 => customer.c_ytd_payment:18
+ │    │    ├── c_balance_new:49 => c_balance:17
+ │    │    ├── c_ytd_payment_new:50 => c_ytd_payment:18
  │    │    ├── c_payment_cnt_new:47 => c_payment_cnt:19
  │    │    └── c_data_new:48 => c_data:21
  │    ├── cardinality: [0 - 1]
@@ -572,20 +572,20 @@ project
  │    ├── key: ()
  │    ├── fd: ()-->(1-17,21)
  │    └── project
- │         ├── columns: c_balance:49 c_ytd_payment:50 c_payment_cnt_new:47 c_data_new:48 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+ │         ├── columns: c_balance_new:49 c_ytd_payment_new:50 c_payment_cnt_new:47 c_data_new:48 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
  │         ├── fd: ()-->(23-43,47-50)
  │         ├── scan customer
- │         │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 customer.c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+ │         │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  │         │    ├── constraint: /25/24/23: [/10/5/1343 - /10/5/1343]
  │         │    ├── cardinality: [0 - 1]
  │         │    ├── key: ()
  │         │    └── fd: ()-->(23-43)
  │         └── projections
- │              ├── crdb_internal.round_decimal_values(customer.c_balance:39::DECIMAL - 3860.61, 2) [as=c_balance:49, outer=(39), immutable]
- │              ├── crdb_internal.round_decimal_values(customer.c_ytd_payment:40::DECIMAL + 3860.61, 2) [as=c_ytd_payment:50, outer=(40), immutable]
+ │              ├── crdb_internal.round_decimal_values(c_balance:39::DECIMAL - 3860.61, 2) [as=c_balance_new:49, outer=(39), immutable]
+ │              ├── crdb_internal.round_decimal_values(c_ytd_payment:40::DECIMAL + 3860.61, 2) [as=c_ytd_payment_new:50, outer=(40), immutable]
  │              ├── c_payment_cnt:41 + 1 [as=c_payment_cnt_new:47, outer=(41), immutable]
  │              └── CASE c_credit:36 WHEN 'BC' THEN left((((((c_id:23::STRING || c_d_id:24::STRING) || c_w_id:25::STRING) || '5') || '10') || '3860.61') || c_data:43::STRING, 500) ELSE c_data:43::STRING END [as=c_data_new:48, outer=(23-25,36,43), immutable]
  └── projections
@@ -600,7 +600,7 @@ VALUES
 insert history
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column19:19 => rowid:1
+ │    ├── rowid_default:19 => rowid:1
  │    ├── column1:11 => history.h_c_id:2
  │    ├── column2:12 => history.h_c_d_id:3
  │    ├── column3:13 => history.h_c_w_id:4
@@ -613,7 +613,7 @@ insert history
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
- │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column7:17!null column8:18!null column19:19 h_amount:20!null
+ │    ├── columns: column1:11!null column2:12!null column3:13!null column4:14!null column5:15!null column7:17!null column8:18!null rowid_default:19 h_amount:20!null
  │    ├── cardinality: [1 - 1]
  │    ├── volatile
  │    ├── key: ()
@@ -877,20 +877,20 @@ WHERE c_w_id = 10 AND (c_d_id, c_id) IN (
 ----
 update customer
  ├── columns: <none>
- ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+ ├── fetch columns: c_id:23 c_d_id:24 c_w_id:25 c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
  ├── update-mapping:
- │    ├── c_balance:47 => customer.c_balance:17
+ │    ├── c_balance_new:47 => c_balance:17
  │    └── c_delivery_cnt_new:45 => c_delivery_cnt:20
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: c_balance:47 c_delivery_cnt_new:45 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+      ├── columns: c_balance_new:47 c_delivery_cnt_new:45 c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
       ├── cardinality: [0 - 10]
       ├── immutable
       ├── key: (23,24)
       ├── fd: ()-->(25), (23,24)-->(26-43,47), (42)-->(45)
       ├── scan customer
-      │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 customer.c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
+      │    ├── columns: c_id:23!null c_d_id:24!null c_w_id:25!null c_first:26 c_middle:27 c_last:28 c_street_1:29 c_street_2:30 c_city:31 c_state:32 c_zip:33 c_phone:34 c_since:35 c_credit:36 c_credit_lim:37 c_discount:38 c_balance:39 c_ytd_payment:40 c_payment_cnt:41 c_delivery_cnt:42 c_data:43
       │    ├── constraint: /25/24/23
       │    │    ├── [/10/1/1405 - /10/1/1405]
       │    │    ├── [/10/2/137 - /10/2/137]
@@ -906,7 +906,7 @@ update customer
       │    ├── key: (23,24)
       │    └── fd: ()-->(25), (23,24)-->(26-43)
       └── projections
-           ├── crdb_internal.round_decimal_values(customer.c_balance:39::DECIMAL + CASE c_d_id:24 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance:47, outer=(24,39), immutable]
+           ├── crdb_internal.round_decimal_values(c_balance:39::DECIMAL + CASE c_d_id:24 WHEN 6 THEN 57214.780000 WHEN 8 THEN 67755.430000 WHEN 1 THEN 51177.840000 WHEN 2 THEN 73840.700000 WHEN 4 THEN 45906.990000 WHEN 9 THEN 32523.760000 WHEN 10 THEN 20240.200000 WHEN 3 THEN 75299.790000 WHEN 5 THEN 56543.340000 WHEN 7 THEN 67157.940000 ELSE CAST(NULL AS DECIMAL) END, 2) [as=c_balance_new:47, outer=(24,39), immutable]
            └── c_delivery_cnt:42 + 1 [as=c_delivery_cnt_new:45, outer=(42), immutable]
 
 opt format=hide-qual
@@ -1395,7 +1395,7 @@ scalar-group-by
  │    │    │         │    ├── columns: o_id:1!null o_d_id:2!null o_w_id:3!null o_carrier_id:6
  │    │    │         │    ├── key: (1-3)
  │    │    │         │    ├── fd: (1-3)-->(6)
- │    │    │         │    └── ordering: +3,+2,-1 opt(6) [actual: +3,+2,-1]
+ │    │    │         │    └── ordering: +3,+2,-1
  │    │    │         └── filters
  │    │    │              └── o_carrier_id:6 IS NULL [outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  │    │    ├── project
@@ -1407,7 +1407,7 @@ scalar-group-by
  │    │    │         ├── ordering: +12,+11,-10 opt(16) [actual: +12,+11,-10]
  │    │    │         ├── scan order_line
  │    │    │         │    ├── columns: ol_o_id:10!null ol_d_id:11!null ol_w_id:12!null ol_delivery_d:16
- │    │    │         │    └── ordering: +12,+11,-10 opt(16) [actual: +12,+11,-10]
+ │    │    │         │    └── ordering: +12,+11,-10
  │    │    │         └── filters
  │    │    │              └── ol_delivery_d:16 IS NULL [outer=(16), constraints=(/16: [/NULL - /NULL]; tight), fd=()-->(16)]
  │    │    └── filters (true)

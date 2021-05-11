@@ -15,8 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // EmitMLAI registers the replica's last assigned max lease index with the
@@ -66,11 +70,6 @@ func (r *Replica) EmitMLAI() {
 // requests, making sure that future requests are not allowed to write below the
 // new closed timestamp.
 //
-// Returns false is the desired timestamp could not be closed. This can happen if the
-// lease is no longer valid, if the range has proposals in-flight, if there are
-// requests evaluating above the desired closed timestamp, or if the range has already
-// closed a higher timestamp.
-//
 // If the closed timestamp was advanced, the function returns a LAI to be
 // attached to the newly closed timestamp.
 //
@@ -81,9 +80,11 @@ func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
 	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy) {
+) sidetransport.BumpSideTransportClosedResult {
+	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	res.Desc = r.descRLocked()
 
 	// This method can be called even after a Replica is destroyed and removed
 	// from the Store's replicas map, because unlinkReplicaByRangeIDLocked does
@@ -91,24 +92,32 @@ func (r *Replica) BumpSideTransportClosed(
 	// local copy of its leaseholder map. To avoid issues resulting from this,
 	// we first check if the replica is destroyed.
 	if _, err := r.isDestroyedRLocked(); err != nil {
-		return false, 0, 0
+		res.FailReason = sidetransport.ReplicaDestroyed
+		return res
 	}
 
 	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	policy := r.closedTimestampPolicyRLocked()
 	target := targetByPolicy[policy]
-
-	// We can't close timestamps outside our lease.
-	st := r.leaseStatusForRequestRLocked(ctx, now, target)
-	if !st.IsValid() || !st.OwnedBy(r.StoreID()) {
-		return false, 0, 0
+	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
+	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
+	// matter.
+	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
+	if !valid || !st.OwnedBy(r.StoreID()) {
+		res.FailReason = sidetransport.InvalidLease
+		return res
+	}
+	if st.ClosedTimestampUpperBound().Less(target) {
+		res.FailReason = sidetransport.TargetOverLeaseExpiration
+		return res
 	}
 
 	// If the range is merging into its left-hand neighbor, we can't close
 	// timestamps any more because the joint-range would not be aware of reads
 	// performed based on this advanced closed timestamp.
 	if r.mergeInProgressRLocked() {
-		return false, 0, 0
+		res.FailReason = sidetransport.MergeInProgress
+		return res
 	}
 
 	// If there are pending Raft proposals in-flight or committed entries that
@@ -124,29 +133,152 @@ func (r *Replica) BumpSideTransportClosed(
 	// proposals and their timestamps are still tracked in proposal buffer's
 	// tracker, and they'll be considered below.
 	if len(r.mu.proposals) > 0 || r.mu.applyingEntries {
-		return false, 0, 0
+		res.FailReason = sidetransport.ProposalsInFlight
+		return res
 	}
 
 	// MaybeForwardClosedLocked checks that there are no evaluating requests
 	// writing under target.
 	if !r.mu.proposalBuf.MaybeForwardClosedLocked(ctx, target) {
-		return false, 0, 0
+		res.FailReason = sidetransport.RequestsEvaluatingBelowTarget
+		return res
 	}
 
 	// Update the replica directly since there's no side-transport connection to
 	// the local node.
-	r.mu.sideTransportClosedTimestamp = target
-	r.mu.sideTransportCloseTimestampLAI = lai
-	return true, lai, policy
+	r.sideTransportClosedTimestamp.forward(ctx, target, lai)
+	res.OK = true
+	res.LAI = lai
+	res.Policy = policy
+	return res
 }
 
 // closedTimestampTargetRLocked computes the timestamp we'd like to close for
 // this range. Note that we might not be able to ultimately close this timestamp
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
-	now := r.Clock().NowAsClockTimestamp()
-	maxClockOffset := r.Clock().MaxOffset()
-	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
-	policy := r.closedTimestampPolicyRLocked()
-	return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, policy)
+	return closedts.TargetForPolicy(
+		r.Clock().NowAsClockTimestamp(),
+		r.Clock().MaxOffset(),
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
+		r.closedTimestampPolicyRLocked(),
+	)
+}
+
+// ForwardSideTransportClosedTimestamp forwards the side-transport closed
+// timestamp. It is called by the closed timestamp side-transport receiver.
+func (r *Replica) ForwardSideTransportClosedTimestamp(
+	ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI,
+) {
+	r.sideTransportClosedTimestamp.forward(ctx, closed, lai)
+}
+
+// sidetransportAccess encapsulates state related to the closed timestamp's
+// information about the range. It stores a potentially stale closed timestamp
+// directly and, when that's not sufficient for a caller, it delegates to the
+// sidetransport.Receiver for more up to date information and updates the local
+// state. The idea is that the local state is cheap to access and acts as a
+// cache.
+//
+// Note that the sidetransportAccess does not incorporate the closed timestamp
+// information carried by Raft commands. That can be found in
+// r.mu.state.RaftClosedTimestamp. Generally, the Raft state should be queried
+// in parallel with the side transport state to determine an up to date closed
+// timestamp (i.e. the maximum across the two). For a given LAI, the side
+// transport closed timestamp will always lead the Raft closed timestamp. Across
+// LAIs, the larger LAI will always include the larger closed timestamp,
+// independent of the source.
+type sidetransportAccess struct {
+	rangeID  roachpb.RangeID
+	receiver sidetransportReceiver
+	mu       struct {
+		syncutil.RWMutex
+		// closedTimestamp is the cached info about the closed timestamp that was
+		// communicated by the side transport. The replica can use it if it has
+		// applied commands up to (and including) lai.
+		closedTimestamp hlc.Timestamp
+		lai             ctpb.LAI
+	}
+}
+
+// sidetransportReceiver abstracts *sidetransport.Receiver.
+type sidetransportReceiver interface {
+	GetClosedTimestamp(
+		ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
+	) (hlc.Timestamp, ctpb.LAI)
+	HTML() string
+}
+
+func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roachpb.RangeID) {
+	if receiver != nil {
+		// Avoid st.receiver becoming a typed nil.
+		st.receiver = receiver
+	}
+	st.rangeID = rangeID
+}
+
+// forward bumps the local closed timestamp info.
+func (st *sidetransportAccess) forward(ctx context.Context, closed hlc.Timestamp, lai ctpb.LAI) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.mu.closedTimestamp.Forward(closed) {
+		if st.mu.lai > lai {
+			log.Fatalf(ctx, "received side-transport notification with higher closed timestamp "+
+				"but lower LAI: r%d current LAI: %d received LAI: %d",
+				st.rangeID, st.mu.lai, lai)
+		}
+		st.mu.lai = lai
+	}
+}
+
+// get returns the closed timestamp that the side transport knows for the range.
+// leaseholder is the known leaseholder for the range. appliedLAI is the LAI
+// that the replica has caught up to. sufficient, if not empty, is a hint
+// indicating that any lower or equal closed timestamp suffices; the caller
+// doesn't need the highest closed timestamp necessarily.
+//
+// Returns an empty timestamp if no closed timestamp is known.
+//
+// get can be called without holding replica.mu. This means that a caller can
+// pass an appliedLAI that's lower than what a previous caller passed in. That's
+// fine, except the second caller might get an empty result.
+func (st *sidetransportAccess) get(
+	ctx context.Context, leaseholder roachpb.NodeID, appliedLAI ctpb.LAI, sufficient hlc.Timestamp,
+) hlc.Timestamp {
+	st.mu.RLock()
+	closed := st.mu.closedTimestamp
+	lai := st.mu.lai
+	st.mu.RUnlock()
+
+	// The local replica hasn't caught up to the closed timestamp we have stored,
+	// so what we have stored is not usable. There's no point in going to the
+	// receiver, as that one can only have an even higher LAI.
+	if appliedLAI < lai {
+		return hlc.Timestamp{}
+	}
+
+	// If the local info is enough to satisfy sufficient, we're done.
+	if !sufficient.IsEmpty() && sufficient.LessEq(closed) {
+		return closed
+	}
+
+	// Check with the receiver.
+
+	// Some tests don't have the receiver set.
+	if st.receiver == nil {
+		return closed
+	}
+
+	receiverClosed, receiverLAI := st.receiver.GetClosedTimestamp(ctx, st.rangeID, leaseholder)
+	if receiverClosed.IsEmpty() || appliedLAI < receiverLAI {
+		return closed
+	}
+
+	// Update the local closed timestamp info.
+	if closed.Forward(receiverClosed) {
+		st.forward(ctx, closed, receiverLAI)
+	}
+	return closed
 }

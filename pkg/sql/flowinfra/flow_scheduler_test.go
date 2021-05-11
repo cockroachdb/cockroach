@@ -48,7 +48,7 @@ func newMockFlow() *mockFlow {
 
 func (m *mockFlow) Setup(
 	_ context.Context, _ *execinfrapb.FlowSpec, _ FuseOpt,
-) (context.Context, error) {
+) (context.Context, execinfra.OpChains, error) {
 	panic("not implemented")
 }
 
@@ -102,6 +102,7 @@ func (m *mockFlow) ConcurrentTxnUse() bool {
 
 func TestFlowScheduler(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var (
 		ctx      = context.Background()

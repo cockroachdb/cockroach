@@ -11,14 +11,12 @@
 package xform
 
 import (
-	"sort"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // GenerateIndexScans enumerates all non-inverted secondary indexes on the given
@@ -39,9 +37,20 @@ import (
 //       index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
+	var pkCols opt.ColSet
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		// The iterator only produces pseudo-partial indexes (the predicate is
+		// true) because no filters are passed to iter.Init to imply a partial
+		// index predicate. constProj is a projection of constant values based
+		// on a partial index predicate. It should always be empty because a
+		// pseudo-partial index cannot hold a column constant. If it is not, we
+		// panic to avoid performing a logically incorrect transformation.
+		if len(constProj) != 0 {
+			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if isCovering {
@@ -60,18 +69,23 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		}
 
 		var sb indexScanBuilder
-		sb.init(c, scanPrivate.Table)
+		sb.Init(c, scanPrivate.Table)
+
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
-		sb.addIndexJoin(scanPrivate.Cols)
-		sb.build(grp)
+		sb.AddIndexJoin(scanPrivate.Cols)
+		sb.Build(grp)
 	})
 }
 
@@ -174,14 +188,14 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	localScanPrivate.LocalityOptimized = true
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
-	localScanPrivate.Constraint = &localConstraint
+	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScan := c.e.f.ConstructScan(localScanPrivate)
 
 	// Create the remote scan.
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	remoteScanPrivate.LocalityOptimized = true
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
-	remoteScanPrivate.Constraint = &remoteConstraint
+	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.
@@ -197,126 +211,6 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
 }
 
-// isZoneLocal returns true if the given zone config indicates that the replicas
-// it constrains will be primarily located in the localRegion.
-func isZoneLocal(zone cat.Zone, localRegion string) bool {
-	// First count the number of local and remote replica constraints. If all
-	// are local or all are remote, we can return early.
-	local, remote := 0, 0
-	for i, n := 0, zone.ReplicaConstraintsCount(); i < n; i++ {
-		replicaConstraint := zone.ReplicaConstraints(i)
-		for j, m := 0, replicaConstraint.ConstraintCount(); j < m; j++ {
-			constraint := replicaConstraint.Constraint(j)
-			if isLocal, ok := isConstraintLocal(constraint, localRegion); ok {
-				if isLocal {
-					local++
-				} else {
-					remote++
-				}
-			}
-		}
-	}
-	if local > 0 && remote == 0 {
-		return true
-	}
-	if remote > 0 && local == 0 {
-		return false
-	}
-
-	// Next check the voter replica constraints. Once again, if all are local or
-	// all are remote, we can return early.
-	local, remote = 0, 0
-	for i, n := 0, zone.VoterConstraintsCount(); i < n; i++ {
-		replicaConstraint := zone.VoterConstraint(i)
-		for j, m := 0, replicaConstraint.ConstraintCount(); j < m; j++ {
-			constraint := replicaConstraint.Constraint(j)
-			if isLocal, ok := isConstraintLocal(constraint, localRegion); ok {
-				if isLocal {
-					local++
-				} else {
-					remote++
-				}
-			}
-		}
-	}
-	if local > 0 && remote == 0 {
-		return true
-	}
-	if remote > 0 && local == 0 {
-		return false
-	}
-
-	// Use the lease preferences as a tie breaker. We only really care about the
-	// first one, since subsequent lease preferences only apply in edge cases.
-	if zone.LeasePreferenceCount() > 0 {
-		leasePref := zone.LeasePreference(0)
-		for i, n := 0, leasePref.ConstraintCount(); i < n; i++ {
-			constraint := leasePref.Constraint(i)
-			if isLocal, ok := isConstraintLocal(constraint, localRegion); ok {
-				return isLocal
-			}
-		}
-	}
-
-	return false
-}
-
-// isConstraintLocal returns isLocal=true and ok=true if the given constraint is
-// a required constraint matching the given localRegion. Returns isLocal=false
-// and ok=true if the given constraint is a prohibited constraint matching the
-// given local region or if it is a required constraint matching a different
-// region. Any other scenario returns ok=false, since this constraint gives no
-// information about whether the constrained replicas are local or remote.
-func isConstraintLocal(constraint cat.Constraint, localRegion string) (isLocal bool, ok bool) {
-	if constraint.GetKey() != regionKey {
-		// We only care about constraints on the region.
-		return false /* isLocal */, false /* ok */
-	}
-	if constraint.GetValue() == localRegion {
-		if constraint.IsRequired() {
-			// The local region is required.
-			return true /* isLocal */, true /* ok */
-		}
-		// The local region is prohibited.
-		return false /* isLocal */, true /* ok */
-	}
-	if constraint.IsRequired() {
-		// A remote region is required.
-		return false /* isLocal */, true /* ok */
-	}
-	// A remote region is prohibited, so this constraint gives no information
-	// about whether the constrained replicas are local or remote.
-	return false /* isLocal */, false /* ok */
-}
-
-// prefixIsLocal contains a PARTITION BY LIST prefix, and a boolean indicating
-// whether the prefix is from a local partition.
-type prefixIsLocal struct {
-	prefix  tree.Datums
-	isLocal bool
-}
-
-// prefixSorter sorts prefixes (which are wrapped in prefixIsLocal structs) so
-// that longer prefixes are ordered first.
-type prefixSorter []prefixIsLocal
-
-var _ sort.Interface = &prefixSorter{}
-
-// Len is part of sort.Interface.
-func (ps prefixSorter) Len() int {
-	return len(ps)
-}
-
-// Less is part of sort.Interface.
-func (ps prefixSorter) Less(i, j int) bool {
-	return len(ps[i].prefix) > len(ps[j].prefix)
-}
-
-// Swap is part of sort.Interface.
-func (ps prefixSorter) Swap(i, j int) {
-	ps[i], ps[j] = ps[j], ps[i]
-}
-
 // getLocalSpans returns the indexes of the spans from the given constraint that
 // target local partitions.
 func (c *CustomFuncs) getLocalSpans(
@@ -328,26 +222,7 @@ func (c *CustomFuncs) getLocalSpans(
 	// will iterate through the list of prefixes until we find a match, so
 	// ordering them with longer prefixes first ensures that the correct match is
 	// found.
-	allPrefixes := make(prefixSorter, 0, index.PartitionCount())
-	for i, n := 0, index.PartitionCount(); i < n; i++ {
-		part := index.Partition(i)
-		isLocal := localPartitions.Contains(i)
-		partitionPrefixes := part.PartitionByListPrefixes()
-		if len(partitionPrefixes) == 0 {
-			// This can happen when the partition value is DEFAULT.
-			allPrefixes = append(allPrefixes, prefixIsLocal{
-				prefix:  nil,
-				isLocal: isLocal,
-			})
-		}
-		for j := range partitionPrefixes {
-			allPrefixes = append(allPrefixes, prefixIsLocal{
-				prefix:  partitionPrefixes[j],
-				isLocal: isLocal,
-			})
-		}
-	}
-	sort.Sort(allPrefixes)
+	allPrefixes := getSortedPrefixes(index, localPartitions)
 
 	// Now iterate through the spans and determine whether each one matches
 	// with a prefix from a local partition.

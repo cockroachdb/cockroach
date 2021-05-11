@@ -39,6 +39,15 @@ var distanceTestCases = []struct {
 		"LINESTRING (1 1, 1 1)",
 	},
 	{
+		"Same 3D POINTs",
+		"POINT(1.0 2.0 3.0)",
+		"POINT(1.0 2.0 3.0)",
+		0,
+		0,
+		"LINESTRING (1 2, 1 2)",
+		"LINESTRING (1 2, 1 2)",
+	},
+	{
 		"Different POINTs",
 		"POINT(1.0 1.0)",
 		"POINT(2.0 1.0)",
@@ -46,6 +55,15 @@ var distanceTestCases = []struct {
 		1,
 		"LINESTRING(1.0 1.0, 2.0 1.0)",
 		"LINESTRING (1 1, 2 1)",
+	},
+	{
+		"Different 3D POINTs",
+		"POINT(0.0 1.0 2.0)",
+		"POINT(0.0 3.0 5.0)",
+		2,
+		2,
+		"LINESTRING (0 1, 0 3)",
+		"LINESTRING (0 1, 0 3)",
 	},
 	{
 		"POINT on LINESTRING",

@@ -42,7 +42,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -61,7 +61,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -80,7 +80,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 33 (33% of the table)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: /2-
 
@@ -99,7 +99,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 33 (33% of the table)
+      estimated row count: 33 (33% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: /2-
 
@@ -118,7 +118,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -137,7 +137,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -208,7 +208,7 @@ vectorized: true
         │
         └── • scan
               columns: (a, b, c, d)
-              estimated row count: 100,000 (100% of the table)
+              estimated row count: 100,000 (100% of the table; stats collected <hidden> ago)
               table: data@primary
               spans: FULL SCAN
 
@@ -233,7 +233,7 @@ vectorized: true
     │ filter: c = 1
     │
     └── • scan
-          estimated row count: 100,000 (100% of the table)
+          estimated row count: 100,000 (100% of the table; stats collected <hidden> ago)
           table: data@primary
           spans: FULL SCAN
 ·
@@ -292,7 +292,7 @@ vectorized: true
         └── • scan
               columns: (title, shelf)
               ordering: +title
-              estimated row count: 100 (100% of the table)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
               table: books@primary
               spans: FULL SCAN
 
@@ -337,13 +337,13 @@ vectorized: true
             │
             ├── • scan
             │     columns: (title, shelf)
-            │     estimated row count: 100 (100% of the table)
+            │     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
             │     table: books@primary
             │     spans: FULL SCAN
             │
             └── • scan
                   columns: (name, book)
-                  estimated row count: 100 (100% of the table)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
                   table: authors@primary
                   spans: FULL SCAN
 
@@ -375,12 +375,12 @@ vectorized: true
         │ equality: (title) = (book)
         │
         ├── • scan
-        │     estimated row count: 100 (100% of the table)
+        │     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
         │     table: books@primary
         │     spans: FULL SCAN
         │
         └── • scan
-              estimated row count: 100 (100% of the table)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
               table: authors@primary
               spans: FULL SCAN
 ·
@@ -412,7 +412,7 @@ vectorized: true
         │
         └── • scan
               columns: (name, book)
-              estimated row count: 100 (100% of the table)
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
               table: authors@primary
               spans: FULL SCAN
 
@@ -429,13 +429,13 @@ vectorized: true
 │
 ├── • scan
 │     columns: (title, edition, shelf)
-│     estimated row count: 10,000 (100% of the table)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
 │     table: books2@primary
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (title, edition, shelf)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: books@primary
       spans: FULL SCAN
 
@@ -454,7 +454,7 @@ vectorized: true
     │ estimated row count: 100
     │
     └── • scan
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: authors@primary
           spans: FULL SCAN
 ·
@@ -520,7 +520,7 @@ vectorized: true
     │
     └── • scan
           columns: (a)
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@primary
           spans: FULL SCAN
 
@@ -553,7 +553,7 @@ vectorized: true
             │
             └── • scan
                   columns: (a)
-                  estimated row count: 100 (100% of the table)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
                   table: small@primary
                   spans: FULL SCAN
 
@@ -576,7 +576,7 @@ vectorized: true
 │
 └── • scan
       columns: (b)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: small@primary
       spans: FULL SCAN
 
@@ -603,7 +603,7 @@ vectorized: true
     └── • scan
           columns: (a)
           ordering: +a
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@primary
           spans: FULL SCAN
 
@@ -620,7 +620,7 @@ vectorized: true
 │ pred: (b % 6) = 0
 │
 └── • scan
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: small@primary
       spans: FULL SCAN
 ·
@@ -645,7 +645,7 @@ vectorized: true
     │
     └── • scan
           columns: (c)
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@primary
           spans: FULL SCAN
 
@@ -678,7 +678,7 @@ vectorized: true
             │
             └── • scan
                   columns: (c)
-                  estimated row count: 100 (100% of the table)
+                  estimated row count: 100 (100% of the table; stats collected <hidden> ago)
                   table: small@primary
                   spans: FULL SCAN
 
@@ -702,7 +702,7 @@ vectorized: true
     │
     └── • scan
           columns: (c)
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@primary
           spans: FULL SCAN
 
@@ -731,13 +731,13 @@ vectorized: true
     │   │
     │   └── • scan
     │         columns: (b, d)
-    │         estimated row count: 10,000 (100% of the table)
+    │         estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
     │         table: large@primary
     │         spans: FULL SCAN
     │
     └── • scan
           columns: (c)
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@primary
           spans: FULL SCAN
 
@@ -937,7 +937,7 @@ vectorized: true
 └── • scan
       columns: (a, b, c)
       ordering: +a
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -958,14 +958,14 @@ vectorized: true
 ├── • scan
 │     columns: (d, e, f)
 │     ordering: +f
-│     estimated row count: 10,000 (100% of the table)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
 │     table: def@primary
 │     spans: FULL SCAN
 │
 └── • scan
       columns: (a, b, c)
       ordering: +a
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -989,13 +989,13 @@ vectorized: true
     │
     ├── • scan
     │     columns: (d, e, f)
-    │     estimated row count: 10,000 (100% of the table)
+    │     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
     │     table: def@primary
     │     spans: FULL SCAN
     │
     └── • scan
           columns: (a, b, c)
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: abc@primary
           spans: FULL SCAN
 
@@ -1014,7 +1014,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -1032,7 +1032,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -1051,7 +1051,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -1070,7 +1070,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -1089,7 +1089,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -1108,7 +1108,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@primary
       spans: FULL SCAN
 
@@ -1125,7 +1125,7 @@ vectorized: true
 │ equality: (a) = (a)
 │
 └── • scan
-      estimated row count: 100 (100% of the table)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: small@primary
       spans: FULL SCAN
 ·
@@ -1149,7 +1149,7 @@ vectorized: true
     │ filter: (a + b) < 20
     │
     └── • scan
-          estimated row count: 100 (100% of the table)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
           table: small@primary
           spans: FULL SCAN
 ·
@@ -1767,7 +1767,7 @@ vectorized: true
                                         │ filter: n_name = 'SAUDI ARABIA'
                                         │
                                         └── • scan
-                                              estimated row count: 25 (100% of the table)
+                                              estimated row count: 25 (100% of the table; stats collected <hidden> ago)
                                               table: nation@primary
                                               spans: FULL SCAN
 

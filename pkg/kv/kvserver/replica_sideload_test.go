@@ -584,7 +584,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, eng storage.Engine) {
 	tc.Start(t, stopper)
 
 	tr := tc.store.ClusterSettings().Tracer
-	tr.TestingIncludeAsyncSpansInRecordings() // we assert on async span traces in this test
+	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), tr, "test-recording")
 	defer cancel()
 

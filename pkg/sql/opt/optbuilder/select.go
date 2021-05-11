@@ -59,7 +59,7 @@ func (b *Builder) buildDataSource(
 		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
 
 		if source.Ordinality {
-			outScope = b.buildWithOrdinality("ordinality", outScope)
+			outScope = b.buildWithOrdinality(outScope)
 		}
 
 		// Overwrite output properties with any alias information.
@@ -83,7 +83,7 @@ func (b *Builder) buildDataSource(
 			for i, col := range cte.cols {
 				id := col.ID
 				c := b.factory.Metadata().ColumnMeta(id)
-				newCol := b.synthesizeColumn(outScope, col.Alias, c.Type, nil, nil)
+				newCol := b.synthesizeColumn(outScope, scopeColName(tree.Name(col.Alias)), c.Type, nil, nil)
 				newCol.table = *tn
 				inCols[i] = id
 				outCols[i] = newCol.id
@@ -168,14 +168,14 @@ func (b *Builder) buildDataSource(
 
 		id := b.factory.Memo().NextWithID()
 		b.factory.Metadata().AddWithBinding(id, innerScope.expr)
-		cte := cteSource{
+		cte := &cteSource{
 			name:         tree.AliasClause{},
 			cols:         innerScope.makePresentationWithHiddenCols(),
 			originalExpr: source.Statement,
 			expr:         innerScope.expr,
 			id:           id,
 		}
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+		b.addCTE(cte)
 
 		inCols := make(opt.ColList, len(cte.cols))
 		outCols := make(opt.ColList, len(cte.cols))
@@ -303,7 +303,7 @@ func (b *Builder) buildView(
 	for i := range outScope.cols {
 		outScope.cols[i].table = *viewName
 		if hasCols {
-			outScope.cols[i].name = view.ColumnName(i)
+			outScope.cols[i].name = scopeColName(view.ColumnName(i))
 		}
 	}
 
@@ -360,7 +360,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 				if col.visibility != cat.Visible {
 					continue
 				}
-				col.name = colAlias[aliasIdx]
+				col.name = scopeColName(colAlias[aliasIdx])
 				if isScan {
 					// Override column metadata alias.
 					colMeta := b.factory.Metadata().ColumnMeta(col.id)
@@ -481,7 +481,7 @@ func (b *Builder) buildScan(
 		kind := col.Kind()
 		outScope.cols[i] = scopeColumn{
 			id:           colID,
-			name:         name,
+			name:         scopeColName(name),
 			table:        tabMeta.Alias,
 			typ:          col.DatumType(),
 			visibility:   col.Visibility(),
@@ -589,6 +589,17 @@ func (b *Builder) buildScan(
 // These expressions are used as "known truths" about table data; as such they
 // can only contain immutable operators.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
+	// Columns of a user defined type have a constraint to ensure
+	// enum values for that column belong to the UDT. We do not want to
+	// track view deps here, or else a view depending on a table with a
+	// column that is a UDT will result in a type dependency being added
+	// between the view and the UDT, even if the view does not use that column.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	tab := tabMeta.Table
 
 	// Check if we have any validated check constraints. Only validated
@@ -658,6 +669,16 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // are used as "known truths" about table data. Any columns for which the
 // expression contains non-immutable operators are omitted.
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+	// We do not want to track view deps here, otherwise a view depending
+	// on a table with a computed column of a UDT will result in a
+	// type dependency being added between the view and the UDT,
+	// even if the view does not use that column.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
@@ -680,7 +701,7 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
-		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
+		if texpr := tableScope.resolveAndRequireType(expr, tabCol.DatumType()); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
 			var scalar opt.ScalarExpr
 			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
@@ -713,7 +734,7 @@ func (b *Builder) buildSequenceSelect(
 		col := md.ColumnMeta(c)
 		outScope.cols[i] = scopeColumn{
 			id:    c,
-			name:  tree.Name(col.Alias),
+			name:  scopeColName(tree.Name(col.Alias)),
 			table: *seqName,
 			typ:   col.Type,
 		}
@@ -731,14 +752,13 @@ func (b *Builder) buildSequenceSelect(
 	return outScope
 }
 
-// buildWithOrdinality builds a group which appends an increasing integer column to
-// the output. colName optionally denotes the name this column is given, or can
-// be blank for none.
+// buildWithOrdinality builds a group which appends an increasing integer column
+// to the output.
 //
-// See Builder.buildStmt for a description of the remaining input and
-// return values.
-func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope *scope) {
-	col := b.synthesizeColumn(inScope, colName, types.Int, nil, nil /* scalar */)
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
+func (b *Builder) buildWithOrdinality(inScope *scope) (outScope *scope) {
+	col := b.synthesizeColumn(inScope, scopeColName("ordinality"), types.Int, nil, nil /* scalar */)
 
 	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
 	// for the semantics around WITH ORDINALITY and ordering.
@@ -750,110 +770,6 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	})
 
 	return inScope
-}
-
-func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
-	if with == nil {
-		return inScope
-	}
-
-	outScope = inScope.push()
-	addedCTEs := make([]cteSource, len(with.CTEList))
-	hasRecursive := false
-
-	// Make a fake subquery to ensure that no CTEs are correlated.
-	// TODO(justin): relax this restriction.
-	outer := b.subquery
-	defer func() { b.subquery = outer }()
-	b.subquery = &subquery{}
-
-	outScope.ctes = make(map[string]*cteSource)
-	for i, cte := range with.CTEList {
-		hasRecursive = hasRecursive || with.Recursive
-		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
-
-		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
-		if b.subquery != nil && !b.subquery.outerCols.Empty() {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
-		}
-
-		aliasStr := cte.Name.Alias.String()
-		if _, ok := outScope.ctes[aliasStr]; ok {
-			panic(pgerror.Newf(
-				pgcode.DuplicateAlias, "WITH query name %s specified more than once", aliasStr,
-			))
-		}
-
-		id := b.factory.Memo().NextWithID()
-		b.factory.Metadata().AddWithBinding(id, cteExpr)
-
-		addedCTEs[i] = cteSource{
-			name:         cte.Name,
-			cols:         cteCols,
-			originalExpr: cte.Stmt,
-			expr:         cteExpr,
-			id:           id,
-			mtr:          cte.Mtr,
-		}
-		cte := &addedCTEs[i]
-		outScope.ctes[cte.name.Alias.String()] = cte
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
-
-		if cteExpr.Relational().CanMutate && !inScope.atRoot {
-			panic(
-				pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"WITH clause containing a data-modifying statement must be at the top level",
-				),
-			)
-		}
-
-	}
-
-	telemetry.Inc(sqltelemetry.CteUseCounter)
-	if hasRecursive {
-		telemetry.Inc(sqltelemetry.RecursiveCteUseCounter)
-	}
-
-	return outScope
-}
-
-// A WITH constructed within an EXPLAIN should not be hoisted above it, and so
-// we need to denote a boundary which blocks them.
-func (b *Builder) pushWithFrame() {
-	b.cteStack = append(b.cteStack, []cteSource{})
-}
-
-// popWithFrame wraps the given scope's expression in the CTEs that have been
-// queued up at this level.
-func (b *Builder) popWithFrame(s *scope) {
-	s.expr = b.flushCTEs(s.expr)
-}
-
-// flushCTEs adds With expressions on top of an expression.
-func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
-	ctes := b.cteStack[len(b.cteStack)-1]
-	b.cteStack = b.cteStack[:len(b.cteStack)-1]
-
-	if len(ctes) == 0 {
-		return expr
-	}
-
-	// Since later CTEs can refer to earlier ones, we want to add these in
-	// reverse order.
-	for i := len(ctes) - 1; i >= 0; i-- {
-		expr = b.factory.ConstructWith(
-			ctes[i].expr,
-			expr,
-			&memo.WithPrivate{
-				ID:           ctes[i].id,
-				Name:         string(ctes[i].name.Alias),
-				Mtr:          ctes[i].mtr,
-				OriginalExpr: ctes[i].originalExpr,
-			},
-		)
-	}
-	return expr
 }
 
 // buildSelectStmt builds a set of memo groups that represent the given select
@@ -980,7 +896,7 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			expr := &outScope.cols[i]
-			col := projectionsScope.addColumn("" /* alias */, expr)
+			col := projectionsScope.addColumn(scopeColName(""), expr)
 			b.buildScalar(expr, outScope, projectionsScope, col, nil)
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)

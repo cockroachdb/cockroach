@@ -982,7 +982,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// "foo" is being added.
 	mt.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{Direction: descpb.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err,
-		`duplicate: index "foo" in the middle of being added, not yet public`) {
+		`duplicate index name: "foo"`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
@@ -1155,27 +1155,33 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		{"v", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
 	}
 
-	if len(tableDesc.GetMutations()) != len(expected) {
-		t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.GetMutations()), len(expected))
+	if len(tableDesc.AllMutations()) != len(expected) {
+		t.Fatalf("%d mutations, instead of expected %d", len(tableDesc.AllMutations()), len(expected))
 	}
 
-	for i, m := range tableDesc.GetMutations() {
+	for i, m := range tableDesc.AllMutations() {
 		name := expected[i].name
-		if col := m.GetColumn(); col != nil {
-			if col.Name != name {
-				t.Errorf("%d entry: name %s, expected %s", i, col.Name, name)
+		if col := m.AsColumn(); col != nil {
+			if col.GetName() != name {
+				t.Errorf("%d entry: name %s, expected %s", i, col.GetName(), name)
 			}
 		}
-		if idx := m.GetIndex(); idx != nil {
-			if idx.Name != name {
-				t.Errorf("%d entry: name %s, expected %s", i, idx.Name, name)
+		if idx := m.AsIndex(); idx != nil {
+			if idx.GetName() != name {
+				t.Errorf("%d entry: name %s, expected %s", i, idx.GetName(), name)
 			}
 		}
-		if id := expected[i].id; m.MutationID != id {
-			t.Errorf("%d entry: id %d, expected %d", i, m.MutationID, id)
+		if id := expected[i].id; m.MutationID() != id {
+			t.Errorf("%d entry: id %d, expected %d", i, m.MutationID(), id)
 		}
-		if state := expected[i].state; m.State != state {
-			t.Errorf("%d entry: state %s, expected %s", i, m.State, state)
+		actualState := descpb.DescriptorMutation_UNKNOWN
+		if m.WriteAndDeleteOnly() {
+			actualState = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		} else if m.DeleteOnly() {
+			actualState = descpb.DescriptorMutation_DELETE_ONLY
+		}
+		if state := expected[i].state; actualState != state {
+			t.Errorf("%d entry: state %s, expected %s", i, actualState, state)
 		}
 	}
 }

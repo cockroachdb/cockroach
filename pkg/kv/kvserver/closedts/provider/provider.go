@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -129,6 +130,12 @@ func (p *Provider) runCloser(ctx context.Context) {
 	t := timeutil.NewTimer()
 	defer t.Stop()
 	for {
+		// If the "new" closed timestamps mechanism is enabled, we inhibit this old one.
+		if p.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+			log.Infof(ctx, "disabling legacy closed-timestamp mechanism; the new one is enabled")
+			break
+		}
+
 		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
 		targetDuration := float64(closedts.TargetDuration.Get(&p.cfg.Settings.SV))
 		if targetDuration > 0 {

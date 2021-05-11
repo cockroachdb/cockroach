@@ -34,18 +34,22 @@ import (
 func RunNemesis(
 	ctx context.Context,
 	rng *rand.Rand,
-	ct ClosedTimestampTargetInterval,
+	env *Env,
 	config GeneratorConfig,
+	numSteps int,
 	dbs ...*kv.DB,
 ) ([]error, error) {
-	const concurrency, numSteps = 5, 30
+	const concurrency = 5
+	if numSteps <= 0 {
+		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
+	}
 
 	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
 	if err != nil {
 		return nil, err
 	}
-	a := MakeApplier(dbs...)
-	w, err := Watch(ctx, dbs, ct, GeneratorDataSpan())
+	a := MakeApplier(env, dbs...)
+	w, err := Watch(ctx, env, dbs, GeneratorDataSpan())
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +61,7 @@ func RunNemesis(
 	workerFn := func(ctx context.Context, workerIdx int) error {
 		workerName := fmt.Sprintf(`%d`, workerIdx)
 		var buf strings.Builder
-		for atomic.AddInt64(&stepsStartedAtomic, 1) <= numSteps {
+		for atomic.AddInt64(&stepsStartedAtomic, 1) <= int64(numSteps) {
 			step := g.RandStep(rng)
 
 			recCtx, collect, cancel := tracing.ContextWithRecordingSpan(

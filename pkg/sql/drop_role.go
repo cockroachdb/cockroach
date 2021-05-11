@@ -16,7 +16,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -121,7 +121,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
-		func(db *dbdesc.Immutable) error {
+		func(db catalog.DatabaseDescriptor) error {
 			if _, ok := userNames[db.GetPrivileges().Owner()]; ok {
 				userNames[db.GetPrivileges().Owner()] = append(
 					userNames[db.GetPrivileges().Owner()],
@@ -179,8 +179,9 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				if f.Len() > 0 {
 					f.WriteString(", ")
 				}
-				parentName := lCtx.getParentName(table)
-				tn := tree.MakeTableName(tree.Name(parentName), tree.Name(table.GetName()))
+				parentName := lCtx.getDatabaseName(table)
+				schemaName := lCtx.getSchemaName(table)
+				tn := tree.MakeTableNameWithSchema(tree.Name(parentName), tree.Name(schemaName), tree.Name(table.GetName()))
 				f.FormatNode(&tn)
 				break
 			}

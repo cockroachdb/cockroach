@@ -516,15 +516,6 @@ e'\xad'::string
 ^
 
 error
-EXPLAIN EXECUTE a
-----
-at or near "execute": syntax error
-DETAIL: source SQL:
-EXPLAIN EXECUTE a
-        ^
-HINT: try \h EXPLAIN
-
-error
 EXPLAIN (ANALYZE, PLAN) SELECT 1
 ----
 at or near "analyze": syntax error

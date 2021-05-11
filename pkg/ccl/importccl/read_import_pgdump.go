@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -112,11 +111,14 @@ func (p *postgreStream) Next() (interface{}, error) {
 			// so here.
 			if p.unsupportedStmtLogger.ignoreUnsupported && errors.HasType(err, (*tree.UnsupportedError)(nil)) {
 				if unsupportedErr := (*tree.UnsupportedError)(nil); errors.As(err, &unsupportedErr) {
-					p.unsupportedStmtLogger.log(unsupportedErr.FeatureName, true /* isParseError */)
+					err := p.unsupportedStmtLogger.log(unsupportedErr.FeatureName, true /* isParseError */)
+					if err != nil {
+						return nil, err
+					}
 				}
 				continue
 			}
-			return nil, err
+			return nil, wrapErrorWithUnsupportedHint(err)
 		}
 		switch len(stmts) {
 		case 0:
@@ -236,43 +238,61 @@ type schemaParsingObjects struct {
 func createPostgresSchemas(
 	ctx context.Context,
 	parentID descpb.ID,
-	createSchema map[string]*tree.CreateSchema,
+	schemasToCreate map[string]*tree.CreateSchema,
 	execCfg *sql.ExecutorConfig,
 	user security.SQLUsername,
 ) ([]*schemadesc.Mutable, error) {
-	var dbDesc *dbdesc.Immutable
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		dbDesc, err = catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, parentID)
-		return err
-	}); err != nil {
-		return nil, err
+	createSchema := func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		dbDesc catalog.DatabaseDescriptor, schema *tree.CreateSchema,
+	) (*schemadesc.Mutable, error) {
+		desc, _, err := sql.CreateUserDefinedSchemaDescriptor(
+			ctx, user, schema, txn, descriptors, execCfg, dbDesc, false, /* allocateID */
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// This is true when the schema exists and we are processing a
+		// CREATE SCHEMA IF NOT EXISTS statement.
+		if desc == nil {
+			return nil, nil
+		}
+
+		// We didn't allocate an ID above, so we must assign it a mock ID until it
+		// is assigned an actual ID later in the import.
+		desc.ID = getNextPlaceholderDescID()
+		desc.SetOffline("importing")
+		return desc, nil
 	}
-	schemaDescs := make([]*schemadesc.Mutable, 0)
-	for _, schema := range createSchema {
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			desc, _, err := sql.CreateUserDefinedSchemaDescriptor(ctx, user, schema, txn, execCfg,
-				dbDesc, false /* allocateID */)
+	var schemaDescs []*schemadesc.Mutable
+	createSchemaDescs := func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	) error {
+		schemaDescs = nil // reset for retries
+		_, dbDesc, err := descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidCached: true,
+		})
+		if err != nil {
+			return err
+		}
+		for _, schema := range schemasToCreate {
+			scDesc, err := createSchema(ctx, txn, descriptors, dbDesc, schema)
 			if err != nil {
 				return err
 			}
-
-			// This is true when the schema exists and we are processing a
-			// CREATE SCHEMA IF NOT EXISTS statement.
-			if desc == nil {
-				return nil
+			if scDesc != nil {
+				schemaDescs = append(schemaDescs, scDesc)
 			}
-
-			// We didn't allocate an ID above, so we must assign it a mock ID until it
-			// is assigned an actual ID later in the import.
-			desc.ID = getNextPlaceholderDescID()
-			desc.State = descpb.DescriptorState_OFFLINE
-			desc.OfflineReason = "importing"
-			schemaDescs = append(schemaDescs, desc)
-			return err
-		}); err != nil {
-			return nil, err
 		}
+		return nil
+	}
+	if err := descs.Txn(
+		ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
+		execCfg.DB, createSchemaDescs,
+	); err != nil {
+		return nil, err
 	}
 	return schemaDescs, nil
 }
@@ -309,6 +329,8 @@ func createPostgresSequences(
 			descpb.NewDefaultPrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
 			nil, /* params */
+			// If this is multi-region, this will get added by WriteDescriptors.
+			false, /* isMultiRegion */
 		)
 		if err != nil {
 			return nil, err
@@ -457,8 +479,15 @@ func readPostgresCreateTable(
 			}
 
 			// Construct sequence descriptors.
-			seqs, err := createPostgresSequences(ctx, parentID, schemaObjects.createSeq, fks,
-				walltime, owner, schemaNameToDesc)
+			seqs, err := createPostgresSequences(
+				ctx,
+				parentID,
+				schemaObjects.createSeq,
+				fks,
+				walltime,
+				owner,
+				schemaNameToDesc,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -605,13 +634,33 @@ func readPostgresStmt(
 				if !found {
 					return colinfo.NewUndefinedColumnError(cmd.Column.String())
 				}
+			case *tree.AlterTableSetVisible:
+				found := false
+				for i, def := range create.Defs {
+					def, ok := def.(*tree.ColumnTableDef)
+					// If it's not a column definition, or the column name doesn't match,
+					// we're not interested in this column.
+					if !ok || def.Name != cmd.Column {
+						continue
+					}
+					def.Hidden = !cmd.Visible
+					create.Defs[i] = def
+					found = true
+					break
+				}
+				if !found {
+					return colinfo.NewUndefinedColumnError(cmd.Column.String())
+				}
 			case *tree.AlterTableAddColumn:
 				if cmd.IfNotExists {
 					if ignoreUnsupportedStmts {
-						unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+						err := unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
-					return errors.Errorf("unsupported statement: %s", stmt)
+					return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 				}
 				create.Defs = append(create.Defs, cmd.ColumnDef)
 			case *tree.AlterTableSetNotNull:
@@ -633,18 +682,20 @@ func readPostgresStmt(
 				}
 			default:
 				if ignoreUnsupportedStmts {
-					unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+					err := unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return errors.Errorf("unsupported statement: %s", stmt)
+				return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 			}
 		}
 	case *tree.AlterTableOwner:
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported statement: %s", stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 	case *tree.CreateSequence:
 		schemaQualifiedTableName, err := getSchemaAndTableName(&stmt.Name)
 		if err != nil {
@@ -655,10 +706,9 @@ func readPostgresStmt(
 		}
 	case *tree.AlterSequence:
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	// Some SELECT statements mutate schema. Search for those here.
 	case *tree.Select:
 		switch sel := stmt.Select.(type) {
@@ -685,10 +735,13 @@ func readPostgresStmt(
 						err := errors.Errorf("unsupported function call: %s in stmt: %s",
 							expr.Func.String(), stmt.String())
 						if ignoreUnsupportedStmts {
-							unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							err := unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							if err != nil {
+								return err
+							}
 							continue
 						}
-						return err
+						return wrapErrorWithUnsupportedHint(err)
 					}
 					// Attempt to convert all func exprs to datums.
 					datums := make(tree.Datums, len(expr.Exprs))
@@ -727,19 +780,25 @@ func readPostgresStmt(
 				default:
 					err := errors.Errorf("unsupported %T SELECT expr: %s", expr, expr)
 					if ignoreUnsupportedStmts {
-						unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						err := unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
-					return err
+					return wrapErrorWithUnsupportedHint(err)
 				}
 			}
 		default:
 			err := errors.Errorf("unsupported %T SELECT %s", sel, sel)
 			if ignoreUnsupportedStmts {
-				unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				err := unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				if err != nil {
+					return err
+				}
 				return nil
 			}
-			return err
+			return wrapErrorWithUnsupportedHint(err)
 		}
 	case *tree.DropTable:
 		names := stmt.Names
@@ -751,13 +810,13 @@ func readPostgresStmt(
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				err := backupccl.CheckObjectExists(
+				err := catalogkv.CheckObjectCollision(
 					ctx,
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
 					keys.PublicSchemaID,
-					tableName,
+					tree.NewUnqualifiedTableName(tree.Name(tableName)),
 				)
 				if err != nil {
 					return errors.Wrapf(err, `drop table "%s" and then retry the import`, tableName)
@@ -782,20 +841,18 @@ func readPostgresStmt(
 		// - ANALYZE is syntactic sugar for CreateStatistics. It can be ignored
 		// because the auto stats stuff will pick up the changes and run if needed.
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
 		}
 	default:
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	}
 	return nil
 }
@@ -837,6 +894,7 @@ type pgDumpReader struct {
 	opts                  roachpb.PgDumpOptions
 	walltime              int64
 	colMap                map[*row.DatumRowConverter](map[string]int)
+	jobID                 int64
 	unsupportedStmtLogger *unsupportedStmtLogger
 	evalCtx               *tree.EvalContext
 }
@@ -846,6 +904,7 @@ var _ inputConverter = &pgDumpReader{}
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
 	ctx context.Context,
+	jobID int64,
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
 	walltime int64,
@@ -857,7 +916,7 @@ func newPgDumpReader(
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			tableDesc := tabledesc.NewImmutable(*table.Desc)
+			tableDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			colSubMap := make(map[string]int, len(table.TargetCols))
 			targetCols := make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
@@ -875,7 +934,7 @@ func newPgDumpReader(
 			colMap[conv] = colSubMap
 			tableDescs[name] = tableDesc
 		} else if table.Desc.IsSequence() {
-			seqDesc := tabledesc.NewImmutable(*table.Desc)
+			seqDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			tableDescs[name] = seqDesc
 		}
 	}
@@ -887,6 +946,7 @@ func newPgDumpReader(
 		opts:       opts,
 		walltime:   walltime,
 		colMap:     colMap,
+		jobID:      jobID,
 		evalCtx:    evalCtx,
 	}, nil
 }
@@ -903,15 +963,22 @@ func (m *pgDumpReader) readFiles(
 	user security.SQLUsername,
 ) error {
 	// Setup logger to handle unsupported DML statements seen in the PGDUMP file.
-	m.unsupportedStmtLogger = makeUnsupportedStmtLogger(format.PgDump.IgnoreUnsupported,
-		format.PgDump.IgnoreUnsupportedLog, dataIngestion, makeExternalStorage)
+	m.unsupportedStmtLogger = makeUnsupportedStmtLogger(ctx, user,
+		m.jobID, format.PgDump.IgnoreUnsupported, format.PgDump.IgnoreUnsupportedLog, dataIngestion,
+		makeExternalStorage)
 
 	err := readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 	if err != nil {
 		return err
 	}
 
-	return m.unsupportedStmtLogger.flush(ctx, user)
+	return m.unsupportedStmtLogger.flush()
+}
+
+func wrapErrorWithUnsupportedHint(err error) error {
+	return errors.WithHintf(err,
+		"To ignore unsupported statements and log them for review post IMPORT, see the options listed"+
+			" in the docs: %s", "https://www.cockroachlabs.com/docs/stable/import.html#import-options")
 }
 
 func (m *pgDumpReader) readFile(
@@ -968,10 +1035,13 @@ func (m *pgDumpReader) readFile(
 				if m.unsupportedStmtLogger.ignoreUnsupported {
 					logLine := fmt.Sprintf("%s: unsupported by IMPORT\n",
 						i.Rows.Select.String())
-					m.unsupportedStmtLogger.log(logLine, false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(logLine, false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return errors.Errorf("unsupported: %s", i.Rows.Select)
+				return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported: %s", i.Rows.Select))
 			}
 			inserts++
 			startingCount := count
@@ -1098,7 +1168,7 @@ func (m *pgDumpReader) readFile(
 							if err != nil {
 								col := conv.VisibleCols[idx]
 								return wrapRowErr(err, "", count, pgcode.Syntax,
-									"parse %q as %s", col.Name, col.Type.SQLString())
+									"parse %q as %s", col.GetName(), col.GetType().SQLString())
 							}
 						}
 					}
@@ -1119,42 +1189,57 @@ func (m *pgDumpReader) readFile(
 			if !ok {
 				err := errors.Errorf("unsupported %T Select: %v", i.Select, i.Select)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 			if len(sc.Exprs) != 1 {
 				err := errors.Errorf("unsupported %d select args: %v", len(sc.Exprs), sc.Exprs)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 			fn, ok := sc.Exprs[0].Expr.(*tree.FuncExpr)
 			if !ok {
 				err := errors.Errorf("unsupported select arg %T: %v", sc.Exprs[0].Expr, sc.Exprs[0].Expr)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 
 			switch funcName := strings.ToLower(fn.Func.String()); funcName {
 			case "search_path", "pg_catalog.set_config":
 				err := errors.Errorf("unsupported %d fn args in select: %v", len(fn.Exprs), fn.Exprs)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			case "setval", "pg_catalog.setval":
 				if args := len(fn.Exprs); args < 2 || args > 3 {
 					err := errors.Errorf("unsupported %d fn args in select: %v", len(fn.Exprs), fn.Exprs)
 					if m.unsupportedStmtLogger.ignoreUnsupported {
-						m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
 					return err
@@ -1175,10 +1260,13 @@ func (m *pgDumpReader) readFile(
 				if !ok {
 					err := errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[1], fn.Exprs[1])
 					if m.unsupportedStmtLogger.ignoreUnsupported {
-						m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
-					return err
+					return wrapErrorWithUnsupportedHint(err)
 				}
 				val, err := seqval.AsInt64()
 				if err != nil {
@@ -1190,7 +1278,10 @@ func (m *pgDumpReader) readFile(
 					if !ok {
 						err := errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[2], fn.Exprs[2])
 						if m.unsupportedStmtLogger.ignoreUnsupported {
-							m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							if err != nil {
+								return err
+							}
 							continue
 						}
 						return err
@@ -1224,10 +1315,13 @@ func (m *pgDumpReader) readFile(
 			default:
 				err := errors.Errorf("unsupported function %s in stmt %s", funcName, i.Select.String())
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
 			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence:
@@ -1240,10 +1334,13 @@ func (m *pgDumpReader) readFile(
 		default:
 			err := errors.Errorf("unsupported %T statement: %v", i, i)
 			if m.unsupportedStmtLogger.ignoreUnsupported {
-				m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				if err != nil {
+					return err
+				}
 				continue
 			}
-			return err
+			return wrapErrorWithUnsupportedHint(err)
 		}
 	}
 	for _, conv := range m.tables {

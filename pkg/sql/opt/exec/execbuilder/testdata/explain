@@ -208,12 +208,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column79) = (table_id)
+        │ equality: (column80) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column61) = (table_id)
+        │       │ equality: (column62) = (table_id)
         │       │
         │       ├── • render
         │       │   │
@@ -257,12 +257,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column84) = (table_id)
+        │ equality: (column85) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column66) = (table_id)
+        │       │ equality: (column67) = (table_id)
         │       │
         │       ├── • render
         │       │   │
@@ -454,7 +454,7 @@ vectorized: true
 │ order: +grantee,+privilege_type
 │
 └── • filter
-    │ filter: (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+    │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
     │
     └── • virtual table
           table: table_privileges@primary
@@ -1101,14 +1101,12 @@ sort
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
- ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1 rowid:3
            ├── constraint: /1/3: [/10 - /10]
@@ -1127,14 +1125,12 @@ sort
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── prune: (2)
- ├── interesting orderings: (+1)
  └── index-join tc
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 75.72
       ├── fd: ()-->(1)
       ├── prune: (2)
-      ├── interesting orderings: (+1)
       └── scan tc@c
            ├── columns: a:1(int!null) rowid:3(int!null)
            ├── constraint: /1/3: [/10 - /10]
@@ -1187,20 +1183,20 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2227.96
+ ├── cost: 2249.74
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1104.02
+ │    ├── cost: 1115.01
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-5)
  ├── scan t
  │    ├── columns: k:6 v:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │    ├── cost: 1084.02
+ │    ├── cost: 1094.81
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    ├── prune: (6,7)
@@ -1228,7 +1224,7 @@ sort
  ├── columns: a:1 b:2  [hidden: column6:6]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1193.26548
+ ├── cost: 1204.25548
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1237,7 +1233,7 @@ sort
       ├── columns: column6:6 a:1 b:2
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1120.71667
+      ├── cost: 1131.70667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
       ├── interesting orderings: (+1)
@@ -1245,12 +1241,12 @@ sort
       │    ├── columns: a:1 b:2
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1114.04
+      │    ├── cost: 1125.03
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1104.02
+      │    │    ├── cost: 1115.01
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
@@ -1265,7 +1261,7 @@ sort
  ├── columns: a:1(int) b:2(int)  [hidden: column6:6(int)]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1193.26548
+ ├── cost: 1204.25548
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1274,7 +1270,7 @@ sort
       ├── columns: column6:6(int) a:1(int) b:2(int)
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1120.71667
+      ├── cost: 1131.70667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
       ├── interesting orderings: (+1)
@@ -1282,12 +1278,12 @@ sort
       │    ├── columns: a:1(int) b:2(int)
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1114.04
+      │    ├── cost: 1125.03
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1104.02
+      │    │    ├── cost: 1115.01
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
@@ -1476,7 +1472,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1,000,000 (100% of the table)
+  estimated row count: 1,000,000 (100% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: FULL SCAN
 
@@ -1487,7 +1483,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 150,000 (15% of the table)
+  estimated row count: 150,000 (15% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /150000]
 
@@ -1498,7 +1494,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 20,000 (2.0% of the table)
+  estimated row count: 20,000 (2.0% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /20000]
 
@@ -1509,7 +1505,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1,234 (0.12% of the table)
+  estimated row count: 1,234 (0.12% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /1234]
 
@@ -1520,7 +1516,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 980 (0.10% of the table)
+  estimated row count: 980 (0.10% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /980]
 
@@ -1531,7 +1527,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 100 (0.01% of the table)
+  estimated row count: 100 (0.01% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /100]
 
@@ -1542,7 +1538,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 99 (<0.01% of the table)
+  estimated row count: 99 (<0.01% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /99]
 
@@ -1553,7 +1549,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1 (<0.01% of the table)
+  estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /1]
 
@@ -1567,3 +1563,27 @@ vectorized: true
 • insert fast path
   into: t2(x)
   auto commit
+
+statement ok
+PREPARE prep AS SELECT $1 + 1
+
+statement error EXPLAIN EXECUTE is not supported
+EXPLAIN EXECUTE prep(1)
+
+statement error EXPLAIN EXECUTE is not supported
+SELECT 1 FROM [ EXPLAIN EXECUTE prep(1) ]
+
+query T
+EXPLAIN ANALYZE EXECUTE prep(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+·
+• values
+  cluster nodes: <hidden>
+  actual row count: 1
+  size: 1 column, 1 row

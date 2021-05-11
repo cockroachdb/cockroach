@@ -1,35 +1,37 @@
-# Documentation for notable events
-
 Certain notable events are reported using a structured format.
 Commonly, these notable events are also copied to the table
 `system.eventlog`, unless the cluster setting
 `server.eventlog.enabled` is unset.
 
 Additionally, notable events are copied to specific external logging
-channels, where they can be collected for further processing.
+channels in log messages, where they can be collected for further processing.
 
 The sections below document the possible notable event types
 in this version of CockroachDB. For each event type, a table
 documents the possible fields. A field may be omitted from
 an event if its value is empty or zero.
 
-A field is also marked as “Sensitive” if it may contain
-application-specific information or PII. In that case,
+A field is also considered "Sensitive" if it may contain
+application-specific information or personally identifiable information (PII). In that case,
 the copy of the event sent to the external logging channel
-may contain redaction markers, in a way compatible
-with the redaction facilities in `debug zip` or `debug merge-log`.
+will contain redaction markers in a format that is compatible
+with the redaction facilities in [`cockroach debug zip`](cockroach-debug-zip.html)
+and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html),
+provided the `redactable` functionality is enabled on the logging sink.
+
+Events not documented on this page will have an unstructured format in log messages.
 
 ## Cluster-level events
 
 Events in this category pertain to an entire cluster and are
 not relative to any particular tenant.
 
-In a multi-tenant setup, the system.eventlog table for individual
+In a multi-tenant setup, the `system.eventlog` table for individual
 tenants cannot contain a copy of cluster-level events; conversely,
-the system.eventlog table in the system tenant cannot contain the
+the `system.eventlog` table in the system tenant cannot contain the
 SQL-level events for individual tenants.
 
-Events in this category are logged to channel OPS.
+Events in this category are logged to the `OPS` channel.
 
 
 ### `certs_reload`
@@ -70,7 +72,7 @@ decommissioned.
 
 ### `node_decommissioning`
 
-NodeDecommissioned is recorded when a node is marked as
+An event of type `node_decommissioning` is recorded when a node is marked as
 decommissioning.
 
 
@@ -137,6 +139,65 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+## Job events
+
+Events in this category pertain to long-running jobs that are orchestrated by
+a node's job registry. These system processes can create and/or modify stored
+objects during the course of their execution.
+
+A job might choose to emit multiple events during its execution when
+transitioning from one "state" to another.
+Egs: IMPORT/RESTORE will emit events on job creation and successful
+completion. If the job fails, events will be emitted on job creation,
+failure, and successful revert.
+
+Events in this category are logged to the `OPS` channel.
+
+
+### `import`
+
+An event of type `import` is recorded when an import job is created and successful completion.
+If the job fails, events will be emitted on job creation, failure, and
+successful revert.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `JobID` | The ID of the job that triggered the event. | no |
+| `JobType` | The type of the job that triggered the event. | no |
+| `Description` | A description of the job that triggered the event. Some jobs populate the description with an approximate representation of the SQL statement run to create the job. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
+| `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
+### `restore`
+
+An event of type `restore` is recorded when a restore job is created and successful completion.
+If the job fails, events will be emitted on job creation, failure, and
+successful revert.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `JobID` | The ID of the job that triggered the event. | no |
+| `JobType` | The type of the job that triggered the event. | no |
+| `Description` | A description of the job that triggered the event. Some jobs populate the description with an approximate representation of the SQL statement run to create the job. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
+| `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
 ## Miscellaneous SQL events
 
 Events in this category report miscellaneous SQL events.
@@ -145,7 +206,7 @@ They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these miscellaneous events are
 preserved in each tenant's own system.eventlog table.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to the `DEV` channel.
 
 
 ### `set_cluster_setting`
@@ -166,6 +227,7 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -174,15 +236,15 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 ## SQL Access Audit Events
 
 Events in this category are generated when a table has been
-marked as audited via `ALTER ... EXPERIMENTAL_AUDIT SET`.
+marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
 
-This feature is experimental.
+{% include {{ page.version.version }}/misc/experimental-warning.md %}
 
-Note: these events are not written to `system.eventlog`, even
+Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SENSITIVE_ACCESS.
+Events in this category are logged to the `SENSITIVE_ACCESS` channel.
 
 
 ### `admin_query`
@@ -200,6 +262,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -233,6 +296,7 @@ a table marked as audited.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -251,11 +315,11 @@ a table marked as audited.
 
 Events in this category report executed queries.
 
-Note: these events are not written to `system.eventlog`, even
+Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SQL_EXEC.
+Events in this category are logged to the `SQL_EXEC` channel.
 
 
 ### `query_execute`
@@ -273,6 +337,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -295,9 +360,9 @@ schema.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel SQL_SCHEMA.
+Events in this category are logged to the `SQL_SCHEMA` channel.
 
 
 ### `alter_database_add_region`
@@ -318,6 +383,7 @@ An event of type `alter_database_add_region` is recorded when a region is added 
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -341,6 +407,7 @@ AlterDatabaseAddRegion is recorded when a region is added to a database.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -364,6 +431,7 @@ An event of type `alter_database_primary_region` is recorded when a primary regi
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -387,6 +455,7 @@ An event of type `alter_database_survival_goal` is recorded when the survival go
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -411,6 +480,7 @@ An event of type `alter_index` is recorded when an index is altered.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -433,6 +503,7 @@ An event of type `alter_sequence` is recorded when a sequence is altered.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -457,6 +528,7 @@ An event of type `alter_table` is recorded when a table is altered.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -479,6 +551,7 @@ EventAlterType is recorded when a user-defined type is altered.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -504,6 +577,7 @@ An event of type `comment_on_column` is recorded when a column is commented.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -528,6 +602,7 @@ CommentOnTable is recorded when a database is commented.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -553,6 +628,7 @@ An event of type `comment_on_index` is recorded when an index is commented.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -577,6 +653,7 @@ An event of type `comment_on_table` is recorded when a table is commented.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -600,6 +677,7 @@ An event of type `convert_to_schema` is recorded when a database is converted to
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -622,6 +700,7 @@ An event of type `create_database` is recorded when a database is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -646,6 +725,7 @@ An event of type `create_index` is recorded when an index is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -669,6 +749,7 @@ An event of type `create_schema` is recorded when a schema is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -692,6 +773,7 @@ An event of type `create_sequence` is recorded when a sequence is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -718,6 +800,7 @@ Events of this type are only collected when the cluster setting
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -741,6 +824,7 @@ An event of type `create_table` is recorded when a table is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -764,6 +848,7 @@ An event of type `create_type` is recorded when a user-defined type is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -788,6 +873,7 @@ An event of type `create_view` is recorded when a view is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -811,6 +897,7 @@ An event of type `drop_database` is recorded when a database is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -836,6 +923,7 @@ An event of type `drop_index` is recorded when an index is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -858,6 +946,7 @@ An event of type `drop_schema` is recorded when a schema is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -880,6 +969,7 @@ An event of type `drop_sequence` is recorded when a sequence is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -903,6 +993,7 @@ An event of type `drop_table` is recorded when a table is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -925,6 +1016,7 @@ An event of type `drop_type` is recorded when a user-defined type is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -948,6 +1040,7 @@ An event of type `drop_view` is recorded when a view is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -989,6 +1082,28 @@ initiated schema change rollback has completed.
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `MutationID` | The descriptor mutation that this schema change was processing. | no |
 
+### `force_delete_table_data_entry`
+
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `DescriptorID` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ### `rename_database`
 
 An event of type `rename_database` is recorded when a database is renamed.
@@ -1007,6 +1122,7 @@ An event of type `rename_database` is recorded when a database is renamed.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1030,6 +1146,7 @@ An event of type `rename_schema` is recorded when a schema is renamed.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1053,6 +1170,7 @@ An event of type `rename_table` is recorded when a table, sequence or view is re
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1076,6 +1194,7 @@ An event of type `rename_type` is recorded when a user-defined type is renamed.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1122,6 +1241,7 @@ An event of type `set_schema` is recorded when a table, view, sequence or type's
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1144,6 +1264,7 @@ An event of type `truncate_table` is recorded when a table is truncated.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1174,6 +1295,7 @@ patch releases without advance notice.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1204,6 +1326,7 @@ patch releases without advance notice.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1230,6 +1353,7 @@ using crdb_internal.unsafe_upsert_descriptor().
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1262,6 +1386,7 @@ patch releases without advance notice.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1275,9 +1400,9 @@ grants for stored objects.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel PRIVILEGES.
+Events in this category are logged to the `PRIVILEGES` channel.
 
 
 ### `alter_database_owner`
@@ -1298,6 +1423,7 @@ An event of type `alter_database_owner` is recorded when a database's owner is c
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1321,6 +1447,7 @@ An event of type `alter_schema_owner` is recorded when a schema's owner is chang
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1344,6 +1471,7 @@ An event of type `alter_table_owner` is recorded when the owner of a table, view
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1367,6 +1495,7 @@ An event of type `alter_type_owner` is recorded when the owner of a user-defiend
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1390,6 +1519,7 @@ added to / removed from a user for a database object.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1416,6 +1546,7 @@ removed from a user for a schema object.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1442,6 +1573,7 @@ from a user for a table, sequence or view object.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1468,6 +1600,7 @@ removed from a user for a type object.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1483,9 +1616,9 @@ and sessions.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these miscellaneous events are
-preserved in each tenant's own system.eventlog table.
+preserved in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel SESSIONS.
+Events in this category are logged to the `SESSIONS` channel.
 
 
 ### `client_authentication_failed`
@@ -1650,7 +1783,7 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SQL_PERF.
+Events in this category are logged to the `SQL_PERF` channel.
 
 
 ### `slow_query`
@@ -1661,8 +1794,9 @@ As of this writing, the condition requires:
 - the cluster setting `sql.log.slow_query.latency_threshold`
 set to a non-zero value, AND
 - EITHER of the following conditions:
-- the actual age of the query exceeds the configured threshold; OR
-- the query performs a full table/index scan.
+- the actual age of the query exceeds the configured threshold; AND/OR
+- the query performs a full table/index scan AND the cluster setting
+`sql.log.slow_query.experimental_full_table_scans.enabled` is set.
 
 
 
@@ -1674,6 +1808,7 @@ set to a non-zero value, AND
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1691,14 +1826,14 @@ set to a non-zero value, AND
 ## SQL Slow Query Log (Internal)
 
 Events in this category report slow query execution by
-internal executors, i.e. when CockroachDB internally issues
+internal executors, i.e., when CockroachDB internally issues
 SQL statements.
 
 Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SQL_INTERNAL_PERF.
+Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
 
 ### `slow_query_internal`
@@ -1719,6 +1854,7 @@ the "slow query" condition.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1740,9 +1876,9 @@ properties of users and roles.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel USER_ADMIN.
+Events in this category are logged to the `USER_ADMIN` channel.
 
 
 ### `alter_role`
@@ -1763,6 +1899,7 @@ An event of type `alter_role` is recorded when a role is altered.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1785,6 +1922,7 @@ An event of type `create_role` is recorded when a role is created.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1807,6 +1945,7 @@ An event of type `drop_role` is recorded when a role is dropped.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1814,18 +1953,18 @@ An event of type `drop_role` is recorded when a role is dropped.
 
 ## Zone config events
 
-Events in this category pertain to zone config changes on
+Events in this category pertain to zone configuration changes on
 the SQL schema or system ranges.
 
 When zone configs apply to individual tables or other objects in a
 SQL logical schema, they are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these zone config events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-When they apply to cluster-level ranges (e.g.  the system zone config),
-they are stored in the system tenant's own system.eventlog table.
+When they apply to cluster-level ranges (e.g., the system zone config),
+they are stored in the system tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel OPS.
+Events in this category are logged to the `OPS` channel.
 
 
 ### `remove_zone_config`
@@ -1842,6 +1981,7 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |
@@ -1864,6 +2004,7 @@ An event of type `set_zone_config` is recorded when a zone config is changed.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 | `Statement` | A normalized copy of the SQL statement that triggered the event. | yes |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
 | `User` | The user account that triggered the event. | yes |
 | `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | yes |

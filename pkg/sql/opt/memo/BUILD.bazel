@@ -3,14 +3,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "memo",
     srcs = [
-        "check_expr_skip.go",
+        "check_expr.go",
+        "check_expr_skip.go",  # keep
         "constraint_builder.go",
         "cost.go",
         "expr.go",
         "expr_format.go",
         "expr_name_gen.go",
         "extract.go",
-        "filters_expr_mutate_checker_skip.go",
+        "filters_expr_mutate_checker.go",
+        "filters_expr_mutate_checker_skip.go",  # keep
         "group.go",
         "interner.go",
         "logical_props_builder.go",
@@ -58,9 +60,11 @@ go_test(
         "statistics_builder_test.go",
         "typing_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
+    ],
     embed = [":memo"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",
@@ -75,7 +79,7 @@ go_test(
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
@@ -97,6 +101,6 @@ genrule(
     cmd = """
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ exprs $(locations //pkg/sql/opt:ops)
     """,
-    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
     visibility = ["//visibility:public"],
 )

@@ -269,6 +269,12 @@ SELECT 'lru'::store
 statement ok
 CREATE TYPE greetings AS ENUM('hi', 'hello', 'howdy', 'yo')
 
+statement error pq: ALTER TYPE ... DROP VALUE ... is only supported as an alpha feature
+ALTER TYPE greetings DROP VALUE 'hi'
+
+statement ok
+SET enable_drop_enum_value = true;
+
 statement ok
 ALTER TYPE greetings DROP VALUE 'hi'
 
@@ -280,16 +286,6 @@ CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings)
 
 statement ok
 INSERT INTO use_greetings VALUES(1, 'yo')
-
-statement ok
-SET sql_safe_updates = true;
-
-# ALTER TYPE DROP VALUE is gated behind sql_safe_updates
-statement error pq: rejected \(sql_safe_updates = true\)
-ALTER TYPE greetings DROP VALUE 'yo'
-
-statement ok
-SET sql_safe_updates = false
 
 statement error pq: could not remove enum value "yo" as it is being used by "use_greetings"
 ALTER TYPE greetings DROP VALUE 'yo'
@@ -371,29 +367,27 @@ statement ok
 CREATE VIEW v as SELECT 'd':::alphabets;
 CREATE TABLE uses_alphabets_2(k INT PRIMARY KEY, v alphabets DEFAULT 'e');
 
-statement error pq: could not validate removal of enum value "d": count-value-usage: enum value "d" is not yet public
+statement error pq: could not remove enum value "d" as it is being used in view "v"
 ALTER TYPE alphabets DROP VALUE 'd'
 
 statement ok
 INSERT INTO uses_alphabets_2 VALUES(1);
 
 # e was inserted as the default value, so we shouldn't be able to remove it.
-statement error pq: could not remove enum value "e" as it is being used by "uses_alphabets_2"
+statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
 
 statement ok
 TRUNCATE uses_alphabets_2
 
-statement ok
+statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
 
-statement error pq: could not find \[160\] in enum "public.alphabets"
+statement ok
 INSERT INTO uses_alphabets_2 VALUES(1);
 
-# Even though the default expr no longer works, we should be able to explicitly
-# insert a value.
 statement ok
-INSERT INTO uses_alphabets_2 VALUES (1, 'f')
+INSERT INTO uses_alphabets_2 VALUES (2, 'f')
 
 # Dropping the column should work.
 statement ok
@@ -496,3 +490,180 @@ SELECT ARRAY['c']::_ab_58710;
 
 statement error invalid input value for enum ab_58710: "a"
 SELECT ARRAY['a']::_ab_58710
+
+subtest regression_60004_basic
+
+statement ok
+CREATE TYPE enum_60004 AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t_60004 (k INT PRIMARY KEY, v enum_60004[])
+
+statement ok
+INSERT INTO t_60004 VALUES (1, ARRAY['a'])
+
+statement error could not remove enum value "a" as it is being used by table "test.public.t_60004"
+ALTER TYPE enum_60004 DROP VALUE 'a'
+
+# Not used in a row, so this DROP should be fine.
+statement ok
+ALTER TYPE enum_60004 DROP VALUE 'b'
+
+statement ok
+CREATE VIEW v_60004 AS SELECT ARRAY['c']:::_enum_60004 AS v;
+
+statement error pq: could not remove enum value "c" as it is being used in view "v_60004"
+ALTER TYPE enum_60004 DROP VALUE 'c'
+
+subtest regression_60004_complex
+# Setup
+statement ok
+CREATE TYPE alphabets_60004 AS ENUM ('a', 'b', 'c', 'd')
+
+statement ok
+CREATE TABLE using_alphabets_60004(k INT PRIMARY KEY, v1 alphabets_60004[], v2 alphabets_60004[])
+
+statement ok
+INSERT INTO using_alphabets_60004 VALUES (1, ARRAY['a', 'b', 'c'], ARRAY['a','b']), (2, ARRAY['a', 'b', 'c'], ARRAY['a','d'])
+
+statement ok
+CREATE TABLE using_alphabets2_60004(k INT PRIMARY KEY, v1 alphabets_60004, v2 alphabets_60004[])
+
+statement ok
+INSERT INTO using_alphabets2_60004 VALUES (1, 'a', ARRAY['b', 'a'])
+
+statement error could not remove enum value "d" as it is being used by table "test.public.using_alphabets_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'd'
+
+# Remove the row that uses 'd' in it and then try dropping.
+statement ok
+DELETE FROM using_alphabets_60004 WHERE k = 2
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'd'
+
+statement error could not remove enum value "c" as it is being used by table "test.public.using_alphabets_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'c'
+
+statement error could not remove enum value "b" as it is being used by table "test.public.using_alphabets_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'b'
+
+statement ok
+TRUNCATE using_alphabets_60004
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'c'
+
+statement error could not remove enum value "a" as it is being used by "using_alphabets2_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'a'
+
+statement error could not remove enum value "b" as it is being used by table "test.public.using_alphabets2_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'b'
+
+statement ok
+TRUNCATE using_alphabets2_60004
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'a'
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'b'
+
+
+subtest if_not_exists
+
+statement ok
+CREATE TYPE ifNotExists AS ENUM()
+
+query T noticetrace
+CREATE TYPE IF NOT EXISTS ifNotExists AS ENUM();
+----
+NOTICE: type "ifnotexists" already exists, skipping
+
+subtest regression_64101
+
+statement ok
+CREATE TYPE reg_64101 AS ENUM('a', 'b', 'c')
+
+statement ok
+CREATE VIEW v_64101 AS SELECT ARRAY['a']:::_reg_64101
+
+statement ok
+ALTER TYPE reg_64101 DROP VALUE 'b'
+
+statement error could not remove enum value "a" as it is being used in view "v_64101"
+ALTER TYPE reg_64101 DROP VALUE 'a'
+
+statement ok
+DROP VIEW v_64101;
+CREATE VIEW v_64101 AS SELECT ARRAY['c'::reg_64101]
+
+statement ok
+ALTER TYPE reg_64101 DROP VALUE 'a'
+
+statement error could not remove enum value "c" as it is being used in view "v_64101"
+ALTER TYPE reg_64101 DROP VALUE 'c'
+
+statement ok
+CREATE TYPE typ_64101 AS ENUM('a', 'b', 'c');
+CREATE TABLE t1_64101("bob""b" typ_64101);
+CREATE TABLE t2_64101("bob""''b" typ_64101[]);
+INSERT INTO t1_64101 VALUES ('a');
+INSERT INTO t2_64101 VALUES(ARRAY['b'])
+
+statement ok
+ALTER TYPE typ_64101 DROP VALUE 'c'
+
+statement error could not remove enum value "a" as it is being used by "t1_64101" in row: bob"b='a'
+ALTER TYPE typ_64101 DROP VALUE 'a'
+
+statement error could not remove enum value "b" as it is being used by table "test.public.t2_64101"
+ALTER TYPE typ_64101 DROP VALUE 'b'
+
+subtest regression_64398
+
+statement error pgcode 42809 type "geometry" is a built-in type
+ALTER TYPE sc64398.geometry RENAME TO bar
+
+statement error pgcode 42809 type "geometry" is a built-in type
+ALTER TYPE sc64398.public.geometry RENAME TO bar
+
+statement ok
+CREATE SCHEMA sc64398;
+
+statement ok
+CREATE TYPE sc64398.geometry AS ENUM()
+
+statement ok
+ALTER TYPE sc64398.geometry RENAME TO bar
+
+
+# Test dropping enums used in views is disallowed.
+subtest drop_enum_value_in_view
+
+statement ok
+CREATE TYPE abc AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE VIEW abc_view AS (SELECT k FROM (SELECT 'a'::abc AS k))
+
+statement error pq: could not remove enum value "a" as it is being used in view "abc_view"
+ALTER TYPE abc DROP VALUE 'a'
+
+statement ok
+CREATE VIEW abc_view2 AS (SELECT 'a'::abc < 'b'::abc)
+
+statement error pq: could not remove enum value "b" as it is being used in view "abc_view2"
+ALTER TYPE abc DROP VALUE 'b'
+
+statement ok
+ALTER TYPE abc DROP VALUE 'c'
+
+statement ok
+CREATE TYPE bar AS ENUM ('b', 'a', 'r')
+
+statement ok
+CREATE VIEW bar_view AS (SELECT ARRAY['b'::bar])
+
+statement error pq: could not remove enum value "b" as it is being used in view "bar_view"
+ALTER TYPE bar DROP VALUE 'b'

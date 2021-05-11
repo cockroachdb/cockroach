@@ -17,7 +17,7 @@ import (
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedPGJDBCTag = "REL42.2.9"
+var supportedPGJDBCTag = "REL42.2.19"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
@@ -35,12 +35,14 @@ func registerPgjdbc(r *testRegistry) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		version, err := fetchCockroachVersion(ctx, c, node[0])
+		version, err := fetchCockroachVersion(ctx, c, node[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+		if err := alterZoneConfigAndClusterSettings(
+			ctx, version, c, node[0], nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 
@@ -54,6 +56,7 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest pgjdbc release is %s.", latestTag)
+		c.l.Printf("Supported pgjdbc release is %s.", supportedPGJDBCTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -61,12 +64,13 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless maven`,
+			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -113,7 +117,7 @@ func registerPgjdbc(r *testRegistry) {
 			c,
 			node,
 			"building pgjdbc (without tests)",
-			`cd /mnt/data1/pgjdbc/pgjdbc/ && mvn -Dtest=OidToStringTest test`,
+			`cd /mnt/data1/pgjdbc/pgjdbc/ && ../gradlew test --tests OidToStringTest`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +137,7 @@ func registerPgjdbc(r *testRegistry) {
 		// Note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/pgjdbc/pgjdbc/ && mvn test`,
+			`cd /mnt/data1/pgjdbc/pgjdbc/ && ../gradlew test`,
 		)
 
 		_ = c.RunE(ctx, node,
@@ -150,7 +154,7 @@ func registerPgjdbc(r *testRegistry) {
 			c,
 			node,
 			"copy test result files",
-			`cp /mnt/data1/pgjdbc/pgjdbc/target/surefire-reports ~/logs/report/pgjdbc-results -a`,
+			`cp /mnt/data1/pgjdbc/pgjdbc/build/test-results/test/ ~/logs/report/pgjdbc-results -a`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +167,7 @@ func registerPgjdbc(r *testRegistry) {
 			t.l,
 			node,
 			"get list of test files",
-			`ls /mnt/data1/pgjdbc/pgjdbc/target/surefire-reports/*.xml`,
+			`ls /mnt/data1/pgjdbc/pgjdbc/build/test-results/test/*.xml`,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -179,7 +183,7 @@ func registerPgjdbc(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		MinVersion: "v2.1.0",
+		MinVersion: "v20.2.0",
 		Name:       "pgjdbc",
 		Owner:      OwnerSQLExperience,
 		Cluster:    makeClusterSpec(1),

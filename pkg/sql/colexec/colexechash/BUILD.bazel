@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
+        "//pkg/util/json",  # keep
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

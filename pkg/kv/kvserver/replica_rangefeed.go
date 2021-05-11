@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -40,6 +40,16 @@ var RangefeedEnabled = settings.RegisterBoolSetting(
 	"if set, rangefeed registration is enabled",
 	false,
 ).WithPublic()
+
+// RangeFeedRefreshInterval controls the frequency with which we deliver closed
+// timestamp updates to rangefeeds.
+var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
+	"kv.rangefeed.closed_timestamp_refresh_interval",
+	"the interval at which closed-timestamp updates"+
+		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
+	0,
+	settings.NonNegativeDuration,
+)
 
 // lockedRangefeedStream is an implementation of rangefeed.Stream which provides
 // support for concurrent calls to Send. Note that the default implementation of
@@ -600,14 +610,15 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress
 	// again.
+	behind := r.Clock().PhysicalTime().Sub(closedTS.GoTime())
 	slowClosedTSThresh := 5 * closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
-	if d := timeutil.Since(closedTS.GoTime()); d > slowClosedTSThresh {
+	if behind > slowClosedTSThresh {
 		m := r.store.metrics.RangeFeedMetrics
 		if m.RangeFeedSlowClosedTimestampLogN.ShouldLog() {
 			if closedTS.IsEmpty() {
 				log.Infof(ctx, "RangeFeed closed timestamp is empty")
 			} else {
-				log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s", closedTS, d)
+				log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s", closedTS, behind)
 			}
 		}
 
@@ -659,9 +670,11 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 	var leaseholderNodeID roachpb.NodeID
 	_, err := r.redirectOnOrAcquireLease(ctx)
 	if err == nil {
-		// We have the lease. Request is essentially a wrapper for calling EmitMLAI
-		// on a remote node, so cut out the middleman.
-		r.EmitMLAI()
+		if !r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+			// We have the lease. Request is essentially a wrapper for calling EmitMLAI
+			// on a remote node, so cut out the middleman.
+			r.EmitMLAI()
+		}
 		return nil
 	} else if lErr, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); ok {
 		if lErr.LeaseHolder == nil {

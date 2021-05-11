@@ -35,10 +35,9 @@ import (
 )
 
 const (
-	confluentSchemaContentType   = `application/vnd.schemaregistry.v1+json`
-	confluentSubjectSuffixKey    = `-key`
-	confluentSubjectSuffixValue  = `-value`
-	confluentAvroWireFormatMagic = byte(0)
+	confluentSchemaContentType  = `application/vnd.schemaregistry.v1+json`
+	confluentSubjectSuffixKey   = `-key`
+	confluentSubjectSuffixValue = `-value`
 )
 
 // encodeRow holds all the pieces necessary to encode a row change into a key or
@@ -360,7 +359,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 	if !ok {
 		var err error
 		tableName := e.rawTableName(row.tableDesc)
-		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex().IndexDesc(), tableName)
+		registered.schema, err = indexToAvroSchema(row.tableDesc, row.tableDesc.GetPrimaryIndex(), tableName, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -378,7 +377,7 @@ func (e *confluentAvroEncoder) EncodeKey(ctx context.Context, row encodeRow) ([]
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
-		confluentAvroWireFormatMagic,
+		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
@@ -401,19 +400,20 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 		var beforeDataSchema *avroDataRecord
 		if e.beforeField && row.prevTableDesc != nil {
 			var err error
-			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, `before`)
+			beforeDataSchema, err = tableToAvroSchema(row.prevTableDesc, `before`, e.schemaPrefix)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		afterDataSchema, err := tableToAvroSchema(row.tableDesc, avroSchemaNoSuffix)
+		afterDataSchema, err := tableToAvroSchema(row.tableDesc, avroSchemaNoSuffix, e.schemaPrefix)
 		if err != nil {
 			return nil, err
 		}
 
 		opts := avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
-		registered.schema, err = envelopeToAvroSchema(row.tableDesc.GetName(), opts, beforeDataSchema, afterDataSchema)
+		registered.schema, err = envelopeToAvroSchema(e.rawTableName(row.tableDesc), opts, beforeDataSchema, afterDataSchema, e.schemaPrefix)
+
 		if err != nil {
 			return nil, err
 		}
@@ -443,7 +443,7 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
-		confluentAvroWireFormatMagic,
+		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))
@@ -458,7 +458,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	if !ok {
 		opts := avroEnvelopeOpts{resolvedField: true}
 		var err error
-		registered.schema, err = envelopeToAvroSchema(topic, opts, nil /* before */, nil /* after */)
+		registered.schema, err = envelopeToAvroSchema(topic, opts, nil /* before */, nil /* after */, e.schemaPrefix /* namespace */)
 		if err != nil {
 			return nil, err
 		}
@@ -481,7 +481,7 @@ func (e *confluentAvroEncoder) EncodeResolvedTimestamp(
 	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
-		confluentAvroWireFormatMagic,
+		changefeedbase.ConfluentAvroWireFormatMagic,
 		0, 0, 0, 0, // Placeholder for the ID.
 	}
 	binary.BigEndian.PutUint32(header[1:5], uint32(registered.registryID))

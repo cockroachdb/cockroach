@@ -203,17 +203,23 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			case *tree.IndexTableDef:
 			case *tree.JoinTableExpr:
 				walk(node.Left, node.Right, node.Cond)
+			case *tree.Limit:
+				walk(node.Count)
 			case *tree.NotExpr:
 				walk(node.Expr)
 			case *tree.NumVal:
 			case *tree.OnJoinCond:
 				walk(node.Expr)
+			case *tree.Order:
+				walk(node.Expr, node.Table)
 			case *tree.OrExpr:
 				walk(node.Left, node.Right)
 			case *tree.ParenExpr:
 				walk(node.Expr)
 			case *tree.ParenSelect:
 				walk(node.Select)
+			case *tree.RangeCond:
+				walk(node.Left, node.From, node.To)
 			case *tree.RowsFromExpr:
 				for _, expr := range node.Items {
 					walk(expr)
@@ -223,6 +229,14 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 					walk(node.With)
 				}
 				walk(node.Select)
+				if node.OrderBy != nil {
+					for _, order := range node.OrderBy {
+						walk(order)
+					}
+				}
+				if node.Limit != nil {
+					walk(node.Limit)
+				}
 			case *tree.SelectClause:
 				walk(node.Exprs)
 				if node.Where != nil {
@@ -233,6 +247,16 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 				}
 				for _, table := range node.From.Tables {
 					walk(table)
+				}
+				if node.DistinctOn != nil {
+					for _, distinct := range node.DistinctOn {
+						walk(distinct)
+					}
+				}
+				if node.GroupBy != nil {
+					for _, group := range node.GroupBy {
+						walk(group)
+					}
 				}
 			case tree.SelectExpr:
 				walk(node.Expr)
@@ -247,7 +271,7 @@ func (w sqlWalker) Transform(s string, i int) (out string, ok bool, err error) {
 			case *tree.StrVal:
 			case *tree.Subquery:
 				walk(node.Select)
-			case *tree.TableName:
+			case *tree.TableName, tree.TableName:
 			case *tree.Tuple:
 				for _, expr := range node.Exprs {
 					walk(expr)

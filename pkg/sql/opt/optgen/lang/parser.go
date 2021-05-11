@@ -19,6 +19,9 @@ import (
 	"strings"
 )
 
+// letLiteral is the keyword that designates a let expression.
+const letLiteral = "Let"
+
 // FileResolver is used by the parser to abstract the opening and reading of
 // input files. Callers of the parser can override the default behavior
 // (os.Open) in order to open files in some other way (e.g. for testing).
@@ -237,7 +240,7 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 
 	for {
 		if p.scan() == RBRACE {
-			if len(p.comments) > 0 {
+			if p.hasComments() {
 				p.addErr(fmt.Sprintf("comments not allowed before closing }: %v", p.comments))
 				return nil
 			}
@@ -353,12 +356,36 @@ func (p *Parser) parseReplace() Expr {
 }
 
 // func = '(' func-name arg* ')'
-func (p *Parser) parseFunc() Expr {
+// let = '(' 'Let' '(' '$' label ('$' label)* ')' ':' func ref ')'
+func (p *Parser) parseFuncOrLet() Expr {
 	if p.scan() != LPAREN {
 		panic("caller should have checked for left parenthesis")
 	}
 
+	// Peek ahead to determine if its a function or a let expression.
+	tok := p.scan()
+	literal := p.s.Literal()
+	p.unscan()
+	if tok == IDENT && literal == letLiteral {
+		return p.parseLet()
+	}
+	return p.parseFuncImpl()
+}
+
+// func = '(' func-name arg* ')'
+func (p *Parser) parseFunc() Expr {
+	if p.scan() != LPAREN {
+		panic("caller should have checked for left parenthesis")
+	}
+	return p.parseFuncImpl()
+}
+
+// func = '(' func-name arg* ')'
+// Note: the leading '(' has already been scanned by parseFuncOrLet or
+// parseFunc.
+func (p *Parser) parseFuncImpl() Expr {
 	src := p.src
+
 	name := p.parseFuncName()
 	if name == nil {
 		return nil
@@ -407,6 +434,80 @@ func (p *Parser) parseFuncName() Expr {
 	}
 	p.setComments(e, comments)
 	return e
+}
+
+// let = '(' 'Let' '(' '$' label ('$' label)* ')' ':' func ref ')'
+// Note: the leading '(' has already been scanned by parseFuncOrLet.
+func (p *Parser) parseLet() Expr {
+	if p.scan() != IDENT && p.s.Literal() != letLiteral {
+		panic("caller should have checked for let literal")
+	}
+
+	if !p.scanToken(LPAREN, "'('") {
+		return nil
+	}
+
+	src := p.src
+
+	var labels StringsExpr
+	for {
+		tok := p.scan()
+		p.unscan()
+		if tok == RPAREN {
+			if p.hasComments() {
+				p.addErr("comments not allowed before ')'")
+				return nil
+			}
+			p.scan()
+			break
+		}
+
+		if !p.scanToken(DOLLAR, "'$'") {
+			return nil
+		}
+
+		if !p.scanToken(IDENT, "label") {
+			return nil
+		}
+
+		label := StringExpr(p.s.Literal())
+		labels = append(labels, label)
+	}
+
+	if len(labels) == 0 {
+		p.addErr("let expression must assign 1 or more variables")
+	}
+
+	if !p.scanToken(COLON, "':'") {
+		return nil
+	}
+
+	if !p.scanToken(LPAREN, "function") {
+		return nil
+	}
+	p.unscan()
+
+	target := p.parseFunc()
+	if target == nil {
+		return nil
+	}
+
+	if !p.scanToken(DOLLAR, "ref") {
+		return nil
+	}
+	p.unscan()
+	result := p.parseRef()
+
+	if !p.scanToken(RPAREN, "')'") {
+		return nil
+	}
+
+	return &LetExpr{
+		Src:    &src,
+		Labels: labels,
+		Target: target.(*FuncExpr),
+		Result: result,
+	}
 }
 
 // names = name ('|' name)*
@@ -486,7 +587,7 @@ func (p *Parser) parseAnd() Expr {
 	return &AndExpr{Src: src, Left: left, Right: right}
 }
 
-// expr = func | not | list | any | name | STRING | NUMBER
+// expr = func | not | let | list | any | name | STRING | NUMBER
 func (p *Parser) parseExpr() Expr {
 	tok := p.scan()
 	comments := p.getComments()
@@ -494,7 +595,7 @@ func (p *Parser) parseExpr() Expr {
 	switch tok {
 	case LPAREN:
 		p.unscan()
-		e = p.parseFunc()
+		e = p.parseFuncOrLet()
 
 	case CARET:
 		p.unscan()

@@ -38,6 +38,8 @@ type tableReader struct {
 	limitHint   int64
 	parallelize bool
 
+	scanStarted bool
+
 	// See TableReaderSpec.MaxTimestampAgeNanos.
 	maxTimestampAge time.Duration
 
@@ -54,10 +56,8 @@ type tableReader struct {
 
 var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
-var _ execinfrapb.MetadataSource = &tableReader{}
 var _ execinfra.Releasable = &tableReader{}
 var _ execinfra.OpNode = &tableReader{}
-var _ execinfra.KVReader = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -88,7 +88,7 @@ func newTableReader(
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	tableDesc := tabledesc.NewImmutable(spec.Table)
+	tableDesc := spec.BuildTableDescriptor()
 	virtualColumn := tabledesc.FindVirtualColumn(tableDesc, spec.VirtualColumn)
 	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
@@ -172,7 +172,7 @@ func newTableReader(
 func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 	// We need to generate metadata before closing the processor because
 	// InternalClose() updates tr.Ctx to the "original" context.
-	trailingMeta := tr.generateMeta(tr.Ctx)
+	trailingMeta := tr.generateMeta()
 	tr.close()
 	return trailingMeta
 }
@@ -183,8 +183,13 @@ func (tr *tableReader) Start(ctx context.Context) {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
+	// Keep ctx assignment so we remember StartInternal can make a new one.
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
+	// Appease the linter.
+	_ = ctx
+}
 
+func (tr *tableReader) startScan(ctx context.Context) error {
 	limitBatches := !tr.parallelize
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
@@ -202,16 +207,18 @@ func (tr *tableReader) Start(ctx context.Context) {
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
-
-	if err != nil {
-		tr.MoveToDraining(err)
-	}
+	tr.scanStarted = true
+	return err
 }
 
 // Release releases this tableReader back to the pool.
 func (tr *tableReader) Release() {
 	tr.ProcessorBase.Reset()
 	tr.fetcher.Reset()
+	// Deeply reset the spans so that we don't hold onto the keys of the spans.
+	for i := range tr.spans {
+		tr.spans[i] = roachpb.Span{}
+	}
 	*tr = tableReader{
 		ProcessorBase: tr.ProcessorBase,
 		fetcher:       tr.fetcher,
@@ -234,6 +241,13 @@ func TestingSetScannedRowProgressFrequency(val int64) func() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
+		if !tr.scanStarted {
+			err := tr.startScan(tr.Ctx)
+			if err != nil {
+				tr.MoveToDraining(err)
+				break
+			}
+		}
 		// Check if it is time to emit a progress update.
 		if tr.rowsRead >= tableReaderProgressFrequency {
 			meta := execinfrapb.GetProducerMeta()
@@ -282,54 +296,35 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
-			BytesRead:      optional.MakeUint(uint64(tr.GetBytesRead())),
+			BytesRead:      optional.MakeUint(uint64(tr.fetcher.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
 			KVTime:         is.WaitTime,
-			ContentionTime: optional.MakeTimeValue(tr.GetCumulativeContentionTime()),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx)),
 		},
 		Output: tr.Out.Stats(),
 	}
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
-func (tr *tableReader) GetBytesRead() int64 {
-	return tr.fetcher.GetBytesRead()
-}
-
-// GetRowsRead is part of the execinfra.KVReader interface.
-func (tr *tableReader) GetRowsRead() int64 {
-	return tr.rowsRead
-}
-
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (tr *tableReader) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(tr.Ctx)
-}
-
-func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
 		nodeID, ok := tr.FlowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(tr.Ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, tr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx, tr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
-	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.GetBytesRead(), tr.GetRowsRead()
+	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
+	meta.Metrics.RowsRead = tr.rowsRead
 	return append(trailingMeta, *meta)
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (tr *tableReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return tr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

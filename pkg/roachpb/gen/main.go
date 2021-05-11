@@ -52,13 +52,13 @@ func initVariant(varInstance interface{}) variantInfo {
 }
 
 func initVariants() {
-	_, _, _, errVars := (&roachpb.ErrorDetail{}).XXX_OneofFuncs()
+	errVars := (&roachpb.ErrorDetail{}).XXX_OneofWrappers()
 	for _, v := range errVars {
 		errInfo := initVariant(v)
 		errVariants = append(errVariants, errInfo)
 	}
 
-	_, _, _, resVars := (&roachpb.ResponseUnion{}).XXX_OneofFuncs()
+	resVars := (&roachpb.ResponseUnion{}).XXX_OneofWrappers()
 	resVarInfos := make(map[string]variantInfo, len(resVars))
 	for _, v := range resVars {
 		resInfo := initVariant(v)
@@ -66,7 +66,7 @@ func initVariants() {
 		resVarInfos[resInfo.variantName] = resInfo
 	}
 
-	_, _, _, reqVars := (&roachpb.RequestUnion{}).XXX_OneofFuncs()
+	reqVars := (&roachpb.RequestUnion{}).XXX_OneofWrappers()
 	reqResVariantMapping = make(map[variantInfo]variantInfo, len(reqVars))
 	for _, v := range reqVars {
 		reqInfo := initVariant(v)

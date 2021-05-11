@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -56,12 +56,14 @@ import (
 )
 
 const (
-	backupOptRevisionHistory = "revision_history"
-	backupOptEncPassphrase   = "encryption_passphrase"
-	backupOptEncKMS          = "kms"
-	backupOptWithPrivileges  = "privileges"
-	localityURLParam         = "COCKROACH_LOCALITY"
-	defaultLocalityValue     = "default"
+	backupOptRevisionHistory    = "revision_history"
+	backupOptIncludeInterleaves = "include_deprecated_interleaves"
+	backupOptEncPassphrase      = "encryption_passphrase"
+	backupOptEncKMS             = "kms"
+	backupOptWithPrivileges     = "privileges"
+	backupOptAsJSON             = "as_json"
+	localityURLParam            = "COCKROACH_LOCALITY"
+	defaultLocalityValue        = "default"
 )
 
 type encryptionMode int
@@ -182,29 +184,41 @@ func getLogicallyMergedTableSpans(
 	endTime hlc.Timestamp,
 	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
 ) ([]roachpb.Span, error) {
-	var nonDropIndexIDs []descpb.IndexID
-	if err := catalog.ForEachNonDropIndex(table, func(idx catalog.Index) error {
+	// Spans with adding indexes are not safe to include in the backup since
+	// they may see non-transactional AddSST traffic. Future incremental backups
+	// will not have a way of incrementally backing up the data until #62585 is
+	// resolved.
+	addingIndexIDs := make(map[descpb.IndexID]struct{})
+	var publicIndexIDs []descpb.IndexID
+
+	allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
+	if err := catalog.ForEachIndex(table, allPhysicalIndexOpts, func(idx catalog.Index) error {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
 		if added[key] {
 			return nil
 		}
 		added[key] = true
-		nonDropIndexIDs = append(nonDropIndexIDs, idx.GetID())
+		if idx.Public() {
+			publicIndexIDs = append(publicIndexIDs, idx.GetID())
+		}
+		if idx.Adding() {
+			addingIndexIDs[idx.GetID()] = struct{}{}
+		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	if len(nonDropIndexIDs) == 0 {
+	if len(publicIndexIDs) == 0 {
 		return nil, nil
 	}
 
 	// There is no merging possible with only a single index, short circuit.
-	if len(nonDropIndexIDs) == 1 {
-		return []roachpb.Span{table.IndexSpan(codec, nonDropIndexIDs[0])}, nil
+	if len(publicIndexIDs) == 1 {
+		return []roachpb.Span{table.IndexSpan(codec, publicIndexIDs[0])}, nil
 	}
 
-	sort.Sort(sortedIndexIDs(nonDropIndexIDs))
+	sort.Sort(sortedIndexIDs(publicIndexIDs))
 
 	var mergedIndexSpans []roachpb.Span
 
@@ -218,10 +232,10 @@ func getLogicallyMergedTableSpans(
 	// mergedSpan to encompass the lhsSpan as that is the furthest we can go.
 	// After recording the new "merged" span, we update mergedSpan to be the
 	// rhsSpan, and start processing the next logically mergeable span set.
-	mergedSpan := table.IndexSpan(codec, nonDropIndexIDs[0])
-	for curIndex := 0; curIndex < len(nonDropIndexIDs)-1; curIndex++ {
-		lhsIndexID := nonDropIndexIDs[curIndex]
-		rhsIndexID := nonDropIndexIDs[curIndex+1]
+	mergedSpan := table.IndexSpan(codec, publicIndexIDs[0])
+	for curIndex := 0; curIndex < len(publicIndexIDs)-1; curIndex++ {
+		lhsIndexID := publicIndexIDs[curIndex]
+		rhsIndexID := publicIndexIDs[curIndex+1]
 
 		lhsSpan := table.IndexSpan(codec, lhsIndexID)
 		rhsSpan := table.IndexSpan(codec, rhsIndexID)
@@ -244,17 +258,27 @@ func getLogicallyMergedTableSpans(
 			mergedSpan = rhsSpan
 		} else {
 			var foundDroppedKV bool
-			// Iterate over all index IDs between the two candidates (lhs and rhs)
-			// which may be logically merged. These index IDs represent dropped
-			// indexes between the two non-drop index spans.
+			// Iterate over all index IDs between the two candidates (lhs and
+			// rhs) which may be logically merged. These index IDs represent
+			// non-public (and perhaps dropped) indexes between the two public
+			// index spans.
 			for i := lhsIndexID + 1; i < rhsIndexID; i++ {
-				// If we find an index which has been dropped but not gc'ed, we cannot
-				// merge the lhs and rhs spans.
+				// If we find an index which has been dropped but not gc'ed, we
+				// cannot merge the lhs and rhs spans.
 				foundDroppedKV, err = checkForKVInBounds(lhsSpan.EndKey, rhsSpan.Key, endTime)
 				if err != nil {
 					return nil, err
 				}
-				if foundDroppedKV {
+				// If we find an index that is being added, don't merge the
+				// spans. We don't want to backup data that is being backfilled
+				// until the backfill is complete. Even if the backfill has not
+				// started yet and there is not data we should not include this
+				// span in the spans to back up since we want these spans to
+				// appear as introduced when the index becomes PUBLIC.
+				// The indexes will appear in introduced spans because indexes
+				// will never go from PUBLIC to ADDING.
+				_, foundAddingIndex := addingIndexIDs[i]
+				if foundDroppedKV || foundAddingIndex {
 					mergedSpan.EndKey = lhsSpan.EndKey
 					mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
 					mergedSpan = rhsSpan
@@ -264,9 +288,9 @@ func getLogicallyMergedTableSpans(
 		}
 
 		// The loop will terminate after this iteration and so we must update the
-		// current mergedSpan to encompass the last element in the nonDropIndexIDs
+		// current mergedSpan to encompass the last element in the indexIDs
 		// slice as well.
-		if curIndex == len(nonDropIndexIDs)-2 {
+		if curIndex == len(publicIndexIDs)-2 {
 			mergedSpan.EndKey = rhsSpan.EndKey
 			mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
 		}
@@ -330,11 +354,9 @@ func spansForAllTableIndexes(
 		// at least 2 revisions, and the first one should have the table in a PUBLIC
 		// state. We want (and do) ignore tables that have been dropped for the
 		// entire interval. DROPPED tables should never later become PUBLIC.
-		// TODO(pbardea): Consider and test the interaction between revision_history
-		// backups and OFFLINE tables.
-		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
-		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
-			tbl := tabledesc.NewImmutable(*rawTbl)
+		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
+		if rawTbl != nil && rawTbl.Public() {
+			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
 			if err != nil {
@@ -360,10 +382,9 @@ func spansForAllTableIndexes(
 	})
 
 	// Attempt to merge any contiguous spans generated from the tables and revs.
-	mergedSpans, distinct := roachpb.MergeSpans(spans)
-	if !distinct {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(errors.New("expected all resolved spans for the BACKUP to be distinct"), "IndexSpan")
-	}
+	// No need to check if the spans are distinct, since some of the merged
+	// indexes may overlap between different revisions of the same descriptor.
+	mergedSpans, _ := roachpb.MergeSpans(spans)
 
 	knobs := execCfg.BackupRestoreTestingKnobs
 	if knobs != nil && knobs.CaptureResolvedTableDescSpans != nil {
@@ -660,15 +681,15 @@ func checkPrivilegesForBackup(
 	}
 	// Check that none of the destinations require an admin role.
 	for _, uri := range to {
-		hasExplicitAuth, uriScheme, err := cloud.AccessIsWithExplicitAuth(uri)
+		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
 		if err != nil {
 			return err
 		}
-		if !hasExplicitAuth {
+		if !conf.AccessIsWithExplicitAuth() {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
 				"only users with the admin role are allowed to BACKUP to the specified %s URI",
-				uriScheme)
+				conf.Provider.String())
 		}
 	}
 
@@ -800,6 +821,62 @@ func backupPlanHook(
 			}
 		}
 
+		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
+		if err != nil {
+			return err
+		}
+
+		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+
+		switch encryptionParams.encryptMode {
+		case passphrase:
+			pw, err := pwFn()
+			if err != nil {
+				return err
+			}
+			if err := requireEnterprise("encryption"); err != nil {
+				return err
+			}
+			encryptionParams.encryptionPassphrase = []byte(pw)
+		case kms:
+			encryptionParams.kmsURIs, encryptionParams.kmsEnv, err = kmsFn()
+			if err != nil {
+				return err
+			}
+			if err := requireEnterprise("encryption"); err != nil {
+				return err
+			}
+		}
+
+		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
+		// backupDestination struct.
+		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
+			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
+				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
+		if err != nil {
+			return err
+		}
+		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
+			encryptionParams)
+		if err != nil {
+			return err
+		}
+		if len(prevBackups) > 0 {
+			baseManifest := prevBackups[0]
+			if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
+				backupStmt.Coverage() != tree.AllDescriptors {
+				return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+			}
+		}
+
+		var startTime hlc.Timestamp
+		if len(prevBackups) > 0 {
+			if err := requireEnterprise("incremental"); err != nil {
+				return err
+			}
+			startTime = prevBackups[len(prevBackups)-1].EndTime
+		}
+
 		mvccFilter := MVCCFilter_Latest
 		if backupStmt.Options.CaptureRevisionHistory {
 			if err := requireEnterprise("revision_history"); err != nil {
@@ -808,13 +885,54 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := backupbase.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
-		if err != nil {
-			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
+		var targetDescs []catalog.Descriptor
+		var completeDBs []descpb.ID
+
+		switch backupStmt.Coverage() {
+		case tree.RequestedDescriptors:
+			var err error
+			targetDescs, completeDBs, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			if err != nil {
+				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
+			}
+		case tree.AllDescriptors:
+			// Cluster backups include all of the descriptors in the cluster.
+			var allDescs []catalog.Descriptor
+			var err error
+			switch mvccFilter {
+			case MVCCFilter_All:
+				// Usually, revision_history backups include all previous versions of the
+				// descriptors at exist as of end time since they have not been GC'ed yet.
+				// However, since database descriptors are deleted as soon as the database
+				// is deleted, cluster backups need to explicitly go looking for these
+				// dropped descriptors up front.
+				allDescs, err = loadAllDescsInInterval(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, startTime, endTime)
+			case MVCCFilter_Latest:
+				allDescs, err = backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
+			}
+			if err != nil {
+				return err
+			}
+
+			targetDescs, completeDBs, err = fullClusterTargetsBackup(allDescs)
+			if err != nil {
+				return err
+			}
+			if len(targetDescs) == 0 {
+				return errors.New("no descriptors available to backup at selected time")
+			}
+		default:
+			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
 		}
 
-		if backupStmt.Coverage() == tree.AllDescriptors && len(targetDescs) == 0 {
-			return errors.New("no descriptors available to backup at selected time")
+		if !backupStmt.Options.IncludeDeprecatedInterleaves {
+			for _, desc := range targetDescs {
+				if table, ok := desc.(catalog.TableDescriptor); ok {
+					if table.IsInterleaved() {
+						return errors.Errorf("interleaved tables are deprecated and backups containing interleaved tables will not be able to be RESTORE'd by future versions -- use option %q to backup interleaved tables anyway %q", backupOptIncludeInterleaves, table.TableDesc().Name)
+					}
+				}
+			}
 		}
 
 		// Check BACKUP privileges.
@@ -844,54 +962,6 @@ func backupPlanHook(
 			return err
 		}
 
-		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
-
-		switch encryptionParams.encryptMode {
-		case passphrase:
-			pw, err := pwFn()
-			if err != nil {
-				return err
-			}
-			if err := requireEnterprise("encryption"); err != nil {
-				return err
-			}
-			encryptionParams.encryptionPassphrase = []byte(pw)
-		case kms:
-			encryptionParams.kmsURIs, encryptionParams.kmsEnv, err = kmsFn()
-			if err != nil {
-				return err
-			}
-			if err := requireEnterprise("encryption"); err != nil {
-				return err
-			}
-		}
-
-		defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(to, "")
-		if err != nil {
-			return err
-		}
-
-		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
-		// backupDestination struct.
-		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-			resolveDest(ctx, p.User(), backupStmt.Nested, backupStmt.AppendToLatest, defaultURI,
-				urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom, subdir)
-		if err != nil {
-			return err
-		}
-		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
-			encryptionParams)
-		if err != nil {
-			return err
-		}
-		if len(prevBackups) > 0 {
-			baseManifest := prevBackups[0]
-			if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
-				backupStmt.Coverage() != tree.AllDescriptors {
-				return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
-			}
-		}
-
 		clusterID := p.ExecCfg().ClusterID()
 		for i := range prevBackups {
 			// IDs are how we identify tables, and those are only meaningful in the
@@ -902,14 +972,7 @@ func backupPlanHook(
 			}
 		}
 
-		var startTime hlc.Timestamp
 		var newSpans roachpb.Spans
-		if len(prevBackups) > 0 {
-			if err := requireEnterprise("incremental"); err != nil {
-				return err
-			}
-			startTime = prevBackups[len(prevBackups)-1].EndTime
-		}
 
 		var priorIDs map[descpb.ID]descpb.ID
 
@@ -996,7 +1059,7 @@ func backupPlanHook(
 			dbsInPrev := make(map[descpb.ID]struct{})
 			rawDescs := prevBackups[len(prevBackups)-1].Descriptors
 			for i := range rawDescs {
-				if t := descpb.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
+				if t, _, _, _ := descpb.FromDescriptor(&rawDescs[i]); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
 				}
 			}
@@ -1019,9 +1082,8 @@ func backupPlanHook(
 			_, coveredTime, err := makeImportSpans(
 				spans,
 				prevBackups,
-				nil, /*backupLocalityInfo*/
-				keys.MinKey,
-				p.User(),
+				nil,         /*backupLocalityMaps*/
+				keys.MinKey, /* lowWatermark */
 				func(span covering.Range, start, end hlc.Timestamp) error {
 					if start.IsEmpty() {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
@@ -1033,8 +1095,15 @@ func backupPlanHook(
 			if err != nil {
 				return errors.Wrap(err, "invalid previous backups")
 			}
+
+			tableSpans, err := getReintroducedSpans(ctx, p, prevBackups, tables, revs, endTime)
+			if err != nil {
+				return err
+			}
+			newSpans = append(newSpans, tableSpans...)
+
 			if coveredTime != startTime {
-				return errors.Wrapf(err, "expected previous backups to cover until time %v, got %v", startTime, coveredTime)
+				return errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
 			}
 		}
 
@@ -1061,6 +1130,7 @@ func backupPlanHook(
 			IntroducedSpans:     newSpans,
 			FormatVersion:       BackupFormatDescriptorTrackingVersion,
 			BuildInfo:           build.GetInfo(),
+			ClusterVersion:      p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version,
 			ClusterID:           p.ExecCfg().ClusterID(),
 			StatisticsFilenames: statsFiles,
 			DescriptorCoverage:  backupStmt.Coverage(),
@@ -1074,7 +1144,6 @@ func backupPlanHook(
 			append(prevBackups, backupManifest),
 			nil, /*backupLocalityInfo*/
 			keys.MinKey,
-			p.User(),
 			errOnMissingRange,
 		); err != nil {
 			return err
@@ -1249,24 +1318,39 @@ func backupPlanHook(
 			return nil
 		}
 
+		// We create the job record in the planner's transaction to ensure that
+		// the job record creation happens transactionally.
+		plannerTxn := p.ExtendedEvalContext().Txn
+
+		// Construct the job and commit the transaction. Perform this work in a
+		// closure to ensure that the job is cleaned up if an error occurs.
 		var sj *jobs.StartableJob
-		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
+		if err := func() (err error) {
+			defer func() {
+				if err == nil || sj == nil {
+					return
+				}
+				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+					log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+				}
+			}()
+			jobID := p.ExecCfg().JobRegistry.MakeJobID()
+			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
 			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
 				return err
 			}
-
-			return protectTimestampForBackup(ctx, p, txn, jobID, spans, startTime, endTime,
-				backupDetails)
-		}); err != nil {
-			if sj != nil {
-				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-				}
+			if err := protectTimestampForBackup(ctx, p, plannerTxn, jobID, spans, startTime, endTime, backupDetails); err != nil {
+				return err
 			}
+
+			// We commit the transaction here so that the job can be started. This
+			// is safe because we're in an implicit transaction. If we were in an
+			// explicit transaction the job would have to be run with the detached
+			// option and would have been handled above.
+			return plannerTxn.Commit(ctx)
+		}(); err != nil {
 			return err
 		}
 
@@ -1284,6 +1368,77 @@ func backupPlanHook(
 		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+// getReintroducedSpans checks to see if any spans need to be re-backed up from
+// ts = 0. This may be the case if a span was OFFLINE in the previous backup and
+// has come back online since. The entire span needs to be re-backed up because
+// we may otherwise miss AddSSTable requests which write to a timestamp older
+// than the last incremental.
+func getReintroducedSpans(
+	ctx context.Context,
+	p sql.PlanHookState,
+	prevBackups []BackupManifest,
+	tables []catalog.TableDescriptor,
+	revs []BackupManifest_DescriptorRevision,
+	endTime hlc.Timestamp,
+) ([]roachpb.Span, error) {
+	reintroducedTables := make(map[descpb.ID]struct{})
+
+	offlineInLastBackup := make(map[descpb.ID]struct{})
+	lastBackup := prevBackups[len(prevBackups)-1]
+	for _, desc := range lastBackup.Descriptors {
+		// TODO(pbardea): Also check that lastWriteTime is set once those are
+		// populated on the table descriptor.
+		if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Offline() {
+			offlineInLastBackup[table.GetID()] = struct{}{}
+		}
+	}
+
+	// If the table was offline in the last backup, but becomes PUBLIC, then it
+	// needs to be re-included since we may have missed non-transactional writes.
+	tablesToReinclude := make([]catalog.TableDescriptor, 0)
+	for _, desc := range tables {
+		if _, wasOffline := offlineInLastBackup[desc.GetID()]; wasOffline && desc.Public() {
+			tablesToReinclude = append(tablesToReinclude, desc)
+			reintroducedTables[desc.GetID()] = struct{}{}
+		}
+	}
+
+	// Tables should be re-introduced if any revision of the table was PUBLIC. A
+	// table may have been OFFLINE at the time of the last backup, and OFFLINE at
+	// the time of the current backup, but may have been PUBLIC at some time in
+	// between.
+	for _, rev := range revs {
+		rawTable, _, _, _ := descpb.FromDescriptor(rev.Desc)
+		if rawTable == nil {
+			continue
+		}
+		table := tabledesc.NewBuilder(rawTable).BuildImmutableTable()
+		if _, wasOffline := offlineInLastBackup[table.GetID()]; wasOffline && table.Public() {
+			tablesToReinclude = append(tablesToReinclude, table)
+			reintroducedTables[table.GetID()] = struct{}{}
+		}
+	}
+
+	// All revisions of the table that we're re-introducing must also be
+	// considered.
+	allRevs := make([]BackupManifest_DescriptorRevision, 0, len(revs))
+	for _, rev := range revs {
+		rawTable, _, _, _ := descpb.FromDescriptor(rev.Desc)
+		if rawTable == nil {
+			continue
+		}
+		if _, ok := reintroducedTables[rawTable.GetID()]; ok {
+			allRevs = append(allRevs, rev)
+		}
+	}
+
+	tableSpans, err := spansForAllTableIndexes(ctx, p.ExecCfg(), endTime, tablesToReinclude, allRevs)
+	if err != nil {
+		return nil, err
+	}
+	return tableSpans, nil
 }
 
 func makeNewEncryptionOptions(

@@ -9,15 +9,18 @@ go_library(
 
 go_test(
     name = "logictestccl_test",
-    size = "small",
+    size = "enormous",
     srcs = [
         "logic_test.go",
         "main_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/logictest:testdata",
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":logictestccl"],
-    tags = ["broken_in_bazel"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/utilccl",
         "//pkg/security",

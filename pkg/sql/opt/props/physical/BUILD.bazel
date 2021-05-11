@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "physical",
     srcs = [
-        "ordering_choice.go",
         "provided.go",
         "required.go",
     ],
@@ -12,17 +11,13 @@ go_library(
     deps = [
         "//pkg/sql/opt",
         "//pkg/sql/opt/props",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "physical_test",
     size = "small",
-    srcs = [
-        "ordering_choice_test.go",
-        "required_test.go",
-    ],
+    srcs = ["required_test.go"],
     deps = [
         ":physical",
         "//pkg/sql/opt",

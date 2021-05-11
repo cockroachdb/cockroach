@@ -84,6 +84,9 @@ const (
 	OptFormatAvro   FormatType = `experimental_avro`
 	OptFormatNative FormatType = `native`
 
+	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
+	OptKafkaSinkConfig = `kafka_sink_config`
+
 	SinkParamCACert           = `ca_cert`
 	SinkParamClientCert       = `client_cert`
 	SinkParamClientKey        = `client_key`
@@ -92,9 +95,11 @@ const (
 	SinkParamTLSEnabled       = `tls_enabled`
 	SinkParamSkipTLSVerify    = `insecure_tls_skip_verify`
 	SinkParamTopicPrefix      = `topic_prefix`
+	SinkParamTopicName        = `topic_name`
 	SinkSchemeBuffer          = ``
 	SinkSchemeExperimentalSQL = `experimental-sql`
 	SinkSchemeKafka           = `kafka`
+	SinkSchemeNull            = `null`
 	SinkParamSASLEnabled      = `sasl_enabled`
 	SinkParamSASLHandshake    = `sasl_handshake`
 	SinkParamSASLUser         = `sasl_user`
@@ -121,4 +126,5 @@ var ChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	OptInitialScan:              sql.KVStringOptRequireNoValue,
 	OptNoInitialScan:            sql.KVStringOptRequireNoValue,
 	OptProtectDataFromGCOnPause: sql.KVStringOptRequireNoValue,
+	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
 }

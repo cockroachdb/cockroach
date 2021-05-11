@@ -83,8 +83,8 @@ func NewExternalDistinct(
 	// in-memory operator tuples, so we plan a special filterer operator to
 	// remove all such tuples.
 	input = &unorderedDistinctFilterer{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		ud:             inMemUnorderedDistinct.(*unorderedDistinct),
 	}
 	numRequiredActivePartitions := colexecop.ExternalSorterMinPartitions
 	ed := newHashBasedPartitioner(
@@ -112,6 +112,9 @@ func NewExternalDistinct(
 		// No particular output ordering is required.
 		return ed
 	}
+	// TODO(yuzefovich): the fact that we're planning an additional external
+	// sort isn't accounted for when considering the number file descriptors to
+	// acquire. Not urgent, but it should be fixed.
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, numRequiredActivePartitions)
 	return createDiskBackedSorter(ed, inputTypes, outputOrdering.Columns, maxNumberActivePartitions)
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -63,7 +62,7 @@ type CreatedByInfo struct {
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	Description   string
-	Statement     string
+	Statements    []string
 	Username      security.SQLUsername
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
@@ -289,6 +288,21 @@ func (j *Job) SetDescription(ctx context.Context, txn *kv.Txn, updateFn Descript
 	})
 }
 
+// SetNonCancelable updates the NonCancelable field of a created job.
+func (j *Job) SetNonCancelable(
+	ctx context.Context, txn *kv.Txn, updateFn NonCancelableUpdateFn,
+) error {
+	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		prev := md.Payload.Noncancelable
+		newStatus := updateFn(ctx, prev)
+		if prev != newStatus {
+			md.Payload.Noncancelable = newStatus
+			ju.UpdatePayload(md.Payload)
+		}
+		return nil
+	})
+}
+
 // RunningStatusFn is a callback that computes a job's running status
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
@@ -297,6 +311,10 @@ type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningS
 // DescriptionUpdateFn is a callback that computes a job's description
 // given its current one.
 type DescriptionUpdateFn func(ctx context.Context, description string) (string, error)
+
+// NonCancelableUpdateFn is a callback that computes a job's non-cancelable
+// status given its current one.
+type NonCancelableUpdateFn func(ctx context.Context, nonCancelable bool) bool
 
 // FractionProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
@@ -309,11 +327,6 @@ func FractionUpdater(f float32) FractionProgressedFn {
 		return f
 	}
 }
-
-// HighWaterProgressedFn is a callback that computes a job's high-water mark
-// given its details. It is safe to modify details in the callback; those
-// modifications will be automatically persisted to the database record.
-type HighWaterProgressedFn func(ctx context.Context, txn *kv.Txn, details jobspb.ProgressDetails) (hlc.Timestamp, error)
 
 // FractionProgressed updates the progress of the tracked job. It sets the job's
 // FractionCompleted field to the value returned by progressedFn and persists
@@ -341,34 +354,6 @@ func (j *Job) FractionProgressed(
 		}
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: fractionCompleted,
-		}
-		ju.UpdateProgress(md.Progress)
-		return nil
-	})
-}
-
-// HighWaterProgressed updates the progress of the tracked job. It sets the
-// job's HighWater field to the value returned by progressedFn and persists
-// progressedFn's modifications to the job's progress details, if any.
-func (j *Job) HighWaterProgressed(
-	ctx context.Context, txn *kv.Txn, progressedFn HighWaterProgressedFn,
-) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if err := md.CheckRunningOrReverting(); err != nil {
-			return err
-		}
-		highWater, err := progressedFn(ctx, txn, md.Progress.Details)
-		if err != nil {
-			return err
-		}
-		if highWater.Less(hlc.Timestamp{}) {
-			return errors.Errorf(
-				"job %d: high-water %s is outside allowable range > 0.0",
-				j.ID(), highWater,
-			)
-		}
-		md.Progress.Progress = &jobspb.Progress_HighWater{
-			HighWater: &highWater,
 		}
 		ju.UpdateProgress(md.Progress)
 		return nil

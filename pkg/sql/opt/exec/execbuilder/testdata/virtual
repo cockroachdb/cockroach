@@ -139,7 +139,7 @@ vectorized: true
         │ equality: (oid) = (connamespace)
         │
         ├── • filter
-        │   │ filter: nspname IN ('public',)
+        │   │ filter: nspname = 'public'
         │   │
         │   └── • virtual table
         │         table: pg_namespace@primary
@@ -147,12 +147,12 @@ vectorized: true
         └── • virtual table lookup join
             │ table: pg_attribute@pg_attribute_attrelid_idx
             │ equality: (oid) = (attrelid)
-            │ pred: column151 = attnum
+            │ pred: column154 = attnum
             │
             └── • render
                 │
                 └── • hash join
-                    │ equality: (attrelid, attnum) = (oid, column125)
+                    │ equality: (attrelid, attnum) = (oid, column128)
                     │
                     ├── • filter
                     │   │ filter: attrelid = 'b'::REGCLASS

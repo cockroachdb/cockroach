@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -90,6 +92,12 @@ func newPartitioner(t *types.T) (partitioner, error) {
 		case -1:
 		default:
 			return partitionerInterval{}, nil
+		}
+	case types.JsonFamily:
+		switch t.Width() {
+		case -1:
+		default:
+			return partitionerJSON{}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
 		switch t.Width() {
@@ -197,9 +205,8 @@ func (p partitionerBool) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -303,9 +310,8 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -368,7 +374,7 @@ func (p partitionerBytes) partitionWithOrder(
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal = append(lastVal[:0], v...)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -394,9 +400,8 @@ func (p partitionerBytes) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = append(lastVal[:0], v...)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -455,7 +460,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal = append(lastVal[:0], v...)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -484,9 +489,8 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = append(lastVal[:0], v...)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -549,7 +553,7 @@ func (p partitionerDecimal) partitionWithOrder(
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal.Set(&v)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -575,9 +579,8 @@ func (p partitionerDecimal) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal.Set(&v)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -636,7 +639,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal.Set(&v)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -665,9 +668,8 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal.Set(&v)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -778,9 +780,8 @@ func (p partitionerInt16) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -890,9 +891,8 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1003,9 +1003,8 @@ func (p partitionerInt32) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1115,9 +1114,8 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1228,9 +1226,8 @@ func (p partitionerInt64) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1340,9 +1337,8 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1469,9 +1465,8 @@ func (p partitionerFloat64) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1597,9 +1592,8 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1702,9 +1696,8 @@ func (p partitionerTimestamp) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1806,9 +1799,8 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1897,9 +1889,8 @@ func (p partitionerInterval) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1987,9 +1978,211 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
+					}
+				}
+				lastVal = __retval_0
+			}
+		}
+	}
+}
+
+// partitionerJSON partitions an arbitrary-length colVec by running a distinct
+// operation over it. It writes the same format to outputCol that sorted
+// distinct does: true for every row that differs from the previous row in the
+// input column.
+type partitionerJSON struct{}
+
+func (p partitionerJSON) partitionWithOrder(
+	colVec coldata.Vec, order []int, outputCol []bool, n int,
+) {
+	var lastVal json.JSON
+	var lastValNull bool
+	var nulls *coldata.Nulls
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec.JSON()
+	// Eliminate bounds checks.
+	_ = col.Get(n - 1)
+	_ = outputCol[n-1]
+	// TODO(yuzefovich): add BCE assertions for these.
+	outputCol[0] = true
+	if nulls != nil {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			checkIdx := order[outputIdx]
+			{
+				var (
+					__retval_lastVal     json.JSON
+					__retval_lastValNull bool
+				)
+				{
+					null := nulls.NullAt(checkIdx)
+					if null {
+						if !lastValNull {
+							// The current value is null while the previous was not.
+							outputCol[outputIdx] = true
+						}
+					} else {
+						v := col.Get(checkIdx)
+						if lastValNull {
+							// The previous value was null while the current is not.
+							outputCol[outputIdx] = true
+						} else {
+							// Neither value is null, so we must compare.
+							var unique bool
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = v.Compare(lastVal)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								unique = cmpResult != 0
+							}
+
+							outputCol[outputIdx] = outputCol[outputIdx] || unique
+						}
+						lastVal = v
+					}
+					{
+						__retval_lastVal = lastVal
+						__retval_lastValNull = null
+					}
+				}
+				lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+			}
+		}
+	} else {
+		for outputIdx := 0; outputIdx < n; outputIdx++ {
+			checkIdx := order[outputIdx]
+			{
+				var __retval_0 json.JSON
+				{
+					v := col.Get(checkIdx)
+					var unique bool
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = v.Compare(lastVal)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						unique = cmpResult != 0
+					}
+
+					outputCol[outputIdx] = outputCol[outputIdx] || unique
+					{
+						__retval_0 = v
+					}
+				}
+				lastVal = __retval_0
+			}
+		}
+	}
+}
+
+func (p partitionerJSON) partition(colVec coldata.Vec, outputCol []bool, n int) {
+	var (
+		lastVal     json.JSON
+		lastValNull bool
+		nulls       *coldata.Nulls
+	)
+	if colVec.MaybeHasNulls() {
+		nulls = colVec.Nulls()
+	}
+
+	col := colVec.JSON()
+	_ = col.Get(n - 1)
+	_ = outputCol[n-1]
+	// TODO(yuzefovich): add BCE assertions for these.
+	outputCol[0] = true
+	if nulls != nil {
+		for idx := 0; idx < n; idx++ {
+			{
+				var (
+					__retval_lastVal     json.JSON
+					__retval_lastValNull bool
+				)
+				{
+					var (
+						checkIdx  int = idx
+						outputIdx int = idx
+					)
+					null := nulls.NullAt(checkIdx)
+					if null {
+						if !lastValNull {
+							// The current value is null while the previous was not.
+							outputCol[outputIdx] = true
+						}
+					} else {
+						v := col.Get(checkIdx)
+						if lastValNull {
+							// The previous value was null while the current is not.
+							outputCol[outputIdx] = true
+						} else {
+							// Neither value is null, so we must compare.
+							var unique bool
+
+							{
+								var cmpResult int
+
+								var err error
+								cmpResult, err = v.Compare(lastVal)
+								if err != nil {
+									colexecerror.ExpectedError(err)
+								}
+
+								unique = cmpResult != 0
+							}
+
+							outputCol[outputIdx] = outputCol[outputIdx] || unique
+						}
+						lastVal = v
+					}
+					{
+						__retval_lastVal = lastVal
+						__retval_lastValNull = null
+					}
+				}
+				lastVal, lastValNull = __retval_lastVal, __retval_lastValNull
+			}
+		}
+	} else {
+		for idx := 0; idx < n; idx++ {
+			{
+				var __retval_0 json.JSON
+				{
+					var (
+						checkIdx  int = idx
+						outputIdx int = idx
+					)
+					v := col.Get(checkIdx)
+					var unique bool
+
+					{
+						var cmpResult int
+
+						var err error
+						cmpResult, err = v.Compare(lastVal)
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+
+						unique = cmpResult != 0
+					}
+
+					outputCol[outputIdx] = outputCol[outputIdx] || unique
+					{
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -2082,9 +2275,8 @@ func (p partitionerDatum) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -2176,9 +2368,8 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0

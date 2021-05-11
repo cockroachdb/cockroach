@@ -45,8 +45,17 @@ func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
 }
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, error) {
+func (so *DummySequenceOperators) CurrentDatabaseRegionConfig(
+	_ context.Context,
+) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errSequenceOperators)
+}
+
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+	_ context.Context,
+) error {
+	return errors.WithStack(errSequenceOperators)
 }
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
@@ -70,9 +79,16 @@ func (so *DummySequenceOperators) LookupSchema(
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (so *DummySequenceOperators) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errSequenceOperators)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
 }
 
 // IncrementSequence is part of the tree.SequenceOperators interface.
@@ -130,10 +146,22 @@ func (ep *DummyEvalPlanner) UnsafeUpsertDescriptor(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) GetImmutableTableInterfaceByID(
+	ctx context.Context, id int,
+) (interface{}, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // UnsafeDeleteDescriptor is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	ctx context.Context, descID int64, force bool,
 ) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// ForceDeleteTableData is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) ForceDeleteTableData(ctx context.Context, descID int64) error {
 	return errors.WithStack(errEvalPlanner)
 }
 
@@ -151,13 +179,6 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	return errors.WithStack(errEvalPlanner)
 }
 
-// CompactEngineSpan is part of the EvalPlanner interface.
-func (ep *DummyEvalPlanner) CompactEngineSpan(
-	ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
-) error {
-	return errors.WithStack(errEvalPlanner)
-}
-
 // MemberOfWithAdminOption is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	ctx context.Context, member security.SQLUsername,
@@ -171,8 +192,17 @@ var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessi
 	"cannot evaluate scalar expressions using table lookups in this context")
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, error) {
+func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
+	_ context.Context,
+) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
+	_ context.Context,
+) error {
+	return errors.WithStack(errEvalPlanner)
 }
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
@@ -189,7 +219,14 @@ func (ep *DummyEvalPlanner) LookupSchema(
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (ep *DummyEvalPlanner) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errEvalPlanner)
 }

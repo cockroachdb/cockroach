@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -77,6 +78,22 @@ func (ju *JobUpdater) UpdateProgress(progress *jobspb.Progress) {
 
 func (ju *JobUpdater) hasUpdates() bool {
 	return ju.md != JobMetadata{}
+}
+
+// UpdateHighwaterProgressed updates job updater progress with the new high water mark.
+func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobUpdater) error {
+	if err := md.CheckRunningOrReverting(); err != nil {
+		return err
+	}
+
+	if highWater.Less(hlc.Timestamp{}) {
+		return errors.Errorf("high-water %s is outside allowable range > 0.0", highWater)
+	}
+	md.Progress.Progress = &jobspb.Progress_HighWater{
+		HighWater: &highWater,
+	}
+	ju.UpdateProgress(md.Progress)
+	return nil
 }
 
 // Update is used to read the metadata for a job and potentially update it.

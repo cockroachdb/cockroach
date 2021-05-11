@@ -1274,3 +1274,16 @@ SELECT * FROM uniq
 ----
 x1  y1  z1
 x2  y2  z2
+
+# Regression test for #57434.
+statement ok
+CREATE TABLE target (x INT PRIMARY KEY, y INT, z INT, UNIQUE (y, z))
+
+statement ok
+CREATE TABLE source (a INT, b INT, c INT)
+
+statement ok
+INSERT INTO source VALUES (1, 1, 2), (1, 2, 1)
+
+statement ok
+INSERT INTO target SELECT * FROM source ORDER BY rowid ON CONFLICT DO NOTHING

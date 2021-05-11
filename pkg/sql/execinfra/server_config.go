@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -39,14 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
-)
-
-// SettingWorkMemBytes is a cluster setting that determines the maximum amount
-// of RAM that a processor can use.
-var SettingWorkMemBytes = settings.RegisterByteSizeSetting(
-	"sql.distsql.temp_storage.workmem",
-	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
-	64*1024*1024, /* 64MB */
 )
 
 // ServerConfig encompasses the configuration required to create a
@@ -151,6 +143,10 @@ type ServerConfig struct {
 	// HydratedTables is a node-level cache of table descriptors which utilize
 	// user-defined types.
 	HydratedTables *hydratedtables.Cache
+
+	// SQLStatsResetter is an interface used to reset SQL stats without the need to
+	// introduce dependency on the sql package.
+	SQLStatsResetter tree.SQLStatsResetter
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
@@ -217,19 +213,11 @@ type TestingKnobs struct {
 	// checked by a test receiver on the gateway.
 	MetadataTestLevel MetadataTestLevel
 
-	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
-	// were closed explicitly in flow.Cleanup.
-	CheckVectorizedFlowIsClosedCorrectly bool
-
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
 
 	// Flowinfra contains testing knobs specific to the flowinfra system
 	Flowinfra base.ModuleTestingKnobs
-
-	// EnableVectorizedInvariantsChecker, if enabled, will allow for planning
-	// the invariant checkers between all columnar operators.
-	EnableVectorizedInvariantsChecker bool
 
 	// Forces bulk adder flush every time a KV batch is processed.
 	BulkAdderFlushesEveryBatch bool
@@ -239,9 +227,6 @@ type TestingKnobs struct {
 
 	// BackupRestoreTestingKnobs are backup and restore specific testing knobs.
 	BackupRestoreTestingKnobs base.ModuleTestingKnobs
-
-	// BackupRestoreTestingKnobs are stream ingestion specific testing knobs.
-	StreamIngestionTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
@@ -261,16 +246,24 @@ const (
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
 
+// DefaultMemoryLimit is the default value of
+// sql.distsql.temp_storage.workmem cluster setting.
+const DefaultMemoryLimit = 64 << 20 /* 64 MiB */
+
 // GetWorkMemLimit returns the number of bytes determining the amount of RAM
 // available to a single processor or operator.
-func GetWorkMemLimit(config *ServerConfig) int64 {
-	if config.TestingKnobs.ForceDiskSpill && config.TestingKnobs.MemoryLimitBytes != 0 {
+func GetWorkMemLimit(flowCtx *FlowCtx) int64 {
+	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill && flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
 		panic(errors.AssertionFailedf("both ForceDiskSpill and MemoryLimitBytes set"))
 	}
-	if config.TestingKnobs.ForceDiskSpill {
+	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		return 1
-	} else if config.TestingKnobs.MemoryLimitBytes != 0 {
-		return config.TestingKnobs.MemoryLimitBytes
+	} else if flowCtx.Cfg.TestingKnobs.MemoryLimitBytes != 0 {
+		return flowCtx.Cfg.TestingKnobs.MemoryLimitBytes
 	}
-	return SettingWorkMemBytes.Get(&config.Settings.SV)
+	if flowCtx.EvalCtx.SessionData.WorkMemLimit <= 0 {
+		// If for some reason workmem limit is not set, use the default value.
+		return DefaultMemoryLimit
+	}
+	return flowCtx.EvalCtx.SessionData.WorkMemLimit
 }

@@ -746,3 +746,7 @@ SELECT * FROM crdb_internal.jobs
 # Cleanup
 statement ok
 SET disallow_full_table_scans = false
+
+# Regression test for #58104.
+statement ok
+SELECT * FROM pg_catalog.pg_attrdef WHERE (adnum = 1 AND adrelid = 1) OR (adbin = 'foo' AND adrelid = 2)

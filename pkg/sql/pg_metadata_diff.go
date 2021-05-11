@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 // GetPGMetadataSQL is a query uses udt_name::regtype instead of data_type column because
@@ -33,6 +36,8 @@ const GetPGMetadataSQL = `
 	JOIN pg_namespace n ON n.oid = c.relnamespace
 	WHERE n.nspname = $1
 	AND a.attnum > 0
+  AND c.relkind != 'i'
+  AND c.relname NOT LIKE 'pg_stat%'
 	ORDER BY 1, 2;
 `
 
@@ -63,8 +68,9 @@ type PGMetadataTables map[string]PGMetadataColumns
 // PGMetadataFile is used to export pg_catalog from postgres and store the representation of this structure as a
 // json file
 type PGMetadataFile struct {
-	PGVersion  string           `json:"pgVersion"`
-	PGMetadata PGMetadataTables `json:"pgMetadata"`
+	PGVersion          string             `json:"pgVersion"`
+	PGMetadata         PGMetadataTables   `json:"pgMetadata"`
+	UnimplementedTypes map[oid.Oid]string `json:"unimplementedTypes"`
 }
 
 func (p PGMetadataTables) addColumn(tableName, columnName string, column *PGMetadataColumnType) {
@@ -187,7 +193,8 @@ func (p PGMetadataTables) rewriteDiffs(diffFile string) error {
 	return nil
 }
 
-// Save have the purpose of storing all the data retrieved from postgres and useful information as postgres version
+// Save have the purpose of storing all the data retrieved from postgres and
+// useful information as postgres version.
 func (f *PGMetadataFile) Save(writer io.Writer) {
 	byteArray, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
@@ -197,4 +204,91 @@ func (f *PGMetadataFile) Save(writer io.Writer) {
 	if _, err = writer.Write(byteArray); err != nil {
 		panic(err)
 	}
+}
+
+//getUnimplementedTables retrieves the tables that are not yet part of CRDB.
+func (p PGMetadataTables) getUnimplementedTables(source PGMetadataTables) PGMetadataTables {
+	notImplemented := make(PGMetadataTables)
+	for tableName := range p {
+		if len(p[tableName]) == 0 && len(source[tableName].getUnimplementedTypes()) == 0 {
+			notImplemented[tableName] = source[tableName]
+		}
+	}
+	return notImplemented
+}
+
+// getUnimplementedColumns is used by diffs as it might not be in sync with
+// already implemented columns.
+func (p PGMetadataTables) getUnimplementedColumns(target PGMetadataTables) PGMetadataTables {
+	unimplementedColumns := make(PGMetadataTables)
+	for tableName, columns := range p {
+		for columnName, columnType := range columns {
+			if columnType != nil {
+				// dataType mismatch (Not a new column).
+				continue
+			}
+			sourceType := target[tableName][columnName]
+			typeOid := oid.Oid(sourceType.Oid)
+			if _, ok := types.OidToType[typeOid]; !ok || typeOid == oid.T_anyarray {
+				// can't implement this column due to missing type.
+				continue
+			}
+			unimplementedColumns.AddColumnMetadata(tableName, columnName, sourceType.DataType, sourceType.Oid)
+		}
+	}
+	return unimplementedColumns
+}
+
+// removeImplementedColumns removes diff columns that are marked as expected
+// diff (or unimplemented column) but is already implemented in CRDB.
+func (p PGMetadataTables) removeImplementedColumns(source PGMetadataTables) {
+	for tableName, columns := range source {
+		pColumns, exists := p[tableName]
+		if !exists {
+			continue
+		}
+		for columnName := range columns {
+			columnType, exists := pColumns[columnName]
+			if !exists {
+				continue
+			}
+			if columnType != nil {
+				continue
+			}
+
+			delete(pColumns, columnName)
+		}
+	}
+}
+
+// getUnimplementedTypes verifies that all the types are implemented in cockroach db.
+func (c PGMetadataColumns) getUnimplementedTypes() map[oid.Oid]string {
+	unimplemented := make(map[oid.Oid]string)
+	for _, column := range c {
+		typeOid := oid.Oid(column.Oid)
+		if _, ok := types.OidToType[typeOid]; !ok || typeOid == oid.T_anyarray {
+			unimplemented[typeOid] = column.DataType
+		}
+	}
+
+	return unimplemented
+}
+
+// AddUnimplementedType reports a type that is not implemented in cockroachdb.
+func (f *PGMetadataFile) AddUnimplementedType(columnType *PGMetadataColumnType) {
+	typeOid := oid.Oid(columnType.Oid)
+	if f.UnimplementedTypes == nil {
+		f.UnimplementedTypes = make(map[oid.Oid]string)
+	}
+
+	f.UnimplementedTypes[typeOid] = columnType.DataType
+}
+
+// IsImplemented determines whether the type is implemented or not in
+// cockroachdb.
+func (t *PGMetadataColumnType) IsImplemented() bool {
+	typeOid := oid.Oid(t.Oid)
+	_, ok := types.OidToType[typeOid]
+	// Cannot use type oid.T_anyarray in CREATE TABLE
+	return ok && typeOid != oid.T_anyarray
 }

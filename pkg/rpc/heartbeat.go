@@ -91,9 +91,22 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 		return errors.Errorf(
 			"cluster requires at least version %s, but peer did not provide a version", activeVersion)
 	}
-	if peerVersion.Less(activeVersion.Version) {
+
+	// KV nodes which are part of the system tenant *must* carry at least the
+	// version currently active in the cluster. Great care is taken to ensure
+	// that all nodes are broadcasting the new version before updating the active
+	// version. However, secondary tenants are allowed to lag the currently
+	// active cluster version. They are permitted to broadcast any version which
+	// is supported by this binary.
+	minVersion := activeVersion.Version
+	if tenantID, isTenant := roachpb.TenantFromContext(ctx); isTenant &&
+		!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+		minVersion = st.Version.BinaryMinSupportedVersion()
+	}
+	if peerVersion.Less(minVersion) {
 		return errors.Errorf(
-			"cluster requires at least version %s, but peer has version %s", activeVersion, peerVersion)
+			"cluster requires at least version %s, but peer has version %s",
+			minVersion, peerVersion)
 	}
 	return nil
 }

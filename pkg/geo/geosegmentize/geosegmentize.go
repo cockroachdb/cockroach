@@ -11,6 +11,10 @@
 package geosegmentize
 
 import (
+	"strconv"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -33,6 +37,7 @@ func Segmentize(
 	if geometry.Empty() {
 		return geometry, nil
 	}
+	layout := geometry.Layout()
 	switch geometry := geometry.(type) {
 	case *geom.Point, *geom.MultiPoint:
 		return geometry, nil
@@ -50,9 +55,9 @@ func Segmentize(
 		}
 		// Appending end point as it wasn't included in the iteration of coordinates.
 		allFlatCoordinates = append(allFlatCoordinates, geometry.Coord(geometry.NumCoords()-1)...)
-		return geom.NewLineStringFlat(geom.XY, allFlatCoordinates).SetSRID(geometry.SRID()), nil
+		return geom.NewLineStringFlat(layout, allFlatCoordinates).SetSRID(geometry.SRID()), nil
 	case *geom.MultiLineString:
-		segMultiLine := geom.NewMultiLineString(geom.XY).SetSRID(geometry.SRID())
+		segMultiLine := geom.NewMultiLineString(layout).SetSRID(geometry.SRID())
 		for lineIdx := 0; lineIdx < geometry.NumLineStrings(); lineIdx++ {
 			l, err := Segmentize(geometry.LineString(lineIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
@@ -78,9 +83,9 @@ func Segmentize(
 		}
 		// Appending end point as it wasn't included in the iteration of coordinates.
 		allFlatCoordinates = append(allFlatCoordinates, geometry.Coord(geometry.NumCoords()-1)...)
-		return geom.NewLinearRingFlat(geom.XY, allFlatCoordinates).SetSRID(geometry.SRID()), nil
+		return geom.NewLinearRingFlat(layout, allFlatCoordinates).SetSRID(geometry.SRID()), nil
 	case *geom.Polygon:
-		segPolygon := geom.NewPolygon(geom.XY).SetSRID(geometry.SRID())
+		segPolygon := geom.NewPolygon(layout).SetSRID(geometry.SRID())
 		for loopIdx := 0; loopIdx < geometry.NumLinearRings(); loopIdx++ {
 			l, err := Segmentize(geometry.LinearRing(loopIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
@@ -93,7 +98,7 @@ func Segmentize(
 		}
 		return segPolygon, nil
 	case *geom.MultiPolygon:
-		segMultiPolygon := geom.NewMultiPolygon(geom.XY).SetSRID(geometry.SRID())
+		segMultiPolygon := geom.NewMultiPolygon(layout).SetSRID(geometry.SRID())
 		for polygonIdx := 0; polygonIdx < geometry.NumPolygons(); polygonIdx++ {
 			p, err := Segmentize(geometry.Polygon(polygonIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
@@ -107,6 +112,10 @@ func Segmentize(
 		return segMultiPolygon, nil
 	case *geom.GeometryCollection:
 		segGeomCollection := geom.NewGeometryCollection().SetSRID(geometry.SRID())
+		err := segGeomCollection.SetLayout(layout)
+		if err != nil {
+			return nil, err
+		}
 		for geoIdx := 0; geoIdx < geometry.NumGeoms(); geoIdx++ {
 			g, err := Segmentize(geometry.Geom(geoIdx), segmentMaxAngleOrLength, segmentizeCoords)
 			if err != nil {
@@ -120,4 +129,19 @@ func Segmentize(
 		return segGeomCollection, nil
 	}
 	return nil, errors.Newf("unknown type: %T", geometry)
+}
+
+// CheckSegmentizeTooManyPoints checks whether segmentize would break down into
+// to many points.
+func CheckSegmentizeTooManyPoints(numPoints float64, a geom.Coord, b geom.Coord) error {
+	if numPoints > float64(geo.MaxAllowedSplitPoints) {
+		return errors.Newf(
+			"attempting to segmentize into too many coordinates; need %s points between %v and %v, max %d",
+			strings.TrimRight(strconv.FormatFloat(numPoints, 'f', -1, 64), "."),
+			a,
+			b,
+			geo.MaxAllowedSplitPoints,
+		)
+	}
+	return nil
 }

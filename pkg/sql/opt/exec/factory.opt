@@ -134,6 +134,9 @@ define GroupBy {
     # distinct set of values on the set of columns in the ordering).
     GroupColOrdering colinfo.ColumnOrdering
     Aggregations []exec.AggInfo
+
+    # If set, the output must have this ordering, but it is guaranteed that
+    # ReqOrdering is a prefix of GroupColOrdering.
     ReqOrdering exec.OutputOrdering
 }
 
@@ -165,6 +168,14 @@ define Distinct {
 # DISTINCT version). The left and right nodes must have the same number of
 # columns.
 #
+# ReqOrdering specifies the required output ordering, and if not empty, both
+# inputs are already ordered according to it. If ReqOrdering is set, it is
+# guaranteed to include all columns produced by this SetOp (the one exception is
+# UNION ALL, which is implemented with only an ordered synchronizer and does not
+# require an ordering over all columns). The execution engine is then guaranteed
+# to use a merge join (or streaming DISTINCT for UNION), which is a streaming
+# operation that maintains ordering.
+#
 # HardLimit can only be set for UNION ALL operations. It is used to implement
 # locality optimized search, and instructs the execution engine that it should
 # execute the left node to completion and possibly short-circuit if the limit is
@@ -175,6 +186,7 @@ define SetOp {
     All bool
     Left exec.Node
     Right exec.Node
+    ReqOrdering exec.OutputOrdering
     HardLimit uint64
 }
 
@@ -345,7 +357,7 @@ define ExplainOpt {
 # to construct the plan against that factory.
 define Explain {
     Options *tree.ExplainOptions
-    StmtType tree.StatementType
+    StmtType tree.StatementReturnType
     BuildFn exec.BuildPlanForExplainFn
 }
 
@@ -555,6 +567,7 @@ define CreateView {
     ViewQuery string
     Columns colinfo.ResultColumns
     deps opt.ViewDeps
+    typeDeps opt.ViewTypeDeps
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.
@@ -608,6 +621,7 @@ define AlterTableRelocate {
     Index cat.Index
     input exec.Node
     relocateLease bool
+    relocateNonVoters bool
 }
 
 # Buffer passes through the input rows but also saves them in a buffer, which

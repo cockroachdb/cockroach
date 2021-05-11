@@ -177,10 +177,12 @@ var trackedWritesMaxSize = settings.RegisterIntSetting(
 // attached to any end transaction request that is passed through the pipeliner
 // to ensure that they the locks within them are released.
 type txnPipeliner struct {
-	st       *cluster.Settings
-	riGen    rangeIteratorFactory // used to condense lock spans, if provided
-	wrapped  lockedSender
-	disabled bool
+	st                     *cluster.Settings
+	riGen                  rangeIteratorFactory // used to condense lock spans, if provided
+	wrapped                lockedSender
+	disabled               bool
+	txnMetrics             *TxnMetrics
+	condensedIntentsEveryN *log.EveryN
 
 	// In-flight writes are intent point writes that have not yet been proved
 	// to have succeeded. They will need to be proven before the transaction
@@ -488,7 +490,20 @@ func (tp *txnPipeliner) updateLockTracking(
 ) {
 	// After adding new writes to the lock footprint, check whether we need to
 	// condense the set to stay below memory limits.
-	defer tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
+	defer func() {
+		alreadyCondensed := tp.lockFootprint.condensed
+		condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, trackedWritesMaxSize.Get(&tp.st.SV))
+		if condensed && !alreadyCondensed {
+			if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
+				log.Warningf(ctx,
+					"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
+						"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
+					ba.Txn, ba.Summary())
+			}
+			tp.txnMetrics.TxnsWithCondensedIntents.Inc(1)
+			tp.txnMetrics.TxnsWithCondensedIntentsGauge.Inc(1)
+		}
+	}()
 
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
@@ -635,7 +650,7 @@ func (tp *txnPipeliner) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 // importLeafFinalState is part of the txnInterceptor interface.
 func (tp *txnPipeliner) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
 
-// epochBumpedLocked implements the txnReqInterceptor interface.
+// epochBumpedLocked implements the txnInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
 	// Move all in-flight writes into the lock footprint. These writes no longer
 	// need to be tracked precisely, but we don't want to forget about them and
@@ -649,10 +664,10 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 	}
 }
 
-// createSavepointLocked is part of the txnReqInterceptor interface.
+// createSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) createSavepointLocked(context.Context, *savepoint) {}
 
-// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
 	// Move all the writes in txnPipeliner that are not in the savepoint to the
 	// lock footprint. We no longer care if these write succeed or fail, so we're
@@ -681,8 +696,12 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 	}
 }
 
-// closeLocked implements the txnReqInterceptor interface.
-func (tp *txnPipeliner) closeLocked() {}
+// closeLocked implements the txnInterceptor interface.
+func (tp *txnPipeliner) closeLocked() {
+	if tp.lockFootprint.condensed {
+		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Dec(1)
+	}
+}
 
 // hasAcquiredLocks returns whether the interceptor has made an attempt to
 // acquire any locks, whether doing so was known to be successful or not.

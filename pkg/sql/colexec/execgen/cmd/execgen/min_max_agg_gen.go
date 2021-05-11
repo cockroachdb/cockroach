@@ -22,6 +22,9 @@ const minMaxAggTmpl = "pkg/sql/colexec/colexecagg/min_max_agg_tmpl.go"
 
 func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_AGG_TITLE", "{{.AggTitle}}",
 		"_AGG", "{{$agg}}",
 		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
 		"_GOTYPE", "{{.GoType}}",
@@ -44,14 +47,17 @@ func genMinMaxAgg(inputFileContents string, wr io.Writer) error {
 	}
 	return tmpl.Execute(wr, []struct {
 		Agg       string
+		AggTitle  string
 		Overloads []*oneArgOverload
 	}{
 		{
 			Agg:       "min",
+			AggTitle:  "Min",
 			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
 		},
 		{
 			Agg:       "max",
+			AggTitle:  "Max",
 			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
 		},
 	})

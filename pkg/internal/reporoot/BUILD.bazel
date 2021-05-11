@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gopath",
+    srcs = ["gopath.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/gopath",
+    visibility = ["//pkg:__subpackages__"],
+    deps = ["//pkg/util/envutil"],
+)
+
+go_library(
+    name = "reporoot",
+    srcs = ["reporoot.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/reporoot",
+    visibility = ["//pkg:__subpackages__"],
+    deps = ["@com_github_cockroachdb_errors//oserror"],
+)

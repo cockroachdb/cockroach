@@ -73,7 +73,7 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewImmutable(*table.Desc),
+		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewBuilder(table.Desc).BuildImmutableTable(),
 			nil /* targetColNames */, evalCtx, kvCh, nil /* seqChunkProvider */)
 		if err != nil {
 			return nil, err
@@ -432,6 +432,8 @@ func mysqlTableToCockroach(
 				priv,
 				tree.PersistencePermanent,
 				nil, /* params */
+				// If this is multi-region, this will get added by WriteDescriptors.
+				false, /* isMultiRegion */
 			)
 		} else {
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
@@ -446,6 +448,8 @@ func mysqlTableToCockroach(
 				priv,
 				tree.PersistencePermanent,
 				nil, /* params */
+				// If this is multi-region, this will get added by WriteDescriptors.
+				false, /* isMultiRegion */
 			)
 		}
 		if err != nil {
@@ -516,8 +520,9 @@ func mysqlTableToCockroach(
 				continue
 			}
 			fromCols := i.Source
-			toTable := tree.MakeTableName(
+			toTable := tree.MakeTableNameWithSchema(
 				safeName(i.ReferencedTable.Qualifier),
+				tree.PublicSchemaName,
 				safeName(i.ReferencedTable.Name),
 			)
 			toCols := i.ReferencedColumns

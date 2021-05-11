@@ -392,6 +392,11 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 	mm.doStop(ctx, true)
 }
 
+// Name returns the name of the monitor.
+func (mm *BytesMonitor) Name() string {
+	return mm.name
+}
+
 const bytesMaxUsageLoggingThreshold = 100 * 1024
 
 func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {

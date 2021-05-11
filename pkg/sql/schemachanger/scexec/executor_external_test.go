@@ -81,8 +81,7 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 	var table *tabledesc.Mutable
 	makeTable := func(f func(mutable *tabledesc.Mutable)) func() catalog.TableDescriptor {
 		return func() catalog.TableDescriptor {
-			cpy := tabledesc.NewExistingMutable(
-				*table.ImmutableCopy().(catalog.TableDescriptor).TableDesc())
+			cpy := tabledesc.NewBuilder(table.TableDesc()).BuildExistingMutableTable()
 			if f != nil {
 				f(cpy)
 			}
@@ -113,7 +112,7 @@ CREATE TABLE db.t (
    i INT PRIMARY KEY 
 )`)
 
-		tn := tree.MakeTableName("db", "t")
+		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "t")
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -128,11 +127,11 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil)
+			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
-			require.NoError(t, ex.ExecuteOps(ctx, c.ops()))
+			require.NoError(t, ex.ExecuteOps(ctx, c.ops(), scexec.TestingKnobMetadata{}))
 			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.exp(), after)
@@ -227,7 +226,7 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			tn := tree.MakeTableName("db", "foo")
+			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 			id = fooTable.GetID()
@@ -312,8 +311,9 @@ func TestSchemaChanger(t *testing.T) {
 						ti.lm.Codec(),
 						noopBackfiller{},
 						nil,
+						nil,
 					)
-					require.NoError(t, exec.ExecuteOps(ctx, s.Ops))
+					require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
 				}
 			}
@@ -328,8 +328,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil)
-				require.NoError(t, exec.ExecuteOps(ctx, s.Ops))
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil)
+				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 				after = s.After
 			}
 			return nil
@@ -363,7 +363,7 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			tn := tree.MakeTableName("db", "foo")
+			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 			id = fooTable.GetID()
@@ -399,7 +399,8 @@ func TestSchemaChanger(t *testing.T) {
 				})
 				require.NoError(t, err)
 				for _, s := range sc.Stages {
-					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil).ExecuteOps(ctx, s.Ops))
+					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil).
+						ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
 				}
 			}
@@ -413,8 +414,8 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil)
-				require.NoError(t, exec.ExecuteOps(ctx, s.Ops))
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil)
+				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 			}
 			return nil
 		}))

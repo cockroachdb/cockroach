@@ -116,7 +116,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mutationID := tableDesc.Mutations[0].MutationID
+	mutationID := tableDesc.AllMutations()[0].MutationID()
 	var jobID jobspb.JobID
 
 	if len(tableDesc.MutationJobs) > 0 {

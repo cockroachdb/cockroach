@@ -262,9 +262,12 @@ type ObjectNameExistingResolver interface {
 }
 
 // QualifiedNameResolver is the helper interface to resolve qualified
-// table names given an ID and the required table kind.
+// table names given an ID and the required table kind, as well as the
+// current database to determine whether or not to include the
+// database in the qualification.
 type QualifiedNameResolver interface {
 	GetQualifiedTableNameByID(ctx context.Context, id int64, requiredType RequiredTableKind) (*TableName, error)
+	CurrentDatabase() string
 }
 
 // NameResolutionResult is an opaque reference returned by LookupObject().
@@ -591,13 +594,13 @@ type CommonLookupFlags struct {
 	IncludeDropped bool
 }
 
-// SchemaLookupFlags is the flag struct suitable for GetSchema().
+// SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
 type SchemaLookupFlags = CommonLookupFlags
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
 type DatabaseLookupFlags = CommonLookupFlags
 
-// DatabaseListFlags is the flag struct suitable for GetObjectNames().
+// DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
 type DatabaseListFlags struct {
 	CommonLookupFlags
 	// ExplicitPrefix, when set, will cause the returned table names to

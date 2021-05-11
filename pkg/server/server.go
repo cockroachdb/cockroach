@@ -14,6 +14,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -61,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -460,13 +463,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
+	nodeLivenessFn := kvserver.MakeStorePoolNodeLivenessFunc(nodeLiveness)
+	if nodeLivenessKnobs, ok := cfg.TestingKnobs.Store.(*kvserver.NodeLivenessTestingKnobs); ok &&
+		nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
+		nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
+	}
 	storePool := kvserver.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		g,
 		clock,
 		nodeLiveness.GetNodeCount,
-		kvserver.MakeStorePoolNodeLivenessFunc(nodeLiveness),
+		nodeLivenessFn,
 		/* deterministic */ false,
 	)
 
@@ -482,6 +490,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
+	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
@@ -537,6 +547,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeDescriptorCache:    distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:     tsDB,
 		ClosedTimestampSender:   ctSender,
+		ClosedTimestampReceiver: ctReceiver,
 
 		// Initialize the closed timestamp subsystem. Note that it won't
 		// be ready until it is .Start()ed, but the grpc server can be
@@ -585,12 +596,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
-		txnMetrics, nil /* execCfg */, &rpcContext.ClusterID)
+		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID)
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer.Server)
+	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
 
@@ -916,7 +928,7 @@ func ensureClockMonotonicity(
 	clock *hlc.Clock,
 	startTime time.Time,
 	prevHLCUpperBound int64,
-	sleepUntilFn func(t hlc.Timestamp),
+	sleepUntilFn func(context.Context, hlc.Timestamp) error,
 ) {
 	var sleepUntil int64
 	if prevHLCUpperBound != 0 {
@@ -950,7 +962,7 @@ func ensureClockMonotonicity(
 			sleepUntil,
 			delta,
 		)
-		sleepUntilFn(hlc.Timestamp{WallTime: sleepUntil})
+		_ = sleepUntilFn(ctx, hlc.Timestamp{WallTime: sleepUntil})
 	}
 }
 
@@ -1271,10 +1283,26 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 		if knobs.SignalAfterGettingRPCAddress != nil {
+			log.Infof(ctx, "signaling caller that RPC address is ready")
 			close(knobs.SignalAfterGettingRPCAddress)
 		}
 		if knobs.PauseAfterGettingRPCAddress != nil {
-			<-knobs.PauseAfterGettingRPCAddress
+			log.Infof(ctx, "waiting for signal from caller to proceed with initialization")
+			select {
+			case <-knobs.PauseAfterGettingRPCAddress:
+				// Normal case. Just continue below.
+
+			case <-ctx.Done():
+				// Test timeout or some other condition in the caller, by which
+				// we are instructed to stop.
+				return errors.CombineErrors(errors.New("server stopping prematurely from context shutdown"), ctx.Err())
+
+			case <-s.stopper.ShouldQuiesce():
+				// The server is instructed to stop before it even finished
+				// starting up.
+				return errors.New("server stopping prematurely")
+			}
+			log.Infof(ctx, "caller is letting us proceed with initialization")
 		}
 	}
 
@@ -1384,7 +1412,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		if storeSpec.InMemory {
 			continue
 		}
-		if len(storeSpec.ExtraOptions) > 0 {
+		if storeSpec.IsEncrypted() {
 			encryptedStore = true
 		}
 
@@ -1626,11 +1654,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
-	)
-
 	var graphiteOnce sync.Once
 	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
@@ -1824,6 +1847,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
+	s.debug.RegisterClosedTimestampSideTransport(s.ctSender, s.node.storeCfg.ClosedTimestampReceiver)
 
 	s.ctSender.Run(ctx, state.nodeID)
 
@@ -1837,6 +1861,142 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	log.Event(ctx, "server initialized")
+
+	// Begin recording time series data collected by the status monitor.
+	// This will perform the first write synchronously, which is now
+	// acceptable.
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+	)
+
+	return maybeImportTS(ctx, s)
+}
+
+func maybeImportTS(ctx context.Context, s *Server) error {
+	knobs, _ := s.cfg.TestingKnobs.Server.(*TestingKnobs)
+	if knobs == nil {
+		return nil
+	}
+	tsImport := knobs.ImportTimeseriesFile
+	if tsImport == "" {
+		return nil
+	}
+
+	// In practice we only allow populating time series in `start-single-node` due
+	// to complexities detailed below. Additionally, we allow it only on a fresh
+	// single-node single-store cluster and we also guard against join flags even
+	// though there shouldn't be any.
+	if !s.InitialStart() || len(s.cfg.JoinList) > 0 || len(s.cfg.Stores.Specs) != 1 {
+		return errors.New("cannot import timeseries into an existing cluster or a multi-{store,node} cluster")
+	}
+
+	f, err := os.Open(tsImport)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	b := &kv.Batch{}
+	var n int
+	maybeFlush := func(force bool) error {
+		if n == 0 {
+			return nil
+		}
+		if n < 100 && !force {
+			return nil
+		}
+		err := s.db.Run(ctx, b)
+		if err != nil {
+			return err
+		}
+		log.Infof(ctx, "imported %d ts pairs\n", n)
+		*b, n = kv.Batch{}, 0
+		return nil
+	}
+
+	nodeIDs := map[string]struct{}{}
+	storeIDs := map[string]struct{}{}
+	dec := gob.NewDecoder(f)
+	for {
+		var v roachpb.KeyValue
+		err := dec.Decode(&v)
+		if err != nil {
+			if err == io.EOF {
+				if err := maybeFlush(true /* force */); err != nil {
+					return err
+				}
+				break
+			}
+			return err
+		}
+
+		name, source, _, _, err := ts.DecodeDataKey(v.Key)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(name, "cr.node.") {
+			nodeIDs[source] = struct{}{}
+		} else if strings.HasPrefix(name, "cr.store.") {
+			storeIDs[source] = struct{}{}
+		} else {
+			return errors.Errorf("unknown metric %s", name)
+		}
+
+		p := roachpb.NewPut(v.Key, v.Value)
+		p.(*roachpb.PutRequest).Inline = true
+		b.AddRawRequest(p)
+		n++
+		if err := maybeFlush(false /* force */); err != nil {
+			return err
+		}
+	}
+
+	nodeToStore := map[string][]string{}
+	for n := range nodeIDs {
+		// By default, assume that each node has one store, with a
+		// matching ID, i.e. n1->s1, n2->s2, etc.
+		nodeToStore[n] = []string{n}
+	}
+
+	for nodeString, storeStrings := range nodeToStore {
+		nid, err := strconv.ParseInt(nodeString, 10, 32)
+		if err != nil {
+			return err
+		}
+		nodeID := roachpb.NodeID(nid)
+
+		var ss []statuspb.StoreStatus
+		for _, storeString := range storeStrings {
+			sid, err := strconv.ParseInt(storeString, 10, 32)
+			if err != nil {
+				return err
+			}
+			ss = append(ss, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{StoreID: roachpb.StoreID(sid)}})
+			delete(storeIDs, nodeString)
+		}
+
+		ns := statuspb.NodeStatus{
+			Desc: roachpb.NodeDescriptor{
+				NodeID: nodeID,
+			},
+			StoreStatuses: ss,
+		}
+		key := keys.NodeStatusKey(nodeID)
+		if err := s.db.PutInline(ctx, key, &ns); err != nil {
+			return err
+		}
+	}
+	if len(storeIDs) == 0 {
+		log.Warningf(ctx, "*** guessed the assignment of nodes to stores: %v ***", nodeToStore)
+	} else {
+		// If you end up here, you can adjust nodeToStore above with the correct mapping and run
+		// a custom binary. We could add an env var that takes JSON if this becomes too burdensome.
+		// Another complication is the fact that at least n1 is live and will write regular statuses,
+		// and generally whatever nodes are running in the cluster have to have the right storeIDs
+		// or things will quickly be out of whack.
+		return errors.Errorf("unable to guess the assignment of remaining stores %v to nodes %v, needs manual mapping", storeIDs, nodeIDs)
+	}
+
 	return nil
 }
 

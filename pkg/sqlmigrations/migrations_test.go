@@ -545,7 +545,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := tabledesc.NewExistingMutable(*systemschema.NamespaceTable.TableDesc())
+	table := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildExistingMutableTable()
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
@@ -798,7 +798,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
-			table := descpb.TableFromDescriptor(desc, ts)
+			table, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(desc, ts)
 			table.CreateAsOfTime = systemschema.NamespaceTable.GetCreateAsOfTime()
 			table.ModificationTime = systemschema.NamespaceTable.GetModificationTime()
 			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
@@ -806,7 +806,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
-			table := descpb.TableFromDescriptor(desc, ts)
+			table, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(desc, ts)
 			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.GetCreateAsOfTime()
 			table.ModificationTime = systemschema.DeprecatedNamespaceTable.GetModificationTime()
 			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))
@@ -856,7 +856,7 @@ CREATE TABLE system.jobs (
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = tabledesc.NewImmutable(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewBuilder(oldJobsTable.TableDesc()).BuildImmutableTable()
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()
@@ -937,7 +937,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = tabledesc.NewImmutable(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewBuilder(oldJobsTable.TableDesc()).BuildImmutableTable()
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()

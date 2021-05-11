@@ -29,7 +29,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-// rowStrIter is an iterator interface for the printQueryOutput function. It is
+// rowStrIter is an iterator interface for the PrintQueryOutput function. It is
 // used so that results can be streamed to the row formatters as they arrive
 // to the CLI.
 type rowStrIter interface {
@@ -38,16 +38,17 @@ type rowStrIter interface {
 	Align() []int
 }
 
-// rowSliceIter is an implementation of the rowStrIter interface and it is used
+// RowSliceIter is an implementation of the rowStrIter interface and it is used
 // to wrap a slice of rows that have already been completely buffered into
 // memory.
-type rowSliceIter struct {
+type RowSliceIter struct {
 	allRows [][]string
 	index   int
 	align   []int
 }
 
-func (iter *rowSliceIter) Next() (row []string, err error) {
+// Next returns next row of RowSliceIter.
+func (iter *RowSliceIter) Next() (row []string, err error) {
 	if iter.index >= len(iter.allRows) {
 		return nil, io.EOF
 	}
@@ -56,11 +57,13 @@ func (iter *rowSliceIter) Next() (row []string, err error) {
 	return row, nil
 }
 
-func (iter *rowSliceIter) ToSlice() ([][]string, error) {
+// ToSlice returns all rows of RowSliceIter.
+func (iter *RowSliceIter) ToSlice() ([][]string, error) {
 	return iter.allRows, nil
 }
 
-func (iter *rowSliceIter) Align() []int {
+// Align returns alignment setting of RowSliceIter.
+func (iter *RowSliceIter) Align() []int {
 	return iter.align
 }
 
@@ -81,11 +84,11 @@ func convertAlign(align string) []int {
 	return result
 }
 
-// newRowSliceIter is an implementation of the rowStrIter interface and it is
+// NewRowSliceIter is an implementation of the rowStrIter interface and it is
 // used when the rows have not been buffered into memory yet and we want to
 // stream them to the row formatters as they arrive over the network.
-func newRowSliceIter(allRows [][]string, align string) *rowSliceIter {
-	return &rowSliceIter{
+func NewRowSliceIter(allRows [][]string, align string) *RowSliceIter {
+	return &RowSliceIter{
 		allRows: allRows,
 		index:   0,
 		align:   convertAlign(align),
@@ -94,11 +97,12 @@ func newRowSliceIter(allRows [][]string, align string) *rowSliceIter {
 
 type rowIter struct {
 	rows          *sqlRows
+	colTypes      []string
 	showMoreChars bool
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
-	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
+	nextRowString, err := getNextRowStrings(iter.rows, iter.colTypes, iter.showMoreChars)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +113,7 @@ func (iter *rowIter) Next() (row []string, err error) {
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
-	return getAllRowStrings(iter.rows, iter.showMoreChars)
+	return getAllRowStrings(iter.rows, iter.colTypes, iter.showMoreChars)
 }
 
 func (iter *rowIter) Align() []int {
@@ -137,6 +141,7 @@ func (iter *rowIter) Align() []int {
 func newRowIter(rows *sqlRows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
+		colTypes:      rows.getColTypes(),
 		showMoreChars: showMoreChars,
 	}
 }
@@ -637,9 +642,9 @@ func makeReporter(w io.Writer) (rowReporter, func(), error) {
 	}
 }
 
-// printQueryOutput takes a list of column names and a list of row
+// PrintQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
-func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
+func PrintQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
 	reporter, cleanup, err := makeReporter(w)
 	if err != nil {
 		return err

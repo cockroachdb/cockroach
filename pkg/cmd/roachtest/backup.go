@@ -12,15 +12,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,37 +36,142 @@ const (
 	KMSRegionBEnvVar = "AWS_KMS_REGION_B"
 	KMSKeyARNAEnvVar = "AWS_KMS_KEY_ARN_A"
 	KMSKeyARNBEnvVar = "AWS_KMS_KEY_ARN_B"
+
+	// rows2TiB is the number of rows to import to load 2TB of data (when
+	// replicated).
+	rows2TiB   = 65_104_166
+	rows100GiB = rows2TiB / 20
+	rows30GiB  = rows2TiB / 66
+	rows15GiB  = rows30GiB / 2
+	rows5GiB   = rows100GiB / 20
+	rows3GiB   = rows30GiB / 10
 )
 
-func registerBackup(r *testRegistry) {
-	importBankData := func(ctx context.Context, rows int, t *test, c *cluster) string {
-		dest := c.name
-		// Randomize starting with encryption-at-rest enabled.
-		c.encryptAtRandom = true
+func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) string {
+	dest := c.name
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 
-		if local {
-			rows = 100
-			dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
-		}
-
-		c.Put(ctx, workload, "./workload")
-		c.Put(ctx, cockroach, "./cockroach")
-
-		// NB: starting the cluster creates the logs dir as a side effect,
-		// needed below.
-		c.Start(ctx, t)
-		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-		time.Sleep(time.Second) // wait for csv server to open listener
-
-		importArgs := []string{
-			"./workload", "fixtures", "import", "bank",
-			"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
-			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
-		}
-		c.Run(ctx, c.Node(1), importArgs...)
-
-		return dest
+	if local {
+		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
+
+	c.Put(ctx, workload, "./workload")
+	c.Put(ctx, cockroach, "./cockroach")
+
+	// NB: starting the cluster creates the logs dir as a side effect,
+	// needed below.
+	c.Start(ctx, t)
+	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+	time.Sleep(time.Second) // wait for csv server to open listener
+
+	importArgs := []string{
+		"./workload", "fixtures", "import", "bank",
+		"--db=bank", "--payload-bytes=10240", fmt.Sprintf("--ranges=%d", ranges), "--csv-server", "http://localhost:8081",
+		fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+	}
+	c.Run(ctx, c.Node(1), importArgs...)
+
+	return dest
+}
+
+func importBankData(ctx context.Context, rows int, t *test, c *cluster) string {
+	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
+}
+
+func registerBackupNodeShutdown(r *testRegistry) {
+	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
+	// the backup.
+	backupNodeRestartSpec := makeClusterSpec(4)
+	loadBackupData := func(ctx context.Context, t *test, c *cluster) string {
+		// This aught to be enough since this isn't a performance test.
+		rows := rows15GiB
+		if local {
+			// Needs to be sufficiently large to give each processor a good chunk of
+			// works so the job doesn't complete immediately.
+			rows = rows5GiB
+		}
+		return importBankData(ctx, rows, t, c)
+	}
+
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:      OwnerBulkIO,
+		Cluster:    backupNodeRestartSpec,
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 3
+			dest := loadBackupData(ctx, t, c)
+			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
+			startBackup := func(c *cluster) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, gatewayNode)
+				defer gatewayDB.Close()
+
+				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
+				return
+			}
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
+		},
+	})
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:      OwnerBulkIO,
+		Cluster:    backupNodeRestartSpec,
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 2
+			dest := loadBackupData(ctx, t, c)
+			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
+			startBackup := func(c *cluster) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, gatewayNode)
+				defer gatewayDB.Close()
+
+				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
+				return
+			}
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
+		},
+	})
+
+}
+
+// initBulkJobPerfArtifacts registers a histogram, creates a performance
+// artifact directory and returns a method that when invoked records a tick.
+func initBulkJobPerfArtifacts(ctx context.Context, testName string, timeout time.Duration) func() {
+	// Register a named histogram to track the total time the bulk job took.
+	// Roachperf uses this information to display information about this
+	// roachtest.
+	reg := histogram.NewRegistry(timeout)
+	reg.GetHandle().Get(testName)
+
+	// Create the stats file where the roachtest will write perf artifacts.
+	// We probably don't want to fail the roachtest if we are unable to
+	// collect perf stats.
+	statsFile := perfArtifactsDir + "/stats.json"
+	err := os.MkdirAll(filepath.Dir(statsFile), 0755)
+	if err != nil {
+		log.Errorf(ctx, "%s failed to create perf artifacts directory %s: %s", testName,
+			statsFile, err.Error())
+	}
+	jsonF, err := os.Create(statsFile)
+	if err != nil {
+		log.Errorf(ctx, "%s failed to create perf artifacts directory %s: %s", testName,
+			statsFile, err.Error())
+	}
+	jsonEnc := json.NewEncoder(jsonF)
+	tick := func() {
+		reg.Tick(func(tick histogram.Tick) {
+			_ = jsonEnc.Encode(tick.Snapshot())
+		})
+	}
+	return tick
+}
+
+func registerBackup(r *testRegistry) {
 
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
@@ -71,13 +180,29 @@ func registerBackup(r *testRegistry) {
 		Cluster:    backup2TBSpec,
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			rows := 65104166
+			rows := rows2TiB
+			if local {
+				rows = 100
+			}
 			dest := importBankData(ctx, rows, t, c)
+			tick := initBulkJobPerfArtifacts(ctx, "backup/2TB", 2*time.Hour)
+
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
+				// Tick once before starting the backup, and once after to capture the
+				// total elapsed time. This is used by roachperf to compute and display
+				// the average MB/sec per node.
+				tick()
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
+				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`?AUTH=implicit'"`)
+				tick()
+
+				// Upload the perf artifacts to any one of the nodes so that the test
+				// runner copies it into an appropriate directory path.
+				if err := c.PutE(ctx, c.l, perfArtifactsDir, perfArtifactsDir, c.Node(1)); err != nil {
+					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				}
 				return nil
 			})
 			m.Wait()
@@ -96,7 +221,10 @@ func registerBackup(r *testRegistry) {
 			}
 
 			// ~10GiB - which is 30Gib replicated.
-			rows := 976562
+			rows := rows30GiB
+			if local {
+				rows = 100
+			}
 			dest := importBankData(ctx, rows, t, c)
 
 			conn := c.Conn(ctx, 1)
@@ -220,7 +348,7 @@ func registerBackup(r *testRegistry) {
 			}
 			warehouses := 10
 
-			backupDir := "gs://cockroachdb-backup-testing/" + c.name
+			backupDir := "gs://cockroachdb-backup-testing/" + c.name + "?AUTH=implicit"
 			// Use inter-node file sharing on 20.1+.
 			if r.buildVersion.AtLeast(version.MustParse(`v20.1.0-0`)) {
 				backupDir = "nodelocal://1/" + c.name

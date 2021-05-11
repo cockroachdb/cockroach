@@ -42,8 +42,8 @@ ALL_TESTS = [`)
 	fmt.Println(`]
 
 # These suites run only the tests with the appropriate "size" (excepting those
-# tagged "broken_in_bazel") [1]. Note that tests have a default timeout
-# depending on the size [2].
+# tagged "broken_in_bazel" or "flaky") [1]. Note that tests have a default
+# timeout depending on the size [2].
 
 # [1] https://docs.bazel.build/versions/master/be/general.html#test_suite
 # [2] https://docs.bazel.build/versions/master/be/common-definitions.html#common-attributes-tests`)
@@ -54,6 +54,7 @@ test_suite(
     name = "%[1]s_tests",
     tags = [
         "-broken_in_bazel",
+        "-flaky",
         "%[1]s",
     ],
     tests = ALL_TESTS,

@@ -41,7 +41,7 @@ func registerDiskFull(r *testRegistry) {
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./workload run kv --tolerate-errors --init --read-percent=0"+
-						" --concurrency=10 --duration=2m {pgurl:1-%d}",
+						" --concurrency=10 --duration=2m {pgurl:2-%d}",
 					nodes)
 				c.Run(ctx, c.Node(nodes+1), cmd)
 				return nil
@@ -62,6 +62,12 @@ func registerDiskFull(r *testRegistry) {
 						return nil
 					}
 					t.l.Printf("starting %d when disk is full\n", n)
+					// Pebble treats "no space left on device" as a background error. Kill
+					// cockroach if it is still running. Note that this is to kill the
+					// node that was started prior to this for loop, before the ballast
+					// was created. Now that the disk is full, any subsequent node starts
+					// must fail with an error for this test to succeed.
+					_ = c.StopE(ctx, c.Node(n))
 					// We expect cockroach to die during startup, though it might get far
 					// enough along that the monitor detects the death.
 					m.ExpectDeath()

@@ -116,10 +116,6 @@ const (
 	// See joinreader.go.
 	joinReaderBatchSize = 100.0
 
-	// In the case of a limit hint, a scan will read this multiple of the expected
-	// number of rows. See scanNode.limitHint.
-	scanSoftLimitMultiplier = 2.0
-
 	// latencyCostFactor represents the throughput impact of doing scans on an
 	// index that may be remotely located in a different locality. If latencies
 	// are higher, then overall cluster throughput will suffer somewhat, as there
@@ -137,6 +133,11 @@ const (
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
 	hugeCost memo.Cost = 1e100
+
+	// fullScanRowCountPenalty adds a penalty to full table scans. This is especially
+	// useful for empty or very small tables, where we would get plans that are
+	// surprising to users (like full scans instead of point lookups).
+	fullScanRowCountPenalty = 10
 
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
@@ -433,7 +434,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
 	case opt.SelectOp:
-		cost = c.computeSelectCost(candidate.(*memo.SelectExpr))
+		cost = c.computeSelectCost(candidate.(*memo.SelectExpr), required)
 
 	case opt.ProjectOp:
 		cost = c.computeProjectCost(candidate.(*memo.ProjectExpr))
@@ -579,17 +580,6 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
-	if required.LimitHint != 0 {
-		rowCount = math.Min(rowCount, required.LimitHint*scanSoftLimitMultiplier)
-	}
-
-	if ordering.ScanIsReverse(scan, &required.Ordering) {
-		if rowCount > 1 {
-			// Need to do binary search to seek to the previous row.
-			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
-		}
-	}
-
 	numSpans := 1
 	if scan.Constraint != nil {
 		numSpans = scan.Constraint.Spans.Count()
@@ -603,11 +593,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		baseCost += virtualScanTableDescriptorFetchCost
 	}
 
-	// Add a small cost if the scan is unconstrained, so all else being equal, we
-	// will prefer a constrained scan. This is important if our row count
-	// estimate turns out to be smaller than the actual row count.
+	// Add a penalty to full table scans. All else being equal, we prefer a
+	// constrained scan. Adding a few rows worth of cost helps prevent surprising
+	// plans for very small tables.
 	if scan.IsUnfiltered(c.mem.Metadata()) {
-		baseCost += cpuCostFactor
+		rowCount += fullScanRowCountPenalty
 
 		// For tables with multiple partitions, add the cost of visiting each
 		// partition.
@@ -620,10 +610,21 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		}
 	}
 
+	if required.LimitHint != 0 {
+		rowCount = math.Min(rowCount, required.LimitHint)
+	}
+
+	if ordering.ScanIsReverse(scan, &required.Ordering) {
+		if rowCount > 1 {
+			// Need to do binary search to seek to the previous row.
+			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
+		}
+	}
+
 	cost := baseCost + memo.Cost(rowCount)*(seqIOCostFactor+perRowCost)
 
 	// If this scan is locality optimized, divide the cost in two in order to make
-	// the total cost of the two scans in the locality optimized plan less then
+	// the total cost of the two scans in the locality optimized plan less than
 	// the cost of the single scan in the non-locality optimized plan.
 	// TODO(rytaft): This is hacky. We should really be making this determination
 	// based on the latency between regions.
@@ -633,9 +634,17 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	return cost
 }
 
-func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {
-	// The filter has to be evaluated on each input row.
+func (c *coster) computeSelectCost(sel *memo.SelectExpr, required *physical.Required) memo.Cost {
+	// Typically the filter has to be evaluated on each input row.
 	inputRowCount := sel.Input.Relational().Stats.RowCount
+
+	// If there is a LimitHint, n, it is expected that the filter will only be
+	// evaluated on the number of rows required to produce n rows.
+	if required.LimitHint != 0 {
+		selectivity := sel.Relational().Stats.Selectivity.AsFloat()
+		inputRowCount = math.Min(inputRowCount, required.LimitHint/selectivity)
+	}
+
 	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, util.FastIntMap{})
 	cost := memo.Cost(inputRowCount) * filterPerRow
 	cost += filterSetup
@@ -760,6 +769,7 @@ func (c *coster) computeIndexJoinCost(
 		join.Table,
 		cat.PrimaryIndex,
 		memo.JoinFlags(0),
+		false, /* localityOptimized */
 	)
 }
 
@@ -778,6 +788,7 @@ func (c *coster) computeLookupJoinCost(
 		join.Table,
 		join.Index,
 		join.Flags,
+		join.LocalityOptimized,
 	)
 }
 
@@ -790,6 +801,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	table opt.TableID,
 	index cat.IndexOrdinal,
 	flags memo.JoinFlags,
+	localityOptimized bool,
 ) memo.Cost {
 	input := join.Child(0).(memo.RelExpr)
 	lookupCount := input.Relational().Stats.RowCount
@@ -858,6 +870,15 @@ func (c *coster) computeIndexLookupJoinCost(
 	if flags.Has(memo.PreferLookupJoinIntoRight) {
 		// If we prefer a lookup join, make the cost much smaller.
 		cost *= preferLookupJoinFactor
+	}
+
+	// If this lookup join is locality optimized, divide the cost by 2.5 in order to make
+	// the total cost of the two lookup joins in the locality optimized plan less than
+	// the cost of the single lookup join in the non-locality optimized plan.
+	// TODO(rytaft): This is hacky. We should really be making this determination
+	// based on the latency between regions.
+	if localityOptimized {
+		cost /= 2.5
 	}
 	return cost
 }
@@ -997,10 +1018,10 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(set.Relational().Stats.RowCount) * cpuCostFactor
 
-	// A set operation must process every row from both tables once.
-	// UnionAll can avoid any extra computation, but all other set operations
-	// must perform a hash table lookup or update for each input row.
-	if set.Op() != opt.UnionAllOp {
+	// A set operation must process every row from both tables once. UnionAll and
+	// LocalityOptimizedSearch can avoid any extra computation, but all other set
+	// operations must perform a hash table lookup or update for each input row.
+	if set.Op() != opt.UnionAllOp && set.Op() != opt.LocalityOptimizedSearchOp {
 		leftRowCount := set.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 		rightRowCount := set.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor

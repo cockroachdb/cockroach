@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
+	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
 	"github.com/cockroachdb/redact"
 )
 
@@ -502,7 +503,7 @@ func (e *LeaseRejectedError) Error() string {
 }
 
 func (e *LeaseRejectedError) message(_ *Error) string {
-	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested, e.Message)
+	return fmt.Sprintf("cannot replace lease %s with %s: %s", e.Existing, e.Requested.String(), e.Message)
 }
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}

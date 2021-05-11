@@ -16,12 +16,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/transport"
 	transporttestutils "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/transport/testutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -76,6 +78,7 @@ func assertNumSubscribers(t *testing.T, p *TestProducer, exp int) {
 
 func TestTransportConnectOnRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, closedts.IssueTrackingRemovalOfOldClosedTimestampsCode)
 
 	container := NewTestContainer()
 	defer container.Stopper.Stop(context.Background())
@@ -108,6 +111,7 @@ func TestTransportConnectOnRequest(t *testing.T) {
 
 func TestTransportClientReceivesEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, closedts.IssueTrackingRemovalOfOldClosedTimestampsCode)
 
 	container := NewTestContainer()
 	defer container.Stopper.Stop(context.Background())

@@ -291,12 +291,22 @@ type TxStatus int
 
 //go:generate stringer -type TxStatus
 const (
-	TxStatusInFailure       TxStatus = pgx.TxStatusInFailure
-	TxStatusRollbackFailure TxStatus = pgx.TxStatusRollbackFailure
-	TxStatusCommitFailure   TxStatus = pgx.TxStatusCommitFailure
-	TxStatusInProgress      TxStatus = pgx.TxStatusInProgress
-	TxStatusCommitSuccess   TxStatus = pgx.TxStatusCommitSuccess
-	TxStatusRollbackSuccess TxStatus = pgx.TxStatusRollbackSuccess
+	TxStatusInFailure       TxStatus = -3
+	TxStatusRollbackFailure TxStatus = -2
+	TxStatusCommitFailure   TxStatus = -1
+	TxStatusInProgress      TxStatus = 0
+	TxStatusCommitSuccess   TxStatus = 1
+	TxStatusRollbackSuccess TxStatus = 2
+)
+
+// Workaround to do compile-time asserts that values are equal.
+const (
+	_ = uint((TxStatusInFailure - pgx.TxStatusInFailure) * (pgx.TxStatusInFailure - TxStatusInFailure))
+	_ = uint((TxStatusRollbackFailure - pgx.TxStatusRollbackFailure) * (pgx.TxStatusRollbackFailure - TxStatusRollbackFailure))
+	_ = uint((TxStatusCommitFailure - pgx.TxStatusCommitFailure) * (pgx.TxStatusCommitFailure - TxStatusCommitFailure))
+	_ = uint((TxStatusInProgress - pgx.TxStatusInProgress) * (pgx.TxStatusInProgress - TxStatusInProgress))
+	_ = uint((TxStatusCommitSuccess - pgx.TxStatusCommitSuccess) * (pgx.TxStatusCommitSuccess - TxStatusCommitSuccess))
+	_ = uint((TxStatusRollbackSuccess - pgx.TxStatusRollbackSuccess) * (pgx.TxStatusRollbackSuccess - TxStatusRollbackSuccess))
 )
 
 // MarshalJSON encodes a TxStatus to a string.
@@ -340,22 +350,18 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 			break
 		}
 
-		op, noops, err := w.opGen.randOp(tx)
-		if w.logger.verbose >= 2 {
-			for _, noop := range noops {
-				w.logger.writeLog(noop)
-			}
-		}
+		op, err := w.opGen.randOp(tx)
 
-		w.logger.addExpectedErrors(w.opGen.expectedExecErrors, w.opGen.expectedCommitErrors)
-
-		if err != nil {
+		if pgErr := (pgx.PgError{}); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+			return errors.Mark(err, errRunInTxnRbkSentinel)
+		} else if err != nil {
 			return errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED ERROR; Failed to generate a random operation"),
 				errRunInTxnFatalSentinel,
 			)
 		}
 
+		w.logger.addExpectedErrors(w.opGen.expectedExecErrors, w.opGen.expectedCommitErrors)
 		w.logger.writeLog(op)
 		if !w.dryRun {
 			start := timeutil.Now()
@@ -412,7 +418,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	}
 
 	// Release log entry locks if holding all.
-	w.releaseLocksIfHeld()
+	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	start := timeutil.Now()

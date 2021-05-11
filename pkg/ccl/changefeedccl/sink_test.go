@@ -10,15 +10,20 @@ package changefeedccl
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -27,6 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -37,21 +45,158 @@ type asyncProducerMock struct {
 	inputCh     chan *sarama.ProducerMessage
 	successesCh chan *sarama.ProducerMessage
 	errorsCh    chan *sarama.ProducerError
+	mu          struct {
+		syncutil.Mutex
+		outstanding []*sarama.ProducerMessage
+	}
 }
 
-func (p asyncProducerMock) Input() chan<- *sarama.ProducerMessage     { return p.inputCh }
-func (p asyncProducerMock) Successes() <-chan *sarama.ProducerMessage { return p.successesCh }
-func (p asyncProducerMock) Errors() <-chan *sarama.ProducerError      { return p.errorsCh }
-func (p asyncProducerMock) AsyncClose()                               { panic(`unimplemented`) }
-func (p asyncProducerMock) Close() error {
+const unbuffered = 0
+
+func newAsyncProducerMock(bufSize int) *asyncProducerMock {
+	return &asyncProducerMock{
+		inputCh:     make(chan *sarama.ProducerMessage, bufSize),
+		successesCh: make(chan *sarama.ProducerMessage, bufSize),
+		errorsCh:    make(chan *sarama.ProducerError, bufSize),
+	}
+}
+
+func (p *asyncProducerMock) Input() chan<- *sarama.ProducerMessage     { return p.inputCh }
+func (p *asyncProducerMock) Successes() <-chan *sarama.ProducerMessage { return p.successesCh }
+func (p *asyncProducerMock) Errors() <-chan *sarama.ProducerError      { return p.errorsCh }
+func (p *asyncProducerMock) AsyncClose()                               { panic(`unimplemented`) }
+func (p *asyncProducerMock) Close() error {
 	close(p.inputCh)
 	close(p.successesCh)
 	close(p.errorsCh)
 	return nil
 }
 
+// consumeAndSucceed consumes input messages and sends them to successes channel.
+// Returns function that must be called to stop this consumer
+// to clean up. The cleanup function must be called before closing asyncProducerMock.
+func (p *asyncProducerMock) consumeAndSucceed() (cleanup func()) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			case m := <-p.inputCh:
+				p.successesCh <- m
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		wg.Wait()
+	}
+}
+
+// consume consumes input messages but does not acknowledge neither successes, nor errors.
+// In essence, this simulates an unreachable kafka sink.
+// Use acknowledge methods to acknowledge successes or errors.
+// Returns a function that must be called to stop this consumer
+// to clean up. The cleanup function must be called before closing asyncProducerMock.
+func (p *asyncProducerMock) consume() (cleanup func()) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			case m := <-p.inputCh:
+				p.mu.Lock()
+				p.mu.outstanding = append(p.mu.outstanding, m)
+				p.mu.Unlock()
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		wg.Wait()
+	}
+}
+
+// acknowledge sends acknowledgements on the specified channel
+// for each of the outstanding messages.
+func (p *asyncProducerMock) acknowledge(n int, ch chan *sarama.ProducerMessage) {
+	for n > 0 {
+		var outstanding []*sarama.ProducerMessage
+		p.mu.Lock()
+		outstanding = append(outstanding, p.mu.outstanding...)
+		p.mu.outstanding = p.mu.outstanding[:0]
+		p.mu.Unlock()
+
+		for _, m := range outstanding {
+			ch <- m
+		}
+		n -= len(outstanding)
+	}
+}
+
+// outstanding returns the number of un-acknowledged messages.
+func (p *asyncProducerMock) outstanding() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.mu.outstanding)
+}
+
 func topic(name string) tableDescriptorTopic {
-	return tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})}
+	return tableDescriptorTopic{tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()}
+}
+
+const memoryUnlimited int64 = math.MaxInt64
+const noTopicPrefix = ""
+const defaultTopicName = ""
+
+func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup func()) {
+	mm := mon.NewMonitorWithLimit(
+		"test-mm", mon.MemoryResource, budget,
+		nil, nil, mon.DefaultPoolAllocationSize, 100,
+		cluster.MakeTestingClusterSettings())
+	mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(budget))
+	return mm.MakeBoundAccount(), func() { mm.Stop(context.Background()) }
+}
+
+func makeTestKafkaSink(
+	t testing.TB,
+	topicPrefix string,
+	topicNameOverride string,
+	p sarama.AsyncProducer,
+	budget int64,
+	targetNames ...string,
+) (s *kafkaSink, cleanup func()) {
+	mem, release := getBoundAccountWithBudget(budget)
+
+	targets := makeChangefeedTargets(targetNames...)
+
+	s = &kafkaSink{
+		ctx:      context.Background(),
+		topics:   makeTopicsMap(topicPrefix, topicNameOverride, targets),
+		producer: p,
+	}
+	s.mu.mem = mem
+	s.start()
+
+	return s, func() {
+		require.NoError(t, s.Close())
+		release()
+	}
+}
+
+func makeChangefeedTargets(targetNames ...string) jobspb.ChangefeedTargets {
+	targets := make(jobspb.ChangefeedTargets, len(targetNames))
+	for i, name := range targetNames {
+		targets[descpb.ID(i)] = jobspb.ChangefeedTarget{StatementTimeName: name}
+	}
+	return targets
 }
 
 func TestKafkaSink(t *testing.T) {
@@ -59,23 +204,10 @@ func TestKafkaSink(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	p := asyncProducerMock{
-		inputCh:     make(chan *sarama.ProducerMessage, 1),
-		successesCh: make(chan *sarama.ProducerMessage, 1),
-		errorsCh:    make(chan *sarama.ProducerError, 1),
-	}
-	sink := &kafkaSink{
-		producer: p,
-	}
-	targets := make(jobspb.ChangefeedTargets, 1)
-	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `t`}
-	sink.setTargets(targets)
-	sink.start()
-	defer func() {
-		if err := sink.Close(); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	p := newAsyncProducerMock(1)
+	sink, cleanup := makeTestKafkaSink(
+		t, noTopicPrefix, defaultTopicName, p, memoryUnlimited, "t")
+	defer cleanup()
 
 	// No inflight
 	if err := sink.Flush(ctx); err != nil {
@@ -147,19 +279,11 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	p := asyncProducerMock{
-		inputCh:     make(chan *sarama.ProducerMessage, 1),
-		successesCh: make(chan *sarama.ProducerMessage, 1),
-		errorsCh:    make(chan *sarama.ProducerError, 1),
-	}
-	sink := &kafkaSink{
-		producer: p,
-	}
-	targets := make(jobspb.ChangefeedTargets, 1)
-	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `☃`}
-	sink.setTargets(targets)
-	sink.start()
-	defer func() { require.NoError(t, sink.Close()) }()
+	p := newAsyncProducerMock(1)
+	sink, cleanup := makeTestKafkaSink(
+		t, noTopicPrefix, defaultTopicName, p, memoryUnlimited, `☃`)
+	defer cleanup()
+
 	if err := sink.EmitRow(ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
 		t.Fatal(err)
 	}
@@ -167,6 +291,69 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	require.Equal(t, `_u2603_`, m.Topic)
 	require.Equal(t, sarama.ByteEncoder(`k☃`), m.Key)
 	require.Equal(t, sarama.ByteEncoder(`v☃`), m.Value)
+}
+
+func TestKafkaTopicNameProvided(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const topicOverride = "general"
+	p := newAsyncProducerMock(1)
+	sink, cleanup := makeTestKafkaSink(
+		t, noTopicPrefix, topicOverride, p, memoryUnlimited, "particular0", "particular1")
+	defer cleanup()
+
+	//all messages go to the general topic
+	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS))
+	m := <-p.inputCh
+	require.Equal(t, topicOverride, m.Topic)
+}
+
+func TestKafkaTopicNameWithPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	p := newAsyncProducerMock(1)
+	const topicPrefix = "prefix-"
+	const topicOverride = "☃"
+	sink, clenaup := makeTestKafkaSink(
+		t, topicPrefix, topicOverride, p, memoryUnlimited, "particular0", "particular1")
+	defer clenaup()
+
+	//the prefix is applied and the name is escaped
+	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS))
+	m := <-p.inputCh
+	require.Equal(t, `prefix-_u2603_`, m.Topic)
+}
+
+// goos: darwin
+// goarch: amd64
+// pkg: github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl
+// cpu: Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+// BenchmarkEmitRow-16    	  573620	      1779 ns/op	     235 B/op	       6 allocs/op
+func BenchmarkEmitRow(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	p := newAsyncProducerMock(unbuffered)
+	const tableName = `defaultdb.public.funky_table☃`
+	topic := topic(tableName)
+	sink, cleanup := makeTestKafkaSink(b, noTopicPrefix, defaultTopicName, p, memoryUnlimited, tableName)
+	stopConsume := p.consumeAndSucceed()
+	defer func() {
+		stopConsume()
+		cleanup()
+	}()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		require.NoError(b, sink.EmitRow(ctx, topic, []byte(`k☃`), []byte(`v☃`), hlc.Timestamp{}))
+	}
+
+	b.ReportAllocs()
 }
 
 type testEncoder struct{}
@@ -183,10 +370,10 @@ func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	topic := func(name string) tableDescriptorTopic {
+	overrideTopic := func(name string) tableDescriptorTopic {
 		id, _ := strconv.ParseUint(name, 36, 64)
 		return tableDescriptorTopic{
-			tabledesc.NewImmutable(descpb.TableDescriptor{Name: name, ID: descpb.ID(id)})}
+			tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()}
 	}
 
 	ctx := context.Background()
@@ -195,18 +382,20 @@ func TestSQLSink(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	sinkURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
-	sinkURL.Path = `d`
+	pgURL.Path = `d`
 
-	fooTopic := topic(`foo`)
-	barTopic := topic(`bar`)
+	fooTopic := overrideTopic(`foo`)
+	barTopic := overrideTopic(`bar`)
 	targets := jobspb.ChangefeedTargets{
 		fooTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `foo`},
 		barTopic.GetID(): jobspb.ChangefeedTarget{StatementTimeName: `bar`},
 	}
-	sink, err := makeSQLSink(sinkURL.String(), `sink`, targets)
+	const testTableName = `sink`
+	sink, err := makeSQLSink(sinkURL{URL: &pgURL}, testTableName, targets)
 	require.NoError(t, err)
+	require.NoError(t, sink.(*sqlSink).Dial())
 	defer func() { require.NoError(t, sink.Close()) }()
 
 	// Empty
@@ -214,7 +403,7 @@ func TestSQLSink(t *testing.T) {
 
 	// Undeclared topic
 	require.EqualError(t,
-		sink.EmitRow(ctx, topic(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: `)
+		sink.EmitRow(ctx, overrideTopic(`nope`), nil, nil, zeroTS), `cannot emit to undeclared topic: `)
 
 	// With one row, nothing flushes until Flush is called.
 	require.NoError(t, sink.EmitRow(ctx, fooTopic, []byte(`k1`), []byte(`v0`), zeroTS))
@@ -298,4 +487,104 @@ func TestSQLSink(t *testing.T) {
 			{`foo`, `2`, ``, ``, `0.000000001,0`},
 		},
 	)
+}
+
+func TestSaramaConfigOptionParsing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	opts := make(map[string]string)
+	cfg, err := getSaramaConfig(opts)
+	require.NoError(t, err)
+	require.Equal(t, defaultSaramaConfig, cfg)
+
+	expected := &saramaConfig{}
+	expected.Flush.MaxMessages = 1000
+	expected.Flush.Frequency = jsonDuration(time.Second)
+
+	opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"MaxMessages": 1000, "Frequency": "1s"}}`
+	cfg, err = getSaramaConfig(opts)
+	require.NoError(t, err)
+	require.Equal(t, expected, cfg)
+}
+
+func TestKafkaSinkTracksMemory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	memCapacity := mon.DefaultPoolAllocationSize
+
+	// Use fake kafka sink which "consumes" all messages on its input channel,
+	// but does not acknowledge them automatically (i.e. slow sink)
+	p := newAsyncProducerMock(unbuffered)
+	stopConsume := p.consume()
+
+	sink, cleanup := makeTestKafkaSink(
+		t, noTopicPrefix, defaultTopicName, p, memCapacity, "t")
+	defer func() {
+		stopConsume()
+		cleanup()
+	}()
+
+	// No inflight
+	require.NoError(t, sink.Flush(ctx))
+
+	// Emit few messages
+	rnd, _ := randutil.NewTestPseudoRand()
+	key := randutil.RandBytes(rnd, 1+rnd.Intn(64))
+	val := randutil.RandBytes(rnd, 1+rnd.Intn(512))
+	kvLen := int64(len(key)) + int64(len(val))
+
+	testTopic := topic(`t`)
+	for i := 0; i < 10; i++ {
+		require.NoError(t, sink.EmitRow(ctx, testTopic, key, val, zeroTS))
+	}
+
+	memUsed := func() int64 {
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		return sink.mu.mem.Used()
+	}
+	require.Equal(t, 10*kvLen, memUsed())
+
+	// Acknowledge outstanding messages, and flush.
+	p.acknowledge(10, p.successesCh)
+	require.NoError(t, sink.Flush(ctx))
+	require.EqualValues(t, 0, p.outstanding())
+
+	// Try emitting resolved timestamp.  This message type is different from the
+	// regular messages since it doesn't have Key set.
+	// We bypass majority of EmitResolvedTimestamp logic since we don't have
+	// a real kafka client instantiated.  Instead, we call emitMessage directly.
+	reg := cdctest.MakeTestSchemaRegistry()
+	defer reg.Close()
+	opts := map[string]string{
+		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
+		changefeedbase.OptConfluentSchemaRegistry: reg.URL(),
+	}
+	encoder, err := newConfluentAvroEncoder(opts, makeChangefeedTargets("t"))
+	require.NoError(t, err)
+	payload, err := encoder.EncodeResolvedTimestamp(ctx, "t", hlc.Timestamp{})
+	require.NoError(t, err)
+	msg := &sarama.ProducerMessage{
+		Topic: "t",
+		Key:   nil,
+		Value: sarama.ByteEncoder(payload),
+	}
+	require.NoError(t, sink.emitMessage(ctx, msg))
+	p.acknowledge(1, p.successesCh)
+	require.NoError(t, sink.Flush(ctx))
+	require.EqualValues(t, 0, p.outstanding())
+
+	// Try to emit more than we can handle.
+	expectOverflow := memCapacity / kvLen
+	for err == nil {
+		err = sink.EmitRow(ctx, testTopic, key, val, zeroTS)
+	}
+
+	require.Regexp(t, `memory budget exceeded`, err)
+	// We failed to allocate more memory, but we should have used
+	// memory for the expectOverflow key/values.
+	require.EqualValues(t, expectOverflow*kvLen, memUsed())
 }

@@ -1795,3 +1795,17 @@ CREATE TABLE t61414_c (
 
 statement ok
 UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
+
+# Regression test for #61284. When building partial index DEL column
+# expressions, there should not be ambiguous column errors if there exists
+# columns in an UPDATE FROM clause that match column names in the partial index
+# predicate.
+
+statement ok
+CREATE TABLE t61284 (
+  a INT,
+  INDEX (a) WHERE a > 0
+)
+
+statement ok
+UPDATE t61284 SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE t61284.a = v.a

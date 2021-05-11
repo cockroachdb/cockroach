@@ -65,6 +65,7 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 		cv.ViewQuery,
 		cols,
 		cv.Deps,
+		cv.TypeDeps,
 	)
 	return execPlan{root: root}, err
 }
@@ -200,6 +201,7 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 		table.Index(relocate.Index),
 		input.root,
 		relocate.RelocateLease,
+		relocate.RelocateNonVoters,
 	)
 	if err != nil {
 		return execPlan{}, err

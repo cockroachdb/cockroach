@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -35,7 +34,7 @@ import (
 
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
-	rowContainer *rowcontainer.RowContainer
+	rowContainer *rowContainerHelper
 	rowsAffected int
 	err          error
 }
@@ -43,21 +42,21 @@ type RowResultWriter struct {
 var _ rowResultWriter = &RowResultWriter{}
 
 // NewRowResultWriter creates a new RowResultWriter.
-func NewRowResultWriter(rowContainer *rowcontainer.RowContainer) *RowResultWriter {
-	// TODO(yuzefovich): consider using disk-backed row container in some cases
-	// (for example, in case of subqueries and apply-joins).
+func NewRowResultWriter(rowContainer *rowContainerHelper) *RowResultWriter {
 	return &RowResultWriter{rowContainer: rowContainer}
 }
 
 // IncrementRowsAffected implements the rowResultWriter interface.
-func (b *RowResultWriter) IncrementRowsAffected(n int) {
+func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	b.rowsAffected += n
 }
 
 // AddRow implements the rowResultWriter interface.
 func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	_, err := b.rowContainer.AddRow(ctx, row)
-	return err
+	if b.rowContainer != nil {
+		return b.rowContainer.addRow(ctx, row)
+	}
+	return nil
 }
 
 // SetError is part of the rowResultWriter interface.
@@ -87,7 +86,7 @@ func newCallbackResultWriter(
 	return &callbackResultWriter{fn: fn}
 }
 
-func (c *callbackResultWriter) IncrementRowsAffected(n int) {
+func (c *callbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	c.rowsAffected += n
 }
 
@@ -158,7 +157,7 @@ func presplitTableBoundaries(
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
-		tblDesc := tabledesc.NewImmutable(*tbl.Desc)
+		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
@@ -302,6 +301,7 @@ func DistIngest(
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
 		evalCtx.ExecCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

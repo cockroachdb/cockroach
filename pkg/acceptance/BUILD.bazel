@@ -39,7 +39,6 @@ go_test(
     deps = [
         "//pkg/acceptance/cluster",
         "//pkg/security",
-        "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/log",
     ],

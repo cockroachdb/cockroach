@@ -605,7 +605,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFFINITY AFTER AGGREGATE
+%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
@@ -635,7 +635,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -644,7 +644,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDING INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE INCLUDE_DEPRECATED_INTERLEAVES INCLUDING INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INTEGER
@@ -666,12 +666,12 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED NOCONTROLJOB
 %token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING NO_INDEX_JOIN
-%token <str> NONE NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONED PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
@@ -684,9 +684,9 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
-%token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_MISSING_FOREIGN_KEYS
+%token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
@@ -701,7 +701,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIRTUAL VISIBLE
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIRTUAL VISIBLE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -854,6 +854,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
+%type <tree.Statement> explainable_stmt
 %type <tree.Statement> row_source_extension_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
@@ -925,6 +926,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
+%type <tree.Statement> show_full_scans_stmt
 
 %type <str> statements_or_queries
 
@@ -960,6 +962,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.SelectStatement> set_operation
 
 %type <tree.Expr> alter_column_default
+%type <tree.Expr> alter_column_visible
 %type <tree.Direction> opt_asc_desc
 %type <tree.NullsOrder> opt_nulls_order
 
@@ -1381,7 +1384,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... SET LOCALITY [REGIONAL BY [TABLE IN <region> | ROW] | GLOBAL]
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
@@ -1684,22 +1687,41 @@ relocate_kw:
   TESTING_RELOCATE
 | EXPERIMENTAL_RELOCATE
 
+voters_kw:
+  VOTERS {}
+| /* EMPTY */ {}
+
 alter_relocate_stmt:
-  ALTER TABLE table_name relocate_kw select_stmt
+  ALTER TABLE table_name relocate_kw voters_kw select_stmt
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
     $$.val = &tree.Relocate{
       TableOrIndex: tree.TableIndexName{Table: name},
-      Rows: $5.slct(),
+      Rows: $6.slct(),
+    }
+  }
+| ALTER TABLE table_name relocate_kw NON_VOTERS select_stmt
+  {
+    /* SKIP DOC */
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Relocate{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+      RelocateNonVoters: true,
     }
   }
 
 alter_relocate_index_stmt:
-  ALTER INDEX table_index_name relocate_kw select_stmt
+  ALTER INDEX table_index_name relocate_kw voters_kw select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $5.slct()}
+    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
+  }
+| ALTER INDEX table_index_name relocate_kw NON_VOTERS select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateNonVoters: true}
   }
 
 alter_relocate_lease_stmt:
@@ -1912,6 +1934,11 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetDefault{Column: tree.Name($3), Default: $4.expr()}
   }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET {VISIBLE|NOT VISIBLE}
+| ALTER opt_column column_name alter_column_visible
+  {
+    $$.val = &tree.AlterTableSetVisible{Column: tree.Name($3), Visible: $4.bool()}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column column_name DROP NOT NULL
   {
@@ -1926,6 +1953,10 @@ alter_table_cmd:
 | ALTER opt_column column_name SET NOT NULL
   {
     $$.val = &tree.AlterTableSetNotNull{Column: tree.Name($3)}
+  }
+| ALTER opt_column column_name ADD error
+  {
+    return unimplemented(sqllex, "alter table alter column add")
   }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS column_name opt_drop_behavior
@@ -2065,6 +2096,16 @@ alter_column_default:
 | DROP DEFAULT
   {
     $$.val = nil
+  }
+
+alter_column_visible:
+  SET VISIBLE
+  {
+    $$.val = true
+  }
+| SET NOT VISIBLE
+  {
+    $$.val = false
   }
 
 opt_alter_column_using:
@@ -2256,7 +2297,7 @@ username_or_sconst:
   {
     // We use UsernameValidation because username_or_sconst and role_spec
     // are only used for usernames of existing accounts, not when
-    // creating new users or roles.	
+    // creating new users or roles.
     $$.val, _ = security.MakeSQLUsernameFromUserInput($1, security.UsernameValidation)
   }
 
@@ -2321,6 +2362,7 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
+//    include_deprecated_interleaves: allow backing up interleaved tables, even if future versions will be unable to restore.
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2426,12 +2468,17 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
   }
+| INCLUDE_DEPRECATED_INTERLEAVES
+  {
+    $$.val = &tree.BackupOptions{IncludeDeprecatedInterleaves: true}
+  }
+
 
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
 // CREATE SCHEDULE [<description>]
-// FOR BACKUP [<targets>] TO <location...>
+// FOR BACKUP [<targets>] INTO <location...>
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
 // [WITH EXPERIMENTAL SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
@@ -2599,6 +2646,7 @@ opt_with_schedule_options:
 //    encryption_passphrase=passphrase: decrypt BACKUP with specified passphrase
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
 //    detached: execute restore job asynchronously, without waiting for its completion
+//    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -2731,6 +2779,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{Detached: true}
   }
+| SKIP_LOCALITIES_CHECK
+  {
+    $$.val = &tree.RestoreOptions{SkipLocalitiesCheck: true}
+  }
 
 import_format:
   name
@@ -2739,9 +2791,21 @@ import_format:
   }
 
 alter_unsupported_stmt:
- ALTER FUNCTION error
+  ALTER FUNCTION error
   {
     return unimplemented(sqllex, "alter function")
+  }
+| ALTER DOMAIN error
+  {
+    return unimplemented(sqllex, "alter domain")
+  }
+| ALTER AGGREGATE error
+  {
+    return unimplemented(sqllex, "alter aggregate")
+  }
+| ALTER DEFAULT error
+  {
+    return unimplemented(sqllex, "alter default privileges")
   }
 
 
@@ -2932,6 +2996,10 @@ copy_from_stmt:
        Stdin: true,
        Options: *$6.copyOptions(),
     }
+  }
+| COPY table_name opt_column_list FROM error
+  {
+    return unimplemented(sqllex, "copy from unsupported format")
   }
 
 opt_with_copy_options:
@@ -3739,7 +3807,7 @@ analyze_target:
 //
 // %SeeAlso: WEBDOCS/explain.html
 explain_stmt:
-  EXPLAIN preparable_stmt
+  EXPLAIN explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain(nil /* options */, $2.stmt())
@@ -3748,7 +3816,7 @@ explain_stmt:
     }
   }
 | EXPLAIN error // SHOW HELP: EXPLAIN
-| EXPLAIN '(' explain_option_list ')' preparable_stmt
+| EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain($3.strs(), $5.stmt())
@@ -3756,7 +3824,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYZE preparable_stmt
+| EXPLAIN ANALYZE explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
@@ -3764,7 +3832,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYSE preparable_stmt
+| EXPLAIN ANALYSE explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain([]string{"ANALYZE"}, $3.stmt())
@@ -3772,7 +3840,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
+| EXPLAIN ANALYZE '(' explain_option_list ')' explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain(append($4.strs(), "ANALYZE"), $6.stmt())
@@ -3780,7 +3848,7 @@ explain_stmt:
       return setErr(sqllex, err)
     }
   }
-| EXPLAIN ANALYSE '(' explain_option_list ')' preparable_stmt
+| EXPLAIN ANALYSE '(' explain_option_list ')' explainable_stmt
   {
     var err error
     $$.val, err = tree.MakeExplain(append($4.strs(), "ANALYZE"), $6.stmt())
@@ -3793,6 +3861,10 @@ explain_stmt:
 // cause a help text for the select clause, which will be confusing in
 // the context of EXPLAIN.
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
+
+explainable_stmt:
+  preparable_stmt
+| execute_stmt
 
 preparable_stmt:
   alter_stmt     // help texts in sub-rule
@@ -3978,6 +4050,10 @@ grant_stmt:
       },
       Grantees: $7.nameList(),
     }
+  }
+| GRANT privileges ON SCHEMA schema_name_list TO name_list WITH error
+  {
+    return unimplemented(sqllex, "grant privileges on schema with")
   }
 | GRANT privileges ON SEQUENCE error
   {
@@ -4490,7 +4566,7 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
-// SHOW LOCALITY, SHOW ZONE CONFIGURATION
+// SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -4529,6 +4605,7 @@ show_stmt:
 | show_zone_stmt            // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
 | SHOW error                // SHOW HELP: SHOW
 | show_last_query_stats_stmt
+| show_full_scans_stmt
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
 // since there will be no open cursors.
@@ -5403,6 +5480,13 @@ show_fingerprints_stmt:
     $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
   }
 
+show_full_scans_stmt:
+  SHOW FULL TABLE SCANS
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowFullTableScans{}
+  }
+
 opt_on_targets_roles:
   ON targets_roles
   {
@@ -5801,11 +5885,11 @@ alter_schema_stmt:
 // Table constraints:
 //    PRIMARY KEY ( <colnames...> ) [USING HASH WITH BUCKET_COUNT = <shard_buckets>]
 //    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
-//    UNIQUE [WITHOUT INDEX] ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
+//    UNIQUE ( <colnames... ) [{STORING | INCLUDE | COVERING} ( <colnames...> )] [<interleave>]
 //    CHECK ( <expr> )
 //
 // Column qualifiers:
-//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | NOT VISIBLE |UNIQUE [WITHOUT INDEX] | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | NOT VISIBLE | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //   COLLATE <collationname>
@@ -6362,6 +6446,7 @@ col_qualification_elem:
 opt_without_index:
   WITHOUT INDEX
   {
+    /* SKIP DOC */
     $$.val = true
   }
 | /* EMPTY */
@@ -6795,8 +6880,7 @@ sequence_option_elem:
                                              return 1
                                      }
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptOwnedBy, ColumnItemVal: columnItem} }
-| CACHE signed_iconst64        { /* SKIP DOC */
-                                 x := $2.int64()
+| CACHE signed_iconst64        { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &x} }
 | INCREMENT signed_iconst64    { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
@@ -7402,6 +7486,12 @@ locality:
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
+| LOCALITY REGIONAL BY TABLE
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
 | LOCALITY REGIONAL IN region_name
   {
     $$.val = &tree.Locality{
@@ -7421,12 +7511,6 @@ locality:
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
-| LOCALITY REGIONAL BY TABLE
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
 | LOCALITY REGIONAL BY ROW
   {
     $$.val = &tree.Locality{
@@ -7434,128 +7518,6 @@ locality:
     }
   }
 | LOCALITY REGIONAL BY ROW AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($6),
-    }
-  }
-| LOCALITY REGIONAL PARTITIONED
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| LOCALITY REGIONAL PARTITIONED AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($5),
-    }
-  }
-| LOCALITY PARTITIONED REGIONAL
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| LOCALITY PARTITIONED REGIONAL AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($5),
-    }
-  }
-| REGIONAL AFFINITY TO NONE
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelGlobal,
-    }
-  }
-| REGIONAL AFFINITY TO region_name
-  {
-    $$.val = &tree.Locality{
-      TableRegion: tree.Name($4),
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY TO PRIMARY REGION
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY AT ROW LEVEL
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-|  REGIONAL AFFINITY AT ROW LEVEL AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($7),
-    }
-  }
-| REGIONAL AFFINITY NONE
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelGlobal,
-    }
-  }
-| REGIONAL AFFINITY region_name
-  {
-    $$.val = &tree.Locality{
-      TableRegion: tree.Name($3),
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY PRIMARY REGION
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY ROW LEVEL
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| REGIONAL AFFINITY ROW LEVEL AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($6),
-    }
-  }
-| NO REGIONAL AFFINITY
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelGlobal,
-    }
-  }
-| TABLE LEVEL REGIONAL AFFINITY TO region_name
-  {
-    $$.val = &tree.Locality{
-      TableRegion: tree.Name($6),
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| TABLE LEVEL REGIONAL AFFINITY TO PRIMARY REGION
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| ROW LEVEL REGIONAL AFFINITY
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| ROW LEVEL REGIONAL AFFINITY AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -7803,7 +7765,7 @@ resume_jobs_stmt:
 // RESUME SCHEDULES <selectclause>
 //  selectclause: select statement returning schedule IDs to resume.
 //
-// RESUME SCHEDULES <jobid>
+// RESUME SCHEDULE <scheduleID>
 //
 // %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, RESUME JOBS
 resume_schedules_stmt:
@@ -7832,7 +7794,7 @@ resume_schedules_stmt:
 // DROP SCHEDULES <selectclause>
 //  selectclause: select statement returning schedule IDs to resume.
 //
-// DROP SCHEDULE <scheduleid>
+// DROP SCHEDULE <scheduleID>
 //
 // %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, CANCEL JOBS
 drop_schedule_stmt:
@@ -10872,7 +10834,7 @@ d_expr:
   }
 | '(' a_expr ')' '.' unrestricted_name
   {
-    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), ColName: $5 }
+    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), ColName: tree.Name($5) }
   }
 | '(' a_expr ')' '.' '@' ICONST
   {
@@ -12377,7 +12339,6 @@ unreserved_keyword:
 | ACCESS
 | ADD
 | ADMIN
-| AFFINITY
 | AFTER
 | AGGREGATE
 | ALTER
@@ -12467,6 +12428,7 @@ unreserved_keyword:
 | FILTER
 | FIRST
 | FOLLOWING
+| FORCE
 | FORCE_INDEX
 | FUNCTION
 | GENERATED
@@ -12489,6 +12451,7 @@ unreserved_keyword:
 | IMMEDIATE
 | IMPORT
 | INCLUDE
+| INCLUDE_DEPRECATED_INTERLEAVES
 | INCLUDING
 | INCREMENT
 | INCREMENTAL
@@ -12559,6 +12522,7 @@ unreserved_keyword:
 | NOCONTROLJOB
 | NOLOGIN
 | NOMODIFYCLUSTERSETTING
+| NON_VOTERS
 | NOVIEWACTIVITY
 | NOWAIT
 | NULLS
@@ -12578,7 +12542,6 @@ unreserved_keyword:
 | PARENT
 | PARTIAL
 | PARTITION
-| PARTITIONED
 | PARTITIONS
 | PASSWORD
 | PAUSE
@@ -12638,6 +12601,7 @@ unreserved_keyword:
 | SETTINGS
 | STATUS
 | SAVEPOINT
+| SCANS
 | SCATTER
 | SCHEMA
 | SCHEMAS
@@ -12656,6 +12620,7 @@ unreserved_keyword:
 | SHOW
 | SIMPLE
 | SKIP
+| SKIP_LOCALITIES_CHECK
 | SKIP_MISSING_FOREIGN_KEYS
 | SKIP_MISSING_SEQUENCES
 | SKIP_MISSING_SEQUENCE_OWNERS
@@ -12712,6 +12677,7 @@ unreserved_keyword:
 | VARYING
 | VIEW
 | VIEWACTIVITY
+| VOTERS
 | WITHIN
 | WITHOUT
 | WRITE
@@ -12831,7 +12797,7 @@ type_func_name_no_crdb_extra_keyword:
 type_func_name_crdb_extra_keyword:
   FAMILY
 
-// Reserved keyword --- these keywords are usable only as a unrestricted_name.
+// Reserved keyword --- these keywords are usable only as an unrestricted_name.
 //
 // Keywords appear here if they could not be distinguished from variable, type,
 // or function names in some contexts.

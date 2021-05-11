@@ -10,13 +10,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
-http_archive(
+git_repository(
     name = "io_bazel_rules_go",
-    sha256 = "81eff5df9077783b18e93d0c7ff990d8ad7a3b8b3ca5b785e1c483aacdb342d7",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.24.9/rules_go-v0.24.9.tar.gz",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.24.9/rules_go-v0.24.9.tar.gz",
-    ],
+    commit = "2fe8a6256c818840cc9a10cf3f366d8410437245",
+    remote = "https://github.com/cockroachdb/rules_go",
 )
 
 # Like the above, but for nodeJS.
@@ -28,12 +25,9 @@ http_archive(
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
 # repo.
-#
-# TODO(irfansharif): Point to a proper bazelle-gazelle release once
-# https://github.com/bazelbuild/bazel-gazelle/pull/933 lands upstream.
 git_repository(
     name = "bazel_gazelle",
-    commit = "493b9adf67665beede36502c2094496af9f245a3",
+    commit = "e9091445339de2ba7c01c3561f751b64a7fab4a5",
     remote = "https://github.com/bazelbuild/bazel-gazelle",
 )
 
@@ -48,8 +42,8 @@ go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:2/QtM1mL37YmcsT8HaDNHDgTqqFVw+zr8UzMiBVLzYU=",
-    version = "v0.0.0-20210217105451-b926d437f341",
+    sum = "h1:cdsMqa2nXzqlgs183pHxtvoVwU7CyzaCTAUOg94af4c=",
+    version = "v0.0.0-20210503173754-0981d6026fa6",
 )
 
 go_repository(
@@ -61,6 +55,14 @@ go_repository(
 )
 
 go_repository(
+    name = "org_golang_x_xerrors",
+    build_file_proto_mode = "disable_global",
+    importpath = "golang.org/x/xerrors",
+    sum = "h1:go1bK/D/BFZV2I8cIQd1NKEZ+0owSTG1fDTci4IqFcE=",
+    version = "v0.0.0-20200804184101-5ec99f83aff1",
+)
+
+go_repository(
     name = "com_github_gogo_protobuf",
     build_file_proto_mode = "disable_global",
     importpath = "github.com/gogo/protobuf",
@@ -68,9 +70,8 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_gogo_protobuf.patch",
     ],
-    replace = "github.com/cockroachdb/gogoproto",
-    sum = "h1:yrdrJWJpn0+1BmXaRzurDIZz3uHmSs/wnwWbC4arWlQ=",
-    version = "v1.2.1-0.20210111172841-8b6737fea948",
+    sum = "h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=",
+    version = "v1.3.2",
 )
 
 go_repository(
@@ -81,16 +82,25 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_golang_protobuf.patch",
     ],
-    sum = "h1:+Z5KGCizgyZCbGh1KZqA0fcLLkwbsjIzS4aV2v7wJX0=",
-    version = "v1.4.2",
+    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
+    version = "v1.5.2",
 )
 
 go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:jB9+PJSvu5tBfmJHy/OVapFdjDF3WvpkqRhxqrmzoEU=",
-    version = "v0.0.0-20200218151345-dad8c97a84f5",
+    sum = "h1:PDIOdWxZ8eRizhKa1AAvY53xsvLB1cWorMjslvY3VA8=",
+    version = "v0.0.0-20200825200019-8632dd797987",
+)
+
+go_repository(
+    name = "in_gopkg_yaml_v2",
+    build_file_proto_mode = "disable_global",
+    importpath = "gopkg.in/yaml.v2",
+    replace = "github.com/cockroachdb/yaml",
+    sum = "h1:EqoCicA1pbWWDGniFxhTElh2hvui7E7tEvuBNJSDn3A=",
+    version = "v0.0.0-20180705215940-0e2822948641",
 )
 
 # Load the go dependencies and invoke them.
@@ -98,7 +108,7 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 
 go_rules_dependencies()
 
-go_register_toolchains(go_version = "1.15.6")
+go_register_toolchains(go_version = "1.15.11")
 
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
@@ -112,7 +122,7 @@ yarn_install(
 # NB: @bazel_skylib comes from go_rules_dependencies().
 load("@bazel_skylib//lib:versions.bzl", "versions")
 
-versions.check(minimum_bazel_version = "3.5.0")
+versions.check(minimum_bazel_version = "4.0.0")
 
 # Load gazelle dependencies.
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
@@ -132,31 +142,6 @@ git_repository(
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
-
-# Load up the pinned clang toolchain.
-
-http_archive(
-    name = "com_grail_bazel_toolchain",
-    sha256 = "b924b102adc0c3368d38a19bd971cb4fa75362a27bc363d0084b90ca6877d3f0",
-    strip_prefix = "bazel-toolchain-0.5.7",
-    urls = ["https://github.com/grailbio/bazel-toolchain/archive/0.5.7.tar.gz"],
-)
-
-load("@com_grail_bazel_toolchain//toolchain:deps.bzl", "bazel_toolchain_dependencies")
-
-bazel_toolchain_dependencies()
-
-load("@com_grail_bazel_toolchain//toolchain:rules.bzl", "llvm_toolchain")
-
-llvm_toolchain(
-    name = "llvm_toolchain",
-    absolute_paths = True,
-    llvm_version = "10.0.0",
-)
-
-load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
-
-llvm_register_toolchains()
 
 # Load up cockroachdb's go dependencies (the ones listed under go.mod). The
 # `DEPS.bzl` file is kept up to date using the `update-repos` Gazelle command
@@ -181,10 +166,15 @@ c_deps()
 # aforementioned PRs.
 git_repository(
     name = "rules_foreign_cc",
-    commit = "6127817283221408069d4ae6765f2d8144f09b9f",
+    commit = "a3b0e5eaa723259458f5c85285f58e46ae7f25a2",
     remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 
-load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
+load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
+
+# Load custom toolchains.
+load("//build:toolchains/REPOSITORIES.bzl", "toolchain_dependencies")
+
+toolchain_dependencies()

@@ -155,7 +155,7 @@ type rowDisposer struct {
 
 var _ execinfra.RowReceiver = &rowDisposer{}
 
-// Push is part of the distsql.RowReceiver interface.
+// Push is part of the execinfra.RowReceiver interface.
 func (r *rowDisposer) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
@@ -167,10 +167,10 @@ func (r *rowDisposer) Push(
 	return execinfra.NeedMoreRows
 }
 
-// ProducerDone is part of the RowReceiver interface.
+// ProducerDone is part of the execinfra.RowReceiver interface.
 func (r *rowDisposer) ProducerDone() {}
 
-// Types is part of the RowReceiver interface.
+// Types is part of the execinfra.RowReceiver interface.
 func (r *rowDisposer) Types() []*types.T {
 	return nil
 }
@@ -181,10 +181,4 @@ func (r *rowDisposer) ResetNumRowsDisposed() {
 
 func (r *rowDisposer) NumRowsDisposed() int {
 	return r.numRowsDisposed
-}
-
-func (r *rowDisposer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
-	meta := r.bufferedMeta
-	r.bufferedMeta = r.bufferedMeta[:0]
-	return meta
 }

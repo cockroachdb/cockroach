@@ -32,6 +32,16 @@ SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a ORDER BY 1,
 2  5
 2  5
 
+query II
+SELECT a, CASE a WHEN 0 THEN 0 WHEN 1 THEN 3 ELSE 5 END FROM a ORDER BY 1, 2 LIMIT 6
+----
+0  0
+0  0
+1  3
+1  3
+2  5
+2  5
+
 # Regression test for 40574.
 statement ok
 CREATE TABLE t40574(pk INTEGER PRIMARY KEY, col0 INTEGER, col1 FLOAT, col2 TEXT, col3 INTEGER, col4 FLOAT, col5 TEXT);
@@ -774,12 +784,27 @@ SELECT CASE WHEN x = 0 THEN 0 ELSE NULL END FROM t_case_null
 0
 
 query I
+SELECT CASE x WHEN 0 THEN 0 ELSE NULL END FROM t_case_null
+----
+0
+
+query I
 SELECT CASE WHEN x = 0 THEN NULL ELSE 0 END FROM t_case_null
 ----
 NULL
 
 query I
+SELECT CASE x WHEN 0 THEN NULL ELSE 0 END FROM t_case_null
+----
+NULL
+
+query I
 SELECT CASE WHEN x = 1 THEN 1 ELSE NULL END FROM t_case_null
+----
+NULL
+
+query I
+SELECT CASE x WHEN 1 THEN 1 ELSE NULL END FROM t_case_null
 ----
 NULL
 
@@ -944,12 +969,21 @@ SELECT CASE WHEN a = 0 THEN a ELSE 1:::INT8 END FROM t43550
 ----
 1
 
+query I
+SELECT CASE a WHEN 0 THEN a ELSE 1:::INT8 END FROM t43550
+----
+1
+
 # Regression test for #43855.
 statement ok
 CREATE TABLE t43855(o OID, r REGPROCEDURE);
 
 query i
 SELECT CASE WHEN o = 0 THEN 0:::OID ELSE r END FROM t43855
+----
+
+query i
+SELECT CASE o WHEN 0 THEN 0:::OID ELSE r END FROM t43855
 ----
 
 # Regression test for an aggregate that has output type different from its

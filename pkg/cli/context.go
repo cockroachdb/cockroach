@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -46,8 +47,6 @@ func initCLIDefaults() {
 	setStartContextDefaults()
 	setQuitContextDefaults()
 	setNodeContextDefaults()
-	setSystemBenchContextDefaults()
-	setNetworkBenchContextDefaults()
 	setSqlfmtContextDefaults()
 	setDemoContextDefaults()
 	setStmtDiagContextDefaults()
@@ -317,7 +316,9 @@ func setSQLContextDefaults() {
 
 // zipCtx captures the command-line parameters of the `zip` command.
 // See below for defaults.
-var zipCtx struct {
+var zipCtx zipContext
+
+type zipContext struct {
 	nodes nodeSelection
 
 	// redactLogs indicates whether log files should be redacted
@@ -326,6 +327,13 @@ var zipCtx struct {
 
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
+
+	// How much concurrency to use during the collection. The code
+	// attempts to access multiple nodes concurrently by default.
+	concurrency int
+
+	// The log/heap/etc files to include.
+	files fileSelection
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -333,8 +341,18 @@ var zipCtx struct {
 // test that exercises command-line parsing.
 func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
+	zipCtx.files = fileSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.cpuProfDuration = 5 * time.Second
+	zipCtx.concurrency = 15
+
+	// File selection covers the last 48 hours by default.
+	// We add 24 hours to now for the end timestamp to ensure
+	// that files created during the zip operation are
+	// also included.
+	now := timeutil.Now()
+	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
+	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.
@@ -386,6 +404,7 @@ var debugCtx struct {
 	printSystemConfig bool
 	maxResults        int
 	decodeAsTableDesc string
+	verbose           bool
 }
 
 // setDebugContextDefaults set the default values in debugCtx.  This
@@ -402,6 +421,7 @@ func setDebugContextDefaults() {
 	debugCtx.maxResults = 0
 	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
+	debugCtx.verbose = false
 }
 
 // startCtx captures the command-line arguments for the `start` command.
@@ -503,46 +523,6 @@ func setNodeContextDefaults() {
 	nodeCtx.statusShowDecommission = false
 }
 
-// systemBenchCtx captures the command-line parameters of the `systembench` command.
-// See below for defaults.
-var systemBenchCtx struct {
-	concurrency  int
-	duration     time.Duration
-	tempDir      string
-	writeSize    int64
-	syncInterval int64
-}
-
-// setSystemBenchContextDefaults set the default values in
-// systemBenchCtx. This function is called by initCLIDefaults() and
-// thus re-called in every test that exercises command-line parsing.
-func setSystemBenchContextDefaults() {
-	systemBenchCtx.concurrency = 1
-	systemBenchCtx.duration = 60 * time.Second
-	systemBenchCtx.tempDir = "."
-	systemBenchCtx.writeSize = 32 << 10
-	systemBenchCtx.syncInterval = 512 << 10
-}
-
-// systemBenchCtx captures the command-line parameters of the
-// `networkbench` command. See below for defaults.
-var networkBenchCtx struct {
-	server    bool
-	port      int
-	addresses []string
-	latency   bool
-}
-
-// setNetworkBenchContextDefaults set the default values in
-// networkBenchCtx. This function is called by initCLIDefaults() and
-// thus re-called in every test that exercises command-line parsing.
-func setNetworkBenchContextDefaults() {
-	networkBenchCtx.server = true
-	networkBenchCtx.port = 8081
-	networkBenchCtx.addresses = []string{"localhost:8081"}
-	networkBenchCtx.latency = false
-}
-
 // sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
 // See below for defaults.
 var sqlfmtCtx struct {
@@ -575,7 +555,7 @@ var demoCtx struct {
 	cacheSize                 int64
 	disableTelemetry          bool
 	disableLicenseAcquisition bool
-	useEmptyDatabase          bool
+	noExampleDatabase         bool
 	runWorkload               bool
 	localities                demoLocalityList
 	geoPartitionedReplicas    bool
@@ -593,7 +573,7 @@ func setDemoContextDefaults() {
 	demoCtx.nodes = 1
 	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.useEmptyDatabase = false
+	demoCtx.noExampleDatabase = false
 	demoCtx.simulateLatency = false
 	demoCtx.runWorkload = false
 	demoCtx.localities = nil

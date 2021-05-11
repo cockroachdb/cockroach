@@ -60,7 +60,7 @@ var (
 	cloud                         = gce
 	encrypt          encryptValue = "false"
 	instanceType     string
-	localSSD         bool
+	localSSDArg      bool
 	workload         string
 	roachprod        string
 	createArgs       []string
@@ -724,7 +724,7 @@ func isSSD(machineType string) bool {
 	if cloud != aws {
 		panic("can only differentiate SSDs based on machine type on AWS")
 	}
-	if !localSSD {
+	if !localSSDArg {
 		// Overridden by the user using a cmd arg.
 		return false
 	}
@@ -750,6 +750,7 @@ type testI interface {
 	// artifacts.
 	ArtifactsDir() string
 	logger() *logger
+	Status(args ...interface{})
 }
 
 // TODO(tschottdorf): Consider using a more idiomatic approach in which options
@@ -832,6 +833,21 @@ func (n nodeListOption) String() string {
 	return buf.String()
 }
 
+// workerAction informs a cluster operation that the callee is a "worker" rather
+// than the test's main goroutine.
+type workerAction struct{}
+
+var _ option = workerAction{}
+
+func (o workerAction) option() {}
+
+// withWorkerAction creates the workerAction option, informing a cluster
+// operation that the callee is a "worker" rather than the test's main
+// goroutine.
+func withWorkerAction() option {
+	return workerAction{}
+}
+
 // clusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type clusterSpec struct {
@@ -839,6 +855,7 @@ type clusterSpec struct {
 	// CPUs is the number of CPUs per node.
 	CPUs        int
 	SSDs        int
+	VolumeSize  int
 	Zones       string
 	Geo         bool
 	Lifetime    time.Duration
@@ -908,6 +925,22 @@ func (s *clusterSpec) args() []string {
 		}
 		machineTypeArg := machineTypeFlag(machineType) + "=" + machineType
 		args = append(args, machineTypeArg)
+	}
+
+	if !local && s.VolumeSize != 0 {
+		fmt.Fprintln(os.Stdout, "test specification requires non-local SSDs, ignoring roachtest --local-ssd flag")
+		// Set network disk options.
+		args = append(args, "--local-ssd=false")
+
+		var arg string
+		switch cloud {
+		case gce:
+			arg = fmt.Sprintf("--gce-pd-volume-size=%d", s.VolumeSize)
+		default:
+			fmt.Fprintf(os.Stderr, "specifying volume size is not yet supported on %s", cloud)
+			os.Exit(1)
+		}
+		args = append(args, arg)
 	}
 
 	if !local && s.SSDs != 0 {
@@ -980,6 +1013,17 @@ func (o nodeCPUOption) apply(spec *clusterSpec) {
 // cpu is a node option which requests nodes with the specified number of CPUs.
 func cpu(n int) nodeCPUOption {
 	return nodeCPUOption(n)
+}
+
+type volumeSizeOption int
+
+func (o volumeSizeOption) apply(spec *clusterSpec) {
+	spec.VolumeSize = int(o)
+}
+
+// volumeSize is the size in GB of the disk volume.
+func volumeSize(n int) volumeSizeOption {
+	return volumeSizeOption(n)
 }
 
 type nodeSSDOption int
@@ -1093,11 +1137,7 @@ type cluster struct {
 	name string
 	tag  string
 	spec clusterSpec
-	// status is used to communicate the test's status. The callback is a noop
-	// until the cluster is passed to a test, at which point it's hooked up to
-	// test.Status().
-	status func(...interface{})
-	t      testI
+	t    testI
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -1118,6 +1158,21 @@ type cluster struct {
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
+}
+
+// status is used to communicate the test's status. It's a no-op until the
+// cluster is passed to a test, at which point it's hooked up to test.Status().
+func (c *cluster) status(args ...interface{}) {
+	if c.t == nil {
+		return
+	}
+	c.t.Status(args...)
+}
+
+func (c *cluster) workerStatus(args ...interface{}) {
+	if impl, ok := c.t.(*test); ok {
+		impl.WorkerStatus(args...)
+	}
 }
 
 func (c *cluster) String() string {
@@ -1244,7 +1299,6 @@ func (f *clusterFactory) newCluster(
 		c := &cluster{
 			name:       name,
 			expiration: timeutil.Now().Add(24 * time.Hour),
-			status:     func(...interface{}) {},
 			r:          f.r,
 		}
 		if err := f.r.registerCluster(c); err != nil {
@@ -1261,7 +1315,6 @@ func (f *clusterFactory) newCluster(
 	c := &cluster{
 		name:           name,
 		spec:           cfg.spec,
-		status:         func(...interface{}) {},
 		expiration:     exp,
 		encryptDefault: encrypt.asBool(),
 		r:              f.r,
@@ -1273,7 +1326,7 @@ func (f *clusterFactory) newCluster(
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.spec.NodeCount)}
 	sargs = append(sargs, cfg.spec.args()...)
-	if !cfg.useIOBarrier && localSSD {
+	if !cfg.useIOBarrier && localSSDArg {
 		sargs = append(sargs, "--local-ssd-no-ext4-barrier")
 	}
 
@@ -1343,7 +1396,6 @@ func attachToExistingCluster(
 	c := &cluster{
 		name:           name,
 		spec:           spec,
-		status:         func(...interface{}) {},
 		l:              l,
 		expiration:     exp,
 		encryptDefault: encrypt.asBool(),
@@ -1390,9 +1442,6 @@ func attachToExistingCluster(
 func (c *cluster) setTest(t testI) {
 	c.t = t
 	c.l = t.logger()
-	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
-	}
 }
 
 // StopCockroachGracefullyOnNode stops a running cockroach instance on the requested
@@ -1574,7 +1623,7 @@ func (c *cluster) FetchDiskUsage(ctx context.Context) error {
 		}
 		if err := execCmd(
 			ctx, c.l, roachprod, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'du -c /mnt/data1 > "+name+"'",
+			"/bin/bash", "-c", "'du -c /mnt/data1 --exclude lost+found > "+name+"'",
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
@@ -1698,7 +1747,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
-		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
+		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
 			return scanErr
 		}
 		finalErr = errors.CombineErrors(finalErr,
@@ -1751,7 +1800,10 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			return c.CheckReplicaDivergenceOnDB(ctx, db)
 		},
 	); err != nil {
-		t.Fatal(err)
+		// NB: we don't call t.Fatal() here because this method is
+		// for use by the test harness beyond the point at which
+		// it can interpret `t.Fatal`.
+		t.printAndFail(0, err)
 	}
 }
 
@@ -2123,24 +2175,41 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
-// Restart restarts the specified cockroach node. It takes a test and, on error,
-// calls t.Fatal().
-func (c *cluster) Restart(ctx context.Context, t *test, node nodeListOption) {
-	// We bound the time taken to restart a node through roachprod. Because
-	// roachprod uses SSH, it's particularly vulnerable to network flakiness (as
-	// seen in #35326) and may stall indefinitely. Setting up timeouts better
-	// surfaces this kind of failure.
-	//
-	// TODO(irfansharif): The underlying issue here is the fact that we're running
-	// roachprod commands that may (reasonably) fail due to connection issues, and
-	// we're unable to retry them safely (the underlying commands are
-	// non-idempotent). Presently we simply fail the entire test, when really we
-	// should be able to retry the specific roachprod commands.
-	var cancel func()
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-	c.Stop(ctx, node)
-	c.Start(ctx, t, node)
-	cancel()
+func (c *cluster) setStatusForClusterOpt(operation string, opts ...option) {
+	var nodes nodeListOption
+	worker := false
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			nodes = s.merge(nodes)
+		}
+		if _, ok := o.(workerAction); ok {
+			worker = true
+		}
+	}
+	nodesString := " cluster"
+	if len(nodes) != 0 {
+		nodesString = " nodes " + nodes.String()
+	}
+	msg := operation + nodesString
+	if worker {
+		c.workerStatus(msg)
+	} else {
+		c.status(msg)
+	}
+}
+
+func (c *cluster) clearStatusForClusterOpt(opts ...option) {
+	worker := false
+	for _, o := range opts {
+		if _, ok := o.(workerAction); ok {
+			worker = true
+		}
+	}
+	if worker {
+		c.workerStatus()
+	} else {
+		c.status()
+	}
 }
 
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
@@ -2154,8 +2223,8 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	c.status("starting cluster")
-	defer c.status()
+	c.setStatusForClusterOpt("starting", opts...)
+	defer c.clearStatusForClusterOpt(opts...)
 	args := []string{
 		roachprod,
 		"start",
@@ -2204,8 +2273,8 @@ func (c *cluster) StopE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	c.status("stopping cluster")
-	defer c.status()
+	c.setStatusForClusterOpt("stopping", opts...)
+	defer c.clearStatusForClusterOpt(opts...)
 	return execCmd(ctx, c.l, args...)
 }
 
@@ -2221,6 +2290,23 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	}
 }
 
+func (c *cluster) Reset(ctx context.Context) error {
+	if c.t.Failed() {
+		return errors.New("already failed")
+	}
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Reset")
+	}
+	args := []string{
+		roachprod,
+		"reset",
+		c.name,
+	}
+	c.status("resetting cluster")
+	defer c.status()
+	return execCmd(ctx, c.l, args...)
+}
+
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
@@ -2231,8 +2317,8 @@ func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
 		// For tests.
 		return nil
 	}
-	c.status("wiping cluster")
-	defer c.status()
+	c.setStatusForClusterOpt("wiping", opts...)
+	defer c.clearStatusForClusterOpt(opts...)
 	return execCmd(ctx, l, roachprod, "wipe", c.makeNodes(opts...))
 }
 
@@ -2354,12 +2440,24 @@ func (c *cluster) RunWithBuffer(
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
-// pgURL returns the Postgres endpoint for the specified node. It accepts a flag
-// specifying whether the URL should include the node's internal or external IP
-// address. In general, inter-cluster communication and should use internal IPs
-// and communication from a test driver to nodes in a cluster should use
-// external IPs.
+// pgURL is like pgURLErr, except that it calls c.t.Fatal on error.
+// DEPRECATED
 func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool) []string {
+	urls, err := c.pgURLErr(ctx, node, external)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return urls
+}
+
+// pgURLErr returns the Postgres endpoint for the specified node. It accepts a
+// flag specifying whether the URL should include the node's internal or
+// external IP address. In general, inter-cluster communication and should use
+// internal IPs and communication from a test driver to nodes in a cluster
+// should use external IPs.
+func (c *cluster) pgURLErr(
+	ctx context.Context, node nodeListOption, external bool,
+) ([]string, error) {
 	args := []string{roachprod, "pgurl"}
 	if external {
 		args = append(args, `--external`)
@@ -2368,11 +2466,11 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 	args = append(args, nodes)
 	cmd := execCmdEx(ctx, c.l, args...)
 	if cmd.err != nil {
-		c.t.Fatal(errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes))
+		return nil, errors.Wrapf(cmd.err, "failed to get pgurl for nodes: %s", nodes)
 	}
 	urls := strings.Split(strings.TrimSpace(cmd.stdout), " ")
 	if len(urls) != len(node) {
-		c.t.Fatalf(
+		return nil, errors.Errorf(
 			"pgurl for nodes %v got urls %v from stdout:\n%s\nstderr:\n%s",
 			node, urls, cmd.stdout, cmd.stderr,
 		)
@@ -2380,13 +2478,13 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 	for i := range urls {
 		urls[i] = strings.Trim(urls[i], "'")
 		if urls[i] == "" {
-			c.t.Fatalf(
+			return nil, errors.Errorf(
 				"pgurl for nodes %s empty: %v from\nstdout:\n%s\nstderr:\n%s",
 				urls, node, cmd.stdout, cmd.stderr,
 			)
 		}
 	}
-	return urls
+	return urls, nil
 }
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
@@ -2402,17 +2500,31 @@ func (c *cluster) ExternalPGUrl(ctx context.Context, node nodeListOption) []stri
 	return c.pgURL(ctx, node, true /* external */)
 }
 
-func addrToAdminUIAddr(c *cluster, addr string) string {
+// ExternalPGUrlSecure returns the external Postgres endpoint for the specified
+// nodes.
+func (c *cluster) ExternalPGUrlSecure(
+	ctx context.Context, node nodeListOption, user string, certsDir string, port int,
+) []string {
+	urlTemplate := "postgres://%s@%s:%d?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
+	ips := c.ExternalIP(ctx, node)
+	var urls []string
+	for _, ip := range ips {
+		urls = append(urls, fmt.Sprintf(urlTemplate, user, ip, port, certsDir, user, certsDir, user, certsDir))
+	}
+	return urls
+}
+
+func addrToAdminUIAddr(c *cluster, addr string) (string, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		c.t.Fatal(err)
+		return "", err
 	}
 	webPort, err := strconv.Atoi(port)
 	if err != nil {
-		c.t.Fatal(err)
+		return "", err
 	}
 	// Roachprod makes Admin UI's port to be node's port + 1.
-	return fmt.Sprintf("%s:%d", host, webPort+1)
+	return fmt.Sprintf("%s:%d", host, webPort+1), nil
 }
 
 func urlToAddr(c *cluster, pgURL string) string {
@@ -2445,19 +2557,42 @@ func addrToHostPort(c *cluster, addr string) (string, int) {
 func (c *cluster) InternalAdminUIAddr(ctx context.Context, node nodeListOption) []string {
 	var addrs []string
 	for _, u := range c.InternalAddr(ctx, node) {
-		addrs = append(addrs, addrToAdminUIAddr(c, u))
+		addr, err := addrToAdminUIAddr(c, u)
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		addrs = append(addrs, addr)
 	}
 	return addrs
 }
 
-// ExternalAdminUIAddr returns the internal Admin UI address in the form host:port
-// for the specified node.
+// ExternalAdminUIAddr is like ExternalAdminUIAddrE, except it calls c.t.Fatal
+// on error.
+// DEPRECATED
 func (c *cluster) ExternalAdminUIAddr(ctx context.Context, node nodeListOption) []string {
-	var addrs []string
-	for _, u := range c.ExternalAddr(ctx, node) {
-		addrs = append(addrs, addrToAdminUIAddr(c, u))
+	addr, err := c.ExternalAdminUIAddrE(ctx, node)
+	if err != nil {
+		c.t.Fatal(err)
 	}
-	return addrs
+	return addr
+}
+
+// ExternalAdminUIAddrE returns the internal Admin UI address in the form
+// host:port for the specified node.
+func (c *cluster) ExternalAdminUIAddrE(ctx context.Context, node nodeListOption) ([]string, error) {
+	rawAddrs, err := c.ExternalAddrE(ctx, node)
+	if err != nil {
+		return nil, err
+	}
+	var addrs []string
+	for _, u := range rawAddrs {
+		addr, err := addrToAdminUIAddr(c, u)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, nil
 }
 
 // InternalAddr returns the internal address in the form host:port for the
@@ -2479,14 +2614,28 @@ func (c *cluster) InternalIP(ctx context.Context, node nodeListOption) []string 
 	return ips
 }
 
-// ExternalAddr returns the external address in the form host:port for the
-// specified node.
+// ExternalAddr is like ExternalAddrE, except that it calls c.t.Fatal on error.
+// DEPRECATED
 func (c *cluster) ExternalAddr(ctx context.Context, node nodeListOption) []string {
-	var addrs []string
-	for _, u := range c.pgURL(ctx, node, true /* external */) {
-		addrs = append(addrs, urlToAddr(c, u))
+	addrs, err := c.ExternalAddrE(ctx, node)
+	if err != nil {
+		c.t.Fatal(err)
 	}
 	return addrs
+}
+
+// ExternalAddrE returns the external address in the form host:port for the
+// specified node.
+func (c *cluster) ExternalAddrE(ctx context.Context, node nodeListOption) ([]string, error) {
+	var addrs []string
+	urls, err := c.pgURLErr(ctx, node, true /* external */)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range urls {
+		addrs = append(addrs, urlToAddr(c, u))
+	}
+	return addrs, nil
 }
 
 // ExternalIP returns the external IP addresses for the specified node.
@@ -2514,6 +2663,18 @@ func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
 // ConnE returns a SQL connection to the specified node.
 func (c *cluster) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
 	url := c.ExternalPGUrl(ctx, c.Node(node))[0]
+	db, err := gosql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// ConnSecure returns a secure SQL connection to the specified node.
+func (c *cluster) ConnSecure(
+	ctx context.Context, node int, user string, certsDir string, port int,
+) (*gosql.DB, error) {
+	url := c.ExternalPGUrlSecure(ctx, c.Node(node), user, certsDir, port)[0]
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
 		return nil, err

@@ -91,6 +91,8 @@ type Table interface {
 	StatisticCount() int
 
 	// Statistic returns the ith statistic, where i < StatisticCount.
+	// The statistics must be ordered from new to old, according to the
+	// CreatedAt() times.
 	Statistic(i int) TableStatistic
 
 	// CheckCount returns the number of check constraints present on the table.

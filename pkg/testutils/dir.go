@@ -15,6 +15,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 )
 
@@ -22,14 +23,14 @@ import (
 // test.
 func TempDir(t testing.TB) (string, func()) {
 	tmpDir := ""
-	if runningUnderBazel() {
+	if bazel.BuiltWithBazel() {
 		// Bazel sets up private temp directories for each test.
 		// Normally, this private temp directory will be cleaned up automatically.
 		// However, we do use external tools (such as stress) which re-execute the
 		// same test multiple times.  Bazel, on the other hand, does not know about
 		// this, and only creates this temporary directory once.  So, ensure we create
 		// a unique temporary directory underneath bazel TEST_TMPDIR.
-		tmpDir = requireEnv(testTmpDirEnv)
+		tmpDir = bazel.TestTmpDir()
 	}
 
 	dir, err := ioutil.TempDir(tmpDir, fileutil.EscapeFilename(t.Name()))

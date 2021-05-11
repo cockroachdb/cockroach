@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -25,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -77,19 +79,46 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	return s3URL.String()
 }
 
+func parseS3URL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_s3
+	conf.S3Config = &roachpb.ExternalStorage_S3{
+		Bucket:        uri.Host,
+		Prefix:        uri.Path,
+		AccessKey:     uri.Query().Get(AWSAccessKeyParam),
+		Secret:        uri.Query().Get(AWSSecretParam),
+		TempToken:     uri.Query().Get(AWSTempTokenParam),
+		Endpoint:      uri.Query().Get(AWSEndpointParam),
+		Region:        uri.Query().Get(S3RegionParam),
+		Auth:          uri.Query().Get(AuthParam),
+		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
+		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
+		/* NB: additions here should also update s3QueryParams() serializer */
+	}
+	conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
+	// AWS secrets often contain + characters, which must be escaped when
+	// included in a query string; otherwise, they represent a space character.
+	// More than a few users have been bitten by this.
+	//
+	// Luckily, AWS secrets are base64-encoded data and thus will never actually
+	// contain spaces. We can convert any space characters we see to +
+	// characters to recover the original secret.
+	conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
+	return conf, nil
+}
+
 // MakeS3Storage returns an instance of S3 ExternalStorage.
 func MakeS3Storage(
-	ctx context.Context,
-	ioConf base.ExternalIODirConfig,
-	conf *roachpb.ExternalStorage_S3,
-	settings *cluster.Settings,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.s3")
+	conf := dest.S3Config
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
 	config := conf.Keys()
 	if conf.Endpoint != "" {
-		if ioConf.DisableHTTP {
+		if args.IOConf.DisableHTTP {
 			return nil, errors.New(
 				"custom endpoints disallowed for s3 due to --external-io-disable-http flag")
 		}
@@ -97,7 +126,7 @@ func MakeS3Storage(
 		if conf.Region == "" {
 			conf.Region = "default-region"
 		}
-		client, err := makeHTTPClient(settings)
+		client, err := cloud.MakeHTTPClient(args.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +158,7 @@ func MakeS3Storage(
 		}
 		opts.Config.MergeIn(config)
 	case AuthParamImplicit:
-		if ioConf.DisableImplicitCredentials {
+		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
@@ -169,11 +198,24 @@ func MakeS3Storage(
 	return &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
-		ioConf:   ioConf,
+		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
 		opts:     opts,
-		settings: settings,
+		settings: args.Settings,
 	}, nil
+}
+
+func s3ErrDelay(err error) time.Duration {
+	var s3err s3.RequestFailure
+	if errors.As(err, &s3err) {
+		// A 503 error could mean we need to reduce our request rate. Impose an
+		// arbitrary slowdown in that case.
+		// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+		if s3err.StatusCode() == 503 {
+			return time.Second * 5
+		}
+	}
+	return 0
 }
 
 func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
@@ -182,7 +224,7 @@ func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
 		return nil, errors.Wrap(err, "new aws session")
 	}
 	if s.conf.Region == "" {
-		if err := delayedRetry(ctx, func() error {
+		if err := cloud.DelayedRetry(ctx, s3ErrDelay, func() error {
 			var err error
 			s.conf.Region, err = s3manager.GetBucketRegion(ctx, sess, s.conf.Bucket, "us-east-1")
 			return err
@@ -196,7 +238,7 @@ func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
 
 func (s *s3Storage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider: roachpb.ExternalStorageProvider_S3,
+		Provider: roachpb.ExternalStorageProvider_s3,
 		S3Config: s.conf,
 	}
 }
@@ -215,7 +257,7 @@ func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.R
 		return err
 	}
 	err = contextutil.RunWithTimeout(ctx, "put s3 object",
-		timeoutSetting.Get(&s.settings.SV),
+		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			putObjectInput := s3.PutObjectInput{
 				Bucket: s.bucket,
@@ -262,7 +304,7 @@ func (s *s3Storage) openStreamAt(
 			switch aerr.Code() {
 			// Relevant 404 errors reported by AWS.
 			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-				return nil, errors.Wrapf(ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
+				return nil, errors.Wrapf(cloud.ErrFileDoesNotExist, "s3 object does not exist: %s", err.Error())
 			}
 		}
 		return nil, errors.Wrap(err, "failed to get s3 object")
@@ -300,17 +342,18 @@ func (s *s3Storage) ReadFileAt(
 		size = *stream.ContentLength
 	}
 
-	return &resumingReader{
-		ctx: ctx,
-		opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	return &cloud.ResumingReader{
+		Ctx: ctx,
+		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			s, err := s.openStreamAt(ctx, basename, pos)
 			if err != nil {
 				return nil, err
 			}
 			return s.Body, nil
 		},
-		reader: stream.Body,
-		pos:    offset,
+		Reader: stream.Body,
+		Pos:    offset,
+		ErrFn:  s3ErrDelay,
 	}, size, nil
 }
 
@@ -319,7 +362,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 
 	pattern := s.prefix
 	if patternSuffix != "" {
-		if containsGlob(s.prefix) {
+		if cloud.ContainsGlob(s.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -334,7 +377,7 @@ func (s *s3Storage) ListFiles(ctx context.Context, patternSuffix string) ([]stri
 		ctx,
 		&s3.ListObjectsInput{
 			Bucket: s.bucket,
-			Prefix: aws.String(getPrefixBeforeWildcard(s.prefix)),
+			Prefix: aws.String(cloud.GetPrefixBeforeWildcard(s.prefix)),
 		},
 		func(page *s3.ListObjectsOutput, lastPage bool) bool {
 			for _, fileObject := range page.Contents {
@@ -376,7 +419,7 @@ func (s *s3Storage) Delete(ctx context.Context, basename string) error {
 		return err
 	}
 	return contextutil.RunWithTimeout(ctx, "delete s3 object",
-		timeoutSetting.Get(&s.settings.SV),
+		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			_, err := client.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
 				Bucket: s.bucket,
@@ -393,7 +436,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 	}
 	var out *s3.HeadObjectOutput
 	err = contextutil.RunWithTimeout(ctx, "get s3 object header",
-		timeoutSetting.Get(&s.settings.SV),
+		cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			out, err = client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{

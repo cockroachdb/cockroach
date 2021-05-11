@@ -53,8 +53,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,7 +92,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var id = descpb.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var instance = base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
-	cfg := base.NewLeaseManagerConfig()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	rf, err := rangefeed.NewFactory(stopper, kvDB, nil /* knobs */)
 	require.NoError(t, err)
@@ -105,7 +106,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
-		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
@@ -160,7 +160,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	for _, direction := range []descpb.DescriptorMutation_Direction{
 		descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_DROP,
 	} {
-		tableDesc.GetMutations()[0].Direction = direction
+		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
 			ctx,
@@ -186,7 +186,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			if newVersion != expectedVersion {
 				t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 			}
-			state := tableDesc.GetMutations()[0].State
+			state := tableDesc.Mutations[0].State
 			if state != expectedState {
 				t.Fatalf("bad state; e = %d, v = %d", expectedState, state)
 			}
@@ -195,7 +195,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	// RunStateMachineBeforeBackfill() doesn't complete the schema change.
 	tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.GetMutations()) == 0 {
+	if len(tableDesc.Mutations) == 0 {
 		t.Fatalf("table expected to have an outstanding schema change: %v", tableDesc)
 	}
 }
@@ -458,7 +458,8 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	require.NoError(t, row.Scan(&descBytes))
 	var desc descpb.Descriptor
 	require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
-	viewDesc := desc.GetTable() //nolint:descriptormarshal
+	//nolint:descriptormarshal
+	viewDesc := desc.GetTable()
 	require.Equal(t, "v", viewDesc.GetName(), "read a different descriptor than expected")
 	require.Equal(t, descpb.DescriptorState_DROP, viewDesc.GetState())
 
@@ -1216,7 +1217,7 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 	if _, err := txn.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err,
-		"referencing constraint \"check_bk\" in the middle of being added") {
+		"pq: unimplemented: constraint \"check_bk\" in the middle of being added, try again later") {
 		t.Fatalf("err = %+v", err)
 	}
 	if err := txn.Rollback(); err != nil {
@@ -1400,13 +1401,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
-		table, _, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
+		table, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
 		if err != nil {
 			t.Error(err)
 		}
-		if err := leaseMgr.Release(table); err != nil {
-			t.Error(err)
-		}
+		table.Release(ctx)
 	}
 
 	// Bulk insert.
@@ -1799,8 +1798,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	// Wait until all the mutations have been processed.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.GetMutations()) > 0 {
-			return errors.Errorf("%d mutations remaining", len(tableDesc.GetMutations()))
+		if len(tableDesc.AllMutations()) > 0 {
+			return errors.Errorf("%d mutations remaining", len(tableDesc.AllMutations()))
 		}
 		return nil
 	})
@@ -2223,8 +2222,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.PublicColumns()), tableDesc.PublicColumns())
 	} else if tableDesc.PublicColumns()[0].GetName() != "k" {
 		t.Fatalf("columns %+v", tableDesc.PublicColumns())
-	} else if len(tableDesc.GetMutations()) != 2 {
-		t.Fatalf("mutations %+v", tableDesc.GetMutations())
+	} else if len(tableDesc.AllMutations()) != 2 {
+		t.Fatalf("mutations %+v", tableDesc.AllMutations())
 	}
 }
 
@@ -2794,8 +2793,8 @@ COMMIT;
 	// Ensure that t.test doesn't have any pending mutations
 	// after the primary key change.
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(desc.GetMutations()) != 0 {
-		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.GetMutations()))
+	if len(desc.AllMutations()) != 0 {
+		t.Fatalf("expected to find 0 mutations, but found %d", len(desc.AllMutations()))
 	}
 }
 
@@ -3067,8 +3066,8 @@ CREATE TABLE t.test (k INT NOT NULL, v INT);
 	// that the job did not succeed even though it was canceled.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if len(tableDesc.GetMutations()) != 0 {
-			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.GetMutations()))
+		if len(tableDesc.AllMutations()) != 0 {
+			return errors.Errorf("expected 0 mutations after cancellation, found %d", len(tableDesc.AllMutations()))
 		}
 		if tableDesc.GetPrimaryIndex().NumColumns() != 1 || tableDesc.GetPrimaryIndex().GetColumnName(0) != "rowid" {
 			return errors.Errorf("expected primary key change to not succeed after cancellation")
@@ -3369,7 +3368,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	// Wait until both mutations are queued up.
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-		if l := len(tableDesc.GetMutations()); l != 3 {
+		if l := len(tableDesc.AllMutations()); l != 3 {
 			return errors.Errorf("number of mutations = %d", l)
 		}
 		return nil
@@ -3467,7 +3466,7 @@ INSERT INTO t.test (k, v, length) VALUES (2, 3, 1);
 	}
 
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if l := len(tableDesc.GetMutations()); l != 3 {
+	if l := len(tableDesc.AllMutations()); l != 3 {
 		t.Fatalf("number of mutations = %d", l)
 	}
 
@@ -4355,7 +4354,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Check that an outstanding schema change exists.
 	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	oldID := tableDesc.GetID()
-	if lenMutations := len(tableDesc.GetMutations()); lenMutations != 3 {
+	if lenMutations := len(tableDesc.AllMutations()); lenMutations != 3 {
 		t.Fatalf("%d outstanding schema change", lenMutations)
 	}
 
@@ -4382,7 +4381,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Col "x" is public and col "v" is dropped.
-	if num := len(tableDesc.GetMutations()); num > 0 {
+	if num := len(tableDesc.AllMutations()); num > 0 {
 		t.Fatalf("%d outstanding mutation", num)
 	}
 	if lenCols := len(tableDesc.PublicColumns()); lenCols != 2 {
@@ -4462,13 +4461,15 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 
 	var tc serverutils.TestClusterInterface
 	ctx := context.Background()
+	var gcAt hlc.Timestamp
 	runGC := func(sp roachpb.Span) error {
 		if tc == nil {
 			return nil
 		}
+		gcAt = tc.Server(0).Clock().Now()
 		gcr := roachpb.GCRequest{
 			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
-			Threshold:     tc.Server(0).Clock().Now(),
+			Threshold:     gcAt,
 		}
 		_, err := kv.SendWrapped(ctx, tc.Server(0).DistSenderI().(*kvcoord.DistSender), &gcr)
 		if err != nil {
@@ -4499,12 +4500,22 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+	if _, err := db.Exec(`CREATE UNIQUE INDEX index_created_in_test ON t.test (v)`); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := sqltestutils.CheckTableKeyCount(context.Background(), kvDB, 2, 0); err != nil {
 		t.Fatal(err)
+	}
+
+	got := sqlDB.QueryStr(t, `
+		SELECT p->'schemaChange'->'writeTimestamp'->>'wallTime' < $1, jsonb_pretty(p)
+		FROM (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS p FROM system.jobs)
+		WHERE p->>'description' LIKE 'CREATE UNIQUE INDEX index_created_in_test%'`,
+		gcAt.WallTime,
+	)[0]
+	if got[0] != "true" {
+		t.Fatalf("expected write-ts < gc time. details: %s", got[1])
 	}
 }
 
@@ -5232,8 +5243,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.GetMutations()) > 0 {
-		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.GetMutations()))
+	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.AllMutations()) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.AllMutations()))
 	}
 }
 
@@ -5306,8 +5317,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 	}
 
 	tableDesc = catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.GetMutations()) > 0 {
-		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.GetMutations()))
+	if len(tableDesc.PublicNonPrimaryIndexes()) > 0 || len(tableDesc.AllMutations()) > 0 {
+		t.Fatalf("descriptor broken %d, %d", len(tableDesc.PublicNonPrimaryIndexes()), len(tableDesc.AllMutations()))
 	}
 }
 
@@ -7028,4 +7039,408 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestDropColumnAfterMutations tests the imapct of a drop column
+// after an existing a mutation on the column
+func TestDropColumnAfterMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+	var jobControlMu syncutil.Mutex
+	var delayJobList []string
+	var delayJobChannels []chan struct{}
+	delayNotify := make(chan struct{})
+
+	proceedBeforeBackfill := make(chan error)
+	params, _ := tests.CreateTestServerParams()
+
+	var s serverutils.TestServerInterface
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				lockHeld := true
+				jobControlMu.Lock()
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				// Check if we are blocking the correct job
+				for idx, s := range delayJobList {
+					if strings.Contains(pl.Description, s) {
+						delayNotify <- struct{}{}
+						channel := delayJobChannels[idx]
+						jobControlMu.Unlock()
+						lockHeld = false
+						<-channel
+						break
+					}
+				}
+				if lockHeld {
+					jobControlMu.Unlock()
+				}
+				return nil
+			},
+			RunAfterBackfill: func(jobID jobspb.JobID) error {
+				return <-proceedBeforeBackfill
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(sqlDB)
+	conn2 := sqlutils.MakeSQLRunner(sqlDB)
+	var schemaChangeWaitGroup sync.WaitGroup
+
+	conn1.Exec(t, `
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+
+	// Test 1: with concurrent drop and mutations
+	t.Run("basic-concurrent-drop-mutations", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ADD COLUMN k INT8 NOT NULL UNIQUE DEFAULT 42",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+BEGIN;
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
+COMMIT;
+`)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		<-delayNotify
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+COMMIT;
+`)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		<-delayNotify
+
+		// Allow jobs to proceed once both are concurrent.
+		delayJobChannels[0] <- struct{}{}
+		// Allow both back fill jobs to proceed
+		proceedBeforeBackfill <- nil
+		// Allow the second job to proceed
+		delayJobChannels[1] <- struct{}{}
+		// Second job will also do back fill next
+		proceedBeforeBackfill <- nil
+
+		schemaChangeWaitGroup.Wait()
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+	})
+
+	// Test 2: with concurrent drop and mutations, where
+	// the drop column will be failed intentionally
+	t.Run("failed-concurrent-drop-mutations", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		conn2.Exec(t, `
+	   DROP TABLE t;
+	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+	   INSERT INTO t VALUES (1, 1);
+	   `)
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(context.Background(),
+				`
+	   BEGIN;
+	   ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+	   ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
+	   COMMIT;
+	   `)
+			failureError := "pq: transaction committed but schema change aborted with error: (XXUUU): A dependent transaction failed for this schema change: Bogus error for drop column transaction"
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+
+		// Wait for the alter to get submitted first
+		<-delayNotify
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn1.DB.ExecContext(context.Background(),
+				`
+	   SET sql_safe_updates = false;
+	   BEGIN;
+	   ALTER TABLE t DROP COLUMN j;
+	   ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+	   ALTER TABLE t ALTER COLUMN k SET DEFAULT 421;
+	   ALTER TABLE t ADD COLUMN o INT8 DEFAULT 42 NOT NULL UNIQUE;
+	   COMMIT;
+	   `)
+			failureError := "pq: transaction committed but schema change aborted with error: (XXUUU): Bogus error for drop column transaction"
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+		<-delayNotify
+
+		// Allow the first operation relying on
+		// the dropped column to resume.
+		delayJobChannels[0] <- struct{}{}
+		// Allow internal backfill processing to resume
+		proceedBeforeBackfill <- nil
+		// Allow the second job to proceed
+		delayJobChannels[1] <- struct{}{}
+		// Second job will also do backfill next
+		proceedBeforeBackfill <- errors.Newf("Bogus error for drop column transaction")
+		// Rollback attempt after failure
+		proceedBeforeBackfill <- nil
+
+		schemaChangeWaitGroup.Wait()
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+	})
+
+	// Test 3: with concurrent drop and mutations where an insert will
+	// cause the backfill operation to fail.
+	t.Run("concurrent-drop-mutations-insert-fail", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		conn2.Exec(t, `
+	   DROP TABLE t;
+	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+	   INSERT INTO t VALUES (1, 1);
+	   `)
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(context.Background(),
+				`
+	   BEGIN;
+	   ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+	   ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL;
+	   COMMIT;
+	   	   `)
+			// Two possibilities exist based on timing, either the current transaction
+			// will fail during backfill or the dependent one with the drop will fail.
+			failureError := "pq: transaction committed but schema change aborted with error: (23505): A dependent transaction failed for this schema change: failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_o_key\""
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+		<-delayNotify
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn1.DB.ExecContext(context.Background(),
+				`
+	   SET sql_safe_updates = false;
+	   BEGIN;
+	   ALTER TABLE t DROP COLUMN j;
+	   ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+	   ALTER TABLE t ALTER COLUMN k SET DEFAULT 421;
+	   ALTER TABLE t ADD COLUMN o INT8 DEFAULT 42 NOT NULL UNIQUE;
+	   INSERT INTO t VALUES (2);
+	   COMMIT;
+	   	   `)
+			failureError := "pq: transaction committed but schema change aborted with error: (23505): failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_o_key\""
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+		<-delayNotify
+
+		// Allow jobs to proceed once both are concurrent.
+		// Allow the first operation relying on
+		// the dropped column to resume.
+		delayJobChannels[0] <- struct{}{}
+		// Allow internal backfill processing to resume
+		proceedBeforeBackfill <- nil
+		// Allow the second job to proceed
+		delayJobChannels[1] <- struct{}{}
+		// Second job will also do backfill next
+		proceedBeforeBackfill <- nil
+		schemaChangeWaitGroup.Wait()
+
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+	})
+
+	close(delayNotify)
+	close(proceedBeforeBackfill)
+}
+
+// TestCheckConstraintDropAndColumn tests for Issue #61749 which uncovered
+// that checks would be incorrectly activated if a drop column occurred, even
+// if they weren't fully validated.
+func TestCheckConstraintDropAndColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+	var jobControlMu syncutil.Mutex
+	var delayJobList []string
+	var delayJobChannels []chan struct{}
+	delayNotify := make(chan struct{})
+	routineResults := make(chan error)
+
+	params, _ := tests.CreateTestServerParams()
+	var s serverutils.TestServerInterface
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				lockHeld := true
+				jobControlMu.Lock()
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				// Check if we are blocking the correct job
+				for idx, s := range delayJobList {
+					if strings.Contains(pl.Description, s) {
+						delayNotify <- struct{}{}
+						channel := delayJobChannels[idx]
+						jobControlMu.Unlock()
+						lockHeld = false
+						<-channel
+						break
+					}
+				}
+				if lockHeld {
+					jobControlMu.Unlock()
+				}
+				return nil
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(sqlDB)
+	conn2 := sqlutils.MakeSQLRunner(sqlDB)
+
+	conn1.Exec(t, `
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+
+	// Issue #61749 uncovered that checks would be incorrectly
+	// activated if a drop column occurred, even if they weren't
+	// fully validate.
+	t.Run("drop-column-and-check-constraint", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ADD CHECK (i > 0)",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		go func() {
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+ALTER TABLE t ADD CHECK (i > 0);
+`)
+			routineResults <- errors.Wrap(err, "alter table add check")
+		}()
+		<-delayNotify
+
+		go func() {
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+INSERT INTO t VALUES(-5);
+DELETE FROM t WHERE i=-5;
+COMMIT;
+`)
+			routineResults <- errors.Wrap(err, "alter table drop column")
+		}()
+		<-delayNotify
+
+		// Allow jobs in expected order.
+		delayJobChannels[0] <- struct{}{}
+		delayJobChannels[1] <- struct{}{}
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+		// Check for the results from the routines
+		for range delayJobChannels {
+			require.NoError(t, <-routineResults)
+		}
+	})
+
+}
+
+// Ensures that errors coming from hlc due to clocks being out of sync are not
+// treated as permanent failures.
+func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc serverutils.TestClusterInterface
+	ctx := context.Background()
+	var updatedClock int64 // updated with atomics
+	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+						if atomic.AddInt64(&updatedClock, 1) > 1 {
+							return nil
+						}
+						clock := tc.Server(0).Clock()
+						now := clock.Now()
+						farInTheFuture := now.Add(time.Hour.Nanoseconds(), 0)
+
+						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY)`)
+	// Before the commit which added this test, the below command would fail
+	// due to a permanent error.
+	tdb.Exec(t, `ALTER TABLE t ADD COLUMN j INT NOT NULL DEFAULT 42`)
 }

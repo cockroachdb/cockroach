@@ -8,6 +8,31 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:generate swagger generate spec -w . -o ../../docs/generated/swagger/spec.json --scan-models
+
+// CockroachDB v2 API
+//
+// API for querying information about CockroachDB health, nodes, ranges,
+// sessions, and other meta entities.
+//
+//     Schemes: http, https
+//     Host: localhost
+//     BasePath: /api/v2/
+//     Version: 2.0.0
+//     License: Business Source License
+//
+//     Produces:
+//     - application/json
+//
+//     SecurityDefinitions:
+//       api_session:
+//          type: apiKey
+//          name: X-Cockroach-API-Session
+//          description: Handle to logged-in REST session. Use `/login/` to
+//            log in and get a session.
+//          in: header
+//
+// swagger:meta
 package server
 
 import (
@@ -17,6 +42,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -37,6 +63,13 @@ func writeJSONResponse(ctx context.Context, w http.ResponseWriter, code int, pay
 		apiV2InternalError(ctx, err, w)
 	}
 	_, _ = w.Write(res)
+}
+
+// Returns a SQL username from the request context of a route requiring login.
+// Only use in routes that require login (requiresAuth = true in its route
+// definition).
+func getSQLUsername(ctx context.Context) security.SQLUsername {
+	return security.MakeSQLUsernameFromPreNormalizedString(ctx.Value(webSessionUserKey{}).(string))
 }
 
 // apiV2Server implements version 2 API endpoints, under apiV2Path. The
@@ -110,6 +143,13 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption},
 		{"health/", a.health, false, regularRole, noOption},
+		{"users/", a.listUsers, true, regularRole, noOption},
+		{"events/", a.listEvents, true, adminRole, noOption},
+		{"databases/", a.listDatabases, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
@@ -153,12 +193,53 @@ func (c *callCountDecorator) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	c.inner.ServeHTTP(w, req)
 }
 
+// Response for listSessions.
+//
+// swagger:model listSessionsResp
 type listSessionsResponse struct {
 	serverpb.ListSessionsResponse
 
+	// The continuation token, for use in the next paginated call in the `start`
+	// parameter.
 	Next string `json:"next,omitempty"`
 }
 
+// swagger:operation GET /sessions/ listSessions
+//
+// List sessions
+//
+// List all sessions on this cluster. If a username is provided, only
+// sessions from that user are returned.
+//
+// Client must be logged-in as a user with admin privileges.
+//
+// ---
+// parameters:
+// - name: username
+//   type: string
+//   in: query
+//   description: Username of user to return sessions for; if unspecified,
+//     sessions from all users are returned.
+//   required: false
+// - name: limit
+//   type: integer
+//   in: query
+//   description: Maximum number of results to return in this call.
+//   required: false
+// - name: start
+//   type: string
+//   in: query
+//   description: Continuation token for results after a past limited run.
+//   required: false
+// produces:
+// - application/json
+// security:
+// - api_session: []
+// responses:
+//   "200":
+//     description: List sessions response.
+//     schema:
+//       "$ref": "#/definitions/listSessionsResp"
 func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, start := getRPCPaginationValues(r)
@@ -183,6 +264,31 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(ctx, w, http.StatusOK, response)
 }
 
+// swagger:operation GET /health/ health
+//
+// Check node health
+//
+// Helper endpoint to check for node health. If `ready` is true, it also checks
+// if this node is fully operational and ready to accept SQL connections.
+// Otherwise, this endpoint always returns a successful response (if the API
+// server is up, of course).
+//
+// ---
+// parameters:
+// - name: ready
+//   type: boolean
+//   in: query
+//   description: If true, check whether this node is ready to accept SQL
+//     connections. If false, this endpoint always returns success, unless
+//     the API server itself is down.
+//   required: false
+// produces:
+// - application/json
+// responses:
+//   "200":
+//     description: Indicates healthy node.
+//   "500":
+//     description: Indicates unhealthy node.
 func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
 	ready := false
 	readyStr := r.URL.Query().Get("ready")

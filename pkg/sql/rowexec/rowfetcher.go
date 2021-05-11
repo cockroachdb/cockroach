@@ -48,7 +48,7 @@ type rowFetcher interface {
 	) error
 
 	NextRow(ctx context.Context) (
-		rowenc.EncDatumRow, catalog.TableDescriptor, *descpb.IndexDescriptor, error)
+		rowenc.EncDatumRow, catalog.TableDescriptor, catalog.Index, error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)
@@ -76,13 +76,12 @@ func initRowFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	withSystemColumns bool,
 	virtualColumn catalog.Column,
-) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
+) (index catalog.Index, isSecondaryIndex bool, err error) {
 	if indexIdx >= len(desc.ActiveIndexes()) {
 		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	indexI := desc.ActiveIndexes()[indexIdx]
-	index = indexI.IndexDesc()
-	isSecondaryIndex = !indexI.Primary()
+	index = desc.ActiveIndexes()[indexIdx]
+	isSecondaryIndex = !index.Primary()
 
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,

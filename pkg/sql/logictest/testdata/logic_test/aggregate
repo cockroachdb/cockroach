@@ -893,8 +893,8 @@ CREATE TABLE mnop (
 )
 
 statement ok
-INSERT INTO mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
-  generate_series(1, 2e4) AS i(i)
+INSERT INTO mnop (m, n) SELECT i, (1e9 + i/100.0)::float FROM
+  generate_series(1, 100) AS i(i)
 
 statement ok
 UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
@@ -3825,3 +3825,61 @@ query FI
 SELECT corr(DISTINCT y, x), count(DISTINCT y) FROM t55776
 ----
 0.522232967867094 3
+
+# Regression test for the vectorized hash aggregator not maintaining the
+# required output ordering when spilling to disk (#63159).
+statement ok
+CREATE TABLE t63159 (a INT, b INT, INDEX(a) STORING (b));
+INSERT INTO t63159 VALUES (1,1), (3,3), (2,2), (5,5), (0,0), (1,1);
+
+query III
+SELECT a, b, count(*) FROM t63159 GROUP BY a,b ORDER BY a
+----
+0  0  1
+1  1  2
+2  2  1
+3  3  1
+5  5  1
+
+# Regression test for the vectorized hash aggregator using incorrect type schema
+# when planning an external sort to maintain the required ordering.
+statement ok
+CREATE TABLE t63436 (a INT, b FLOAT, c DECIMAL, INDEX(a));
+SELECT count(*) FROM t63436@t63436_a_idx GROUP BY b, c ORDER BY c;
+
+# Regression test for #64319. Percentiles of constants should not panic.
+subtest 63436
+
+query I
+SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY 33) FROM osagg
+----
+33
+
+query R
+SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY 33.0) FROM osagg
+----
+33.0
+
+query I
+SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY 33::INT) FROM osagg
+----
+33
+
+query I
+SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY '33'::INT) FROM osagg
+----
+33
+
+# Note: In this case Postgres returns "ERROR: 42804: could not determine
+# polymorphic type because input has type unknown". However, Postgres does allow
+# ... (ORDER BY s) ... where s is a TEXT column. It would require additional
+# complexity for us to error in this case, so we return a result instead.
+query T
+SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY 'foo') FROM osagg
+----
+foo
+
+query T
+SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY current_database()) FROM osagg
+----
+test

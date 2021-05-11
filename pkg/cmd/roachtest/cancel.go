@@ -13,9 +13,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
+	"github.com/cockroachdb/errors"
 )
 
 // Motivation:
@@ -23,7 +27,7 @@ import (
 // insufficient in detecting problems with canceling long-running, multi-node
 // DistSQL queries. This is because, unlike local queries which only need to
 // cancel the transaction's context, DistSQL queries must cancel flow contexts
-// on each node involed in the query. Typical strategies for local execution
+// on each node involved in the query. Typical strategies for local execution
 // testing involve using a builtin like generate_series to create artificially
 // long-running queries, but these approaches don't create multi-node DistSQL
 // queries; the only way to do so is by querying a large dataset split across
@@ -33,49 +37,59 @@ import (
 // Once DistSQL queries provide more testing knobs, these tests can likely be
 // replaced with unit tests.
 func registerCancel(r *testRegistry) {
-	runCancel := func(ctx context.Context, t *test, c *cluster,
-		queries []string, warehouses int, useDistsql bool) {
-		t.Skip("skipping flaky cancel/tpcc test", "test needs to be updated see https://github.com/cockroachdb/cockroach/issues/42103")
+	runCancel := func(ctx context.Context, t *test, c *cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Put(ctx, workload, "./workload", c.All())
 		c.Start(ctx, t, c.All())
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
-			t.Status("importing TPCC fixture")
-			c.Run(ctx, c.Node(1), tpccImportCmd(warehouses))
+			t.Status("restoring TPCH dataset for Scale Factor 1")
+			if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
+				t.Fatal(err)
+			}
 
 			conn := c.Conn(ctx, 1)
 			defer conn.Close()
 
-			var queryPrefix string
+			queryPrefix := "USE tpch; "
 			if !useDistsql {
-				queryPrefix = "SET distsql = off;"
+				queryPrefix += "SET distsql = off; "
 			}
 
 			t.Status("running queries to cancel")
-			for _, q := range queries {
-				sem := make(chan struct{}, 1)
-				go func(q string) {
-					t.l.Printf("executing \"%s\"\n", q)
+			for _, queryNum := range tpchQueriesToRun {
+				// sem is used to indicate that the query-runner goroutine has
+				// been spawned up.
+				sem := make(chan struct{})
+				// Any error regarding the cancellation (or of its absence) will
+				// be sent on errCh.
+				errCh := make(chan error, 1)
+				go func(query string) {
+					defer close(errCh)
+					t.l.Printf("executing q%d\n", queryNum)
 					sem <- struct{}{}
-					_, err := conn.Exec(queryPrefix + q)
+					close(sem)
+					_, err := conn.Exec(queryPrefix + query)
 					if err == nil {
-						close(sem)
-						t.Fatal("query completed before it could be canceled")
+						errCh <- errors.New("query completed before it could be canceled")
 					} else {
 						fmt.Printf("query failed with error: %s\n", err)
+						// Note that errors.Is() doesn't work here because
+						// lib/pq wraps the query canceled error.
+						if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
+							errCh <- errors.Wrap(err, "unexpected error")
+						}
 					}
-					sem <- struct{}{}
-				}(q)
+				}(tpch.QueriesByNumber[queryNum])
 
+				// Wait for the query-runner goroutine to start.
 				<-sem
 
 				// The cancel query races with the execution of the query it's trying to
 				// cancel, which may result in attempting to cancel the query before it
 				// has started.  To be more confident that the query is executing, wait
 				// a bit before attempting to cancel it.
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(250 * time.Millisecond)
 
 				const cancelQuery = `CANCEL QUERIES
 	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%'`
@@ -83,12 +97,13 @@ func registerCancel(r *testRegistry) {
 				cancelStartTime := timeutil.Now()
 
 				select {
-				case _, ok := <-sem:
-					if !ok {
-						t.Fatal("query could not be canceled")
+				case err, ok := <-errCh:
+					if ok {
+						t.Fatal(err)
 					}
+					// If errCh is closed, then the cancellation was successful.
 					timeToCancel := timeutil.Now().Sub(cancelStartTime)
-					fmt.Printf("canceling \"%s\" took %s\n", q, timeToCancel)
+					fmt.Printf("canceling q%d took %s\n", queryNum, timeToCancel)
 
 				case <-time.After(5 * time.Second):
 					t.Fatal("query took too long to respond to cancellation")
@@ -100,32 +115,26 @@ func registerCancel(r *testRegistry) {
 		m.Wait()
 	}
 
-	const warehouses = 10
 	const numNodes = 3
-	queries := []string{
-		`SELECT * FROM tpcc.stock`,
-		`SELECT * FROM tpcc.stock WHERE s_quantity > 100`,
-		`SELECT s_i_id, sum(s_quantity) FROM tpcc.stock GROUP BY s_i_id`,
-		`SELECT * FROM tpcc.stock ORDER BY s_quantity`,
-		`SELECT * FROM tpcc.order_line JOIN tpcc.stock ON s_i_id=ol_i_id`,
-		`SELECT ol_number, sum(s_quantity) FROM tpcc.stock JOIN tpcc.order_line ON s_i_id=ol_i_id WHERE ol_number > 10 GROUP BY ol_number ORDER BY ol_number`,
-	}
+	// Choose several longer running TPCH queries (each is taking at least 3s to
+	// complete).
+	tpchQueriesToRun := []int{7, 9, 20, 21}
 
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
-		Owner:   OwnerSQLExec,
+		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%v,nodes=%d", tpchQueriesToRun, numNodes),
+		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runCancel(ctx, t, c, queries, warehouses, true /* useDistsql */)
+			runCancel(ctx, t, c, tpchQueriesToRun, true /* useDistsql */)
 		},
 	})
 
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
-		Owner:   OwnerSQLExec,
+		Name:    fmt.Sprintf("cancel/tpch/local/queries=%v,nodes=%d", tpchQueriesToRun, numNodes),
+		Owner:   OwnerSQLQueries,
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runCancel(ctx, t, c, queries, warehouses, false /* useDistsql */)
+			runCancel(ctx, t, c, tpchQueriesToRun, false /* useDistsql */)
 		},
 	})
 }

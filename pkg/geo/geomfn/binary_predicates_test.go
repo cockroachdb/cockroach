@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	emptyPoint           = geo.MustParseGeometry("POINT EMPTY")
 	emptyRect            = geo.MustParseGeometry("POLYGON EMPTY")
 	emptyLine            = geo.MustParseGeometry("LINESTRING EMPTY")
 	leftRect             = geo.MustParseGeometry("POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))")
@@ -28,6 +29,20 @@ var (
 	rightRectPoint       = geo.MustParseGeometry("POINT(0.5 0.5)")
 	overlappingRightRect = geo.MustParseGeometry("POLYGON((-0.1 0.0, 1.0 0.0, 1.0 1.0, -0.1 1.0, -0.1 0.0))")
 	middleLine           = geo.MustParseGeometry("LINESTRING(-0.5 0.5, 0.5 0.5)")
+	leftRectWithHole     = geo.MustParseGeometry("POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0), " +
+		"(-0.75 0.25, -0.75 0.75, -0.25 0.75, -0.25 0.25, -0.75 0.25))")
+	bothLeftRects = geo.MustParseGeometry("MULTIPOLYGON(((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0)), " +
+		"((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0), (-0.75 0.25, -0.75 0.75, -0.25 0.75, -0.25 0.25, -0.75 0.25)))")
+	bothLeftRectsHoleFirst = geo.MustParseGeometry("MULTIPOLYGON(" +
+		"((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0), " +
+		"(-0.75 0.25, -0.75 0.75, -0.25 0.75, -0.25 0.25, -0.75 0.25)), " +
+		"((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0)))")
+	leftRectCornerPoint     = geo.MustParseGeometry("POINT(-1.0 0.0)")
+	leftRectEdgePoint       = geo.MustParseGeometry("POINT(-1.0 0.2)")
+	leftRectHoleCornerPoint = geo.MustParseGeometry("POINT(-0.75 0.75)")
+	leftRectHoleEdgePoint   = geo.MustParseGeometry("POINT(-0.75 0.5)")
+	leftRectMultiPoint      = geo.MustParseGeometry("MULTIPOINT(-0.5 0.5, -0.9 0.1)")
+	leftRectEdgeMultiPoint  = geo.MustParseGeometry("MULTIPOINT(-1.0 0.2, -0.9 0.1)")
 )
 
 func TestCovers(t *testing.T) {
@@ -39,6 +54,9 @@ func TestCovers(t *testing.T) {
 		{rightRect, rightRectPoint, true},
 		{rightRectPoint, rightRect, false},
 		{leftRect, rightRect, false},
+		{leftRect, leftRectEdgePoint, true},
+		{leftRectWithHole, leftRectPoint, false},
+		{leftRect, emptyPoint, false},
 	}
 
 	for i, tc := range testCases {
@@ -64,6 +82,8 @@ func TestCoveredBy(t *testing.T) {
 		{rightRect, rightRectPoint, false},
 		{rightRectPoint, rightRect, true},
 		{leftRect, rightRect, false},
+		{leftRectEdgeMultiPoint, leftRectWithHole, true},
+		{leftRectPoint, emptyRect, false},
 	}
 
 	for i, tc := range testCases {
@@ -91,6 +111,13 @@ func TestContains(t *testing.T) {
 		{rightRectPoint, rightRectPoint, true},
 		{rightRect, rightRect, true},
 		{leftRect, rightRect, false},
+		{emptyRect, emptyPoint, false},
+		{leftRectWithHole, leftRectPoint, false},
+		{leftRectWithHole, leftRectMultiPoint, false},
+		{leftRect, leftRectMultiPoint, true},
+		{bothLeftRectsHoleFirst, leftRectPoint, true},
+		{leftRect, leftRectEdgePoint, false},
+		{leftRect, leftRectEdgeMultiPoint, true},
 	}
 
 	for i, tc := range testCases {
@@ -224,6 +251,16 @@ func TestIntersects(t *testing.T) {
 		{leftRect, rightRect, true},
 		{leftRect, middleLine, true},
 		{rightRect, middleLine, true},
+		{leftRectPoint, leftRect, true},
+		{leftRectPoint, leftRectWithHole, false},
+		{leftRect, leftRectPoint, true},
+		{leftRectWithHole, leftRectPoint, false},
+		{leftRectPoint, bothLeftRects, true},
+		{leftRectWithHole, leftRectMultiPoint, true},
+		{leftRectCornerPoint, leftRect, true},
+		{leftRectEdgePoint, leftRect, true},
+		{leftRectHoleEdgePoint, leftRectWithHole, true},
+		{leftRectHoleCornerPoint, leftRectWithHole, true},
 	}
 
 	for i, tc := range testCases {
@@ -372,6 +409,13 @@ func TestWithin(t *testing.T) {
 		{rightRect, rightRectPoint, false},
 		{rightRectPoint, rightRect, true},
 		{leftRect, rightRect, false},
+		{emptyPoint, emptyRect, false},
+		{leftRectPoint, leftRect, true},
+		{leftRectMultiPoint, leftRect, true},
+		{leftRectMultiPoint, leftRectWithHole, false},
+		{leftRectHoleEdgePoint, leftRectWithHole, false},
+		{leftRectEdgePoint, leftRectWithHole, false},
+		{leftRectEdgeMultiPoint, leftRectWithHole, true},
 	}
 
 	for i, tc := range testCases {

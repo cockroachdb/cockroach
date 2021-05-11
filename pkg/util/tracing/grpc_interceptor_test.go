@@ -192,7 +192,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			var rec tracingpb.RecordedSpan
 			require.NoError(t, types.UnmarshalAny(recAny, &rec))
 			require.Len(t, rec.InternalStructured, 1)
-			require.NoError(t, sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec}))
+			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			sp.Finish()
 			var n int
 			sp.SetVerbose(true) // to get the tags

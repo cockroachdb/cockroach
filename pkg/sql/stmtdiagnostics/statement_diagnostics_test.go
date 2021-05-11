@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -65,13 +67,6 @@ func TestDiagnosticsRequest(t *testing.T) {
 	}
 
 	checkCompleted(reqID)
-
-	// Check the trace.
-	row := db.QueryRow("SELECT jsonb_pretty(trace) FROM system.statement_diagnostics WHERE ID = $1", traceID.Int64)
-	var json string
-	require.NoError(t, row.Scan(&json))
-	require.Contains(t, json, "traced statement")
-	require.Contains(t, json, "statement execution committed the txn")
 
 	// Verify that we can handle multiple requests at the same time.
 	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
@@ -139,13 +134,6 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 			return nil
 		})
 		require.True(t, traceID.Valid)
-
-		// Check the trace.
-		row := db0.QueryRow(`SELECT jsonb_pretty(trace) FROM system.statement_diagnostics
-                         WHERE ID = $1`, traceID.Int64)
-		var json string
-		require.NoError(t, row.Scan(&json))
-		require.Contains(t, json, "traced statement")
 	}
 	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
 
@@ -198,7 +186,13 @@ func TestChangePollInterval(t *testing.T) {
 		})
 		return seen
 	}
+	settings := cluster.MakeTestingClusterSettings()
+
+	// Set an extremely long initial polling interval to not hit flakes due to
+	// server startup taking more than 10s.
+	stmtdiagnostics.PollingInterval.Override(&settings.SV, time.Hour)
 	args := base.TestServerArgs{
+		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {

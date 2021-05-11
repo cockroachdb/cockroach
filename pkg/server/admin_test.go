@@ -60,6 +60,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func getAdminJSONProto(
@@ -2081,5 +2084,171 @@ func TestDecommissionSelf(t *testing.T) {
 			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
 			return ok && liveness.Membership == expect
 		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+	}
+}
+
+func TestAdminDecommissionedOperations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // allows admin client without setting up certs
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	require.Len(t, scratchRange.InternalReplicas, 1)
+	require.Equal(t, tc.Server(0).NodeID(), scratchRange.InternalReplicas[0].NodeID)
+
+	// Decommission server 1 and wait for it to lose cluster access.
+	srv := tc.Server(0)
+	decomSrv := tc.Server(1)
+	for _, status := range []livenesspb.MembershipStatus{
+		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
+	} {
+		require.NoError(t, srv.Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
+	}
+
+	require.Eventually(t, func() bool {
+		_, err := decomSrv.DB().Scan(ctx, keys.MinKey, keys.MaxKey, 0)
+		s, ok := status.FromError(errors.UnwrapAll(err))
+		return ok && s.Code() == codes.PermissionDenied
+	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for server to lose cluster access")
+
+	// Set up an admin client.
+	conn, err := grpc.Dial(decomSrv.ServingRPCAddr(), grpc.WithInsecure())
+	require.NoError(t, err)
+	defer func() {
+		_ = conn.Close() // nolint:grpcconnclose
+	}()
+	adminClient := serverpb.NewAdminClient(conn)
+
+	// Run some operations on the decommissioned node. The ones that require
+	// access to the cluster should fail, other should succeed. We're mostly
+	// concerned with making sure they return rather than hang due to internal
+	// retries.
+	testcases := []struct {
+		name       string
+		expectCode codes.Code
+		op         func(serverpb.AdminClient) error
+	}{
+		{"Cluster", codes.OK, func(c serverpb.AdminClient) error {
+			_, err := c.Cluster(ctx, &serverpb.ClusterRequest{})
+			return err
+		}},
+		{"Databases", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.Databases(ctx, &serverpb.DatabasesRequest{})
+			return err
+		}},
+		{"DatabaseDetails", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: "foo"})
+			return err
+		}},
+		{"DataDistribution", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.DataDistribution(ctx, &serverpb.DataDistributionRequest{})
+			return err
+		}},
+		{"Decommission", codes.Unknown, func(c serverpb.AdminClient) error {
+			_, err := c.Decommission(ctx, &serverpb.DecommissionRequest{
+				NodeIDs:          []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+			})
+			return err
+		}},
+		{"DecommissionStatus", codes.Unknown, func(c serverpb.AdminClient) error {
+			_, err := c.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{
+				NodeIDs: []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
+			})
+			return err
+		}},
+		{"EnqueueRange", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.EnqueueRange(ctx, &serverpb.EnqueueRangeRequest{
+				RangeID: scratchRange.RangeID,
+				Queue:   "replicaGC",
+			})
+			return err
+		}},
+		{"Events", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.Events(ctx, &serverpb.EventsRequest{})
+			return err
+		}},
+		{"Health", codes.OK, func(c serverpb.AdminClient) error {
+			_, err := c.Health(ctx, &serverpb.HealthRequest{})
+			return err
+		}},
+		{"Jobs", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.Jobs(ctx, &serverpb.JobsRequest{})
+			return err
+		}},
+		{"Liveness", codes.OK, func(c serverpb.AdminClient) error {
+			_, err := c.Liveness(ctx, &serverpb.LivenessRequest{})
+			return err
+		}},
+		{"Locations", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.Locations(ctx, &serverpb.LocationsRequest{})
+			return err
+		}},
+		{"NonTableStats", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.NonTableStats(ctx, &serverpb.NonTableStatsRequest{})
+			return err
+		}},
+		{"QueryPlan", codes.OK, func(c serverpb.AdminClient) error {
+			_, err := c.QueryPlan(ctx, &serverpb.QueryPlanRequest{Query: "SELECT 1"})
+			return err
+		}},
+		{"RangeLog", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.RangeLog(ctx, &serverpb.RangeLogRequest{})
+			return err
+		}},
+		{"Settings", codes.OK, func(c serverpb.AdminClient) error {
+			_, err := c.Settings(ctx, &serverpb.SettingsRequest{})
+			return err
+		}},
+		{"TableStats", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.TableStats(ctx, &serverpb.TableStatsRequest{Database: "foo", Table: "bar"})
+			return err
+		}},
+		{"TableDetails", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: "foo", Table: "bar"})
+			return err
+		}},
+		{"Users", codes.Internal, func(c serverpb.AdminClient) error {
+			_, err := c.Users(ctx, &serverpb.UsersRequest{})
+			return err
+		}},
+		// We drain at the end, since it may evict us.
+		{"Drain", codes.Unknown, func(c serverpb.AdminClient) error {
+			stream, err := c.Drain(ctx, &serverpb.DrainRequest{DoDrain: true})
+			if err != nil {
+				return err
+			}
+			_, err = stream.Recv()
+			return err
+		}},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			require.Eventually(t, func() bool {
+				err = tc.op(adminClient)
+				if tc.expectCode == codes.OK {
+					require.NoError(t, err)
+					return true
+				}
+				s, ok := status.FromError(errors.UnwrapAll(err))
+				if s == nil || !ok {
+					return false
+				}
+				require.Equal(t, tc.expectCode, s.Code())
+				return true
+			}, 10*time.Second, 100*time.Millisecond, "timed out waiting for gRPC error, got %s", err)
+		})
 	}
 }

@@ -222,6 +222,7 @@ func TestAndOrOps(t *testing.T) {
 func benchmarkLogicalProjOp(
 	b *testing.B, operation string, useSelectionVector bool, hasNulls bool,
 ) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -268,11 +269,11 @@ func benchmarkLogicalProjOp(
 		fmt.Sprintf("@1 %s @2", operation), false /* canFallbackToRowexec */, testMemAcc,
 	)
 	require.NoError(b, err)
-	logicalProjOp.Init()
+	logicalProjOp.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
-		logicalProjOp.Next(ctx)
+		logicalProjOp.Next()
 	}
 }
 

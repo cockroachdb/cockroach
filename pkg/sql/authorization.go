@@ -130,11 +130,14 @@ func (p *planner) CheckPrivilegeForUser(
 	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
-		user, privilege, descriptor.TypeName(), descriptor.GetName())
+		user, privilege, descriptor.DescriptorType(), descriptor.GetName())
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
+// TODO(arul): This CheckPrivileges method name is rather deceptive,
+// it should be probably be called CheckPrivilegesOrOwnership and return
+// a better error.
 func (p *planner) CheckPrivilege(
 	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
 ) error {
@@ -233,7 +236,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s has no privileges on %s %s",
-		p.SessionData().User(), descriptor.TypeName(), descriptor.GetName())
+		p.SessionData().User(), descriptor.DescriptorType(), descriptor.GetName())
 }
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.

@@ -417,14 +417,9 @@ CREATE TABLE test.tt (x test.t);
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, id,
-				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
-			if err != nil {
-				return err
-			}
-			typeDesc = desc.(catalog.TypeDescriptor)
-			return nil
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, keys.SystemSQLCodec, id)
+			return err
 		}); err != nil {
 			return tree.TypeName{}, nil, err
 		}
@@ -464,30 +459,30 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// Test a simple UDT as the default value.
 		{
 			"x greeting DEFAULT ('hello')",
-			`b'\x80':::@100053`,
+			`x'80':::@100053`,
 			getDefault,
 		},
 		{
 			"x greeting DEFAULT ('hello':::greeting)",
-			`b'\x80':::@100053`,
+			`x'80':::@100053`,
 			getDefault,
 		},
 		// Test when a UDT is used in a default value, but isn't the
 		// final type of the column.
 		{
 			"x INT DEFAULT (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END)",
-			`CASE WHEN b'\x80':::@100053 = b'\x80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@100053 = x'80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getDefault,
 		},
 		{
 			"x BOOL DEFAULT ('hello'::greeting IS OF (greeting, greeting))",
-			`b'\x80':::@100053 IS OF (@100053, @100053)`,
+			`x'80':::@100053 IS OF (@100053, @100053)`,
 			getDefault,
 		},
 		// Test check constraints.
 		{
 			"x greeting, CHECK (x = 'hello')",
-			`x = b'\x80':::@100053`,
+			`x = x'80':::@100053`,
 			getCheck,
 		},
 		{
@@ -498,12 +493,12 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// Test a computed column in the same cases as above.
 		{
 			"x greeting AS ('hello') STORED",
-			`b'\x80':::@100053`,
+			`x'80':::@100053`,
 			getComputed,
 		},
 		{
 			"x INT AS (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END) STORED",
-			`CASE WHEN b'\x80':::@100053 = b'\x80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@100053 = x'80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getComputed,
 		},
 	}
@@ -529,6 +524,68 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)
 		}
 		if _, err := sqlDB.Exec("DROP TABLE t"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestSerializedUDTsInView tests that view queries containing
+// explicit type references and members of user defined types are serialized
+// in a way that is stable across changes to the type itself. For example,
+// we want to ensure that enum members are serialized in a way that is stable
+// across renames to the member itself.
+func TestSerializedUDTsInView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testdata := []struct {
+		viewQuery    string
+		expectedExpr string
+	}{
+		// Test simple UDT in the view query.
+		{
+			"SELECT 'hello':::greeting",
+			`(SELECT b'\x80':::@100053)`,
+		},
+		// Test when a UDT is used in a view query, but isn't the
+		// final type of the column.
+		{
+			"SELECT 'hello'::greeting < 'hello'::greeting",
+			`(SELECT b'\x80':::@100053 < b'\x80':::@100053)`,
+		},
+		// Test when a UDT is used in various parts of a view (subquery, CTE, etc.).
+		{
+			"SELECT k FROM (SELECT 'hello'::greeting AS k)",
+			`(SELECT k FROM (SELECT b'\x80':::@100053 AS k))`,
+		},
+		{
+			"WITH w AS (SELECT 'hello':::greeting AS k) SELECT k FROM w",
+			`(WITH w AS (SELECT b'\x80':::@100053 AS k) SELECT k FROM w)`,
+		},
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+	CREATE DATABASE test;
+	USE test;
+	CREATE TYPE greeting AS ENUM ('hello');
+`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range testdata {
+		create := "CREATE VIEW v AS (" + tc.viewQuery + ")"
+		if _, err := sqlDB.Exec(create); err != nil {
+			t.Fatal(err)
+		}
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "v")
+		foundViewQuery := desc.GetViewQuery()
+		if tc.expectedExpr != foundViewQuery {
+			t.Errorf("for view %s, found %s, expected %s", tc.viewQuery, foundViewQuery, tc.expectedExpr)
+		}
+		if _, err := sqlDB.Exec("DROP VIEW v"); err != nil {
 			t.Fatal(err)
 		}
 	}

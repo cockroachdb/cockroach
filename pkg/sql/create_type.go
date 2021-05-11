@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -84,14 +85,19 @@ func (n *createTypeNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	// If we found a descriptor and have IfNotExists = true, then exit without
-	// doing anything. Ideally, we would do this below by inspecting the type
-	// of error returned by getCreateTypeParams, but it doesn't return enough
-	// information for us to do so. For comparison, we handle this case in
-	// CREATE TABLE IF NOT EXISTS by checking the return code
+
+	// If we found a descriptor and have IfNotExists = true, then buffer a notice
+	// and exit without doing anything. Ideally, we would do this below by
+	// inspecting the type of error returned by getCreateTypeParams, but it
+	// doesn't return enough information for us to do so. For comparison, we
+	// handle this case in CREATE TABLE IF NOT EXISTS by checking the return code
 	// (pgcode.DuplicateRelation) of getCreateTableParams. However, there isn't
 	// a pgcode for duplicate types, only the more general pgcode.DuplicateObject.
 	if found && n.n.IfNotExists {
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.Newf("type %q already exists, skipping", n.typeName),
+		)
 		return nil
 	}
 
@@ -157,20 +163,19 @@ func getCreateTypeParams(
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
-	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
-	exists, collided, err := catalogkv.LookupObjectID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, collided, catalogkv.Immutable)
-		if err != nil {
-			return nil, 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return nil, 0, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name.String())
-	}
+	err = catalogkv.CheckObjectCollision(
+		params.ctx,
+		params.p.txn,
+		params.ExecCfg().Codec,
+		db.GetID(),
+		schemaID,
+		name,
+	)
 	if err != nil {
-		return nil, 0, err
+		return nil, descpb.InvalidID, err
 	}
+
+	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
 	return typeKey, schemaID, nil
 }
 
@@ -250,7 +255,7 @@ func (p *planner) createArrayType(
 	// Construct the descriptor for the array type.
 	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
 	// meta, just hold on.
-	arrayTypDesc := typedesc.NewCreatedMutable(descpb.TypeDescriptor{
+	arrayTypDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
 		Name:           arrayTypeName,
 		ID:             id,
 		ParentID:       db.GetID(),
@@ -259,7 +264,7 @@ func (p *planner) createArrayType(
 		Alias:          types.MakeArray(elemTyp),
 		Version:        1,
 		Privileges:     typDesc.Privileges,
-	})
+	}).BuildCreatedMutable()
 
 	jobStr := fmt.Sprintf("implicit array type creation for %s", typ)
 	if err := p.createDescriptorWithID(
@@ -363,18 +368,17 @@ func (p *planner) createEnumWithID(
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := typedesc.NewCreatedMutable(
-		descpb.TypeDescriptor{
-			Name:           typeName.Type(),
-			ID:             id,
-			ParentID:       dbDesc.GetID(),
-			ParentSchemaID: schemaID,
-			Kind:           enumKind,
-			EnumMembers:    members,
-			Version:        1,
-			Privileges:     privs,
-			RegionConfig:   regionConfig,
-		})
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:           typeName.Type(),
+		ID:             id,
+		ParentID:       dbDesc.GetID(),
+		ParentSchemaID: schemaID,
+		Kind:           enumKind,
+		EnumMembers:    members,
+		Version:        1,
+		Privileges:     privs,
+		RegionConfig:   regionConfig,
+	}).BuildCreatedMutableType()
 
 	// Create the implicit array type for this type before finishing the type.
 	arrayTypeID, err := p.createArrayType(params, typeName, typeDesc, dbDesc, schemaID)

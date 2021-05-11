@@ -26,7 +26,7 @@ func TestIndexForDisplay(t *testing.T) {
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")
-	tableName := tree.MakeTableName(database, table)
+	tableName := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
 
 	colNames := []string{"a", "b"}
 	tableDesc := testTableDesc(
@@ -94,7 +94,7 @@ func TestIndexForDisplay(t *testing.T) {
 
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
-			got, err := IndexForDisplay(
+			got, err := indexForDisplay(
 				ctx, tableDesc, &tc.tableName, &tc.index, tc.partition, tc.interleave, &semaCtx,
 			)
 			if err != nil {

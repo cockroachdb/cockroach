@@ -73,7 +73,7 @@ func Centroid(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (geo.Geo
 			//  * Calculate the mid-points and length/angle for all the edges.
 			//  * The centroid of (Multi)LineString will be a weighted average of mid-points
 			//    of all the edges, where each mid-points is weighted by its length/angle.
-			for edgeIdx := 0; edgeIdx < region.NumEdges(); edgeIdx++ {
+			for edgeIdx, regionNumEdges := 0, region.NumEdges(); edgeIdx < regionNumEdges; edgeIdx++ {
 				var edgeWeight float64
 				eV0 := region.Edge(edgeIdx).V0
 				eV1 := region.Edge(edgeIdx).V1

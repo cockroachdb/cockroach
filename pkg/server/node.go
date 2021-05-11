@@ -233,7 +233,7 @@ func bootstrapCluster(
 		if i == 0 {
 			bootstrapVersion = cv
 		} else if bootstrapVersion != cv {
-			return nil, errors.Wrapf(err, "found cluster versions %s and %s", bootstrapVersion, cv)
+			return nil, errors.Errorf("found cluster versions %s and %s", bootstrapVersion, cv)
 		}
 
 		sIdent := roachpb.StoreIdent{
@@ -287,6 +287,7 @@ func NewNode(
 	reg *metric.Registry,
 	stopper *stop.Stopper,
 	txnMetrics kvcoord.TxnMetrics,
+	stores *kvserver.Stores,
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 ) *Node {
@@ -299,7 +300,7 @@ func NewNode(
 		stopper:    stopper,
 		recorder:   recorder,
 		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:     kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
+		stores:     stores,
 		txnMetrics: txnMetrics,
 		sqlExec:    sqlExec,
 		clusterID:  clusterID,

@@ -7,9 +7,11 @@ import org.postgresql.util.PSQLException;
 import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.Statement;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
@@ -287,7 +289,7 @@ public class MainTest extends CockroachDBTest {
         PreparedStatement stmt = conn.prepareStatement("SELECT * FROM x WHERE b = ?");
         stmt.setObject(1, "e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
         exception.expectMessage("ERROR: could not parse \"e81bb788-2291-4b6e-9cf3-b237fe6c2f3\" as " +
-            "type uuid: uuid: incorrect UUID length: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
+            "type uuid: uuid: incorrect UUID format: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
         stmt.executeQuery();
     }
 
@@ -336,6 +338,47 @@ public class MainTest extends CockroachDBTest {
         for (int i = 1; i <= colCount; i++) {
           String tableName = m.getTableName(i);
           Assert.assertEquals("pg_proc", tableName);
+        }
+      }
+    }
+
+    // Regression test for #42912: using setFetchSize in a transaction should
+    // not cause issues.
+    @Test
+    public void testSetFetchSize() throws Exception {
+      for (int fetchSize = 0; fetchSize <= 3; fetchSize++) {
+        testSetFetchSize(fetchSize, true);
+        testSetFetchSize(fetchSize, false);
+      }
+    }
+
+    private void testSetFetchSize(int fetchSize, boolean useTransaction) throws Exception {
+      int expectedResults = fetchSize;
+      if (fetchSize == 0 || fetchSize == 3) {
+        expectedResults = 2;
+      }
+
+      try (final Connection testConn = DriverManager.getConnection(getDBUrl(), "root", "")) {
+        testConn.setAutoCommit(!useTransaction);
+        try (final Statement stmt = testConn.createStatement()) {
+          stmt.setFetchSize(fetchSize);
+          ResultSet result = stmt.executeQuery("select n from generate_series(0,1) n");
+          for (int i = 0; i < expectedResults; i++) {
+            Assert.assertTrue(result.next());
+            Assert.assertEquals(i, result.getInt(1));
+          }
+          if (useTransaction) {
+            // This should implicitly close the ResultSet (i.e. portal).
+            testConn.commit();
+            if (fetchSize != 0 && fetchSize != 3) {
+              try {
+                result.next();
+                fail("expected portal to be closed");
+              } catch (PSQLException e) {
+                Assert.assertTrue(e.getMessage().contains("unknown portal"));
+              }
+            }
+          }
         }
       }
     }

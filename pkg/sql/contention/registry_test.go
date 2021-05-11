@@ -96,27 +96,38 @@ func TestRegistry(t *testing.T) {
 			}
 			merged := contention.MergeSerializedRegistries(first.Serialize(), second.Serialize())
 			var b strings.Builder
-			for i := range merged {
-				b.WriteString(merged[i].String())
+			for i := range merged.IndexContentionEvents {
+				b.WriteString(merged.IndexContentionEvents[i].String())
+			}
+			for i := range merged.NonSQLKeysContention {
+				b.WriteString(merged.NonSQLKeysContention[i].String())
 			}
 			return testFriendlyRegistryString(b.String())
-		case "ev", "evcheck":
+		case "ev", "evnonsql", "evcheck":
 			var (
-				tableIDStr string
-				indexIDStr string
-				key        string
-				id         string
-				duration   string
+				key      string
+				id       string
+				duration string
 			)
-			d.ScanArgs(t, "tableid", &tableIDStr)
-			tableID, err := strconv.Atoi(tableIDStr)
-			if err != nil {
-				return fmt.Sprintf("could not parse table ID %s as int: %v", tableIDStr, err)
-			}
-			d.ScanArgs(t, "indexid", &indexIDStr)
-			indexID, err := strconv.Atoi(indexIDStr)
-			if err != nil {
-				return fmt.Sprintf("could not parse index ID %s as int: %v", indexIDStr, err)
+			var keyBytes []byte
+			if d.Cmd != "evnonsql" {
+				var tableIDStr string
+				var indexIDStr string
+				d.ScanArgs(t, "tableid", &tableIDStr)
+				tableID, err := strconv.Atoi(tableIDStr)
+				if err != nil {
+					return fmt.Sprintf("could not parse table ID %s as int: %v", tableIDStr, err)
+				}
+				d.ScanArgs(t, "indexid", &indexIDStr)
+				indexID, err := strconv.Atoi(indexIDStr)
+				if err != nil {
+					return fmt.Sprintf("could not parse index ID %s as int: %v", indexIDStr, err)
+				}
+				keyBytes = keys.MakeTableIDIndexID(nil, uint32(tableID), uint32(indexID))
+			} else {
+				// Choose such a byte sequence that keys.DecodeTableIDIndexID
+				// would fail on this prefix.
+				keyBytes = []byte{255}
 			}
 			d.ScanArgs(t, "key", &key)
 			d.ScanArgs(t, "id", &id)
@@ -131,21 +142,20 @@ func TestRegistry(t *testing.T) {
 			if err != nil {
 				return fmt.Sprintf("could not parse duration %s as int: %v", duration, err)
 			}
-			keyBytes := keys.MakeTableIDIndexID(nil, uint32(tableID), uint32(indexID))
 			keyBytes = encoding.EncodeStringAscending(keyBytes, key)
-			if err := registry.AddContentionEvent(roachpb.ContentionEvent{
+			registry.AddContentionEvent(roachpb.ContentionEvent{
 				Key: keyBytes,
 				TxnMeta: enginepb.TxnMeta{
 					ID: contendingTxnID,
 				},
 				Duration: time.Duration(contentionDuration),
-			}); err != nil {
-				return err.Error()
+			})
+			if d.Cmd != "evcheck" {
+				return d.Expected
 			}
-			if d.Cmd == "evcheck" {
-				return testFriendlyRegistryString(registry.String())
-			}
-			return d.Expected
+			fallthrough
+		case "check":
+			return testFriendlyRegistryString(registry.String())
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
@@ -159,27 +169,16 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
 	registry := contention.NewRegistry()
-	errCh := make(chan error, numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			errCh <- registry.AddContentionEvent(roachpb.ContentionEvent{
+			registry.AddContentionEvent(roachpb.ContentionEvent{
 				Key: keys.MakeTableIDIndexID(nil /* key */, 1 /* tableID */, 1 /* indexID */),
 			})
 		}()
 	}
 
 	wg.Wait()
-
-	for drained := false; drained; {
-		select {
-		case err := <-errCh:
-			require.NoError(t, err, "unexpected error from goroutine adding contention event")
-		default:
-			// Nothing else to read.
-			drained = true
-		}
-	}
 
 	require.Equal(t, uint64(numGoroutines), contention.CalculateTotalNumContentionEvents(registry))
 }
@@ -191,6 +190,7 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 //   requirements.
 func TestSerializedRegistryInvariants(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
+	const nonSQLKeyProbability = 0.1
 	const sizeLimit = 5
 	const keySpaceSize = sizeLimit * sizeLimit
 	// Use large limit on the number of contention events so that the likelihood
@@ -219,26 +219,32 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 	populateRegistry := func(r *contention.Registry) {
 		numContentionEvents := rng.Intn(maxNumContentionEvents)
 		for i := 0; i < numContentionEvents; i++ {
-			tableID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))
-			indexID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))
-			key := keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+			var key []byte
+			if rng.Float64() > nonSQLKeyProbability {
+				// Create a key with a valid SQL prefix.
+				tableID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))
+				indexID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))
+				key = keys.MakeTableIDIndexID(nil /* key */, tableID, indexID)
+			}
 			key = append(key, getKey()...)
-			require.NoError(t, r.AddContentionEvent(roachpb.ContentionEvent{
+			r.AddContentionEvent(roachpb.ContentionEvent{
 				Key: key,
 				TxnMeta: enginepb.TxnMeta{
 					ID:  uuid.MakeV4(),
 					Key: getKey(),
 				},
 				Duration: time.Duration(int64(rng.Uint64())),
-			}))
+			})
 		}
 	}
 
 	// checkSerializedRegistryInvariants verifies that all invariants about the
 	// sizes of registries and the ordering of objects at all levels are
 	// maintained.
-	checkSerializedRegistryInvariants := func(ice []contentionpb.IndexContentionEvents) {
-		// Check the total size of the serialized registry.
+	checkSerializedRegistryInvariants := func(r contentionpb.SerializedRegistry) {
+		// Check the total size of the index contention events in the serialized
+		// registry.
+		ice := r.IndexContentionEvents
 		require.GreaterOrEqual(t, testIndexMapMaxSize, len(ice))
 		for i := range ice {
 			if i > 0 {
@@ -267,9 +273,29 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 				}
 			}
 		}
+
+		// Check the total size of the contention events on non-SQL keys in the
+		// serialized registry.
+		nkc := r.NonSQLKeysContention
+		require.GreaterOrEqual(t, testOrderedKeyMapMaxSize, len(nkc))
+		for i := range nkc {
+			if i > 0 {
+				// Check the ordering of the keys.
+				require.True(t, nkc[i].Key.Compare(nkc[i-1].Key) >= 0)
+			}
+			// Check the number of contended transactions on this key.
+			txns := nkc[i].Txns
+			require.GreaterOrEqual(t, testMaxNumTxns, len(txns))
+			for k := range txns {
+				if k > 0 {
+					// Check the ordering of the transactions.
+					require.LessOrEqual(t, txns[k].Count, txns[k-1].Count)
+				}
+			}
+		}
 	}
 
-	createNewSerializedRegistry := func() []contentionpb.IndexContentionEvents {
+	createNewSerializedRegistry := func() contentionpb.SerializedRegistry {
 		r := contention.NewRegistry()
 		populateRegistry(r)
 		s := r.Serialize()

@@ -30,7 +30,7 @@ import (
 // descriptor injection.
 
 func foreignKeyRepresentationUpgrade(
-	ctx context.Context, _ clusterversion.ClusterVersion, d migration.SQLDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps,
 ) error {
 	var lastUpgradedID descpb.ID
 	for {
@@ -45,7 +45,7 @@ func foreignKeyRepresentationUpgrade(
 	}
 }
 
-func upgradeFKRepresentation(ctx context.Context, upgrade descpb.ID, d migration.SQLDeps) error {
+func upgradeFKRepresentation(ctx context.Context, upgrade descpb.ID, d migration.TenantDeps) error {
 	return descs.Txn(ctx, d.Settings, d.LeaseManager, d.InternalExecutor, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
@@ -88,7 +88,7 @@ SELECT id, descriptor, crdb_internal_mvcc_timestamp FROM system.descriptor WHERE
 			return false, 0, errors.Wrapf(err,
 				"failed to unmarshal descriptor with ID %d", id)
 		}
-		t := descpb.TableFromDescriptor(&desc, ts)
+		t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
 		if t != nil && !t.Dropped() && tableNeedsFKUpgrade(t) {
 			return false, id, nil
 		}

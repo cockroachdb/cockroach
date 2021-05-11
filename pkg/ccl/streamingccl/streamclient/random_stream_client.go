@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,14 +66,30 @@ const (
 	IngestionTablePrefix = "foo"
 )
 
-type interceptFn func(event streamingccl.Event, pa streamingccl.PartitionAddress)
+var randomStreamClientSingleton *randomStreamClient
+
+// GetRandomStreamClientSingletonForTesting returns the singleton instance of
+// the client. This is to be used in testing, when interceptors can be
+// registered on the client to observe events.
+func GetRandomStreamClientSingletonForTesting() Client {
+	if randomStreamClientSingleton == nil {
+		randomStreamClientSingleton = &randomStreamClient{}
+	}
+	return randomStreamClientSingleton
+}
+
+// InterceptFn is a function that will intercept events emitted by
+// an InterceptableStreamClient
+type InterceptFn func(event streamingccl.Event, pa streamingccl.PartitionAddress)
 
 // InterceptableStreamClient wraps a Client, and provides a method to register
 // interceptor methods that are run on every streamed Event.
 type InterceptableStreamClient interface {
 	Client
 
-	RegisterInterception(fn interceptFn)
+	// RegisterInterception is how you can register your interceptor to be called
+	// from an InterceptableStreamClient.
+	RegisterInterception(fn InterceptFn)
 }
 
 // randomStreamConfig specifies the variables that controls the rate and type of
@@ -168,16 +186,21 @@ var _ InterceptableStreamClient = &randomStreamClient{}
 // events on a table with an integer key and integer value for the table with
 // the given ID.
 func newRandomStreamClient(streamURL *url.URL) (Client, error) {
+	if randomStreamClientSingleton == nil {
+		randomStreamClientSingleton = &randomStreamClient{}
+
+		randomStreamClientSingleton.mu.Lock()
+		randomStreamClientSingleton.mu.tableID = 52
+		randomStreamClientSingleton.mu.Unlock()
+	}
+
 	streamConfig, err := parseRandomStreamConfig(streamURL)
 	if err != nil {
 		return nil, err
 	}
+	randomStreamClientSingleton.config = streamConfig
 
-	client := randomStreamClient{config: streamConfig}
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	client.mu.tableID = 52
-	return &client, nil
+	return randomStreamClientSingleton, nil
 }
 
 func (m *randomStreamClient) getNextTableID() int {
@@ -220,7 +243,7 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 		IngestionDatabaseID,
 		tableID,
 		fmt.Sprintf(RandomStreamSchemaPlaceholder, tableName),
-		&descpb.PrivilegeDescriptor{},
+		descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -364,7 +387,7 @@ func (m *randomStreamClient) makeRandomKey(
 	r *rand.Rand, tableDesc *tabledesc.Mutable,
 ) roachpb.KeyValue {
 	// Create a key holding a random integer.
-	k, err := rowenc.TestingMakePrimaryIndexKey(tableDesc, r.Intn(m.config.valueRange))
+	k, err := randgen.TestingMakePrimaryIndexKey(tableDesc, r.Intn(m.config.valueRange))
 	if err != nil {
 		panic(err)
 	}
@@ -393,7 +416,7 @@ func (m *randomStreamClient) makeRandomKey(
 }
 
 // RegisterInterception implements the InterceptableStreamClient interface.
-func (m *randomStreamClient) RegisterInterception(fn interceptFn) {
+func (m *randomStreamClient) RegisterInterception(fn InterceptFn) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.interceptors = append(m.mu.interceptors, fn)

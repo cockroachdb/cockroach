@@ -487,25 +487,18 @@ func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	return nil, false
 }
 
-// getJSONPath is used for the #> and #>> operators.
-func getJSONPath(j DJSON, ary DArray) (Datum, error) {
+// GetJSONPath is used for the #> and #>> operators.
+func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
 		if v == DNull {
-			return DNull, nil
+			return nil, nil
 		}
 		path[i] = string(MustBeDString(v))
 	}
-	result, err := json.FetchPath(j.JSON, path)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return DNull, nil
-	}
-	return &DJSON{result}, nil
+	return json.FetchPath(j, path)
 }
 
 // BinOps contains the binary operations indexed by operation type.
@@ -1874,7 +1867,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				path, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
+				if err != nil {
+					return nil, err
+				}
+				if path == nil {
+					return DNull, nil
+				}
+				return &DJSON{path}, nil
 			},
 			Volatility: VolatilityImmutable,
 		},
@@ -1935,14 +1935,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.MakeArray(types.String),
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				res, err := GetJSONPath(left.(*DJSON).JSON, *MustBeDArray(right))
 				if err != nil {
 					return nil, err
 				}
-				if res == DNull {
+				if res == nil {
 					return DNull, nil
 				}
-				text, err := res.(*DJSON).JSON.AsText()
+				text, err := res.AsText()
 				if err != nil {
 					return nil, err
 				}
@@ -3003,7 +3003,7 @@ func (e *MultipleResultsError) Error() string {
 	return fmt.Sprintf("%s: unexpected multiple results", e.SQL)
 }
 
-// DatabaseRegionConfig is a wrapper around DatabaseDescriptor_RegionConfig
+// DatabaseRegionConfig is a wrapper around multiregion.RegionConfig
 // related methods which avoids a circular dependency between descpb and tree.
 type DatabaseRegionConfig interface {
 	IsValidRegionNameString(r string) bool
@@ -3015,7 +3015,12 @@ type DatabaseRegionConfig interface {
 type EvalDatabase interface {
 	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
 	// session database.
-	CurrentDatabaseRegionConfig() (DatabaseRegionConfig, error)
+	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
+
+	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
+	// database's multi-region zone configs are correctly setup. This includes
+	// all tables within the database.
+	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
@@ -3036,10 +3041,13 @@ type EvalDatabase interface {
 	// IsTableVisible checks if the table with the given ID belongs to a schema
 	// on the given sessiondata.SearchPath.
 	IsTableVisible(
-		ctx context.Context,
-		curDB string,
-		searchPath sessiondata.SearchPath,
-		tableID int64,
+		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+	) (isVisible bool, exists bool, err error)
+
+	// IsTypeVisible checks if the type with the given ID belongs to a schema
+	// on the given sessiondata.SearchPath.
+	IsTypeVisible(
+		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 	) (isVisible bool, exists bool, err error)
 }
 
@@ -3047,6 +3055,10 @@ type EvalDatabase interface {
 type EvalPlanner interface {
 	EvalDatabase
 	TypeReferenceResolver
+
+	// GetImmutableTableInterfaceByID returns an interface{} with
+	// catalog.TableDescriptor to avoid a circular dependency.
+	GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error)
 
 	// GetTypeFromValidSQLSyntax parses a column type when the input
 	// string uses the parseable SQL representation of a type name, e.g.
@@ -3065,6 +3077,10 @@ type EvalPlanner interface {
 	// UnsafeDeleteDescriptor is used to repair descriptors in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error
+
+	// ForceDeleteTableData cleans up underlying data for a table
+	// descriptor ID. See the comment on the planner implementation.
+	ForceDeleteTableData(ctx context.Context, descID int64) error
 
 	// UnsafeUpsertNamespaceEntry is used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
@@ -3086,14 +3102,6 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
-	// CompactEngineSpan is used to compact an engine key span at the given
-	// (nodeID, storeID). If we add more overloads to the compact_span builtin,
-	// this parameter list should be changed to a struct union to accommodate
-	// those overloads.
-	CompactEngineSpan(
-		ctx context.Context, nodeID int32, storeID int32, startKey []byte, endKey []byte,
-	) error
-
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
@@ -3102,6 +3110,14 @@ type EvalPlanner interface {
 		member security.SQLUsername,
 	) (map[security.SQLUsername]bool, error)
 }
+
+// CompactEngineSpanFunc is used to compact an engine key span at the given
+// (nodeID, storeID). If we add more overloads to the compact_span builtin,
+// this parameter list should be changed to a struct union to accommodate
+// those overloads.
+type CompactEngineSpanFunc func(
+	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+) error
 
 // EvalSessionAccessor is a limited interface to access session variables.
 type EvalSessionAccessor interface {
@@ -3220,7 +3236,8 @@ type SequenceOperators interface {
 // errors when run by any tenant other than the system tenant.
 type TenantOperator interface {
 	// CreateTenant attempts to install a new tenant in the system. It returns
-	// an error if the tenant already exists.
+	// an error if the tenant already exists. The new tenant is created at the
+	// current active version of the cluster performing the create.
 	CreateTenant(ctx context.Context, tenantID uint64) error
 
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
@@ -3231,6 +3248,16 @@ type TenantOperator interface {
 	// success it also removes the tenant record.
 	// It returns an error if the tenant does not exist.
 	GCTenant(ctx context.Context, tenantID uint64) error
+}
+
+// JoinTokenCreator is capable of creating and persisting join tokens, allowing
+// SQL builtin functions to create join tokens. The methods will return errors
+// when run on multi-tenant clusters or with this functionality unavailable.
+type JoinTokenCreator interface {
+	// CreateJoinToken creates a new ephemeral join token and persists it
+	// across the cluster. This join token can then be used to have new nodes
+	// join the cluster and exchange certificates securely.
+	CreateJoinToken(ctx context.Context) (string, error)
 }
 
 // EvalContextTestingKnobs contains test knobs.
@@ -3265,6 +3292,13 @@ var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
+
+// SQLStatsResetter is an interface embedded in EvalCtx which can be used by
+// the builtins to reset SQL stats in the cluster. This interface is introduced
+// to avoid circular dependency.
+type SQLStatsResetter interface {
+	ResetClusterSQLStats(ctx context.Context) error
+}
 
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
@@ -3354,6 +3388,8 @@ type EvalContext struct {
 
 	Tenant TenantOperator
 
+	JoinTokenCreator JoinTokenCreator
+
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
 	// A handle to the database.
@@ -3388,6 +3424,11 @@ type EvalContext struct {
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
+
+	SQLStatsResetter SQLStatsResetter
+
+	// CompactEngineSpan is used to force compaction of a span in a store.
+	CompactEngineSpan CompactEngineSpanFunc
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
@@ -5408,7 +5449,7 @@ func (c *CallbackValueGenerator) Values() (Datums, error) {
 }
 
 // Close is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Close() {}
+func (c *CallbackValueGenerator) Close(_ context.Context) {}
 
 // Sqrt returns the square root of x.
 func Sqrt(x float64) (*DFloat, error) {

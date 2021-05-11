@@ -3633,6 +3633,15 @@ USE db2
 statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT REFERENCES db1.public.parent(p))
 
+
+# Validate that cross DB foreign keys are detected by internal tables
+query TTTTTTT
+select * from "".crdb_internal.cross_db_references;
+----
+db2  public  child   db1  public  parent  table foreign key reference
+db2  public  child2  db1  public  parent  table foreign key reference
+
+
 # Test that foreign keys cannot reference columns that are indexed by a partial
 # unique index or a partial unique constraint. Partial unique indexes and
 # constraints do not guarantee uniqueness in the entire table.

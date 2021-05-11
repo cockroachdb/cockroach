@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
@@ -150,3 +151,39 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 // MakeChangefeedMetricsHook allows for registration of changefeed metrics from
 // ccl code.
 var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
+
+// JobTelemetryMetrics is a telemetry metrics for individual job types.
+type JobTelemetryMetrics struct {
+	Successful telemetry.Counter
+	Failed     telemetry.Counter
+	Canceled   telemetry.Counter
+}
+
+// newJobTelemetryMetrics creates a new JobTelemetryMetrics object
+// for a given job type name.
+func newJobTelemetryMetrics(jobName string) *JobTelemetryMetrics {
+	return &JobTelemetryMetrics{
+		Successful: telemetry.GetCounterOnce(fmt.Sprintf("job.%s.successful", jobName)),
+		Failed:     telemetry.GetCounterOnce(fmt.Sprintf("job.%s.failed", jobName)),
+		Canceled:   telemetry.GetCounterOnce(fmt.Sprintf("job.%s.canceled", jobName)),
+	}
+}
+
+// getJobTelemetryMetricsArray initializes an array of job related telemetry
+// metrics
+func getJobTelemetryMetricsArray() [jobspb.NumJobTypes]*JobTelemetryMetrics {
+	var metrics [jobspb.NumJobTypes]*JobTelemetryMetrics
+	for i := 0; i < jobspb.NumJobTypes; i++ {
+		jt := jobspb.Type(i)
+		if jt == jobspb.TypeUnspecified { // do not track TypeUnspecified
+			continue
+		}
+		typeStr := strings.ToLower(strings.Replace(jt.String(), " ", "_", -1))
+		metrics[i] = newJobTelemetryMetrics(typeStr)
+	}
+	return metrics
+}
+
+// TelemetryMetrics contains telemetry metrics for different
+// job types.
+var TelemetryMetrics = getJobTelemetryMetricsArray()

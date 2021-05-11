@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -94,12 +95,6 @@ type interner struct {
 	// cache is a helper struct that implements the interning pattern described
 	// in the header over a Go map.
 	cache internCache
-}
-
-// Clear clears all interned expressions. Expressions interned before the call
-// to Clear will not be connected to expressions interned after.
-func (in *interner) Clear() {
-	in.cache.Clear()
 }
 
 // Count returns the number of expressions that have been interned.
@@ -188,11 +183,6 @@ func (c *internCache) Item() interface{} {
 // Count returns the number of items in the cache.
 func (c *internCache) Count() int {
 	return len(c.cache)
-}
-
-// Clear clears all items in the cache.
-func (c *internCache) Clear() {
-	c.cache = nil
 }
 
 // Start prepares to look up an item in the cache by its hash value. It must be
@@ -461,7 +451,7 @@ func (h *hasher) HashOrdering(val opt.Ordering) {
 	h.hash = hash
 }
 
-func (h *hasher) HashOrderingChoice(val physical.OrderingChoice) {
+func (h *hasher) HashOrderingChoice(val props.OrderingChoice) {
 	h.HashColSet(val.Optional)
 
 	for i := range val.Columns {
@@ -524,7 +514,7 @@ func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.hash = hash
 }
 
-func (h *hasher) HashStatementType(val tree.StatementType) {
+func (h *hasher) HashStatementReturnType(val tree.StatementReturnType) {
 	h.HashUint64(uint64(val))
 }
 
@@ -568,6 +558,15 @@ func (h *hasher) HashViewDeps(val opt.ViewDeps) {
 	if len(val) > 0 {
 		h.HashPointer(unsafe.Pointer(&val[0]))
 	}
+}
+
+func (h *hasher) HashViewTypeDeps(val opt.ViewTypeDeps) {
+	hash := h.hash
+	val.ForEach(func(i int) {
+		hash ^= internHash(i)
+		hash *= prime64
+	})
+	h.hash = hash
 }
 
 func (h *hasher) HashWindowFrame(val WindowFrame) {
@@ -868,7 +867,7 @@ func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {
 	return l.Equals(r)
 }
 
-func (h *hasher) IsOrderingChoiceEqual(l, r physical.OrderingChoice) bool {
+func (h *hasher) IsOrderingChoiceEqual(l, r props.OrderingChoice) bool {
 	return l.Equals(&r)
 }
 
@@ -921,7 +920,7 @@ func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
 	return l == r
 }
 
-func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
+func (h *hasher) IsStatementReturnTypeEqual(l, r tree.StatementReturnType) bool {
 	return l == r
 }
 
@@ -970,6 +969,10 @@ func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
 		return false
 	}
 	return len(l) == 0 || &l[0] == &r[0]
+}
+
+func (h *hasher) IsViewTypeDepsEqual(l, r opt.ViewTypeDeps) bool {
+	return l.Equals(r)
 }
 
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {

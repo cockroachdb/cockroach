@@ -168,10 +168,14 @@ func ParseTimestamp(str string) (_ Timestamp, err error) {
 
 // AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.
 func (t Timestamp) AsOfSystemTime() string {
-	return fmt.Sprintf("%d.%010d", t.WallTime, t.Logical)
+	syn := ""
+	if t.Synthetic {
+		syn = "?"
+	}
+	return fmt.Sprintf("%d.%010d%s", t.WallTime, t.Logical, syn)
 }
 
-// IsEmpty retruns true if t is an empty Timestamp.
+// IsEmpty returns true if t is an empty Timestamp.
 func (t Timestamp) IsEmpty() bool {
 	return t == Timestamp{}
 }
@@ -270,6 +274,15 @@ func (t Timestamp) FloorPrev() Timestamp {
 	panic("cannot take the previous value to a zero timestamp")
 }
 
+// WallPrev subtracts 1 from the WallTime and resets Logical.
+func (t Timestamp) WallPrev() Timestamp {
+	return Timestamp{
+		WallTime:  t.WallTime - 1,
+		Logical:   0,
+		Synthetic: t.Synthetic,
+	}
+}
+
 // Forward replaces the receiver with the argument, if that moves it forwards in
 // time. Returns true if the timestamp was adjusted to a larger time and false
 // otherwise.
@@ -364,15 +377,6 @@ func (t Timestamp) UnsafeToClockTimestamp() ClockTimestamp {
 	return ClockTimestamp(t)
 }
 
-// MustToClockTimestamp casts a Timestamp to a ClockTimestamp. Panics if the
-// timestamp is synthetic. See TryToClockTimestamp if you don't want to panic.
-func (t Timestamp) MustToClockTimestamp() ClockTimestamp {
-	if t.Synthetic {
-		panic(fmt.Sprintf("can't convert synthetic timestamp to ClockTimestamp: %s", t))
-	}
-	return ClockTimestamp(t)
-}
-
 // ToTimestamp upcasts a ClockTimestamp into a Timestamp.
 func (t ClockTimestamp) ToTimestamp() Timestamp {
 	if t.Synthetic {
@@ -416,6 +420,11 @@ func (t *ClockTimestamp) ProtoMessage() {}
 
 // MarshalTo implements the protoutil.Message interface.
 func (t *ClockTimestamp) MarshalTo(data []byte) (int, error) { return (*Timestamp)(t).MarshalTo(data) }
+
+// MarshalToSizedBuffer implements the protoutil.Message interface.
+func (t *ClockTimestamp) MarshalToSizedBuffer(data []byte) (int, error) {
+	return (*Timestamp)(t).MarshalToSizedBuffer(data)
+}
 
 // Unmarshal implements the protoutil.Message interface.
 func (t *ClockTimestamp) Unmarshal(data []byte) error { return (*Timestamp)(t).Unmarshal(data) }

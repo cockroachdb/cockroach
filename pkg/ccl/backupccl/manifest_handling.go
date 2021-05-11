@@ -72,8 +72,14 @@ const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 
-	dateBasedIncFolderName  = "/20060102/150405.00"
-	dateBasedIntoFolderName = "/2006/01/02-150405.00"
+	// DateBasedIncFolderName is the date format used when creating sub-directories
+	// storing incremental backups for auto-appendable backups.
+	// It is exported for testing backup inspection tooling.
+	DateBasedIncFolderName = "/20060102/150405.00"
+	// DateBasedIntoFolderName is the date format used when creating sub-directories
+	// for storing backups in a collection.
+	// Also exported for testing backup inspection tooling.
+	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
 
@@ -103,8 +109,12 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 	return bytes.Compare(r[i].Span.EndKey, r[j].Span.EndKey) < 0
 }
 
+func (m *BackupManifest) isIncremental() bool {
+	return !m.StartTime.IsEmpty()
+}
+
 // ReadBackupManifestFromURI creates an export store from the given URI, then
-// reads and unmarshals a BackupManifest at the standard location in the
+// reads and unmarshalls a BackupManifest at the standard location in the
 // export storage.
 func ReadBackupManifestFromURI(
 	ctx context.Context,
@@ -119,10 +129,12 @@ func ReadBackupManifestFromURI(
 		return BackupManifest{}, err
 	}
 	defer exportStore.Close()
-	return readBackupManifestFromStore(ctx, exportStore, encryption)
+	return ReadBackupManifestFromStore(ctx, exportStore, encryption)
 }
 
-func readBackupManifestFromStore(
+// ReadBackupManifestFromStore reads and unmarshalls a BackupManifest
+// from an export store.
+func ReadBackupManifestFromStore(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -146,7 +158,7 @@ func readBackupManifestFromStore(
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err != nil {
-		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
 		}
 		return false, err
@@ -216,7 +228,7 @@ func readBackupManifest(
 		}
 	} else {
 		// If we don't have a checksum file, carry on. This might be an old version.
-		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return BackupManifest{}, err
 		}
 	}
@@ -421,6 +433,8 @@ func getEncryptionKey(
 		return encryption.Key, nil
 	case jobspb.EncryptionMode_KMS:
 		// Contact the selected KMS to derive the decrypted data key.
+		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
+		// here to avoid a panic, and return an error instead.
 		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
 			settings: settings,
 			conf:     &ioConf,
@@ -592,12 +606,12 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 	return prev, nil
 }
 
-// findPriorBackupLocations finds "appended" incremental backups by searching
+// FindPriorBackupLocations finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
 // Using file-system searching rather than keeping an explicit list allows
 // layers to be manually moved/removed/etc without needing to update/maintain
 // said list.
-func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+func FindPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
 	backupManifestSuffix := backupManifestName
 	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
 	if err != nil {
@@ -641,7 +655,7 @@ func resolveBackupManifests(
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	_ error,
 ) {
-	baseManifest, err := readBackupManifestFromStore(ctx, baseStores[0], encryption)
+	baseManifest, err := ReadBackupManifestFromStore(ctx, baseStores[0], encryption)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -666,7 +680,7 @@ func resolveBackupManifests(
 				defer stores[j].Close()
 			}
 
-			mainBackupManifests[i], err = readBackupManifestFromStore(ctx, stores[0], encryption)
+			mainBackupManifests[i], err = ReadBackupManifestFromStore(ctx, stores[0], encryption)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -684,7 +698,7 @@ func resolveBackupManifests(
 		// automatically created incremental layers inside the base layer.
 		prev, err := findPriorBackupNames(ctx, baseStores[0])
 		if err != nil {
-			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
+			if errors.Is(err, cloud.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])
 				// If we do not support listing, we have to just assume there are none
 				// and restore the specified base.
@@ -835,7 +849,7 @@ func loadSQLDescsFromBackupsAtTime(
 	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
 		ret := make([]catalog.Descriptor, 0, len(raw))
 		for i := range raw {
-			ret = append(ret, catalogkv.UnwrapDescriptorRaw(context.TODO(), &raw[i]))
+			ret = append(ret, catalogkv.NewBuilder(&raw[i]).BuildExistingMutable())
 		}
 		return ret
 	}
@@ -869,7 +883,7 @@ func loadSQLDescsFromBackupsAtTime(
 	for _, raw := range byID {
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
-		desc := catalogkv.UnwrapDescriptorRaw(context.TODO(), raw)
+		desc := catalogkv.NewBuilder(raw).BuildExistingMutable()
 		var isObject bool
 		switch desc.(type) {
 		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
@@ -928,7 +942,7 @@ func writeEncryptionInfoIfNotExists(
 		return nil
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"returned an unexpected error when checking for the existence of %s file",
 			backupEncryptionInfoFile)
@@ -970,7 +984,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
 			redactedURI, backupManifestName)
@@ -984,7 +998,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestCheckpointName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+	if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 		return errors.Wrapf(err,
 			"%s returned an unexpected error when checking for the existence of %s file",
 			redactedURI, backupManifestCheckpointName)
@@ -996,4 +1010,19 @@ func checkForPreviousBackup(
 // tempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
 func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 	return fmt.Sprintf("%s-%d", backupManifestCheckpointName, jobID)
+}
+
+// ListFullBackupsInCollection lists full backup paths in the collection
+// of an export store
+func ListFullBackupsInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) ([]string, error) {
+	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
+	if err != nil {
+		return nil, err
+	}
+	for i, backupPath := range backupPaths {
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
+	}
+	return backupPaths, nil
 }

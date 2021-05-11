@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/hash"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/leaktestcall"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nilness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
@@ -63,6 +64,7 @@ func main() {
 		unconvert.Analyzer,
 		fmtsafe.Analyzer,
 		errcmp.Analyzer,
+		nilness.CRDBAnalyzer,
 	)
 
 	// Standard go vet analyzers:

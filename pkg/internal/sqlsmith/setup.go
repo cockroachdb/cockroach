@@ -16,8 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -27,14 +26,29 @@ type Setup func(*rand.Rand) string
 
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
-	"empty": stringSetup(""),
+	"empty": wrapCommonSetup(stringSetup("")),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed": stringSetup(seedTable),
+	"seed": wrapCommonSetup(stringSetup(seedTable)),
 	// seed-vec is like seed except only types supported by vectorized
 	// execution are used.
-	"seed-vec":    stringSetup(vecSeedTable),
-	"rand-tables": randTables,
+	"seed-vec":    wrapCommonSetup(stringSetup(vecSeedTable)),
+	"rand-tables": wrapCommonSetup(randTables),
+}
+
+// wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
+// specific setup passed in.
+func wrapCommonSetup(setupFn Setup) Setup {
+	return func(r *rand.Rand) string {
+		s := setupFn(r)
+		var sb strings.Builder
+		sb.WriteString(`
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
+`)
+		sb.WriteString(s)
+		return sb.String()
+	}
 }
 
 var setupNames = func() []string {
@@ -58,7 +72,13 @@ func stringSetup(s string) Setup {
 	}
 }
 
+// randTables is a Setup function that creates 1-5 random tables.
 func randTables(r *rand.Rand) string {
+	return randTablesN(r, r.Intn(5)+1)
+}
+
+// randTablesN is a Setup function that creates n random tables.
+func randTablesN(r *rand.Rand, n int) string {
 	var sb strings.Builder
 	// Since we use the stats mutator, disable auto stats generation.
 	sb.WriteString(`
@@ -68,16 +88,10 @@ func randTables(r *rand.Rand) string {
 	`)
 
 	// Create the random tables.
-	stmts := rowenc.RandCreateTables(r, "table", r.Intn(5)+1,
-		mutations.StatisticsMutator,
-		// The PartialIndexMutator must be listed before the ForeignKeyMutator.
-		// A foreign key requires a unique index on the referenced column. These
-		// unique indexes are created by the ForeignKeyMutator. If the
-		// PartialIndexMutator is listed after the ForeignKeyMutator, it may
-		// mutate these unique indexes into partial unique indexes, which do not
-		// satisfy the requirements for creating the foreign key.
-		mutations.PartialIndexMutator,
-		mutations.ForeignKeyMutator,
+	stmts := randgen.RandCreateTables(r, "table", n,
+		randgen.StatisticsMutator,
+		randgen.PartialIndexMutator,
+		randgen.ForeignKeyMutator,
 	)
 
 	for _, stmt := range stmts {
@@ -89,7 +103,7 @@ func randTables(r *rand.Rand) string {
 	numTypes := r.Intn(5) + 1
 	for i := 0; i < numTypes; i++ {
 		name := fmt.Sprintf("rand_typ_%d", i)
-		stmt := rowenc.RandCreateType(r, name, letters)
+		stmt := randgen.RandCreateType(r, name, letters)
 		sb.WriteString(stmt.String())
 		sb.WriteString(";\n")
 	}

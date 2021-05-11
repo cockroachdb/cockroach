@@ -153,13 +153,17 @@ type RowSource interface {
 	// before Next indicates that there are no more rows, ConsumerDone() and/or
 	// ConsumerClosed() must be called; it is a no-op to call these methods after
 	// all the rows were consumed (i.e. after Next() returned an empty row).
+	//
+	// Processors that embed ProcessorBase can delegate the implementation to
+	// the latter if they only need to perform trivial cleanup (calling
+	// ProcessorBase.InternalClose).
 	ConsumerClosed()
 }
 
 // RowSourcedProcessor is the union of RowSource and Processor.
 type RowSourcedProcessor interface {
 	RowSource
-	Run(context.Context)
+	Processor
 }
 
 // Run reads records from the source and outputs them to the receiver, properly
@@ -238,6 +242,17 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 func GetTraceData(ctx context.Context) []tracingpb.RecordedSpan {
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		return sp.GetRecording()
+	}
+	return nil
+}
+
+// GetTraceDataAsMetadata returns the trace data as execinfrapb.ProducerMetadata
+// object.
+func GetTraceDataAsMetadata(span *tracing.Span) *execinfrapb.ProducerMetadata {
+	if trace := span.GetRecording(); len(trace) > 0 {
+		meta := execinfrapb.GetProducerMeta()
+		meta.TraceData = trace
+		return meta
 	}
 	return nil
 }

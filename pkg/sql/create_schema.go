@@ -18,15 +18,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -46,8 +48,9 @@ func CreateUserDefinedSchemaDescriptor(
 	user security.SQLUsername,
 	n *tree.CreateSchema,
 	txn *kv.Txn,
+	descriptors *descs.Collection,
 	execCfg *ExecutorConfig,
-	db *dbdesc.Immutable,
+	db catalog.DatabaseDescriptor,
 	allocateID bool,
 ) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
 	var schemaName string
@@ -58,7 +61,7 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.ID, schemaName)
+	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.GetID(), schemaName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,11 +72,16 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, execCfg.Codec, schemaID, catalogkv.Immutable)
-				if err != nil {
+				sc, err := descriptors.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
+					Required:       true,
+					AvoidCached:    true,
+					IncludeOffline: true,
+					IncludeDropped: true,
+				})
+				if err != nil || sc.Kind != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}
-				if desc.Dropped() {
+				if sc.Desc.Dropped() {
 					return nil, nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"schema %q is being dropped, try again later",
 						schemaName)
@@ -81,7 +89,7 @@ func CreateUserDefinedSchemaDescriptor(
 			}
 			return nil, nil, nil
 		}
-		return nil, nil, pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", schemaName)
+		return nil, nil, sqlerrors.NewSchemaAlreadyExistsError(schemaName)
 	}
 
 	// Check validity of the schema name.
@@ -127,13 +135,13 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Create the SchemaDescriptor.
-	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
-		ParentID:   db.ID,
+	desc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+		ParentID:   db.GetID(),
 		Name:       schemaName,
 		ID:         id,
 		Privileges: privs,
 		Version:    1,
-	})
+	}).BuildCreatedMutableSchema()
 
 	return desc, privs, nil
 }
@@ -175,7 +183,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData().User(), n,
-		p.Txn(), p.ExecCfg(), &db.Immutable, true /* allocateID */)
+		p.Txn(), p.Descriptors(), p.ExecCfg(), db, true /* allocateID */)
 	if err != nil {
 		return err
 	}

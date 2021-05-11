@@ -55,6 +55,12 @@ export function getEventDescription(e: Event$Properties): string {
       return `View Created: User ${info.User} created view ${info.ViewName}`;
     case eventTypes.DROP_VIEW:
       return `View Dropped: User ${info.User} dropped view ${info.ViewName}`;
+    case eventTypes.CREATE_TYPE:
+      return `Type Created: User ${info.User} created type ${info.TypeName}`;
+    case eventTypes.ALTER_TYPE:
+      return `Type Altered: User ${info.User} altered type ${info.TypeName}`;
+    case eventTypes.DROP_TYPE:
+      return `Type Dropped: User ${info.User} dropped type ${info.TypeName}`;
     case eventTypes.CREATE_SEQUENCE:
       return `Sequence Created: User ${info.User} created sequence ${info.SequenceName}`;
     case eventTypes.ALTER_SEQUENCE:
@@ -136,6 +142,18 @@ export function getEventDescription(e: Event$Properties): string {
       return `Role Dropped: User ${info.User} dropped role ${info.RoleName}`;
     case eventTypes.ALTER_ROLE:
       return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+    case eventTypes.IMPORT:
+      return `Import Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
+    case eventTypes.RESTORE:
+      return `Restore Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
+    case eventTypes.ALTER_DATABASE_ADD_REGION:
+      return `Add Region: User ${info.User} added region ${info.RegionName} to database ${info.DatabaseName}`;
+    case eventTypes.ALTER_DATABASE_DROP_REGION:
+      return `Drop Region: User ${info.User} dropped region ${info.RegionName} from database ${info.DatabaseName}`;
+    case eventTypes.ALTER_DATABASE_PRIMARY_REGION:
+      return `Primary Region Changed: User ${info.User} changed primary region of database ${info.DatabaseName} to ${info.PrimaryRegionName}`;
+    case eventTypes.ALTER_DATABASE_SURVIVAL_GOAL:
+      return `Survival Goal Changed: User ${info.User} changed survival goal of database ${info.DatabaseName} to ${info.SurvivalGoal}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
         info,
@@ -182,6 +200,11 @@ export interface EventInfo {
   DroppedSchemaObjects?: string[];
   Grantees?: string;
   NewDatabaseParent?: string;
+  JobID?: string;
+  Status?: string;
+  RegionName?: string;
+  PrimaryRegionName?: string;
+  SurvivalGoal?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {

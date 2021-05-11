@@ -21,6 +21,7 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -30,6 +31,21 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
+
+func parseGSURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+	conf := roachpb.ExternalStorage{}
+	conf.Provider = roachpb.ExternalStorageProvider_gs
+	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
+		Bucket:         uri.Host,
+		Prefix:         uri.Path,
+		Auth:           uri.Query().Get(AuthParam),
+		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
+		Credentials:    uri.Query().Get(CredentialsParam),
+		/* NB: additions here should also update gcsQueryParams() serializer */
+	}
+	conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
+	return conf, nil
+}
 
 func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
 	q := make(url.Values)
@@ -58,7 +74,7 @@ var _ cloud.ExternalStorage = &gcsStorage{}
 
 func (g *gcsStorage) Conf() roachpb.ExternalStorage {
 	return roachpb.ExternalStorage{
-		Provider:          roachpb.ExternalStorageProvider_GoogleCloud,
+		Provider:          roachpb.ExternalStorageProvider_gs,
 		GoogleCloudConfig: g.conf,
 	}
 }
@@ -72,11 +88,10 @@ func (g *gcsStorage) Settings() *cluster.Settings {
 }
 
 func makeGCSStorage(
-	ctx context.Context,
-	ioConf base.ExternalIODirConfig,
-	conf *roachpb.ExternalStorage_GCS,
-	settings *cluster.Settings,
+	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
+	telemetry.Count("external-io.google_cloud")
+	conf := dest.GoogleCloudConfig
 	if conf == nil {
 		return nil, errors.Errorf("google cloud storage upload requested but info missing")
 	}
@@ -87,35 +102,22 @@ func makeGCSStorage(
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
-	if ioConf.DisableImplicitCredentials && conf.Auth != AuthParamSpecified {
+	if args.IOConf.DisableImplicitCredentials && conf.Auth == AuthParamImplicit {
 		return nil, errors.New(
 			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
 	}
 
 	switch conf.Auth {
-	case "", AuthParamDefault:
-		var key string
-		if settings != nil {
-			key = GcsDefault.Get(&settings.SV)
-		}
-		// We expect a key to be present if default is specified.
-		if conf.Auth == AuthParamDefault && key == "" {
-			return nil, errors.Errorf("expected settings value for %s", CloudstorageGSDefaultKey)
-		}
-		if key != "" {
-			source, err := google.JWTConfigFromJSON([]byte(key), scope)
-			if err != nil {
-				return nil, errors.Wrap(err, "creating GCS oauth token source")
-			}
-			opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
-		}
-	case AuthParamSpecified:
+	case AuthParamImplicit:
+		// Do nothing; use implicit params:
+		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
+	default:
 		if conf.Credentials == "" {
 			return nil, errors.Errorf(
-				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
+				"%s must be set unless %q is %q",
 				CredentialsParam,
+				AuthParam,
+				AuthParamImplicit,
 			)
 		}
 		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
@@ -127,11 +129,6 @@ func makeGCSStorage(
 			return nil, errors.Wrap(err, "creating GCS oauth token source from specified credentials")
 		}
 		opts = append(opts, option.WithTokenSource(source.TokenSource(ctx)))
-	case AuthParamImplicit:
-		// Do nothing; use implicit params:
-		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
-	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
 	}
 	g, err := gcs.NewClient(ctx, opts...)
 	if err != nil {
@@ -145,9 +142,9 @@ func makeGCSStorage(
 		bucket:   bucket,
 		client:   g,
 		conf:     conf,
-		ioConf:   ioConf,
+		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
-		settings: settings,
+		settings: args.Settings,
 	}, nil
 }
 
@@ -158,7 +155,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 			return err
 		}
 		// Set the timeout within the retry loop.
-		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
+		return contextutil.RunWithTimeout(ctx, "put gcs file", cloud.Timeout.Get(&g.settings.SV),
 			func(ctx context.Context) error {
 				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 				if _, err := io.Copy(w, content); err != nil {
@@ -181,36 +178,36 @@ func (g *gcsStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
 	object := path.Join(g.prefix, basename)
-	r := &resumingReader{
-		ctx: ctx,
-		opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	r := &cloud.ResumingReader{
+		Ctx: ctx,
+		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
 		},
-		pos: offset,
+		Pos: offset,
 	}
 
-	if err := r.openStream(); err != nil {
+	if err := r.Open(); err != nil {
 		if errors.Is(err, gcs.ErrObjectNotExist) {
 			// Callers of this method sometimes look at the returned error to determine
 			// if file does not exist.  Regardless why we couldn't open the stream
 			// (whether its invalid bucket or file doesn't exist),
 			// return our internal ErrFileDoesNotExist.
-			err = errors.Wrapf(ErrFileDoesNotExist, "gcs object does not exist: %s", err.Error())
+			err = errors.Wrapf(cloud.ErrFileDoesNotExist, "gcs object does not exist: %s", err.Error())
 		}
 		return nil, 0, err
 	}
-	return r.reader, r.reader.(*gcs.Reader).Attrs.Size, nil
+	return r.Reader, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	it := g.bucket.Objects(ctx, &gcs.Query{
-		Prefix: getPrefixBeforeWildcard(g.prefix),
+		Prefix: cloud.GetPrefixBeforeWildcard(g.prefix),
 	})
 
 	pattern := g.prefix
 	if patternSuffix != "" {
-		if containsGlob(g.prefix) {
+		if cloud.ContainsGlob(g.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -253,7 +250,7 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
-		timeoutSetting.Get(&g.settings.SV),
+		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
 		})
@@ -262,7 +259,7 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var r *gcs.Reader
 	if err := contextutil.RunWithTimeout(ctx, "size gcs file",
-		timeoutSetting.Get(&g.settings.SV),
+		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			r, err = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)

@@ -134,10 +134,14 @@ const (
 	fmtStaticallyFormatUserDefinedTypes
 
 	// fmtFormatByteLiterals instructs bytes to be formatted as byte literals
-	// rather than string literals. For example, the bytes \x40 will be formatted
-	// as b'\x40' rather than '\x40'.
+	// rather than string literals. For example, the bytes \x40ab will be formatted
+	// as x'40ab' rather than '\x40ab'.
 	fmtFormatByteLiterals
 )
+
+// PasswordSubstitution is the string that replaces
+// passwords unless FmtShowPasswords is specified.
+const PasswordSubstitution = "'*****'"
 
 // Composite/derived flag definitions follow.
 const (

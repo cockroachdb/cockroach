@@ -11,11 +11,14 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -232,6 +235,26 @@ type EngineIterator interface {
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
 	GetRawIter() *pebble.Iterator
+	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
+	// additional exclusive upper limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	SeekEngineKeyGEWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// SeekEngineKeyLTWithLimit is similar to SeekEngineKeyLT, but takes an
+	// additional inclusive lower limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	SeekEngineKeyLTWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// NextEngineKeyWithLimit is similar to NextEngineKey, but takes an
+	// additional exclusive upper limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	NextEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// PrevEngineKeyWithLimit is similar to PrevEngineKey, but takes an
+	// additional inclusive lower limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.
@@ -362,7 +385,8 @@ type Reader interface {
 	ExportMVCCToSst(
 		startKey, endKey roachpb.Key, startTS, endTS hlc.Timestamp,
 		exportAllRevisions bool, targetSize uint64, maxSize uint64, useTBI bool,
-	) (sst []byte, _ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
+		dest io.WriteCloser,
+	) (_ roachpb.BulkOpSummary, resumeKey roachpb.Key, _ error)
 	// Get returns the value for the given key, nil otherwise. Semantically, it
 	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
 	//
@@ -715,7 +739,7 @@ type Engine interface {
 	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
 	// that know that this enabled setting is not changing and need the value to
 	// adjust their expectations.
-	IsSeparatedIntentsEnabledForTesting() bool
+	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
 }
 
 // Batch is the interface for batch specific operations.
@@ -859,6 +883,53 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 		return nil
 	})
 	return kvs, err
+}
+
+// ScanSeparatedIntents scans intents using only the separated intents lock
+// table. It does not take interleaved intents into account at all.
+//
+// TODO(erikgrinaker): When we are fully migrated to separated intents, this
+// should be renamed ScanIntents.
+func ScanSeparatedIntents(
+	reader Reader, start, end roachpb.Key, max int64, targetBytes int64,
+) ([]roachpb.Intent, error) {
+	if bytes.Compare(start, end) >= 0 {
+		return []roachpb.Intent{}, nil
+	}
+
+	ltStart, _ := keys.LockTableSingleKey(start, nil)
+	ltEnd, _ := keys.LockTableSingleKey(end, nil)
+	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	defer iter.Close()
+
+	var (
+		intents     = []roachpb.Intent{}
+		intentBytes int64
+		meta        enginepb.MVCCMetadata
+	)
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: ltStart})
+	for ; valid; valid, err = iter.NextEngineKey() {
+		if max != 0 && int64(len(intents)) >= max {
+			break
+		}
+		key, err := iter.EngineKey()
+		if err != nil {
+			return nil, err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		if err != nil {
+			return nil, err
+		}
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return nil, err
+		}
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+		if (max > 0 && int64(len(intents)) >= max) || (targetBytes > 0 && intentBytes >= targetBytes) {
+			break
+		}
+	}
+	return intents, err
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.

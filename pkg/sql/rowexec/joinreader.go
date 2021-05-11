@@ -13,12 +13,10 @@ package rowexec
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -76,7 +74,7 @@ type joinReader struct {
 	diskMonitor *mon.BytesMonitor
 
 	desc             catalog.TableDescriptor
-	index            *descpb.IndexDescriptor
+	index            catalog.Index
 	colIdxMap        catalog.TableColMap
 	maintainOrdering bool
 
@@ -148,9 +146,7 @@ type joinReader struct {
 
 var _ execinfra.Processor = &joinReader{}
 var _ execinfra.RowSource = &joinReader{}
-var _ execinfrapb.MetadataSource = &joinReader{}
 var _ execinfra.OpNode = &joinReader{}
-var _ execinfra.KVReader = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -191,11 +187,11 @@ func newJoinReader(
 	}
 
 	var lookupCols []uint32
+	tableDesc := spec.BuildTableDescriptor()
 	switch readerType {
 	case indexJoinReaderType:
-		pkIDs := spec.Table.PrimaryIndex.ColumnIDs
-		lookupCols = make([]uint32, len(pkIDs))
-		for i := range pkIDs {
+		lookupCols = make([]uint32, tableDesc.GetPrimaryIndex().NumColumns())
+		for i := range lookupCols {
 			lookupCols[i] = uint32(i)
 		}
 	case lookupJoinReaderType:
@@ -204,7 +200,7 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:                              tabledesc.NewImmutable(spec.Table),
+		desc:                              tableDesc,
 		maintainOrdering:                  spec.MaintainOrdering,
 		input:                             input,
 		lookupCols:                        lookupCols,
@@ -224,9 +220,8 @@ func newJoinReader(
 	if indexIdx >= len(jr.desc.ActiveIndexes()) {
 		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
-	indexI := jr.desc.ActiveIndexes()[indexIdx]
-	jr.index = indexI.IndexDesc()
-	isSecondary = !indexI.Primary()
+	jr.index = jr.desc.ActiveIndexes()[indexIdx]
+	isSecondary = !jr.index.Primary()
 	cols := jr.desc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = jr.desc.DeletableColumns()
@@ -234,7 +229,7 @@ func newJoinReader(
 	jr.colIdxMap = catalog.ColumnIDToOrdinalMap(cols)
 	columnTypes := catalog.ColumnTypes(cols)
 
-	columnIDs, _ := jr.index.FullColumnIDs()
+	columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
 	indexCols := make([]uint32, len(columnIDs))
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
@@ -286,7 +281,7 @@ func newJoinReader(
 				// We need to generate metadata before closing the processor
 				// because InternalClose() updates jr.Ctx to the "original"
 				// context.
-				trailingMeta := jr.generateMeta(jr.Ctx)
+				trailingMeta := jr.generateMeta()
 				jr.close()
 				return trailingMeta
 			},
@@ -373,7 +368,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		// Since jr.lookupExpr is set, we need to use multiSpanGenerator, which
 		// supports looking up multiple spans per input row.
 		tableOrdToIndexOrd := util.FastIntMap{}
-		columnIDs, _ := jr.index.FullColumnIDs()
+		columnIDs, _ := catalog.FullIndexColumnIDs(jr.index)
 		for i, colID := range columnIDs {
 			tabOrd := jr.colIdxMap.GetDefault(colID)
 			tableOrdToIndexOrd.Set(tabOrd, i)
@@ -414,9 +409,9 @@ func (jr *joinReader) initJoinReaderStrategy(
 	ctx := flowCtx.EvalCtx.Ctx()
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// joinReader will overflow to disk if this limit is not enough.
-	limit := execinfra.GetWorkMemLimit(flowCtx.Cfg)
+	limit := execinfra.GetWorkMemLimit(flowCtx)
 	// Initialize memory monitors and row container for looked up rows.
-	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx.Cfg, "joinreader-limited")
+	jr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "joinreader-limited")
 	jr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "joinreader-disk")
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
@@ -443,11 +438,9 @@ func (jr *joinReader) initJoinReaderStrategy(
 }
 
 // getIndexColSet returns a set of all column indices for the given index.
-func getIndexColSet(
-	index *descpb.IndexDescriptor, colIdxMap catalog.TableColMap,
-) (util.FastIntSet, error) {
+func getIndexColSet(index catalog.Index, colIdxMap catalog.TableColMap) (util.FastIntSet, error) {
 	cols := util.MakeFastIntSet()
-	err := index.RunOverAllColumns(func(id descpb.ColumnID) error {
+	err := index.ForEachColumnID(func(id descpb.ColumnID) error {
 		cols.Add(colIdxMap.GetDefault(id))
 		return nil
 	})
@@ -745,45 +738,25 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			BytesRead:      optional.MakeUint(uint64(jr.GetBytesRead())),
+			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(jr.GetCumulativeContentionTime()),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx)),
 		},
 		Output: jr.Out.Stats(),
 	}
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetBytesRead() int64 {
-	return jr.fetcher.GetBytesRead()
-}
-
-// GetRowsRead is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetRowsRead() int64 {
-	return jr.rowsRead
-}
-
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(jr.Ctx)
-}
-
-func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
+func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
-	meta.Metrics.RowsRead = jr.GetRowsRead()
-	meta.Metrics.BytesRead = jr.GetBytesRead()
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
+	meta.Metrics.RowsRead = jr.rowsRead
+	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
+	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (jr *joinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return jr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

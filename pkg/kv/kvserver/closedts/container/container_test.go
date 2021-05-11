@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -129,6 +130,7 @@ func setupTwoNodeTest() (_ *TestContainer, _ *TestContainer, shutdown func()) {
 
 func TestTwoNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, closedts.IssueTrackingRemovalOfOldClosedTimestampsCode)
 
 	ctx := context.Background()
 

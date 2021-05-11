@@ -430,17 +430,20 @@ CREATE TABLE t (
 opt
 SELECT * FROM t WHERE pk2 = 1 AND b1 = false AND b2 = false
 ----
-index-join t
+project
  ├── columns: pk1:1(int!null) pk2:2(int!null) b1:3(bool!null) b2:4(bool!null)
  ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
  ├── key: (1)
  ├── fd: ()-->(2-4)
- └── scan t@secondary,partial
-      ├── columns: pk1:1(int!null) pk2:2(int!null)
-      ├── constraint: /2/1: [/1 - /1]
-      ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
-      ├── key: (1)
-      └── fd: ()-->(2)
+ ├── scan t@secondary,partial
+ │    ├── columns: pk1:1(int!null) pk2:2(int!null)
+ │    ├── constraint: /2/1: [/1 - /1]
+ │    ├── stats: [rows=1.245025, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
+ │    ├── key: (1)
+ │    └── fd: ()-->(2)
+ └── projections
+      ├── false [as=b1:3, type=bool]
+      └── false [as=b2:4, type=bool]
 
 
 # ---------------------
@@ -701,7 +704,7 @@ CREATE INDEX idx ON hist (i) WHERE i > 100 AND i <= 200 AND s = 'banana'
 opt
 SELECT * FROM hist WHERE i > 125 AND i < 150 AND s = 'banana'
 ----
-index-join hist
+project
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  ├── stats: [rows=6.91433927, distinct(2)=3.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=3.09090909, null(2,3)=0]
  │   histogram(2)=  0   0   6.6262 0.2881
@@ -710,16 +713,18 @@ index-join hist
  │                <--- 'banana'
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
- └── scan hist@idx,partial
-      ├── columns: k:1(int!null) i:2(int!null)
-      ├── constraint: /2/1: [/126 - /149]
-      ├── stats: [rows=6.91433927, distinct(2)=3.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=3.09090909, null(2,3)=0]
-      │   histogram(2)=  0   0   6.6262 0.2881
-      │                <--- 125 -------- 149 -
-      │   histogram(3)=  0   6.9143
-      │                <--- 'banana'
-      ├── key: (1)
-      └── fd: (1)-->(2)
+ ├── scan hist@idx,partial
+ │    ├── columns: k:1(int!null) i:2(int!null)
+ │    ├── constraint: /2/1: [/126 - /149]
+ │    ├── stats: [rows=6.91433927, distinct(2)=3.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=3.09090909, null(2,3)=0]
+ │    │   histogram(2)=  0   0   6.6262 0.2881
+ │    │                <--- 125 -------- 149 -
+ │    │   histogram(3)=  0   6.9143
+ │    │                <--- 'banana'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      └── 'banana' [as=s:3, type=string]
 
 exec-ddl
 DROP INDEX idx

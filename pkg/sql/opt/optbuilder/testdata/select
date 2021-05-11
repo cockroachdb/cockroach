@@ -235,6 +235,31 @@ project
       └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
 
 build
+SELECT row_to_json(kv) FROM kv
+----
+project
+ ├── columns: row_to_json:4
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+ └── projections
+      └── row_to_json(((k:1, v:2) AS k, v)) [as=row_to_json:4]
+
+build
+SELECT kv FROM kv
+----
+project
+ ├── columns: kv:4
+ ├── scan kv
+ │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+ └── projections
+      └── ((k:1, v:2) AS k, v) [as=kv:4]
+
+build
+SELECT log(kv) FROM kv
+----
+error (42883): unknown signature: log(tuple{char AS k, char AS v})
+
+build
 SELECT (kv.*) AS r FROM kv
 ----
 project
@@ -1236,15 +1261,15 @@ with &1
  │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
  │    ├── insert-mapping:
  │    │    ├── column1:5 => abc.a:1
- │    │    ├── column6:6 => abc.b:2
- │    │    └── column6:6 => abc.c:3
+ │    │    ├── b_default:6 => abc.b:2
+ │    │    └── b_default:6 => abc.c:3
  │    └── project
- │         ├── columns: column6:6 column1:5!null
+ │         ├── columns: b_default:6 column1:5!null
  │         ├── values
  │         │    ├── columns: column1:5!null
  │         │    └── (1,)
  │         └── projections
- │              └── NULL::INT8 [as=column6:6]
+ │              └── NULL::INT8 [as=b_default:6]
  └── with &2 (cte)
       ├── columns: abc.a:10!null abc.b:11 abc.c:12
       ├── limit
@@ -1415,14 +1440,14 @@ insert inaccessible
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:4 => k:1
- │    └── column5:5 => v:2
+ │    └── v_default:5 => v:2
  └── project
-      ├── columns: column5:5 column1:4!null
+      ├── columns: v_default:5 column1:4!null
       ├── values
       │    ├── columns: column1:4!null
       │    └── (1,)
       └── projections
-           └── NULL::INT8 [as=column5:5]
+           └── NULL::INT8 [as=v_default:5]
 
 build
 INSERT INTO inaccessible VALUES (1) RETURNING v
@@ -1478,3 +1503,40 @@ build
 DELETE FROM inaccessible RETURNING v
 ----
 error (42703): column "v" does not exist
+
+exec-ddl
+CREATE TABLE same_name (
+  same_name TEXT PRIMARY KEY,
+  b INT
+)
+----
+
+build
+SELECT same_name FROM same_name
+----
+project
+ ├── columns: same_name:1!null
+ └── scan same_name
+      └── columns: same_name:1!null b:2 crdb_internal_mvcc_timestamp:3
+
+build
+SELECT row_to_json(same_name) FROM same_name
+----
+error (42883): unknown signature: row_to_json(string)
+
+build
+SELECT log(same_name) FROM same_name
+----
+error (42883): unknown signature: log(string)
+
+build
+SELECT t FROM (VALUES (1,2), (3,4)) t(x, y);
+----
+project
+ ├── columns: t:3!null
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── (1, 2)
+ │    └── (3, 4)
+ └── projections
+      └── ((column1:1, column2:2) AS x, y) [as=t:3]

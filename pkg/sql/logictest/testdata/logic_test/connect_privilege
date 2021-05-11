@@ -8,9 +8,6 @@ public  a  root
 
 user testuser
 
-statement notice NOTICE: CONNECT privilege will be required to connect to databases in a future release\nHINT: .*59875.*
-use test
-
 query TTT
 SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE tablename = 'a'
 ----

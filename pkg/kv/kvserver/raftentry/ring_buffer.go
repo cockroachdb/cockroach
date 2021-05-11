@@ -13,6 +13,8 @@ package raftentry
 import (
 	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -32,10 +34,10 @@ const (
 // given that ents may overlap with existing entries or may be rejected from
 // the buffer. ents must not be empty.
 func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
-	if afterCache := b.len > 0 && ents[0].Index > last(b).index(b)+1; afterCache {
+	if it := last(b); it.valid(b) && ents[0].Index > it.index(b)+1 {
 		// If ents is non-contiguous and later than the currently cached range then
 		// remove the current entries and add ents in their place.
-		removedBytes, removedEntries := b.clearTo(last(b).index(b) + 1)
+		removedBytes, removedEntries := b.clearTo(it.index(b) + 1)
 		addedBytes, addedEntries = -1*removedBytes, -1*removedEntries
 	}
 	before, after, ok := computeExtension(b, ents[0].Index, ents[len(ents)-1].Index)
@@ -62,8 +64,19 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 
 // truncateFrom clears all entries from the ringBuf with index equal to or
 // greater than lo. The method returns the aggregate size and count of entries
-// removed.
+// removed. Note that lo itself may or may not be in the cache.
 func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
+	if b.len == 0 {
+		return
+	}
+	if idx := first(b).index(b); idx > lo {
+		// If `lo` precedes the indexes in the buffer
+		// (say the buf is idx=[100, 101, 102] and `lo` is 99),
+		// `iterateFrom` will return an invalid iter. But we
+		// need to truncate everything and so advance to the
+		// first index before constructing the iterator.
+		lo = idx
+	}
 	it, ok := iterateFrom(b, lo)
 	for ok {
 		removedBytes += int32(it.entry(b).Size())
@@ -75,7 +88,17 @@ func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
 	if b.len < (len(b.buf) / shrinkThreshold) {
 		realloc(b, 0, b.len)
 	}
-	return
+	if util.RaceEnabled {
+		if b.len > 0 {
+			if lastIdx := last(b).index(b); lastIdx >= lo {
+				panic(errors.AssertionFailedf(
+					"buffer truncated to [..., %d], but current last index is %d",
+					lo, lastIdx,
+				))
+			}
+		}
+	}
+	return removedBytes, removedEntries
 }
 
 // clearTo clears all entries from the ringBuf with index less than hi. The
@@ -84,7 +107,8 @@ func (b *ringBuf) clearTo(hi uint64) (removedBytes, removedEntries int32) {
 	if b.len == 0 || hi < first(b).index(b) {
 		return
 	}
-	it, ok := first(b), true
+	it := first(b)
+	ok := it.valid(b) // true
 	firstIndex := it.index(b)
 	for ok && it.index(b) < hi {
 		removedBytes += int32(it.entry(b).Size())
@@ -213,12 +237,18 @@ func iterateFrom(b *ringBuf, index uint64) (_ iterator, ok bool) {
 // first returns an iterator pointing to the first entry of the ringBuf.
 // If b is empty, the returned iterator is not valid.
 func first(b *ringBuf) iterator {
+	if b.len == 0 {
+		return iterator(-1)
+	}
 	return iterator(b.head)
 }
 
 // last returns an iterator pointing to the last element in b.
-// It is unsafe to call last if b has an empty buffer.
+// If b is empty, the returned iterator is not valid.
 func last(b *ringBuf) iterator {
+	if b.len == 0 {
+		return iterator(-1)
+	}
 	return iterator((b.head + b.len - 1) % len(b.buf))
 }
 

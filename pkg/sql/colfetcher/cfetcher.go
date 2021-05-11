@@ -50,19 +50,25 @@ type cTableInfo struct {
 	// want to scan.
 	spans            roachpb.Spans
 	desc             catalog.TableDescriptor
-	index            *descpb.IndexDescriptor
+	index            catalog.Index
 	isSecondaryIndex bool
 	indexColumnDirs  []descpb.IndexDescriptor_Direction
 
 	// The table columns to use for fetching, possibly including ones currently in
 	// schema changes.
-	cols []descpb.ColumnDescriptor
+	cols []catalog.Column
 
 	// The ordered list of ColumnIDs that are required.
 	neededColsList []int
 
 	// The set of required value-component column ordinals in the table.
 	neededValueColsByIdx util.FastIntSet
+
+	// The set of ordinals of the columns that are **not** required. cFetcher
+	// creates an output batch that includes all columns in cols, yet only
+	// needed columns are actually populated. The vectors at positions in
+	// notNeededColOrdinals will be set to have all null values.
+	notNeededColOrdinals []int
 
 	// Map used to get the index for columns in cols.
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
@@ -135,6 +141,8 @@ func newCTableInfo() *cTableInfo {
 
 // Release implements the execinfra.Releasable interface.
 func (c *cTableInfo) Release() {
+	// Note that all slices are being reused, but there is no need to deeply
+	// reset them since all of the slices are of Go native types.
 	c.colIdxMap.ords = c.colIdxMap.ords[:0]
 	c.colIdxMap.vals = c.colIdxMap.vals[:0]
 	*c = cTableInfo{
@@ -142,6 +150,7 @@ func (c *cTableInfo) Release() {
 		keyValTypes:            c.keyValTypes[:0],
 		extraTypes:             c.extraTypes[:0],
 		neededColsList:         c.neededColsList[:0],
+		notNeededColOrdinals:   c.notNeededColOrdinals[:0],
 		indexColOrdinals:       c.indexColOrdinals[:0],
 		allIndexColOrdinals:    c.allIndexColOrdinals[:0],
 		extraValColOrdinals:    c.extraValColOrdinals[:0],
@@ -253,6 +262,10 @@ type cFetcher struct {
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
 
+	// estimatedRowCount is the optimizer-derived number of expected rows that
+	// this fetch will produce, if non-zero.
+	estimatedRowCount uint64
+
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
 		// state is the queue of next states of the state machine. The 0th entry
@@ -268,6 +281,13 @@ type cFetcher struct {
 		nextKV roachpb.KeyValue
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
+
+		// limitHint is a hint as to the number of rows that the caller expects
+		// to be returned from this fetch. It will be decremented whenever a
+		// batch is returned by the length of the batch so that it tracks the
+		// hint for the rows remaining to be returned. It might become negative
+		// indicating that the hint is no longer applicable.
+		limitHint int
 
 		// remainingValueColsByIdx is the set of value columns that are yet to be
 		// seen during the decoding of the current row.
@@ -306,12 +326,32 @@ type cFetcher struct {
 	}
 }
 
-const cFetcherBatchMinCapacity = 1
-
 func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
+	var minCapacity int
+	if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
+		// If we have a limit hint, and either
+		//   1) we don't have an estimate, or
+		//   2) we have a soft limit,
+		// use the hint to size the batch. Note that if it exceeds
+		// coldata.BatchSize, ResetMaybeReallocate will chop it down.
+		minCapacity = rf.machine.limitHint
+	} else {
+		// Otherwise, use the estimate. Note that if the estimate is not
+		// present, it'll be 0 and ResetMaybeReallocate will allocate the
+		// initial batch of capacity 1 which is the esired behavior.
+		//
+		// We need to transform our rf.estimatedRowCount, which is a uint64,
+		// into an int. We have to be careful: if we just cast it directly, a
+		// giant estimate will wrap around and become negative.
+		if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
+			minCapacity = coldata.BatchSize()
+		} else {
+			minCapacity = int(rf.estimatedRowCount)
+		}
+	}
 	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity, rf.memoryLimit,
+		rf.typs, rf.machine.batch, minCapacity, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -361,7 +401,7 @@ func (rf *cFetcher) Init(
 	colDescriptors := tableArgs.Cols
 	for i := range colDescriptors {
 		//gcassert:bce
-		id := colDescriptors[i].ID
+		id := colDescriptors[i].GetID()
 		table.colIdxMap.vals = append(table.colIdxMap.vals, id)
 		table.colIdxMap.ords = append(table.colIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
 	}
@@ -391,20 +431,24 @@ func (rf *cFetcher) Init(
 	_ = typs[len(colDescriptors)-1]
 	for i := range colDescriptors {
 		//gcassert:bce
-		typs[i] = colDescriptors[i].Type
+		typs[i] = colDescriptors[i].GetType()
 	}
 
 	var err error
 
 	var neededCols util.FastIntSet
-	// Scan through the entire columns map to see which columns are
-	// required.
-	if numNeededCols := tableArgs.ValNeededForCol.Len(); cap(table.neededColsList) < numNeededCols {
+	numNeededCols := tableArgs.ValNeededForCol.Len()
+	// Scan through the entire columns map to see which columns are required and
+	// which columns are not needed (the latter will be set to all null values).
+	if cap(table.neededColsList) < numNeededCols {
 		table.neededColsList = make([]int, 0, numNeededCols)
+	}
+	if cap(table.notNeededColOrdinals) < len(colDescriptors)-numNeededCols {
+		table.notNeededColOrdinals = make([]int, 0, len(colDescriptors)-numNeededCols)
 	}
 	for i := range colDescriptors {
 		//gcassert:bce
-		col := colDescriptors[i].ID
+		col := colDescriptors[i].GetID()
 		idx := tableArgs.ColIdxMap.GetDefault(col)
 		if tableArgs.ValNeededForCol.Contains(idx) {
 			// The idx-th column is required.
@@ -418,18 +462,21 @@ func (rf *cFetcher) Init(
 			case descpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
 			}
+		} else {
+			table.notNeededColOrdinals = append(table.notNeededColOrdinals, idx)
 		}
 	}
 	sort.Ints(table.neededColsList)
+	sort.Ints(table.notNeededColOrdinals)
 
-	rf.resetBatch(table.timestampOutputIdx, table.oidOutputIdx)
-	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
+	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.GetID()))
 
 	var indexColumnIDs []descpb.ColumnID
-	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
+	indexColumnIDs, table.indexColumnDirs = catalog.FullIndexColumnIDs(table.index)
 
 	compositeColumnIDs := util.MakeFastIntSet()
-	for _, id := range table.index.CompositeColumnIDs {
+	for i := 0; i < table.index.NumCompositeColumns(); i++ {
+		id := table.index.GetCompositeColumnID(i)
 		compositeColumnIDs.Add(int(id))
 	}
 
@@ -486,7 +533,7 @@ func (rf *cFetcher) Init(
 		}
 	}
 	table.invertedColOrdinal = -1
-	if table.index.Type == descpb.IndexDescriptor_INVERTED {
+	if table.index.GetType() == descpb.IndexDescriptor_INVERTED {
 		id := table.index.InvertedColumnID()
 		colIdx, ok := tableArgs.ColIdxMap.Get(id)
 		if ok && neededCols.Contains(int(id)) {
@@ -498,8 +545,9 @@ func (rf *cFetcher) Init(
 	// Unique secondary indexes contain the extra column IDs as part of
 	// the value component. We process these separately, so we need to know
 	// what extra columns are composite or not.
-	if table.isSecondaryIndex && table.index.Unique {
-		for _, id := range table.index.ExtraColumnIDs {
+	if table.isSecondaryIndex && table.index.IsUnique() {
+		for i := 0; i < table.index.NumExtraColumns(); i++ {
+			id := table.index.GetExtraColumnID(i)
 			colIdx, ok := tableArgs.ColIdxMap.Get(id)
 			if ok && neededCols.Contains(int(id)) {
 				if compositeColumnIDs.Contains(int(id)) {
@@ -516,16 +564,16 @@ func (rf *cFetcher) Init(
 	// - If there are needed columns from the index key, we need to read it.
 	//
 	// Otherwise, we can completely avoid decoding the index key.
-	if neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0 {
+	if neededIndexCols > 0 || table.index.NumInterleavedBy() > 0 || table.index.NumInterleaveAncestors() > 0 {
 		rf.mustDecodeIndexKey = true
 	}
 
 	if table.isSecondaryIndex {
 		for i := range colDescriptors {
 			//gcassert:bce
-			id := colDescriptors[i].ID
+			id := colDescriptors[i].GetID()
 			if neededCols.Contains(int(id)) && !table.index.ContainsColumnID(id) {
-				return errors.Errorf("requested column %s not in index", colDescriptors[i].Name)
+				return errors.Errorf("requested column %s not in index", colDescriptors[i].GetName())
 			}
 		}
 	}
@@ -534,17 +582,16 @@ func (rf *cFetcher) Init(
 	table.keyValTypes = colinfo.GetColumnTypesFromColDescs(
 		colDescriptors, indexColumnIDs, table.keyValTypes,
 	)
-	if len(table.index.ExtraColumnIDs) > 0 {
+	if table.index.NumExtraColumns() > 0 {
 		// Unique secondary indexes have a value that is the
 		// primary index key.
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		extraColumnIDs := table.index.ExtraColumnIDs
 		table.extraTypes = colinfo.GetColumnTypesFromColDescs(
-			colDescriptors, extraColumnIDs, table.extraTypes,
+			colDescriptors, table.index.IndexDesc().ExtraColumnIDs, table.extraTypes,
 		)
-		nExtraColumns := len(extraColumnIDs)
+		nExtraColumns := table.index.NumExtraColumns()
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]
 		} else {
@@ -558,10 +605,11 @@ func (rf *cFetcher) Init(
 		}
 
 		extraValColOrdinals := table.extraValColOrdinals
-		_ = extraValColOrdinals[len(extraColumnIDs)-1]
+		_ = extraValColOrdinals[nExtraColumns-1]
 		allExtraValColOrdinals := table.allExtraValColOrdinals
-		_ = allExtraValColOrdinals[len(extraColumnIDs)-1]
-		for i, id := range extraColumnIDs {
+		_ = allExtraValColOrdinals[nExtraColumns-1]
+		for i := 0; i < nExtraColumns; i++ {
+			id := table.index.GetExtraColumnID(i)
 			idx := tableArgs.ColIdxMap.GetDefault(id)
 			//gcassert:bce
 			allExtraValColOrdinals[i] = idx
@@ -577,7 +625,7 @@ func (rf *cFetcher) Init(
 
 	// Keep track of the maximum keys per row to accommodate a
 	// limitHint when StartScan is invoked.
-	keysPerRow, err := table.desc.KeysPerRow(table.index.ID)
+	keysPerRow, err := table.desc.KeysPerRow(table.index.GetID())
 	if err != nil {
 		return err
 	}
@@ -649,7 +697,9 @@ func (rf *cFetcher) StartScan(
 	}
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
-	rf.machine.state[0] = stateInitFetch
+	rf.machine.limitHint = int(limitHint)
+	rf.machine.state[0] = stateResetBatch
+	rf.machine.state[1] = stateInitFetch
 	return nil
 }
 
@@ -880,7 +930,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			// them when processing the index. The difference with unique secondary indexes
 			// is that the extra columns are not always there, and are used to unique-ify
 			// the index key, rather than provide the primary key column values.
-			if foundNull && rf.table.isSecondaryIndex && rf.table.index.Unique && rf.table.desc.NumFamilies() != 1 {
+			if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1 {
 				// We get the remaining bytes after the computed prefix, and then
 				// slice off the extra encoded columns from those bytes. We calculate
 				// how many bytes were sliced away, and then extend lastRowPrefix
@@ -888,7 +938,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				prefixLen := len(rf.machine.lastRowPrefix)
 				remainingBytes := rf.machine.nextKV.Key[prefixLen:]
 				origRemainingBytesLen := len(remainingBytes)
-				for range rf.table.index.ExtraColumnIDs {
+				for i := 0; i < rf.table.index.NumExtraColumns(); i++ {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
 					remainingBytes, err = rowenc.SkipTableKey(remainingBytes)
@@ -1038,17 +1088,34 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= rf.machine.batch.Capacity() {
+
+			var emitBatch bool
+			if rf.machine.rowIdx >= rf.machine.batch.Capacity() ||
+				(rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint) {
+				// We either
+				//   1. have no more room in our batch, so output it immediately
+				// or
+				//   2. we made it to our limit hint, so output our batch early
+				//      to make sure that we don't bother filling in extra data
+				//      if we don't need to.
+				emitBatch = true
+				// Update the limit hint to track the expected remaining rows to
+				// be fetched.
+				//
+				// Note that limitHint might become negative at which point we
+				// will start ignoring it.
+				rf.machine.limitHint -= rf.machine.rowIdx
+			}
+
+			if emitBatch {
 				rf.pushState(stateResetBatch)
-				rf.machine.batch.SetLength(rf.machine.rowIdx)
-				rf.machine.rowIdx = 0
+				rf.finalizeBatch()
 				return rf.machine.batch, nil
 			}
 
 		case stateEmitLastBatch:
 			rf.machine.state[0] = stateFinished
-			rf.machine.batch.SetLength(rf.machine.rowIdx)
-			rf.machine.rowIdx = 0
+			rf.finalizeBatch()
 			return rf.machine.batch, nil
 
 		case stateFinished:
@@ -1092,7 +1159,7 @@ func (rf *cFetcher) processValue(
 		buf.WriteByte('/')
 		buf.WriteString(rf.table.desc.GetName())
 		buf.WriteByte('/')
-		buf.WriteString(rf.table.index.Name)
+		buf.WriteString(rf.table.index.GetName())
 		for _, idx := range rf.table.allIndexColOrdinals {
 			buf.WriteByte('/')
 			if idx != -1 {
@@ -1113,7 +1180,7 @@ func (rf *cFetcher) processValue(
 	}
 
 	val := rf.machine.nextKV.Value
-	if !table.isSecondaryIndex || table.index.EncodingType == descpb.PrimaryIndexEncoding {
+	if !table.isSecondaryIndex || table.index.GetEncodingType() == descpb.PrimaryIndexEncoding {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
@@ -1165,7 +1232,7 @@ func (rf *cFetcher) processValue(
 				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 
-			if table.isSecondaryIndex && table.index.Unique {
+			if table.isSecondaryIndex && table.index.IsUnique() {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
 				var err error
@@ -1263,7 +1330,7 @@ func (rf *cFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].Type
+			typ := table.cols[idx].GetType()
 			err := colencoding.UnmarshalColumnValueToCol(
 				&table.da, rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val,
 			)
@@ -1363,7 +1430,7 @@ func (rf *cFetcher) processValueBytes(
 
 		vec := rf.machine.colvecs[idx]
 
-		valTyp := table.cols[idx].Type
+		valTyp := table.cols[idx].GetType()
 		valueBytes, err = colencoding.DecodeTableValueToCol(
 			&table.da, vec, rf.machine.rowIdx, typ, dataOffset, valTyp, valueBytes,
 		)
@@ -1403,7 +1470,7 @@ func (rf *cFetcher) fillNulls() error {
 		if table.compositeIndexColOrdinals.Contains(i) {
 			continue
 		}
-		if !table.cols[i].Nullable {
+		if !table.cols[i].IsNullable() {
 			var indexColValues []string
 			for _, idx := range table.indexColOrdinals {
 				if idx != -1 {
@@ -1413,13 +1480,24 @@ func (rf *cFetcher) fillNulls() error {
 				}
 				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 					"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-					table.desc.GetName(), table.cols[i].Name, table.index.Name,
-					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
+					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
+					strings.Join(table.index.IndexDesc().ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 		}
 		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
 	}
 	return nil
+}
+
+func (rf *cFetcher) finalizeBatch() {
+	// We need to set all values in "not needed" vectors to nulls because if the
+	// batch is materialized (i.e. values are converted to datums), the
+	// conversion of unset values might encounter an error.
+	for _, notNeededIdx := range rf.table.notNeededColOrdinals {
+		rf.machine.colvecs[notNeededIdx].Nulls().SetNulls()
+	}
+	rf.machine.batch.SetLength(rf.machine.rowIdx)
+	rf.machine.rowIdx = 0
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
@@ -1458,7 +1536,7 @@ func (rf *cFetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if len(key) < rf.table.knownPrefixLength {
 		return nil, false
 	}
-	nIndexCols := len(rf.table.index.ColumnIDs) + len(rf.table.index.ExtraColumnIDs)
+	nIndexCols := rf.table.index.NumColumns() + rf.table.index.NumExtraColumns()
 	tableKeyVals := make([]rowenc.EncDatum, nIndexCols)
 	_, ok, _, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 		rf.table.desc,
@@ -1483,6 +1561,8 @@ var cFetcherPool = sync.Pool{
 func (rf *cFetcher) Release() {
 	rf.table.Release()
 	*rf = cFetcher{
+		// The types are small objects, so we don't bother deeply resetting this
+		// slice.
 		typs: rf.typs[:0],
 	}
 	cFetcherPool.Put(rf)

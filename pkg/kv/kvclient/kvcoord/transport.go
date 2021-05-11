@@ -206,9 +206,7 @@ func (gt *grpcTransport) sendBatch(
 				return nil, errors.Errorf(
 					"trying to ingest remote spans but there is no recording span set up")
 			}
-			if err := span.ImportRemoteSpans(reply.CollectedSpans); err != nil {
-				return nil, errors.Wrap(err, "error ingesting remote spans")
-			}
+			span.ImportRemoteSpans(reply.CollectedSpans)
 		}
 	}
 	return reply, err
@@ -346,9 +344,7 @@ func (s *senderTransport) SendNext(
 		if span == nil {
 			panic("trying to ingest remote spans but there is no recording span set up")
 		}
-		if err := span.ImportRemoteSpans(br.CollectedSpans); err != nil {
-			panic(err)
-		}
+		span.ImportRemoteSpans(br.CollectedSpans)
 	}
 
 	return br, nil

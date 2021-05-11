@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,6 +42,8 @@ var (
 	_ tree.AggType
 	_ apd.Context
 	_ duration.Duration
+	_ json.JSON
+	_ coldataext.Datum
 )
 
 // Remove unused warning.
@@ -58,70 +61,29 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 
 // */}}
 
-func newMin_AGGKINDAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) aggregateFuncAlloc {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return &minBool_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.BytesFamily:
-		return &minBytes_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.DecimalFamily:
-		return &minDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &minInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}
-		case 32:
-			return &minInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}
-		default:
-			return &minInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}
-		}
-	case types.FloatFamily:
-		return &minFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.TimestampTZFamily:
-		return &minTimestamp_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.IntervalFamily:
-		return &minInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &minDatum_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	}
-}
-
-func newMax_AGGKINDAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) aggregateFuncAlloc {
-	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BoolFamily:
-		return &maxBool_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.BytesFamily:
-		return &maxBytes_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.DecimalFamily:
-		return &maxDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.IntFamily:
-		switch t.Width() {
-		case 16:
-			return &maxInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}
-		case 32:
-			return &maxInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}
-		default:
-			return &maxInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}
-		}
-	case types.FloatFamily:
-		return &maxFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.TimestampTZFamily:
-		return &maxTimestamp_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	case types.IntervalFamily:
-		return &maxInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	default:
-		return &maxDatum_AGGKINDAggAlloc{aggAllocBase: allocBase}
-	}
-}
-
 // {{range .}}
 // {{$agg := .Agg}}
+
+func new_AGG_TITLE_AGGKINDAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	// {{range .Overloads}}
+	case _CANONICAL_TYPE_FAMILY:
+		switch t.Width() {
+		// {{range .WidthOverloads}}
+		case _TYPE_WIDTH:
+			return &_AGG_TYPE_AGGKINDAggAlloc{aggAllocBase: allocBase}
+			// {{end}}
+		}
+		// {{end}}
+	}
+	colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find _AGG overload for %s type family", t.Name()))
+	// This code is unreachable, but the compiler cannot infer that.
+	return nil
+}
+
 // {{range .Overloads}}
 // {{range .WidthOverloads}}
 
@@ -220,15 +182,10 @@ func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	} else {
 		execgen.SET(a.col, outputIdx, a.curAgg)
 	}
-	// {{if or (eq .VecMethod "Bytes") (eq .VecMethod "Datum")}}
+	// {{if or (.IsBytesLike) (eq .VecMethod "Datum")}}
+	execgen.SETVARIABLESIZE(oldCurAggSize, a.curAgg)
 	// Release the reference to curAgg eagerly.
-	// {{if eq .VecMethod "Bytes"}}
-	a.allocator.AdjustMemoryUsage(-int64(len(a.curAgg)))
-	// {{else}}
-	if d, ok := a.curAgg.(*coldataext.Datum); ok {
-		a.allocator.AdjustMemoryUsage(-int64(d.Size()))
-	}
-	// {{end}}
+	a.allocator.AdjustMemoryUsage(-int64(oldCurAggSize))
 	a.curAgg = nil
 	// {{end}}
 }

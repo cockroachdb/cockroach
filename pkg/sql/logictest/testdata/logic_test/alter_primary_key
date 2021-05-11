@@ -1404,3 +1404,24 @@ drop table child3;
 
 statement ok
 drop table parent3;
+
+statement ok
+CREATE TABLE table_with_virtual_cols (
+  id INT PRIMARY KEY,
+  new_pk INT NOT NULL,
+  virtual_col INT AS (1::int) VIRTUAL,
+  FAMILY (id, new_pk)
+);
+ALTER TABLE table_with_virtual_cols ALTER PRIMARY KEY USING COLUMNS (new_pk)
+
+query TT
+SHOW CREATE TABLE table_with_virtual_cols
+----
+table_with_virtual_cols  CREATE TABLE public.table_with_virtual_cols (
+                         id INT8 NOT NULL,
+                         new_pk INT8 NOT NULL,
+                         virtual_col INT8 NULL AS (1:::INT8) VIRTUAL,
+                         CONSTRAINT "primary" PRIMARY KEY (new_pk ASC),
+                         UNIQUE INDEX table_with_virtual_cols_id_key (id ASC),
+                         FAMILY fam_0_id_new_pk (id, new_pk)
+)

@@ -451,8 +451,9 @@ func evaluateBatch(
 		return nil, mergedResult, roachpb.NewErrorWithTxn(writeTooOldState.err, baHeader.Txn)
 	}
 
-	// The batch evaluation will not return an error (i.e. either everything went fine or
-	// we're deferring a WriteTooOldError by having bumped baHeader.Txn.Timestamp).
+	// The batch evaluation will not return an error (i.e. either everything went
+	// fine or we're deferring a WriteTooOldError by having bumped
+	// baHeader.Txn.WriteTimestamp).
 
 	// Update the batch response timestamp field to the timestamp at which the
 	// batch's reads were evaluated.

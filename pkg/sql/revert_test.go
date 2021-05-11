@@ -131,6 +131,7 @@ func TestRevertTable(t *testing.T) {
 
 func TestRevertGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
@@ -138,8 +139,9 @@ func TestRevertGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.RevertRangeRequest{
-		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
-		TargetTime:    hlc.Timestamp{WallTime: -1},
+		RequestHeader:                       roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+		TargetTime:                          hlc.Timestamp{WallTime: -1},
+		EnableTimeBoundIteratorOptimization: true,
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {

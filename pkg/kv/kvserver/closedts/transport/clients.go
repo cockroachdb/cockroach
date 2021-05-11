@@ -14,6 +14,7 @@ import (
 	"context"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,6 +67,11 @@ type client struct {
 // done so, the information should soon thereafter be available to the Sink and
 // from there, further follower read attempts. Does not block.
 func (pr *Clients) Request(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
+	// If the new closed timestamps is enabled, this old one is disabled.
+	if pr.cfg.Settings.Version.IsActive(context.TODO(), clusterversion.ClosedTimestampsRaftTransport) {
+		return
+	}
+
 	if nodeID == pr.cfg.NodeID {
 		return
 	}

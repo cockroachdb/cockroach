@@ -57,10 +57,9 @@ func registerTPCDSVec(r *testRegistry) {
 
 		clusterConn := c.Conn(ctx, 1)
 		disableAutoStats(t, clusterConn)
-		disableVectorizeRowCountThresholdHeuristic(t, clusterConn)
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
-			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup';`,
+			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup?AUTH=implicit';`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +167,7 @@ func registerTPCDSVec(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:       "tpcdsvec",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		Cluster:    makeClusterSpec(3),
 		MinVersion: "v20.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {

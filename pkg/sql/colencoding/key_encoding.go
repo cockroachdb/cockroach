@@ -33,14 +33,13 @@ import (
 // tenant id and first table id / index id prefix removed. If matches is false,
 // the key is from a different table, and the returned remainingKey indicates a
 // "seek prefix": the next key that might be part of the table being searched
-// for. The input key will also be mutated if matches is false. See the analog
-// in sqlbase/index_encoding.go.
+// for. See the analog in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
 	da *rowenc.DatumAlloc,
 	vecs []coldata.Vec,
 	idx int,
 	desc catalog.TableDescriptor,
-	index *descpb.IndexDescriptor,
+	index catalog.Index,
 	indexColIdx []int,
 	types []*types.T,
 	colDirs []descpb.IndexDescriptor_Direction,
@@ -53,8 +52,9 @@ func DecodeIndexKeyToCols(
 
 	origKey := key
 
-	if len(index.Interleave.Ancestors) > 0 {
-		for i, ancestor := range index.Interleave.Ancestors {
+	if index.NumInterleaveAncestors() > 0 {
+		for i := 0; i < index.NumInterleaveAncestors(); i++ {
+			ancestor := index.GetInterleaveAncestor(i)
 			// Our input key had its first table id / index id chopped off, so
 			// don't try to decode those for the first ancestor.
 			if i != 0 {
@@ -66,7 +66,8 @@ func DecodeIndexKeyToCols(
 					// We don't match. Return a key with the table ID / index ID we're
 					// searching for, so the caller knows what to seek to.
 					curPos := len(origKey) - len(key)
-					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos], ancestor.TableID, ancestor.IndexID)
+					// Prevent unwanted aliasing on the origKey by setting the capacity.
+					key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], ancestor.TableID, ancestor.IndexID)
 					return key, false, false, nil
 				}
 			}
@@ -92,7 +93,8 @@ func DecodeIndexKeyToCols(
 				// We're expecting an interleaved sentinel but didn't find one. Append
 				// one so the caller can seek to it.
 				curPos := len(origKey) - len(key)
-				key = encoding.EncodeInterleavedSentinel(origKey[:curPos])
+				// Prevent unwanted aliasing on the origKey by setting the capacity.
+				key = encoding.EncodeInterleavedSentinel(origKey[:curPos:curPos])
 				return key, false, false, nil
 			}
 		}
@@ -101,11 +103,12 @@ func DecodeIndexKeyToCols(
 		if err != nil {
 			return nil, false, false, err
 		}
-		if decodedTableID != desc.GetID() || decodedIndexID != index.ID {
+		if decodedTableID != desc.GetID() || decodedIndexID != index.GetID() {
 			// We don't match. Return a key with the table ID / index ID we're
 			// searching for, so the caller knows what to seek to.
 			curPos := len(origKey) - len(key)
-			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos], desc.GetID(), index.ID)
+			// Prevent unwanted aliasing on the origKey by setting the capacity.
+			key = rowenc.EncodePartialTableIDIndexID(origKey[:curPos:curPos], desc.GetID(), index.GetID())
 			return key, false, false, nil
 		}
 	}
@@ -124,7 +127,8 @@ func DecodeIndexKeyToCols(
 	// table.
 	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
 		curPos := len(origKey) - len(key)
-		key = encoding.EncodeNullDescending(origKey[:curPos])
+		// Prevent unwanted aliasing on the origKey by setting the capacity.
+		key = encoding.EncodeNullDescending(origKey[:curPos:curPos])
 		return key, false, false, nil
 	}
 
@@ -281,6 +285,13 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		vec.Interval()[idx] = d
+	case types.JsonFamily:
+		// Don't attempt to decode the JSON value. Instead, just return the
+		// remaining bytes of the key.
+		var jsonLen int
+		jsonLen, err = encoding.PeekLength(key)
+		vec.JSON().Bytes.Set(idx, key[:jsonLen])
+		rkey = key[jsonLen:]
 	default:
 		var d tree.Datum
 		encDir := encoding.Ascending
@@ -346,6 +357,10 @@ func UnmarshalColumnValueToCol(
 		var v duration.Duration
 		v, err = value.GetDuration()
 		vec.Interval()[idx] = v
+	case types.JsonFamily:
+		var v []byte
+		v, err = value.GetBytes()
+		vec.JSON().Bytes.Set(idx, v)
 	// Types backed by tree.Datums.
 	default:
 		var d tree.Datum

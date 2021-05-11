@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -70,7 +70,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
 	partitions := make([]opt.ColSet, len(inScope.windows))
-	orderings := make([]physical.OrderingChoice, len(inScope.windows))
+	orderings := make([]props.OrderingChoice, len(inScope.windows))
 	filterCols := make([]opt.ColumnID, len(inScope.windows))
 	defs := make([]*tree.WindowDef, len(inScope.windows))
 	windowFrames := make([]tree.WindowFrame, len(inScope.windows))
@@ -235,7 +235,7 @@ func (b *Builder) buildAggregationAsWindow(
 	// Create the window frames based on the orderings and groupings specified.
 	argLists := make([][]opt.ScalarExpr, len(g.aggs))
 	partitions := make([]opt.ColSet, len(g.aggs))
-	orderings := make([]physical.OrderingChoice, len(g.aggs))
+	orderings := make([]props.OrderingChoice, len(g.aggs))
 	filterCols := make([]opt.ColumnID, len(g.aggs))
 
 	// Construct the pre-projection, which renders the grouping columns and the
@@ -347,9 +347,14 @@ func (b *Builder) buildWindowArgs(
 	for j, a := range argExprs {
 		col := outScope.findExistingCol(a, false /* allowSideEffects */)
 		if col == nil {
+			// Use an anonymous name because the column cannot be referenced
+			// in other expressions.
+			colName := scopeColName("").WithMetadataName(
+				fmt.Sprintf("%s_%d_arg%d", funcName, windowIndex+1, j+1),
+			)
 			col = b.synthesizeColumn(
 				outScope,
-				fmt.Sprintf("%s_%d_arg%d", funcName, windowIndex+1, j+1),
+				colName,
 				a.ResolvedType(),
 				a,
 				b.buildScalar(a, inScope, nil, nil, nil),
@@ -375,9 +380,14 @@ func (b *Builder) buildWindowPartition(
 	for j, e := range cols {
 		col := outScope.findExistingCol(e, false /* allowSideEffects */)
 		if col == nil {
+			// Use an anonymous name because the column cannot be referenced
+			// in other expressions.
+			colName := scopeColName("").WithMetadataName(
+				fmt.Sprintf("%s_%d_partition_%d", funcName, windowIndex+1, j+1),
+			)
 			col = b.synthesizeColumn(
 				outScope,
-				fmt.Sprintf("%s_%d_partition_%d", funcName, windowIndex+1, j+1),
+				colName,
 				e.ResolvedType(),
 				e,
 				b.buildScalar(e, inScope, nil, nil, nil),
@@ -401,9 +411,14 @@ func (b *Builder) buildWindowOrdering(
 		for _, e := range cols {
 			col := outScope.findExistingCol(e, false /* allowSideEffects */)
 			if col == nil {
+				// Use an anonymous name because the column cannot be referenced
+				// in other expressions.
+				colName := scopeColName("").WithMetadataName(
+					fmt.Sprintf("%s_%d_orderby_%d", funcName, windowIndex+1, j+1),
+				)
 				col = b.synthesizeColumn(
 					outScope,
-					fmt.Sprintf("%s_%d_orderby_%d", funcName, windowIndex+1, j+1),
+					colName,
 					te.ResolvedType(),
 					te,
 					b.buildScalar(e, inScope, nil, nil, nil),
@@ -426,9 +441,14 @@ func (b *Builder) buildFilterCol(
 
 	col := outScope.findExistingCol(te, false /* allowSideEffects */)
 	if col == nil {
+		// Use an anonymous name because the column cannot be referenced
+		// in other expressions.
+		colName := scopeColName("").WithMetadataName(
+			fmt.Sprintf("%s_%d_filter", funcName, windowIndex+1),
+		)
 		col = b.synthesizeColumn(
 			outScope,
-			fmt.Sprintf("%s_%d_filter", funcName, windowIndex+1),
+			colName,
 			te.ResolvedType(),
 			te,
 			b.buildScalar(te, inScope, nil, nil, nil),
@@ -442,7 +462,7 @@ func (b *Builder) buildFilterCol(
 // given partition and ordering can be added to. If no such frame is found, a
 // new one is made.
 func (b *Builder) findMatchingFrameIndex(
-	frames *[]memo.WindowExpr, partition opt.ColSet, ordering physical.OrderingChoice,
+	frames *[]memo.WindowExpr, partition opt.ColSet, ordering props.OrderingChoice,
 ) int {
 	frameIdx := -1
 
@@ -562,7 +582,7 @@ func (b *Builder) constructScalarWindowGroup(
 		defaultNullVal, requiresProjection := b.overrideDefaultNullValue(aggInfos[i])
 		aggregateCol := aggInfos[i].col
 		if requiresProjection {
-			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name.String(), aggregateCol.typ, aggregateCol.expr, varExpr)
+			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name, aggregateCol.typ, aggregateCol.expr, varExpr)
 		}
 
 		aggs = append(aggs, b.factory.ConstructAggregationsItem(varExpr, aggregateCol.id))

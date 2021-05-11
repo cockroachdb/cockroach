@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "execinfrapb",
     srcs = [
+        "aggregate_funcs.go",
         "api.go",
         "component_stats.go",
         "data.go",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
@@ -118,7 +120,6 @@ go_proto_library(
     proto = ":execinfrapb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/streamingccl",  # keep
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",

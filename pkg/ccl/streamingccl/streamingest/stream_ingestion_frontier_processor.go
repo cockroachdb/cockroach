@@ -30,7 +30,6 @@ const streamIngestionFrontierProcName = `ingestfntr`
 
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
-	execinfra.StreamingProcessor
 
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionFrontierSpec
@@ -84,6 +83,11 @@ func newStreamIngestionFrontierProcessor(
 		return nil, err
 	}
 	return sf, nil
+}
+
+// MustBeStreaming implements the execinfra.Processor interface.
+func (sf *streamIngestionFrontier) MustBeStreaming() bool {
+	return true
 }
 
 // Start is part of the RowSource interface.
@@ -176,10 +180,4 @@ func (sf *streamIngestionFrontier) maybeMoveFrontier(
 	prevResolved := sf.frontier.Frontier()
 	sf.frontier.Forward(span, resolved)
 	return prevResolved.Less(sf.frontier.Frontier())
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (sf *streamIngestionFrontier) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	sf.InternalClose()
 }

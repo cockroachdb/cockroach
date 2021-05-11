@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "geomfn",
     srcs = [
+        "add_measure.go",
         "affine_transforms.go",
         "angle.go",
         "azimuth.go",
@@ -22,6 +23,7 @@ go_library(
         "make_geometry.go",
         "node.go",
         "orientation.go",
+        "point_polygon_optimization.go",
         "remove_repeated_points.go",
         "reverse.go",
         "segmentize.go",
@@ -59,9 +61,11 @@ go_test(
     name = "geomfn_test",
     size = "small",
     srcs = [
+        "add_measure_test.go",
         "affine_transforms_test.go",
         "angle_test.go",
         "azimuth_test.go",
+        "binary_predicates_bench_test.go",
         "binary_predicates_test.go",
         "buffer_test.go",
         "collections_test.go",
@@ -91,8 +95,8 @@ go_test(
         "validity_check_test.go",
         "voronoi_test.go",
     ],
+    data = ["@cockroach//c-deps:libgeos"],
     embed = [":geomfn"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",

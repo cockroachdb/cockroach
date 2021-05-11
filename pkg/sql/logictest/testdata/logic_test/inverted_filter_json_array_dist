@@ -295,25 +295,25 @@ vectorized: true
 │ distinct on: a
 │ order key: a
 │
-└── • sort
-    │ order: +a
+└── • union all
     │
-    └── • union all
-        │
-        ├── • index join
-        │   │ table: json_tab@primary
-        │   │
-        │   └── • scan
-        │         missing stats
-        │         table: json_tab@json_inv
-        │         spans: 1 span
-        │
-        └── • scan
-              missing stats
-              table: json_tab@primary
-              spans: [/44 - /44]
+    ├── • index join
+    │   │ table: json_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: json_tab@json_inv
+    │             spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: [/44 - /44]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lF9v2jwUxu_fT2Gd96Kt5ipxEqCNNIluzTQmBiwgbVMXTYZ4bSYaZ7aZWiG--5SE8bfYobDeOXF-5zz2eZ5MQf4agw_Bl177qtVBp9et_qD_qX2G-kE7eDtAFL0Lux_RT8nT74oO0ef3QRig0yFqfpvYtsvQyQ2JTs5QN0SnFL1Gnpevr4MQvfmKKGBIecw69J5J8G-AAAYHMLgQYcgEHzEpuci3psWHrfgBfBtDkmYTlb-OMIy4YOBPQSVqzMCHAR2OWchozIRlA4aYKZqMi_J_VTYzkdxT8QgY-hlNpY8szzu3PM_6HzB0J8pHTYKbDkQzDHyils2korcMfDLD1QX1uVBMWI11LU3yamd5b5_y14lUSTpSFrE3O-SHETETLM4PtNFuWWH4iO6ovNuio9lSUm2npGUdXvZ66pxa3a5B92IkOy-sfnR1HX7OM4t4a5_vat9Ya0-q-5Ps8GexSNLfKwYltnUlhEXOFyurJ9iP5CFI4wo35Owj8QNP0rlC15igCnFx92k-j0vtuXExlF_Y7uLF0kKOmhZy5LQ41e3qVLers7Crc7hdDRJX7Ood366G5nO71p9rV0P5xdwvX8yuzlHt6vzDn_sTjUMmM55KVum_befSWXzLyqNKPhEj1hN8VLQpH7sFV7yImVTlLikfWmm5lQtchYkWdvSwswmTVfhyDSb7wcQ7hHb1sKs9tKGzp7_umv7Kalq6rofrWrihhxta-EIPXxwyaT1smrSeNkz68pBJE0OyTNHSZ4sYwkW2LL6OuwZ8y-T7jMxAm2ZmwA1DI_qIbfaOZv_9CQAA___7R4gK
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8VF1v0zAUfedXWPdlm_CU2EnbLRJSBwuiqLQjHQI0IuQ2Zgvq4mC7aNPU_46SjH6ttVNa9hI5cc49x_ee4wdQv8YQQPjlonvW6aHD887gcvCxe4QGYTd8c4kYehv1P6CfSmTfNRuiz-_CKESHQ9T-NnFdj6ODKxIfHKF-hA4ZeoV8v1ifhxF6_RUxwJCJhPfYLVcQXAEBDBQweBBjyKUYcaWELLYeyh87yR0ELoY0yye6-BxjGAnJIXgAneoxhwAu2XDMI84SLh0XMCRcs3Rclv-rsp3L9JbJe8AwyFmmAuT4vuMel0-n96nbBQz9iQ5Qm-A2hXiKQUz0nFNpds0hIFNcX9d5qnSajbRzuiyqXRy6LxMueVIQrrDNCwzv0Q1TN0_Q8XSuqLFR0byOqLhW67ysCm2UTahF96xlG_vV3Lu6njgWuUO8pd830beW6El9G5ENNioXafZ7wUfEdc6kdMjxbOVcSP4jvQuzpEaH6DYSB0JqLh1vXa_Wl_e2Kf9epNljAxrWHNVIi78N-cx2rWdLC9lrWtw9p4XWtyutb1c6syvd3a4WiY929f_VrpbyC3Zt7t-uFvLZ3E-eza50r3Yl__FyX0MccZWLTPFa97ZbSOfJNa-OqsREjviFFKOSpnrtl7jyQ8KVrnZJ9dLJqq1C4CKYrILJIvhkCUy2AxNvFzQ1g6nx0BZmz9wx39wy34humMENI7hpBjeN4JYZ3Npl0mawbdJmtGXSJ7tM-tQ8adcSDku0bNl64vBlOLXAn3h8q2ya0dZwmuGWmRFzwla54-mLPwEAAP__0V5WYQ==
 
 # We cannot use the index for this query.
 query T
@@ -413,25 +413,25 @@ vectorized: true
 │ distinct on: a
 │ order key: a
 │
-└── • sort
-    │ order: +a
+└── • union all
     │
-    └── • union all
-        │
-        ├── • index join
-        │   │ table: array_tab@primary
-        │   │
-        │   └── • scan
-        │         missing stats
-        │         table: array_tab@arr_inv
-        │         spans: 1 span
-        │
-        └── • scan
-              missing stats
-              table: array_tab@primary
-              spans: [/1 - /1]
+    ├── • index join
+    │   │ table: array_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • scan
+    │             missing stats
+    │             table: array_tab@arr_inv
+    │             spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: [/1 - /1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k19r2zAUxd_3KcTdQ1umYEv5O8Mg2-KxjCzp7MA2NlMU-1IMqeVJ8lgJ-e7DdmnqUKtOx16MpavfPUc63B3oX1vwwP92uXg7X5Lz2Txch18WFyT0F_77NRHkQ7D6TIRS4vbKiA35-tEPfHK-IdOfhev2kZzt2P7sgqwCci7IG8LK35kfkHffiQAKmUxwKW5Qg_cDGFDgQKEPEYVcyRi1lqos7aqD8-QPeC6FNMsLU2-b1GwRPCgyqRJUmACFBI1It2U92kcUYqkQvMPRpezJ3BkdHaQgC3PXNqKgjbhG8AZ72iL9SONQKoPKGTc6w5S9grb2w1Paz1Jt0iw2zuRYACis6tt7pF4Vpvpr0x01dJlddy02WwxQJKgc1pS-z30qlLpKs99AIcxFpj3iMNdhvfLLOxjipxj6JNPszk-_zU-u0huhbg_SdMpb1fsNdd79Odyn5e-fo-cw52U3P-y5fnj3eHgVD39OPE8YehDP4D_HcxB9bPoBLPM_7DT_7ikDGqDOZaaxY-eIAibXWN9Dy0LFeKlkXMnUy1XFVRsJalNXWb2YZ3WpNPgQZlaY22FuhV_b4b4VHtjhgRV2GzA7hodWeGKHR1Z4bLc9_hflyUl3jvYv_gYAAP__5A1x4g==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lF9r2zAUxd_3KcR9acsUbNn5axhkWzyWkSWdk7GNzRTFvhRDanmSPFaCv_uwHdq6JIqTshdj_fndc6500BbU7w144H-_nr2dzsnlZLpcLb_MrsjSn_nvV4STD8HiM-FS8vsbzdfk20c_8Mnlmox_5bbtIrnYsuLiiiwCcsnJG8LK34kfkHc_CAcKqYhxzu9QgfcTGFBwgIILIYVMigiVErJc2lYbp_Ff8GwKSZrlup7Wid4geCBkjBJjoBCj5smmqjdmryEsQgqRkAje4-656IjMGjZ2hwUFketd5ZCC0vwWwesV9ID6nsKTROkkjbQ1eu4EKCxqjx6pR7mu_g7p9hu6zKy74usNBshjlBZrSj_czZhLeZOkf4DCMuOp8ojFbIt1yq_TwpBziqGlkBql5e67kP3l3VPKfxJJumu3d6jdTCZ3XN4_dkbHzkH1bkPdaX_a9nH5h9O27E75seZfZ7N2tti5tpz2IXCqEDjnhOCIoV0IuueG4Ej5JyHo_-cQvOyhGbR6aOxTHpoAVSZShS0rhxQwvsW6FSVyGeG1FFElUw8XFVdNxKh0vcrqwTStl0qDT2Fmhm0z7Rhp1wy7RrhrhrtGuGmbPYd7RnhkhvtGeGC2PTDCQzM8fInt0UkHFhav_gUAAP__CVynkw==
 
 # The split disjunction rule allows us to use the index for this query.
 query T
@@ -445,29 +445,29 @@ vectorized: true
 │ distinct on: a
 │ order key: a
 │
-└── • sort
-    │ order: +a
+└── • union all
     │
-    └── • union all
-        │
-        ├── • index join
-        │   │ table: array_tab@primary
-        │   │
-        │   └── • inverted filter
-        │       │ inverted column: b_inverted_key
-        │       │ num spans: 1
-        │       │
-        │       └── • scan
-        │             missing stats
-        │             table: array_tab@arr_inv
-        │             spans: 1 span
-        │
-        └── • scan
-              missing stats
-              table: array_tab@primary
-              spans: [/1 - /1]
+    ├── • index join
+    │   │ table: array_tab@primary
+    │   │
+    │   └── • sort
+    │       │ order: +a
+    │       │
+    │       └── • inverted filter
+    │           │ inverted column: b_inverted_key
+    │           │ num spans: 1
+    │           │
+    │           └── • scan
+    │                 missing stats
+    │                 table: array_tab@arr_inv
+    │                 spans: 1 span
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: [/1 - /1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVGFv2jAQ_b5fYd0-tNVSJedAaSNNYltTjakrHVTapoEqQ05tJGpntqlaVfz3KQRBU8AB1E37grDP7967u5d7AvN7BBHEPy7PP7Qu2P5pq3vV_XZ-wLrxefzpigl21ml_ZUJr8XhtxYB9_xx3Yra_P2DN3jgIQmJ7TzjZO2DtDitd8sneQXEr2HuG-d_TuMM-_mQCPJAqoQtxRwaiX4DgAQcPQuh7kGk1JGOUzkNP04et5AGiwINUZmNbXNvUjggiGEulE9KUgAcJWZGO8nh_0vdgqDRBtHh6mhqbyqH166W30Mzp22MbsSZCf-KBGtsZT98DY8UNQVSbeGu0rGD6olLZIZGQ9o_KXPM-NjOd3gn9uKD2mnwte30b9q7SlrTfeFnlu7Xpj7ZJP2_jyao2FsNY0cpFgsEjuxXmdgk9HdpMUWOtokWeVYOflemSjVihu9oMx6-u7kIdqszH8IWLV9OflOjRPa4rMRjRzIy4zoxC6-tU3oMH3UxIEzEfAx8P899wM4fybTS15D1pS8lZOrKkSfvluufx-CHTTEnWxIiZXBgzVmgb9aDX44g9YCST2SnsAVurLiyp45t3LKj-fOcdO_TRf7tZt3BXPXzzCfLpBPmOE6zQtDTB2v80wdkGPN51A1akX6yS4J-tQP6qK5D_xRW4grhDJlPS0EbbLcilU3JDRalGjfWQLrUaTmmKY3uKm14kZGwRxeLQkkUoF_gcjE4wd4O5Exy6weFLMD4H10pg3A6MoRtdc-quu8F1d7tr7qqPnOiGG9xwggO37mO37gqfnLjRQYXL3B6tUI5uk2KFS3HJpts4rQJdZTVccqrTa_3Jmz8BAAD__zm3B-Y=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVF9v2j4Uff99iqv70la_VIkdKG2kSWxrqjEx6KDTNg1UGXLVRqJxZpuqVcV3n5IwKH_iQNVNe4liXx-f43uO_YT65wQDDL9dtt-2OnB43upf9T-3j6AftsP3VyDgotf9BEIp8XhtxAi-fgh7IRwejqA5mHqeT3DwxGYHR9Dtwcoknx0cFbMC3gDLfs_DHrz7DgIdTGREHXFHGoMfyNBBjg76OHQwVXJMWkuVlZ7yha3oAQPPwThJp6aYNrGZEAY4TaSKSFGEDkZkRDzJ6sPZ0MGxVITBcul5rE2cjI1bX1mLzYy-OzUBNBkOZw7KqZnzDB3URtwQBrWZU6JlC1NfKkPKPVnn-b90-_o-23-UcdIjEZFyG6sUC5uaqYrvhHpcnsxp8lL2k33YF2083dbGwowtrVxuMHqEW6FvN9C5aXNFjVJFy322GT9vsk028yp0V4fh9NXVdeSxTF3G11K8nf5shZ7Z7boSownN08LK0iKUuo6Te3Swn4pEB-Ayz2XH2dffLUJ8H02t5J6UoeginhhSpHKSZ8J-18OHVIFMoMkC0Jkw0EYoEwxwMOCMDRAoieYjf4BQqs5fUcd375hXfb8WHXO94-zjdr6027s1jb1UFt_dSJ4byV9oZIWmDSNr_5KRiyt_9tdeKv6qLxX7gy_VFuIe6VQmmnZ6hLxMOkU3VBxVy6ka06WS45ymGHZzXD4RkTZFlRWDVlKUMoHPwcwK5nYwt4J9O9hfB7Pn4NoKmO0HZtyOrll11-3gur3dFac-saIbdnDDCvbsuk_tuitycmZHexUps2e0QjnbCOk-UalAV2WF2UO-Hpbh7L9fAQAA___OJNYQ
 
 # We cannot use the index for this query.
 query T

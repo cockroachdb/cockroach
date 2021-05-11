@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // LimitScanPrivate constructs a new ScanPrivate value that is based on the
@@ -26,7 +26,7 @@ import (
 // which must be a constant int datum value. The other fields are inherited from
 // the existing private.
 func (c *CustomFuncs) LimitScanPrivate(
-	scanPrivate *memo.ScanPrivate, limit tree.Datum, required physical.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
 	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
@@ -45,7 +45,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 //       GenerateLimitedScans rule, since that can require IndexJoin operators
 //       to be generated.
 func (c *CustomFuncs) CanLimitFilteredScan(
-	scanPrivate *memo.ScanPrivate, required physical.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, required props.OrderingChoice,
 ) bool {
 	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
@@ -86,30 +86,36 @@ func (c *CustomFuncs) CanLimitFilteredScan(
 // limited partial index scans. Limiting partial indexes is done by the
 // PushLimitIntoFilteredScans rule.
 func (c *CustomFuncs) GenerateLimitedScans(
-	grp memo.RelExpr,
-	scanPrivate *memo.ScanPrivate,
-	limit tree.Datum,
-	required physical.OrderingChoice,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
+	var pkCols opt.ColSet
 	var sb indexScanBuilder
-	sb.init(c, scanPrivate.Table)
+	sb.Init(c, scanPrivate.Table)
 
 	// Iterate over all non-inverted, non-partial indexes, looking for those
 	// that can be limited.
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		// The iterator rejects partial indexes because there are no filters to
+		// imply a partial index predicate. constProj is a projection of
+		// constant values based on a partial index predicate. It should always
+		// be empty because we iterate only on non-partial indexes. If it is
+		// not, we panic to avoid performing a logically incorrect
+		// transformation.
+		if len(constProj) != 0 {
+			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := ordering.ScanPrivateCanProvide(
-			c.e.mem.Metadata(), &newScanPrivate, &required,
-		)
+		ok, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), &newScanPrivate, &required)
 		if !ok {
 			return
 		}
@@ -118,8 +124,8 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if isCovering {
-			sb.setScan(&newScanPrivate)
-			sb.build(grp)
+			sb.SetScan(&newScanPrivate)
+			sb.Build(grp)
 			return
 		}
 
@@ -129,18 +135,23 @@ func (c *CustomFuncs) GenerateLimitedScans(
 			return
 		}
 
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
+
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
 		// The Scan operator will go into its own group (because it projects a
 		// different set of columns), and the IndexJoin operator will be added to
 		// the same group as the original Limit operator.
-		sb.addIndexJoin(scanPrivate.Cols)
+		sb.AddIndexJoin(scanPrivate.Cols)
 
-		sb.build(grp)
+		sb.Build(grp)
 	})
 }
 
@@ -159,20 +170,21 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 }
 
 // SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
-// that each scan over a single key from the original Scan's constraints. This
-// is beneficial in cases where the original Scan had to scan over many rows but
-// had relatively few keys to scan over.
+// that each scan over a single key from the original Scan's constraints. If no
+// such Union of Scans can be found, ok=false is returned. This is beneficial in
+// cases where the original Scan had to scan over many rows but had relatively
+// few keys to scan over.
 // TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
-	limitOrdering physical.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
-) memo.RelExpr {
+	limitOrdering props.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
+) (_ memo.RelExpr, ok bool) {
 	const maxScanCount = 16
 	const threshold = 4
 
 	cons, ok := c.getKnownScanConstraint(sp)
 	if !ok {
 		// No valid constraint was found.
-		return nil
+		return nil, false
 	}
 
 	// Find the length of the prefix of index columns preceding the first limit
@@ -183,7 +195,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	//
 	if len(limitOrdering.Columns) == 0 {
 		// This case can be handled by GenerateLimitedScans.
-		return nil
+		return nil, false
 	}
 	keyPrefixLength := cons.Columns.Count()
 	for i := 0; i < cons.Columns.Count(); i++ {
@@ -194,7 +206,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 	if keyPrefixLength == 0 {
 		// This case can be handled by GenerateLimitedScans.
-		return nil
+		return nil, false
 	}
 
 	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
@@ -219,7 +231,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 	if keyCount <= 0 || (keyCount == 1 && spans.Count() == 1) || budgetExceededIndex == 0 {
 		// Ensure that at least one new Scan will be constructed.
-		return nil
+		return nil, false
 	}
 
 	scanCount := keyCount
@@ -235,7 +247,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		// Splitting the Scan may not be worth the overhead. Creating a sequence of
 		// Scans and Unions is expensive, so we only want to create the plan if it
 		// is likely to be used.
-		return nil
+		return nil, false
 	}
 
 	// The index ordering must have a prefix of columns of length keyLength
@@ -243,7 +255,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	hasLimitOrderingSeq, reverse := indexHasOrderingSequence(
 		c.e.mem.Metadata(), scan, sp, limitOrdering, keyPrefixLength)
 	if !hasLimitOrderingSeq {
-		return nil
+		return nil, false
 	}
 	newHardLimit := memo.MakeScanLimit(int64(limitVal), reverse)
 
@@ -302,22 +314,22 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		// Expect to generate at least one new limited single-key Scan. This could
 		// happen if a valid key count could be obtained for at least span, but no
 		// span could be split into single-key spans.
-		return nil
+		return nil, false
 	}
 	if noLimitSpans.Count() == 0 {
 		// All spans could be used to generate limited Scans.
-		return last
+		return last, true
 	}
 
 	// If any spans could not be used to generate limited Scans, use them to
 	// construct an unlimited Scan and add it to the Union tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
-	newScanPrivate.Constraint = &constraint.Constraint{
+	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
 		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
-	}
+	})
 	newScan := c.e.f.ConstructScan(newScanPrivate)
-	return makeNewUnion(last, newScan, sp.Cols.ToList())
+	return makeNewUnion(last, newScan, sp.Cols.ToList()), true
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given
@@ -347,7 +359,7 @@ func indexHasOrderingSequence(
 	md *opt.Metadata,
 	scan memo.RelExpr,
 	sp *memo.ScanPrivate,
-	limitOrdering physical.OrderingChoice,
+	limitOrdering props.OrderingChoice,
 	keyLength int,
 ) (hasSequence, reverse bool) {
 	tableMeta := md.TableMeta(sp.Table)
@@ -406,7 +418,7 @@ func (c *CustomFuncs) makeNewScan(
 		Columns: columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   newSpans,
 	}
-	newScanPrivate.Constraint = newConstraint
+	newScanPrivate.SetConstraint(c.e.evalCtx, newConstraint)
 
 	return c.e.f.ConstructScan(newScanPrivate)
 }

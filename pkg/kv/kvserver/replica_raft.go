@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -62,6 +63,10 @@ func makeIDKey() kvserverbase.CmdIDKey {
 // tok.Move() it into this method. It will be used to untrack the request once
 // it comes out of the proposal buffer.
 //
+// Nothing here or below can take out a raftMu lock, since executeWriteBatch()
+// is already holding readOnlyCmdMu when calling this. Locking raftMu after it
+// would violate the locking order specified for Store.mu.
+//
 // Return values:
 // - a channel which receives a response or error upon application
 // - a closure used to attempt to abandon the command. When called, it unbinds
@@ -88,6 +93,8 @@ func (r *Replica) evalAndPropose(
 	// proagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
+		return nil, nil, 0, pErr
+	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
 		return nil, nil, 0, pErr
 	}
 
@@ -1131,8 +1138,33 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 				// contain fat entries. Since these are the only two sources that
 				// raft.sendAppend gathers entries from to populate MsgApps, we
 				// should never see thin entries here.
+				//
+				// Also assert that the log term only ever increases (most of the
+				// time it stays constant, as term changes are rare), and that
+				// the index increases by exactly one with each entry.
+				//
+				// This assertion came out of #61990.
+				prevTerm := message.LogTerm // term of entry preceding the append
+				prevIndex := message.Index  // index of entry preceding the append
 				for j := range message.Entries {
-					assertSideloadedRaftCommandInlined(ctx, &message.Entries[j])
+					ent := &message.Entries[j]
+					assertSideloadedRaftCommandInlined(ctx, ent)
+
+					if prevIndex+1 != ent.Index {
+						log.Fatalf(ctx,
+							"index gap in outgoing MsgApp: idx %d followed by %d",
+							prevIndex, ent.Index,
+						)
+					}
+					prevIndex = ent.Index
+					if prevTerm > ent.Term {
+						log.Fatalf(ctx,
+							"term regression in outgoing MsgApp: idx %d at term=%d "+
+								"appended with logterm=%d",
+							ent.Index, ent.Term, message.LogTerm,
+						)
+					}
+					prevTerm = ent.Term
 				}
 			}
 
@@ -1327,7 +1359,7 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 		return
 	}
 
-	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
+	deadline := now.Add(RaftLogQueuePendingSnapshotGracePeriod)
 	item.deadline = deadline
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
@@ -1511,6 +1543,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
 		}
+		r.store.enqueueRaftUpdateCheck(r.RangeID)
 	}
 }
 
@@ -1840,4 +1873,67 @@ func getNonDeterministicFailureExplanation(err error) string {
 		return nd.safeExpl
 	}
 	return "???"
+}
+
+// printRaftTail pretty-prints the tail of the log and returns it as a string,
+// with the same format as `cockroach debug raft-log`. The entries are printed
+// from newest to oldest. maxEntries and maxCharsPerEntry control the size of
+// the output.
+//
+// If an error is returned, it's possible that a string with some entries is
+// still returned.
+func (r *Replica) printRaftTail(
+	ctx context.Context, maxEntries, maxCharsPerEntry int,
+) (string, error) {
+	start := keys.RaftLogPrefix(r.RangeID)
+	end := keys.RaftLogPrefix(r.RangeID).PrefixEnd()
+
+	// NB: raft log does not have intents.
+	it := r.Engine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	valid, err := it.SeekEngineKeyLT(storage.EngineKey{Key: end})
+	if err != nil {
+		return "", err
+	}
+	if !valid {
+		return "", errors.AssertionFailedf("iterator invalid but no error")
+	}
+
+	var sb strings.Builder
+	for i := 0; i < maxEntries; i++ {
+		key, err := it.EngineKey()
+		if err != nil {
+			return sb.String(), err
+		}
+		mvccKey, err := key.ToMVCCKey()
+		if err != nil {
+			return sb.String(), err
+		}
+		kv := storage.MVCCKeyValue{
+			Key:   mvccKey,
+			Value: it.Value(),
+		}
+		sb.WriteString(truncateEntryString(SprintKeyValue(kv, true /* printKey */), 2000))
+		sb.WriteRune('\n')
+
+		valid, err := it.PrevEngineKey()
+		if err != nil {
+			return sb.String(), err
+		}
+		if !valid {
+			// We've finished the log.
+			break
+		}
+	}
+	return sb.String(), nil
+}
+
+func truncateEntryString(s string, maxChars int) string {
+	res := s
+	if len(s) > maxChars {
+		if maxChars > 3 {
+			maxChars -= 3
+		}
+		res = s[0:maxChars] + "..."
+	}
+	return res
 }

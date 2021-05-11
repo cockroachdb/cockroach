@@ -12,6 +12,7 @@ package closedts
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -24,29 +25,64 @@ func TestTargetForPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const nowNanos = 100
-	const maxOffsetNanos = 20
-	const lagTargetNanos = 10
+	cast := func(i int, unit time.Duration) time.Duration { return time.Duration(i) * unit }
+	secs := func(i int) time.Duration { return cast(i, time.Second) }
+	millis := func(i int) time.Duration { return cast(i, time.Millisecond) }
+
+	now := hlc.Timestamp{WallTime: millis(100).Nanoseconds()}
+	maxClockOffset := millis(500)
 
 	for _, tc := range []struct {
-		rangePolicy       roachpb.RangeClosedTimestampPolicy
-		expClosedTSTarget hlc.Timestamp
+		lagTargetNanos             time.Duration
+		leadTargetOverride         time.Duration
+		sideTransportCloseInterval time.Duration
+		rangePolicy                roachpb.RangeClosedTimestampPolicy
+		expClosedTSTarget          hlc.Timestamp
 	}{
 		{
+			lagTargetNanos:    secs(3),
 			rangePolicy:       roachpb.LAG_BY_CLUSTER_SETTING,
-			expClosedTSTarget: hlc.Timestamp{WallTime: nowNanos - lagTargetNanos},
+			expClosedTSTarget: now.Add(-secs(3).Nanoseconds(), 0),
 		},
 		{
-			rangePolicy:       roachpb.LEAD_FOR_GLOBAL_READS,
-			expClosedTSTarget: hlc.Timestamp{WallTime: nowNanos - lagTargetNanos},
-			// TODO(andrei, nvanbenschoten): What we should be expecting here is the following, once
-			// the propBuf starts properly implementing this timestamp closing policy:
-			// expClosedTSTarget: hlc.Timestamp{WallTime: nowNanos + 2*maxOffsetNanos, Synthetic: true},
+			lagTargetNanos:    secs(1),
+			rangePolicy:       roachpb.LAG_BY_CLUSTER_SETTING,
+			expClosedTSTarget: now.Add(-secs(1).Nanoseconds(), 0),
+		},
+		{
+			sideTransportCloseInterval: millis(200),
+			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			expClosedTSTarget: now.
+				Add((maxClockOffset +
+					millis(275) /* sideTransportPropTime */ +
+					millis(25) /* bufferTime */).Nanoseconds(), 0).
+				WithSynthetic(true),
+		},
+		{
+			sideTransportCloseInterval: millis(50),
+			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			expClosedTSTarget: now.
+				Add((maxClockOffset +
+					millis(245) /* raftTransportPropTime */ +
+					millis(25) /* bufferTime */).Nanoseconds(), 0).
+				WithSynthetic(true),
+		},
+		{
+			leadTargetOverride:         millis(1234),
+			sideTransportCloseInterval: millis(200),
+			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
+			expClosedTSTarget:          now.Add(millis(1234).Nanoseconds(), 0).WithSynthetic(true),
 		},
 	} {
-		t.Run(tc.rangePolicy.String(), func(t *testing.T) {
-			now := hlc.ClockTimestamp{WallTime: nowNanos}
-			target := TargetForPolicy(now, maxOffsetNanos, lagTargetNanos, tc.rangePolicy)
+		t.Run("", func(t *testing.T) {
+			target := TargetForPolicy(
+				now.UnsafeToClockTimestamp(),
+				maxClockOffset,
+				tc.lagTargetNanos,
+				tc.leadTargetOverride,
+				tc.sideTransportCloseInterval,
+				tc.rangePolicy,
+			)
 			require.Equal(t, tc.expClosedTSTarget, target)
 		})
 	}

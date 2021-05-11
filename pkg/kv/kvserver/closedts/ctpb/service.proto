@@ -35,6 +35,7 @@ service ClosedTimestamp {
 // properly handle incrementals, the recipient maintains a "stream's state": the
 // group of ranges that can be implicitly referenced by the next message.
 message Update {
+  option (gogoproto.goproto_stringer) = false;
   // node_id identifies the sending node.
   int32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
@@ -72,8 +73,9 @@ message Update {
   }
   repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
 
-  // removed contains the set of ranges that are no longer registered on the
-  // stream and who future updates are no longer applicable to.
+  // removed contains the set of ranges that are no longer tracked on this
+  // stream. The closed timestamps in this message and future messages no longer
+  // apply to these removed ranges.
   //
   // The field will be empty if snapshot is true, as a snapshot message implies
   // that all ranges not present in the snapshot's added_or_updated list are no

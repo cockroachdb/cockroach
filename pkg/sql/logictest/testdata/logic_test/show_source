@@ -41,6 +41,8 @@ default_transaction_use_follower_reads                off
 disable_partially_distributed_plans                   off
 disallow_full_table_scans                             off
 distsql                                               off
+distsql_workmem                                       64 MiB
+enable_drop_enum_value                                off
 enable_experimental_alter_column_type_general         off
 enable_experimental_stream_replication                off
 enable_implicit_select_for_update                     on
@@ -62,13 +64,14 @@ idle_in_transaction_session_timeout                   0
 integer_datetimes                                     on
 intervalstyle                                         postgres
 locality                                              region=test,dc=dc1
-locality_optimized_partitioned_index_scan             off
+locality_optimized_partitioned_index_scan             on
 lock_timeout                                          0
 max_identifier_length                                 128
 max_index_keys                                        32
 node_id                                               1
 optimizer_use_histograms                              on
 optimizer_use_multicol_stats                          on
+override_multi_region_zone_config                     off
 prefer_lookup_joins_for_fks                           off
 reorder_joins_limit                                   8
 require_explicit_primary_keys                         off
@@ -83,6 +86,7 @@ session_user                                          root
 sql_safe_updates                                      off
 standard_conforming_strings                           on
 statement_timeout                                     0
+stub_catalog_tables                                   on
 synchronize_seqscans                                  on
 synchronous_commit                                    on
 testing_vectorize_inject_panics                       off
@@ -93,7 +97,6 @@ transaction_priority                                  normal
 transaction_read_only                                 off
 transaction_status                                    NoTxn
 vectorize                                             on
-vectorize_row_count_threshold                         0
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
@@ -197,6 +200,7 @@ SELECT * FROM [SHOW TABLES FROM system]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality
 public       namespace                        table  NULL   0                    NULL
+public       join_tokens                      table  NULL   0                    NULL
 public       migrations                       table  NULL   0                    NULL
 public       sqlliveness                      table  NULL   0                    NULL
 public       scheduled_jobs                   table  NULL   0                    NULL
@@ -232,6 +236,7 @@ SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality  comment
 public       namespace                        table  NULL   0                    NULL      ·
+public       join_tokens                      table  NULL   0                    NULL      ·
 public       migrations                       table  NULL   0                    NULL      ·
 public       sqlliveness                      table  NULL   0                    NULL      ·
 public       scheduled_jobs                   table  NULL   0                    NULL      ·

@@ -717,7 +717,7 @@ type RestrictedCommandResult interface {
 
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
-	IncrementRowsAffected(n int)
+	IncrementRowsAffected(ctx context.Context, n int)
 
 	// RowsAffected returns either the number of times AddRow was called, or the
 	// sum of all n passed into IncrementRowsAffected.
@@ -861,7 +861,11 @@ const discarded resCloseType = false
 // streamingCommandResult is a CommandResult that streams rows on the channel
 // and can call a provided callback when closed.
 type streamingCommandResult struct {
-	ch           chan ieIteratorResult
+	// All the data (the rows and the metadata) are written into w. The
+	// goroutine writing into this streamingCommandResult might block depending
+	// on the synchronization strategy.
+	w ieResultWriter
+
 	err          error
 	rowsAffected int
 
@@ -874,7 +878,12 @@ var _ CommandResultClose = &streamingCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
-	r.ch <- ieIteratorResult{cols: cols}
+	// The interface allows for cols to be nil, yet the iterator result expects
+	// non-nil value to indicate that it was the column metadata.
+	if cols == nil {
+		cols = colinfo.ResultColumns{}
+	}
+	_ = r.w.addResult(ctx, ieIteratorResult{cols: cols})
 }
 
 // BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
@@ -900,8 +909,7 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
-	r.ch <- ieIteratorResult{row: rowCopy}
-	return nil
+	return r.w.addResult(ctx, ieIteratorResult{row: rowCopy})
 }
 
 func (r *streamingCommandResult) DisableBuffering() {
@@ -923,12 +931,12 @@ func (r *streamingCommandResult) Err() error {
 }
 
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
-func (r *streamingCommandResult) IncrementRowsAffected(n int) {
+func (r *streamingCommandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.rowsAffected += n
-	if r.ch != nil {
-		// streamingCommandResult might be used outside of the internal executor
-		// (i.e. not by rowsIterator) in which case the channel is not set.
-		r.ch <- ieIteratorResult{rowsAffectedIncrement: &n}
+	// streamingCommandResult might be used outside of the internal executor
+	// (i.e. not by rowsIterator) in which case the channel is not set.
+	if r.w != nil {
+		_ = r.w.addResult(ctx, ieIteratorResult{rowsAffectedIncrement: &n})
 	}
 }
 

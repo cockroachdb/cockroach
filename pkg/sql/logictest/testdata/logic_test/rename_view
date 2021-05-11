@@ -81,7 +81,7 @@ INSERT INTO t VALUES (4, 16), (5, 25)
 statement ok
 CREATE VIEW v as SELECT c1,c2 from t
 
-statement error pgcode 42P07 relation "new_v" already exists
+statement error pgcode 42P07 relation "test.public.new_v" already exists
 ALTER VIEW v RENAME TO new_v
 
 user testuser

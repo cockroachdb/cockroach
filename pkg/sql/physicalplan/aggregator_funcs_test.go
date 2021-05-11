@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -74,14 +75,13 @@ func runTestFlow(
 
 	var rowBuf distsqlutils.RowBuffer
 
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf)
+	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, distsql.LocalState{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Start(ctx, func() {}); err != nil {
+	if err := flow.Run(ctx, func() {}); err != nil {
 		t.Fatal(err)
 	}
-	flow.Wait()
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed() {
@@ -132,11 +132,11 @@ func checkDistAggregationInfo(
 		}
 
 		var err error
-		tr.Spans[0].Span.Key, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, startPK)
+		tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].Span.EndKey, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, endPK)
+		tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -431,17 +431,17 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				rowenc.RandDatum(rng, types.Int, true),
+				randgen.RandDatum(rng, types.Int, true),
 				// Note that we use INT4 here, yet the table schema uses INT8 -
 				// this is ok since we want to limit the range of values but use
 				// the default INT type.
-				rowenc.RandDatum(rng, types.Int4, true),
+				randgen.RandDatum(rng, types.Int4, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				rowenc.RandDatum(rng, types.Decimal, false),
-				rowenc.RandDatum(rng, types.Decimal, true),
-				rowenc.RandDatum(rng, types.Float, false),
-				rowenc.RandDatum(rng, types.Float, true),
+				randgen.RandDatum(rng, types.Decimal, false),
+				randgen.RandDatum(rng, types.Decimal, true),
+				randgen.RandDatum(rng, types.Float, false),
+				randgen.RandDatum(rng, types.Float, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},
@@ -451,12 +451,12 @@ func TestDistAggregationTable(t *testing.T) {
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	for fn, info := range DistAggregationTable {
-		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
+		if fn == execinfrapb.AnyNotNull {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.
 			continue
 		}
-		if fn == execinfrapb.AggregatorSpec_COUNT_ROWS {
+		if fn == execinfrapb.CountRows {
 			// COUNT_ROWS takes no arguments; skip it in this test.
 			continue
 		}
@@ -472,7 +472,7 @@ func TestDistAggregationTable(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			if fn == execinfrapb.AggregatorSpec_SUM_INT && col.Ordinal() == 2 {
+			if fn == execinfrapb.SumInt && col.Ordinal() == 2 {
 				// When using sum_int over int2 column we're likely to hit an
 				// integer out of range error since we insert random DInts into
 				// that column, so we'll skip such config.

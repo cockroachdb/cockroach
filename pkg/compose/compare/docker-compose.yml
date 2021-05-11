@@ -1,7 +1,7 @@
 version: '3'
 services:
   postgres:
-    image: postgis/postgis:11-3.0
+    image: postgis/postgis:13-3.1
     environment:
       - POSTGRES_INITDB_ARGS=--locale=C
       - POSTGRES_HOST_AUTH_METHOD=trust

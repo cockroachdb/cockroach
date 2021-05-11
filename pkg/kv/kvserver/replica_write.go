@@ -69,15 +69,17 @@ func (r *Replica) executeWriteBatch(
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
-	// TODO(nvanbenschoten): unlike on the read-path (executeReadOnlyBatch), we
-	// don't synchronize with r.readOnlyCmdMu here. Is that ok? What if the
-	// replica is destroyed concurrently with a write? We won't be able to
-	// successfully propose as the lease will presumably have changed, but what
-	// if we hit an error during evaluation (e.g. a ConditionFailedError)?
+	// Even though we're not a read-only operation by definition, we have to
+	// take out a read lock on readOnlyCmdMu while performing any reads during
+	// pre-Raft evaluation (e.g. conditional puts), otherwise we can race with
+	// replica removal and get evaluated on an empty replica. We must release
+	// this lock before Raft execution, to avoid deadlocks.
+	r.readOnlyCmdMu.RLock()
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceed(ctx, ba, g)
 	if err != nil {
+		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -88,24 +90,26 @@ func (r *Replica) executeWriteBatch(
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 
-	// Start tracking this request. The act of tracking also gives us a closed
-	// timestamp, which we must ensure to evaluate above of. We're going to pass
-	// in minTS to applyTimestampCache(), which bumps us accordingly if necessary.
-	// We need to start tracking this request before we know the final write
-	// timestamp at which this request will evaluate because we need to atomically
-	// read the closed timestamp and start to be tracked.
-	// TODO(andrei): The timestamp cache might bump us above the timestamp at
-	// which we're registering with the proposalBuf. In that case, this request
-	// will be tracked at an unnecessarily low timestamp. We could invent an
-	// interface through which to communicate the updated timestamp to the
-	// proposalBuf.
-	minTS2, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
-	defer tok.DoneIfNotMoved(ctx)
-	minTS.Forward(minTS2)
-
-	if !ba.IsSingleSkipLeaseCheckRequest() && st.Expiration().Less(minTS) {
-		log.Fatalf(ctx, "closed timestamp above lease expiration (%s vs %s): %s", minTS, st.Expiration(), ba)
+	// Start tracking this request if it is an MVCC write (i.e. if it's the kind
+	// of request that needs to obey the closed timestamp). The act of tracking
+	// also gives us a closed timestamp, which we must ensure to evaluate above
+	// of. We're going to pass in minTS to applyTimestampCache(), which bumps us
+	// accordingly if necessary. We need to start tracking this request before we
+	// know the final write timestamp at which this request will evaluate because
+	// we need to atomically read the closed timestamp and start to be tracked.
+	// TODO(andrei): The timestamp cache (and also the "old closed timestamp
+	// mechanism" in the form of minTS) might bump us above the timestamp at which
+	// we're registering with the proposalBuf. In that case, this request will be
+	// tracked at an unnecessarily low timestamp which can block the closing of
+	// this low timestamp for no reason. We should refactor such that the request
+	// starts being tracked after we apply the timestamp cache.
+	var tok TrackedRequestToken
+	if ba.IsIntentWrite() {
+		var minTS2 hlc.Timestamp
+		minTS2, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
+		minTS.Forward(minTS2)
 	}
+	defer tok.DoneIfNotMoved(ctx)
 
 	// Examine the timestamp cache for preceding commands which require this
 	// command to move its timestamp forward. Or, in the case of a transactional
@@ -133,6 +137,7 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
+		r.readOnlyCmdMu.RUnlock()
 		return nil, g, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
@@ -141,6 +146,13 @@ func (r *Replica) executeWriteBatch(
 	// evalAndPropose.
 	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
+		r.readOnlyCmdMu.RUnlock()
+		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
+			r.raftMu.Lock()
+			defer r.raftMu.Unlock()
+			// This exits with a fatal error, but returns in tests.
+			return nil, g, r.setCorruptRaftMuLocked(ctx, cErr)
+		}
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
 				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
@@ -159,6 +171,10 @@ func (r *Replica) executeWriteBatch(
 	if maxLeaseIndex != 0 {
 		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
+
+	// We are done with pre-Raft evaluation at this point, and have to release the
+	// read-only command lock to avoid deadlocks during Raft evaluation.
+	r.readOnlyCmdMu.RUnlock()
 
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
@@ -549,7 +565,7 @@ func (r *Replica) evaluate1PC(
 		if err != nil {
 			return onePCResult{
 				success: onePCFailed,
-				pErr:    roachpb.NewErrorf("failed to run commit trigger: %s", err),
+				pErr:    roachpb.NewError(errors.Wrap(err, "failed to run commit trigger")),
 			}
 		}
 		if err := res.MergeAndDestroy(innerResult); err != nil {

@@ -36,7 +36,7 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="SQL Queries"
+      title="SQL Statements"
       sources={nodeSources}
       tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
         successfully executed per second ${tooltipSelection}.`}
@@ -66,14 +66,14 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Service Latency: SQL, 99th percentile"
+      title="Service Latency: SQL Statements, 99th percentile"
       tooltip={
         <div>
-          Over the last minute, this node executed 99% of queries within this
-          time.&nbsp;
+          Over the last minute, this node executed 99% of SQL statements within
+          this time.&nbsp;
           <em>
-            This time does not include network latency between the node and
-            client.
+            This time only includes SELECT, INSERT, UPDATE and DELETE statements
+            and does not include network latency between the node and client.
           </em>
         </div>
       }

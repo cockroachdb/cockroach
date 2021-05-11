@@ -172,6 +172,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	}
 }
 
+func (b *logicalPropsBuilder) buildPlaceholderScanProps(
+	scan *PlaceholderScanExpr, rel *props.Relational,
+) {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 func (b *logicalPropsBuilder) buildSequenceSelectProps(
 	seq *SequenceSelectExpr, rel *props.Relational,
 ) {
@@ -718,6 +724,34 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
 		// These operators eliminate duplicates, so a strict key exists.
 		rel.FuncDeps.AddStrictKey(rel.OutputCols, rel.OutputCols)
+	}
+	switch setNode.Op() {
+	case opt.UnionOp, opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
+		// If columns at ordinals (i, j) are equivalent in both the left input
+		// and right input, then the output columns at ordinals at (i, j) are
+		// also equivalent.
+		for i := range setPrivate.OutCols {
+			for j := i + 1; j < len(setPrivate.OutCols); j++ {
+				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) &&
+					rightProps.FuncDeps.AreColsEquiv(setPrivate.RightCols[i], setPrivate.RightCols[j]) {
+					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+				}
+			}
+		}
+	case opt.IntersectOp, opt.IntersectAllOp, opt.ExceptOp, opt.ExceptAllOp:
+		// Intersect, IntersectAll, Except and ExceptAll only output rows from
+		// the left input, so if columns at ordinals (i, j) are equivalent in
+		// the left input, then they are equivalent in the output.
+		// TODO(mgartner): The entire FD set on the left side can be used, but
+		// columns may need to be mapped. Intersections can combine FD
+		// information from both the left and the right.
+		for i := range setPrivate.OutCols {
+			for j := i + 1; j < len(setPrivate.OutCols); j++ {
+				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) {
+					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+				}
+			}
+		}
 	}
 
 	// Cardinality
@@ -1423,21 +1457,29 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 
 	// Functional Dependencies
 	// -----------------------
-	// Add constant columns. No need to add not null columns, because they
-	// are only relevant if there are lax FDs that can be made strict.
+	var constCols opt.ColSet
 	if scalar.Constraints != nil {
-		constCols := scalar.Constraints.ExtractConstCols(b.evalCtx)
-		scalar.FuncDeps.AddConstants(constCols)
+		constCols = scalar.Constraints.ExtractConstCols(b.evalCtx)
 	}
 
-	// Check for filter conjunct of the form: x = y.
 	if eq, ok := item.Condition.(*EqExpr); ok {
 		if leftVar, ok := eq.Left.(*VariableExpr); ok {
-			if rightVar, ok := eq.Right.(*VariableExpr); ok {
-				scalar.FuncDeps.AddEquivalency(leftVar.Col, rightVar.Col)
+			switch rhs := eq.Right.(type) {
+			case *VariableExpr:
+				// Filter conjunct of the form: x = y.
+				scalar.FuncDeps.AddEquivalency(leftVar.Col, rhs.Col)
+
+			case *PlaceholderExpr:
+				// Filter conjunct of the form x = $1. This filter cannot generate
+				// constraints, but still tell us that the column is constant.
+				constCols.Add(leftVar.Col)
 			}
 		}
 	}
+
+	// Add constant columns. No need to add not null columns, because they
+	// are only relevant if there are lax FDs that can be made strict.
+	scalar.FuncDeps.AddConstants(constCols)
 }
 
 func (b *logicalPropsBuilder) buildProjectionsItemProps(
@@ -2431,6 +2473,9 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 
 	case *WithExpr:
 		excludedID = e.ID
+
+	case *RecursiveCTEExpr:
+		excludedID = e.WithID
 
 	default:
 		if opt.IsMutationOp(e) {

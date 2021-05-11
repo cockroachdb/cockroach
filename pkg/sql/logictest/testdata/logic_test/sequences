@@ -90,7 +90,7 @@ statement ok
 CREATE SEQUENCE foo
 
 # A sequence with the same name can't be created again.
-statement error pgcode 42P07 relation "foo" already exists
+statement error pgcode 42P07 relation "test.public.foo" already exists
 CREATE SEQUENCE foo
 
 statement ok
@@ -100,7 +100,7 @@ statement error pgcode 42601 conflicting or redundant options
 CREATE SEQUENCE bar INCREMENT 5 MAXVALUE 1000 INCREMENT 2
 
 # Sequences are in the same namespace as tables.
-statement error pgcode 42P07 relation "foo" already exists
+statement error pgcode 42P07 relation "test.public.foo" already exists
 CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
 
 # You can't create with 0 increment.
@@ -1485,6 +1485,11 @@ CREATE SEQUENCE cache_test CACHE 0
 statement ok
 CREATE SEQUENCE cache_test CACHE 10 INCREMENT 1
 
+query TT
+SHOW CREATE SEQUENCE cache_test
+----
+cache_test  CREATE SEQUENCE public.cache_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 10
+
 # Verify cache invalidation with schema changes.
 
 # 10 values (1,2,...,10) are cached, and the underlying sequence is incremented to 10.
@@ -1794,3 +1799,20 @@ DROP SEQUENCE s1
 
 statement ok
 DROP TABLE s2
+
+# Validate that cross DB sequences are detected by internal tables
+statement ok
+CREATE DATABASE db3;
+
+statement ok
+CREATE SEQUENCE db3.s;
+
+statement ok
+CREATE TABLE tDb3Ref (i INT PRIMARY KEY DEFAULT (nextval('db3.s')));
+
+query TTTTTTT
+SELECT * FROM "".crdb_internal.cross_db_references;
+----
+db2  public  seq   db1  public  t  sequences owning table
+db2  public  seq2  db1  public  t  sequences owning table
+test  public  tdb3ref  db3  public  s  table column refers to sequence

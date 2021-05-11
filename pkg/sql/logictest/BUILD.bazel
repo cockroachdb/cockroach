@@ -1,5 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/ccl/logictestccl:__subpackages__"],
+)
+
 go_library(
     name = "logictest",
     srcs = ["logic.go"],
@@ -17,15 +23,16 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/execinfra",
-        "//pkg/sql/mutations",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/randgen",
         "//pkg/sql/row",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/stats",
         "//pkg/testutils",
+        "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
@@ -45,15 +52,17 @@ go_library(
 
 go_test(
     name = "logictest_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "logic_test.go",
         "main_test.go",
         "parallel_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = [
+        ":testdata",
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":logictest"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",

@@ -350,3 +350,47 @@ update abc
            │    └── ac.c:14
            └── first-agg [as=ac.rowid:15]
                 └── ac.rowid:15
+
+
+# Regression test for #61520. The new value for column a (projected as b:8)
+# should be in-scope when building the partial index PUT expression when the
+# value in the FROM clause must be rounded.
+
+exec-ddl
+CREATE TABLE t61520 (
+  a DECIMAL(10, 2),
+  CHECK (a > 0)
+)
+----
+
+build
+UPDATE t61520 t SET a = v.b FROM (VALUES (1.0)) v(b) WHERE t.a = v.b RETURNING a, b
+----
+project
+ ├── columns: a:1 b:7
+ └── update t61520 [as=t]
+      ├── columns: a:1 rowid:2!null column1:7
+      ├── fetch columns: a:4 rowid:5
+      ├── update-mapping:
+      │    └── b:8 => a:1
+      ├── check columns: check1:9
+      └── project
+           ├── columns: check1:9 a:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null b:8
+           ├── project
+           │    ├── columns: b:8 a:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null
+           │    ├── select
+           │    │    ├── columns: a:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: a:4 rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null
+           │    │    │    ├── scan t61520 [as=t]
+           │    │    │    │    └── columns: a:4 rowid:5!null crdb_internal_mvcc_timestamp:6
+           │    │    │    ├── values
+           │    │    │    │    ├── columns: column1:7!null
+           │    │    │    │    └── (1.0,)
+           │    │    │    └── filters (true)
+           │    │    └── filters
+           │    │         └── a:4 = column1:7
+           │    └── projections
+           │         └── crdb_internal.round_decimal_values(column1:7, 2) [as=b:8]
+           └── projections
+                └── b:8 > 0 [as=check1:9]

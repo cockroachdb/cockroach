@@ -74,7 +74,8 @@ func CreateTestTableDescriptor(
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
-			nil, /* params */
+			nil,   /* params */
+			false, /* isMultiRegion */
 		)
 		return desc, err
 	default:
@@ -132,12 +133,13 @@ func (dsp *DistSQLPlanner) Exec(
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
-		stmt.AST.StatementType(),
+		stmt.AST.StatementReturnType(),
 		execCfg.RangeDescriptorCache,
 		p.txn,
 		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
 		execCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

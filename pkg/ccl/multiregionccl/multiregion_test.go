@@ -12,9 +12,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	// Blank import ccl so that we have all CCL features enabled.
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func TestMultiRegionNoLicense(t *testing.T) {
 	defer utilccl.TestingDisableEnterprise()()
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+		t, 3 /* numServers */, base.TestingKnobs{},
 	)
 	defer cleanup()
 
@@ -52,22 +53,24 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
-	skip.UnderRace(t, "#61163")
-
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+		t, 3 /* numServers */, base.TestingKnobs{},
 	)
 	defer cleanup()
 
-	_, err := sqlDB.Exec(`
-CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2";
-USE test;
-CREATE TABLE t1 () LOCALITY GLOBAL;
-CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t3 () LOCALITY REGIONAL BY TABLE IN "us-east2";
-CREATE TABLE t4 () LOCALITY REGIONAL BY ROW
-	`)
-	require.NoError(t, err)
+	for _, setupQuery := range []string{
+		`CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
+		`USE test`,
+		`CREATE TABLE t1 () LOCALITY GLOBAL`,
+		`CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE`,
+		`CREATE TABLE t3 () LOCALITY REGIONAL BY TABLE IN "us-east2"`,
+		`CREATE TABLE t4 () LOCALITY REGIONAL BY ROW`,
+	} {
+		t.Run(setupQuery, func(t *testing.T) {
+			_, err := sqlDB.Exec(setupQuery)
+			require.NoError(t, err)
+		})
+	}
 
 	defer utilccl.TestingDisableEnterprise()()
 
@@ -113,4 +116,47 @@ CREATE TABLE t4 () LOCALITY REGIONAL BY ROW
 			})
 		}
 	})
+}
+
+func TestGlobalReadsAfterEnterpriseDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 1 /* numServers */, base.TestingKnobs{},
+	)
+	defer cleanup()
+
+	for _, setupQuery := range []string{
+		`CREATE DATABASE test`,
+		`USE test`,
+		`CREATE TABLE t1 ()`,
+		`CREATE TABLE t2 ()`,
+	} {
+		_, err := sqlDB.Exec(setupQuery)
+		require.NoError(t, err)
+	}
+
+	// Can set global_reads with enterprise license enabled.
+	_, err := sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = true`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE t2 CONFIGURE ZONE USING global_reads = true`)
+	require.NoError(t, err)
+
+	// Can unset global_reads with enterprise license enabled.
+	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = false`)
+	require.NoError(t, err)
+
+	defer utilccl.TestingDisableEnterprise()()
+
+	// Cannot set global_reads with enterprise license disabled.
+	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = true`)
+	require.Error(t, err)
+	require.Regexp(t, "use of global_reads requires an enterprise license", err)
+
+	// Can unset global_reads with enterprise license disabled.
+	_, err = sqlDB.Exec(`ALTER TABLE t2 CONFIGURE ZONE USING global_reads = false`)
+	require.NoError(t, err)
 }

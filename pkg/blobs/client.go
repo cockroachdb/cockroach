@@ -128,8 +128,8 @@ type localClient struct {
 	localStorage *LocalStorage
 }
 
-// newLocalClient instantiates a local blob service client.
-func newLocalClient(externalIODir string) (BlobClient, error) {
+// NewLocalClient instantiates a local blob service client.
+func NewLocalClient(externalIODir string) (BlobClient, error) {
 	storage, err := NewLocalStorage(externalIODir)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating local client")
@@ -168,7 +168,7 @@ func NewBlobClientFactory(
 ) BlobClientFactory {
 	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
 		if dialing == 0 || localNodeID == dialing {
-			return newLocalClient(externalIODir)
+			return NewLocalClient(externalIODir)
 		}
 		conn, err := dialer.Dial(ctx, dialing, rpc.DefaultClass)
 		if err != nil {

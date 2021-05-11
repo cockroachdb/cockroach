@@ -86,6 +86,15 @@ func GenerateSubzoneSpans(
 		}
 	}
 
+	// We already completely avoid creating subzone spans for dropped indexes.
+	// Whether this was intentional is a different story, but it turns out to be
+	// pretty sane. Dropped elements may refer to dropped types and we aren't
+	// necessarily in a position to deal with those dropped types. Add a special
+	// case to avoid generating any subzone spans in the face of being dropped.
+	if tableDesc.Dropped() {
+		return nil, nil
+	}
+
 	a := &rowenc.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
@@ -116,7 +125,7 @@ func GenerateSubzoneSpans(
 
 		var emptyPrefix []tree.Datum
 		indexPartitionCoverings, err := indexCoveringsForPartitioning(
-			a, codec, tableDesc, idx.IndexDesc(), &idx.IndexDesc().Partitioning, subzoneIndexByPartition, emptyPrefix)
+			a, codec, tableDesc, idx, &idx.IndexDesc().Partitioning, subzoneIndexByPartition, emptyPrefix)
 		if err != nil {
 			return err
 		}
@@ -176,7 +185,7 @@ func indexCoveringsForPartitioning(
 	a *rowenc.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	idxDesc *descpb.IndexDescriptor,
+	idx catalog.Index,
 	partDesc *descpb.PartitioningDescriptor,
 	relevantPartitions map[string]int32,
 	prefixDatums []tree.Datum,
@@ -200,7 +209,7 @@ func indexCoveringsForPartitioning(
 		for _, p := range partDesc.List {
 			for _, valueEncBuf := range p.Values {
 				t, keyPrefix, err := rowenc.DecodePartitionTuple(
-					a, codec, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
+					a, codec, tableDesc, idx, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return nil, err
 				}
@@ -212,7 +221,7 @@ func indexCoveringsForPartitioning(
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
-					a, codec, tableDesc, idxDesc, &p.Subpartitioning, relevantPartitions, newPrefixDatums)
+					a, codec, tableDesc, idx, &p.Subpartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
 					return nil, err
 				}
@@ -232,12 +241,12 @@ func indexCoveringsForPartitioning(
 				continue
 			}
 			_, fromKey, err := rowenc.DecodePartitionTuple(
-				a, codec, tableDesc, idxDesc, partDesc, p.FromInclusive, prefixDatums)
+				a, codec, tableDesc, idx, partDesc, p.FromInclusive, prefixDatums)
 			if err != nil {
 				return nil, err
 			}
 			_, toKey, err := rowenc.DecodePartitionTuple(
-				a, codec, tableDesc, idxDesc, partDesc, p.ToExclusive, prefixDatums)
+				a, codec, tableDesc, idx, partDesc, p.ToExclusive, prefixDatums)
 			if err != nil {
 				return nil, err
 			}

@@ -709,6 +709,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tbody>
 <tr><td><a name="experimental_uuid_v4"></a><code>experimental_uuid_v4() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a UUID.</p>
 </span></td></tr>
+<tr><td><a name="gen_random_ulid"></a><code>gen_random_ulid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random ULID and returns it as a value of UUID type.</p>
+</span></td></tr>
 <tr><td><a name="gen_random_uuid"></a><code>gen_random_uuid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>
 </span></td></tr>
 <tr><td><a name="unique_rowid"></a><code>unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID used by CockroachDB to generate unique row IDs if a Primary Key isn’t defined for the table. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. However, there can be gaps and the order is not completely guaranteed.</p>
@@ -816,6 +818,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="json_extract_path"></a><code>json_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td></tr>
+<tr><td><a name="json_extract_path_text"></a><code>json_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
+</span></td></tr>
 <tr><td><a name="json_object"></a><code>json_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
 <tr><td><a name="json_object"></a><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
@@ -839,6 +843,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
 </span></td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
+</span></td></tr>
+<tr><td><a name="jsonb_extract_path_text"></a><code>jsonb_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_insert"></a><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. <code>new_val</code> will be inserted before path target.</p>
 </span></td></tr>
@@ -869,6 +875,16 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="crdb_internal.filter_multiregion_fields_from_zone_config_sql"></a><code>crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Takes in a CONFIGURE ZONE SQL statement and returns a modified
+SQL statement omitting multi-region related zone configuration fields.
+If the CONFIGURE ZONE statement can be inferred by the database’s or
+table’s zone configuration this will return NULL.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.validate_multi_region_zone_configs"></a><code>crdb_internal.validate_multi_region_zone_configs() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validates all multi-region zone configurations are correctly setup
+for the current database, including all tables, indexes and partitions underneath.
+Returns an error if validation fails. This builtin uses un-leased versions of the
+each descriptor, requiring extra round trips.</p>
+</span></td></tr>
 <tr><td><a name="default_to_database_primary_region"></a><code>default_to_database_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region has been added to the current database.
 Otherwise, this will return the primary region of the current database.
 This will error if the current database is not a multi-region database.</p>
@@ -1012,6 +1028,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
 </span></td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="timestamp.html">timestamp</a>, end: <a href="timestamp.html">timestamp</a>, step: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestamp values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
+</span></td></tr>
+<tr><td><a name="generate_series"></a><code>generate_series(start: <a href="timestamp.html">timestamptz</a>, end: <a href="timestamp.html">timestamptz</a>, step: <a href="interval.html">interval</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the timestampTZ values from <code>start</code> to <code>end</code>, inclusive, by increment of <code>step</code>.</p>
 </span></td></tr>
 <tr><td><a name="generate_subscripts"></a><code>generate_subscripts(array: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a series comprising the given array’s subscripts.</p>
 </span></td></tr>
@@ -1271,6 +1289,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="postgis_wagyu_version"></a><code>postgis_wagyu_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
 </span></td></tr>
+<tr><td><a name="st_addmeasure"></a><code>st_addmeasure(geometry: geometry, start: <a href="float.html">float</a>, end: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a copy of a LineString or MultiLineString with measure coordinates linearly interpolated between the specified start and end values. Any existing M coordinates will be overwritten.</p>
+</span></td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to the end of a LineString.</p>
 </span></td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to a LineString at the given 0-based index (-1 to append).</p>
@@ -1430,6 +1450,12 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 </span></td></tr>
 <tr><td><a name="st_astext"></a><code>st_astext(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>, precision_z: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>, precision_z: <a href="int.html">int</a>, precision_m: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geographies, or NULL if the two points are coincident. It is solved using the Inverse geodesic problem.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
@@ -1680,6 +1706,8 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_endpoint"></a><code>st_endpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_envelope"></a><code>st_envelope(box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding geometry for the given box.</p>
+</span></td></tr>
 <tr><td><a name="st_envelope"></a><code>st_envelope(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding envelope for the given geometry.</p>
 <p>For geometries which have a POINT or LINESTRING bounding box (i.e. is a single point
 or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise, the
@@ -1689,6 +1717,13 @@ Bottom Left.</p>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>, parent_only: <a href="bool.html">bool</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+<p>The parent_only boolean is always ignored.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
 </span></td></tr>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta units across all dimensions.</p>
 </span></td></tr>
@@ -1875,6 +1910,9 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>For flags=0, validity is defined by the OGC spec.</p>
 <p>For flags=1, validity considers self-intersecting rings forming holes as valid as per ESRI. This is not valid under OGC and CRDB spatial operations may not operate correctly.</p>
 <p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_isvalidtrajectory"></a><code>st_isvalidtrajectory(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry encodes a valid trajectory.</p>
+<p>Note the geometry must be a LineString with M coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_length"></a><code>st_length(geography: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the length of the given geography in meters. Uses a spheroid to perform the operation.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -2221,9 +2259,11 @@ The paths themselves are given in the direction of the first geometry.</p>
 Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
 If no snapping occurs then the input geometry is returned unchanged.</p>
 </span></td></tr>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>, size_z: <a href="float.html">float</a>, size_m: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid defined by the given origin and X, Y, Z, and M cell sizes. Any dimension with a 0 cell size will not be snapped.</p>
+</span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).</p>
 </span></td></tr>
-<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size.</p>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size. The specified size is only used to snap X and Y coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y.</p>
 </span></td></tr>
@@ -2364,14 +2404,13 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td></tr>
 <tr><td><a name="convert_to"></a><code>convert_to(str: <a href="string.html">string</a>, enc: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encode the string <code>str</code> as a byte array using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
 </span></td></tr>
-<tr><td><a name="crdb_internal.filter_multiregion_fields_from_zone_config_sql"></a><code>crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Takes in a CONFIGURE ZONE SQL statement and returns a modified
-SQL statement omitting multi-region related zone configuration fields.
-If the CONFIGURE ZONE statement can be inferred by the database’s or
-table’s zone configuration this will return NULL.</p>
-</span></td></tr>
-<tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(dbName: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a flat log of CREATE table statements followed by
-ALTER table statements that add table constraints. The flat log can be used
-to recreate a database.’</p>
+<tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE table statements followed by
+ALTER table statements that add table constraints. The rows are ordered
+by dependencies. All foreign keys are added after the creation of the table
+in the alter statements.
+It is not recommended to perform this operation on a database with many
+tables.
+The output can be used to recreate a database.’</p>
 </span></td></tr>
 <tr><td><a name="decode"></a><code>decode(text: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td></tr>
@@ -2618,6 +2657,8 @@ to recreate a database.’</p>
 <tr><td><a name="translate"></a><code>translate(input: <a href="string.html">string</a>, find: <a href="string.html">string</a>, replace: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>In <code>input</code>, replaces the first character from <code>find</code> with the first character in <code>replace</code>; repeat for each character in <code>find</code>.</p>
 <p>For example, <code>translate('doggie', 'dog', '123');</code> returns <code>1233ie</code>.</p>
 </span></td></tr>
+<tr><td><a name="ulid_to_uuid"></a><code>ulid_to_uuid(val: <a href="string.html">string</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Converts a ULID string to its UUID-encoded representation.</p>
+</span></td></tr>
 <tr><td><a name="unaccent"></a><code>unaccent(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes accents (diacritic signs) from the text provided in <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="upper"></a><code>upper(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their to their upper-case equivalents.</p>
@@ -2647,6 +2688,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.completed_migrations"></a><code>crdb_internal.completed_migrations() &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.create_join_token"></a><code>crdb_internal.create_join_token() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Creates a join token for use when adding a new node to a secure cluster.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.encode_key"></a><code>crdb_internal.encode_key(table_id: <a href="int.html">int</a>, index_id: <a href="int.html">int</a>, row_tuple: anyelement) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generate the key for a row on a particular table and index.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.force_assertion_error"></a><code>crdb_internal.force_assertion_error(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
@@ -2661,6 +2704,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.get_database_id"></a><code>crdb_internal.get_database_id(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td></tr>
 <tr><td><a name="crdb_internal.get_namespace_id"></a><code>crdb_internal.get_namespace_id(parent_id: <a href="int.html">int</a>, name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td></td></tr>
+<tr><td><a name="crdb_internal.get_vmodule"></a><code>crdb_internal.get_vmodule() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the vmodule configuration on the gateway node processing this request.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.get_zone_config"></a><code>crdb_internal.get_zone_config(namespace_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td></td></tr>
 <tr><td><a name="crdb_internal.has_role_option"></a><code>crdb_internal.has_role_option(option: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the current user has the specified role option</p>
 </span></td></tr>
@@ -2702,9 +2747,13 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.reset_sql_stats"></a><code>crdb_internal.reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>, scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>This function is used internally to round decimal values during mutations.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.set_trace_verbose"></a><code>crdb_internal.set_trace_verbose(trace_id: <a href="int.html">int</a>, verbosity: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if root span was found and verbosity was set, false otherwise.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.set_vmodule"></a><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the equivalent of the <code>--vmodule</code> flag on the gateway node processing this request; it affords control over the logging verbosity of different files. Example syntax: <code>crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')</code>. Reset with: <code>crdb_internal.set_vmodule('')</code>. Raising the verbosity can severely affect performance.</p>
 </span></td></tr>
@@ -2719,6 +2768,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="current_user"></a><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td></tr>
 <tr><td><a name="version"></a><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
+</span></td></tr></tbody>
+</table>
+
+### System repair functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.force_delete_table_data"></a><code>crdb_internal.force_delete_table_data(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function can be used to clear the data belonging to a table, when the table cannot be dropped.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2755,6 +2813,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+</span></td></tr></tbody>
+</table>
+
+### UUID functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="uuid_to_ulid"></a><code>uuid_to_ulid(val: <a href="uuid.html">uuid</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a UUID-encoded ULID to its string representation.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -2930,6 +2997,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="pg_sleep"></a><code>pg_sleep(seconds: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>pg_sleep makes the current session’s process sleep until seconds seconds have elapsed. seconds is a value of type double precision, so fractional-second delays can be specified.</p>
 </span></td></tr>
 <tr><td><a name="pg_table_is_visible"></a><code>pg_table_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the table with the given OID belongs to one of the schemas on the search path.</p>
+</span></td></tr>
+<tr><td><a name="pg_type_is_visible"></a><code>pg_type_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the type with the given OID belongs to one of the schemas on the search path.</p>
 </span></td></tr></tbody>
 </table>
 

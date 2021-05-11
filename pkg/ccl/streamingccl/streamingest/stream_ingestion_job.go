@@ -81,7 +81,8 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 	p := execCtx.(sql.JobExecContext)
 
 	// Start ingesting KVs from the replication stream.
-	err := ingest(resumeCtx, p, details.StartTime, details.StreamAddress, s.job.Progress(), s.job.ID())
+	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
+	err := ingest(resumeCtx, p, details.StartTime, streamAddress, s.job.Progress(), s.job.ID())
 	if err != nil {
 		return err
 	}
@@ -133,7 +134,8 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime: sp.StreamIngest.CutoverTime,
+				TargetTime:                          sp.StreamIngest.CutoverTime,
+				EnableTimeBoundIteratorOptimization: true,
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize

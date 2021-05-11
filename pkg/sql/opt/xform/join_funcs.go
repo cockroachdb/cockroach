@@ -17,7 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -50,25 +51,39 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	orders := DeriveInterestingOrderings(left).Copy()
-	orders.RestrictToCols(leftEq.ToSet())
+	orders := ordering.DeriveInterestingOrderings(left).Copy()
+	leftCols, leftFDs := leftEq.ToSet(), &left.Relational().FuncDeps
+	orders.RestrictToCols(leftCols, leftFDs)
+
+	var mustGenerateMergeJoin bool
+	if len(orders) == 0 && leftCols.SubsetOf(leftFDs.ConstantCols()) {
+		// All left equality columns are constant, so we can trivially create
+		// an ordering.
+		mustGenerateMergeJoin = true
+	}
 
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
-		rightOrders := DeriveInterestingOrderings(right).Copy()
-		rightOrders.RestrictToCols(leftEq.ToSet())
+		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
+		rightOrders.RestrictToCols(rightEq.ToSet(), &right.Relational().FuncDeps)
 		orders = append(orders, rightOrders...)
 
 		// If we don't allow hash join, we must do our best to generate a merge
-		// join, even if it means sorting both sides. We append an arbitrary
-		// ordering, in case the interesting orderings don't result in any merge
-		// joins.
+		// join, even if it means sorting both sides.
+		mustGenerateMergeJoin = true
+	}
+
+	if mustGenerateMergeJoin {
+		// We append an arbitrary ordering, in case the interesting orderings don't
+		// result in any merge joins.
 		o := make(opt.Ordering, len(leftEq))
 		for i := range o {
 			o[i] = opt.MakeOrderingColumn(leftEq[i], false /* descending */)
 		}
-		orders.Add(o)
+		var oc props.OrderingChoice
+		oc.FromOrdering(o)
+		orders.Add(&oc)
 	}
 
 	if len(orders) == 0 {
@@ -84,14 +99,6 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	var remainingFilters memo.FiltersExpr
 
 	for _, o := range orders {
-		if len(o) < n {
-			// TODO(radu): we have a partial ordering on the equality columns. We
-			// should augment it with the other columns (in arbitrary order) in the
-			// hope that we can get the full ordering cheaply using a "streaming"
-			// sort. This would not useful now since we don't support streaming sorts.
-			continue
-		}
-
 		if remainingFilters == nil {
 			remainingFilters = memo.ExtractRemainingJoinFilters(on, leftEq, rightEq)
 		}
@@ -99,18 +106,33 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		merge := memo.MergeJoinExpr{Left: left, Right: right, On: remainingFilters}
 		merge.JoinPrivate = *joinPrivate
 		merge.JoinType = originalOp
-		merge.LeftEq = make(opt.Ordering, n)
-		merge.RightEq = make(opt.Ordering, n)
-		merge.LeftOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
-		merge.RightOrdering.Columns = make([]physical.OrderingColumnChoice, 0, n)
-		for i := 0; i < n; i++ {
-			eqIdx, _ := colToEq.Get(int(o[i].ID()))
-			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
-			merge.LeftEq[i] = opt.MakeOrderingColumn(l, descending)
-			merge.RightEq[i] = opt.MakeOrderingColumn(r, descending)
+		merge.LeftEq = make(opt.Ordering, 0, n)
+		merge.RightEq = make(opt.Ordering, 0, n)
+		merge.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		merge.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+
+		addCol := func(col opt.ColumnID, descending bool) {
+			eqIdx, _ := colToEq.Get(int(col))
+			l, r := leftEq[eqIdx], rightEq[eqIdx]
+			merge.LeftEq = append(merge.LeftEq, opt.MakeOrderingColumn(l, descending))
+			merge.RightEq = append(merge.RightEq, opt.MakeOrderingColumn(r, descending))
 			merge.LeftOrdering.AppendCol(l, descending)
 			merge.RightOrdering.AppendCol(r, descending)
 		}
+
+		// Add the required ordering columns.
+		for i := range o.Columns {
+			c := &o.Columns[i]
+			c.Group.ForEach(func(col opt.ColumnID) {
+				addCol(col, c.Descending)
+			})
+		}
+
+		// Add the remaining columns in an arbitrary order.
+		remaining := leftCols.Difference(merge.LeftEq.ColSet())
+		remaining.ForEach(func(col opt.ColumnID) {
+			addCol(col, false /* descending */)
+		})
 
 		// Simplify the orderings with the corresponding FD sets.
 		merge.LeftOrdering.Simplify(&leftProps.FuncDeps)
@@ -229,8 +251,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	var pkCols opt.ColList
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
@@ -364,7 +386,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
-		if isCovering {
+		// TODO(mgartner): The right side of the join can "produce" columns held
+		// constant by a partial index predicate, but the lookup joiner does not
+		// currently support this. For now, if constProj is non-empty we
+		// consider the index non-covering.
+		if isCovering && len(constProj) == 0 {
 			// Case 1 (see function comment).
 			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
 
@@ -639,8 +665,8 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	var optionalFilters memo.FiltersExpr
 
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
-	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
 		numPrefixCols := index.NonInvertedPrefixColumnCount()
 
@@ -904,11 +930,14 @@ func (c *CustomFuncs) mapInvertedJoin(
 // findJoinFilterConstants tries to find a filter that is exactly equivalent to
 // constraining the given column to a constant value or a set of constant
 // values. If successful, the constant values and the index of the constraining
-// FiltersItem are returned. Note that the returned constant values do not
-// contain NULL.
+// FiltersItem are returned. If multiple filters match, the one that minimizes
+// the number of returned values is chosen. Note that the returned constant
+// values do not contain NULL.
 func (c *CustomFuncs) findJoinFilterConstants(
 	filters memo.FiltersExpr, col opt.ColumnID,
 ) (values tree.Datums, filterIdx int, ok bool) {
+	var bestValues tree.Datums
+	var bestFilterIdx int
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
@@ -923,12 +952,16 @@ func (c *CustomFuncs) findJoinFilterConstants(
 					break
 				}
 			}
-			if !hasNull {
-				return constVals, filterIdx, true
+			if !hasNull && (bestValues == nil || len(bestValues) > len(constVals)) {
+				bestValues = constVals
+				bestFilterIdx = filterIdx
 			}
 		}
 	}
-	return nil, -1, false
+	if bestValues == nil {
+		return nil, -1, false
+	}
+	return bestValues, bestFilterIdx, true
 }
 
 // constructJoinWithConstants constructs a cross join that joins every row in
@@ -1120,4 +1153,195 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 		result[i] = c.e.f.ConstructProjectionsItem(ifExpr, proj[i].Col)
 	}
 	return result
+}
+
+// CreateLocalityOptimizedAntiLookupJoinPrivate creates a new lookup join
+// private from the given private and replaces the LookupExpr with the given
+// filters. It also marks the private as locality optimized.
+func (c *CustomFuncs) CreateLocalityOptimizedAntiLookupJoinPrivate(
+	lookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
+) *memo.LookupJoinPrivate {
+	newPrivate := *private
+	newPrivate.LookupExpr = lookupExpr
+	newPrivate.LocalityOptimized = true
+	return &newPrivate
+}
+
+// GetLocalityOptimizedAntiJoinLookupExprs returns the local and remote lookup
+// expressions needed to build a locality optimized anti join from the given
+// lookup join private, if possible. Otherwise, it returns ok=false. See the
+// comment above the GenerateLocalityOptimizedAntiJoin rule for more details.
+func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
+	input memo.RelExpr, private *memo.LookupJoinPrivate,
+) (localExpr memo.FiltersExpr, remoteExpr memo.FiltersExpr, ok bool) {
+	// Respect the session setting LocalityOptimizedSearch.
+	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+		return nil, nil, false
+	}
+
+	// Check whether this lookup join has already been locality optimized.
+	if private.LocalityOptimized {
+		return nil, nil, false
+	}
+
+	// We can only apply this optimization to anti-joins.
+	if private.JoinType != opt.AntiJoinOp {
+		return nil, nil, false
+	}
+
+	// This lookup join cannot not be part of a paired join.
+	if private.IsSecondJoinInPairedJoiner {
+		return nil, nil, false
+	}
+
+	// This lookup join should have the LookupExpr filled in, indicating that one
+	// or more of the join filters constrain an index column to multiple constant
+	// values.
+	if private.LookupExpr == nil {
+		return nil, nil, false
+	}
+
+	// The local region must be set, or we won't be able to determine which
+	// partitions are local.
+	localRegion, found := c.e.evalCtx.Locality.Find(regionKey)
+	if !found {
+		return nil, nil, false
+	}
+
+	// There should be at least two partitions, or we won't be able to
+	// differentiate between local and remote partitions.
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	index := tabMeta.Table.Index(private.Index)
+	if index.PartitionCount() < 2 {
+		return nil, nil, false
+	}
+
+	// Determine whether the index has both local and remote partitions.
+	var localPartitions util.FastIntSet
+	for i, n := 0, index.PartitionCount(); i < n; i++ {
+		part := index.Partition(i)
+		if isZoneLocal(part.Zone(), localRegion) {
+			localPartitions.Add(i)
+		}
+	}
+	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
+		// The partitions are either all local or all remote.
+		return nil, nil, false
+	}
+
+	// Find a filter that constrains the first column of the index.
+	filterIdx, ok := c.getConstPrefixFilter(index, private.Table, private.LookupExpr)
+	if !ok {
+		return nil, nil, false
+	}
+	filter := private.LookupExpr[filterIdx]
+
+	// Check whether the filter constrains the first column of the index
+	// to at least two constant values. We need at least two values so that one
+	// can target a local partition and one can target a remote partition.
+	col, vals, ok := filter.ScalarProps().Constraints.HasSingleColumnConstValues(c.e.evalCtx)
+	if !ok || len(vals) < 2 {
+		return nil, nil, false
+	}
+
+	// Determine whether the values target both local and remote partitions.
+	localValOrds := c.getLocalValues(index, localPartitions, vals)
+	if localValOrds.Len() == 0 || localValOrds.Len() == len(vals) {
+		// The values target all local or all remote partitions.
+		return nil, nil, false
+	}
+
+	// Split the values into local and remote sets.
+	localValues, remoteValues := c.splitValues(vals, localValOrds)
+
+	// Copy all of the filters from the LookupExpr, and replace the filter that
+	// constrains the first index column with a filter targeting only local
+	// partitions or only remote partitions.
+	localExpr = make(memo.FiltersExpr, len(private.LookupExpr))
+	copy(localExpr, private.LookupExpr)
+	localExpr[filterIdx] = c.makeConstFilter(col, localValues)
+
+	remoteExpr = make(memo.FiltersExpr, len(private.LookupExpr))
+	copy(remoteExpr, private.LookupExpr)
+	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
+
+	// Return the two sets of lookup expressions. They will be used to construct
+	// two nested anti joins.
+	return localExpr, remoteExpr, true
+}
+
+// getConstPrefixFilter finds the position of the filter in the given slice of
+// filters that constrains the first index column to one or more constant
+// values. If such a filter is found, getConstPrefixFilter returns the position
+// of the filter and ok=true. Otherwise, returns ok=false.
+func (c CustomFuncs) getConstPrefixFilter(
+	index cat.Index, table opt.TableID, filters memo.FiltersExpr,
+) (pos int, ok bool) {
+	idxCol := table.IndexColumnID(index, 0)
+	for i := range filters {
+		props := filters[i].ScalarProps()
+		if !props.TightConstraints {
+			continue
+		}
+		if props.OuterCols.Len() != 1 {
+			continue
+		}
+		col := props.OuterCols.SingleColumn()
+		if col == idxCol {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// getLocalValues returns the indexes of the values in the given Datums slice
+// that target local partitions.
+func (c *CustomFuncs) getLocalValues(
+	index cat.Index, localPartitions util.FastIntSet, values tree.Datums,
+) util.FastIntSet {
+	// Collect all the prefixes from all the different partitions (remembering
+	// which ones came from local partitions), and sort them so that longer
+	// prefixes come before shorter prefixes. For each value in the given Datums,
+	// we will iterate through the list of prefixes until we find a match, so
+	// ordering them with longer prefixes first ensures that the correct match is
+	// found.
+	allPrefixes := getSortedPrefixes(index, localPartitions)
+
+	// TODO(rytaft): Sort the prefixes by key in addition to length, and use
+	// binary search here.
+	var localVals util.FastIntSet
+	for i, val := range values {
+		for j := range allPrefixes {
+			prefix := allPrefixes[j].prefix
+			isLocal := allPrefixes[j].isLocal
+			if len(prefix) > 1 {
+				continue
+			}
+			if val.Compare(c.e.evalCtx, prefix[0]) == 0 {
+				if isLocal {
+					localVals.Add(i)
+				}
+				break
+			}
+		}
+	}
+	return localVals
+}
+
+// splitValues splits the given slice of Datums into local and remote slices
+// by putting the Datums at positions identified by localValOrds into the local
+// slice, and the remaining Datums into the remote slice.
+func (c *CustomFuncs) splitValues(
+	values tree.Datums, localValOrds util.FastIntSet,
+) (localVals, remoteVals tree.Datums) {
+	localVals = make(tree.Datums, 0, localValOrds.Len())
+	remoteVals = make(tree.Datums, 0, len(values)-len(localVals))
+	for i, val := range values {
+		if localValOrds.Contains(i) {
+			localVals = append(localVals, val)
+		} else {
+			remoteVals = append(remoteVals, val)
+		}
+	}
+	return localVals, remoteVals
 }

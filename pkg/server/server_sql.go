@@ -31,8 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -68,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -313,7 +317,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs,
 		cfg.stopper,
 		cfg.rangeFeedFactory,
-		cfg.LeaseManagerConfig,
 	)
 	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 
@@ -381,6 +384,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	cfg.registry.AddMetricStruct(hydratedTablesCache.Metrics())
 
 	gcJobNotifier := gcjobnotifier.New(cfg.Settings, cfg.systemConfigProvider, codec, cfg.stopper)
+
+	var compactEngineSpanFunc tree.CompactEngineSpanFunc
+	if !codec.ForSystemTenant() {
+		compactEngineSpanFunc = func(
+			ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
+		) error {
+			return errorutil.UnsupportedWithMultiTenancy(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+		}
+	} else {
+		cli := kvserver.NewCompactEngineSpanClient(cfg.nodeDialer)
+		compactEngineSpanFunc = cli.CompactEngineSpan
+	}
 
 	// Set up the DistSQL server.
 	distSQLCfg := execinfra.ServerConfig{
@@ -504,7 +519,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
 		RoleMemberCache:         &sql.MembershipCache{},
+		RootMemoryMonitor:       rootSQLMemoryMonitor,
 		TestingKnobs:            sqlExecutorTestingKnobs,
+		CompactEngineSpanFunc:   compactEngineSpanFunc,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -522,13 +539,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
+			ctx,
 			cfg.TableStatCacheSize,
-			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
 			codec,
 			leaseMgr,
 			cfg.Settings,
+			cfg.rangeFeedFactory,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
@@ -543,6 +561,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
 	} else {
 		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
+	}
+	if sqlNewSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLNewSchemaChanger; sqlNewSchemaChangerTestingKnobs != nil {
+		execCfg.NewSchemaChangerTestingKnobs = sqlNewSchemaChangerTestingKnobs.(*scexec.NewSchemaChangerTestingKnobs)
+	} else {
+		execCfg.NewSchemaChangerTestingKnobs = new(scexec.NewSchemaChangerTestingKnobs)
 	}
 	if sqlTypeSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLTypeSchemaChanger; sqlTypeSchemaChangerTestingKnobs != nil {
 		execCfg.TypeSchemaChangerTestingKnobs = sqlTypeSchemaChangerTestingKnobs.(*sql.TypeSchemaChangerTestingKnobs)
@@ -599,6 +622,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg,
 	)
 
+	distSQLServer.ServerConfig.SQLStatsResetter = pgServer.SQLServer
+
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
@@ -636,19 +661,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
-	if cfg.TenantID == roachpb.SystemTenantID {
+	{
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
 		// versions.
-		//
-		// TODO(ajwerner): Allow tenants to set their cluster version and to
-		// perform sql migrations through the migration infrastructure.
-		// See #48436.
-		c := migrationcluster.New(migrationcluster.ClusterConfig{
-			NodeLiveness: nodeLiveness,
-			Dialer:       cfg.nodeDialer,
-			DB:           cfg.db,
-		})
+		var c migration.Cluster
+		if codec.ForSystemTenant() {
+			c = migrationcluster.New(migrationcluster.ClusterConfig{
+				NodeLiveness: nodeLiveness,
+				Dialer:       cfg.nodeDialer,
+				DB:           cfg.db,
+			})
+		} else {
+			c = migrationcluster.NewTenantCluster(cfg.db)
+		}
+
 		knobs, _ := cfg.TestingKnobs.MigrationManager.(*migrationmanager.TestingKnobs)
 		migrationMgr := migrationmanager.NewManager(
 			c, cfg.circularInternalExecutor, jobRegistry, codec, cfg.Settings, knobs,
@@ -756,7 +783,7 @@ func (s *SQLServer) preStart(
 		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
 	}
 
-	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB, s.execCfg.Gossip)
+	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
 	// Only start the sqlliveness subsystem if we're already at the cluster

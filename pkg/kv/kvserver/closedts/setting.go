@@ -46,3 +46,14 @@ var SideTransportCloseInterval = settings.RegisterDurationSetting(
 	200*time.Millisecond,
 	settings.NonNegativeDuration,
 )
+
+// LeadForGlobalReadsOverride overrides the lead time that ranges with the
+// LEAD_FOR_GLOBAL_READS closed timestamp policy use to publish close timestamps
+// (see TargetForPolicy), if it is set to a non-zero value. Meant as an escape
+// hatch.
+var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
+	"kv.closed_timestamp.lead_for_global_reads_override",
+	"if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps",
+	0,
+	settings.NonNegativeDuration,
+)

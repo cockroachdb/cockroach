@@ -84,7 +84,7 @@ func (ef *execFactory) ConstructScan(
 	}
 
 	tabDesc := table.(*optTable).desc
-	indexDesc := index.(*optIndex).desc
+	idx := index.(*optIndex).idx
 	// Create a scanNode.
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
@@ -104,20 +104,20 @@ func (ef *execFactory) ConstructScan(
 		return newZeroNode(scan.resultColumns), nil
 	}
 
-	scan.index = indexDesc
+	scan.index = idx
 	scan.hardLimit = params.HardLimit
 	scan.softLimit = params.SoftLimit
 
 	scan.reverse = params.Reverse
 	scan.parallelize = params.Parallelize
 	var err error
-	scan.spans, err = generateScanSpans(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc, params)
+	scan.spans, err = generateScanSpans(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, idx, params)
 	if err != nil {
 		return nil, err
 	}
 
 	scan.isFull = len(scan.spans) == 1 && scan.spans[0].EqualValue(
-		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.ID),
+		scan.desc.IndexSpan(ef.planner.ExecCfg().Codec, scan.index.GetID()),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -136,10 +136,10 @@ func generateScanSpans(
 	evalCtx *tree.EvalContext,
 	codec keys.SQLCodec,
 	tabDesc catalog.TableDescriptor,
-	indexDesc *descpb.IndexDescriptor,
+	index catalog.Index,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
-	sb := span.MakeBuilder(evalCtx, codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(evalCtx, codec, tabDesc, index)
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint)
 	}
@@ -497,7 +497,11 @@ func (ef *execFactory) ConstructDistinct(
 
 // ConstructSetOp is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
+	typ tree.UnionType,
+	all bool,
+	left, right exec.Node,
+	reqOrdering exec.OutputOrdering,
+	hardLimit uint64,
 ) (exec.Node, error) {
 	if hardLimit != 0 && (typ != tree.UnionOp || !all) {
 		return nil, errors.AssertionFailedf("a hard limit on a set operator is only supported for UNION ALL")
@@ -507,7 +511,9 @@ func (ef *execFactory) ConstructSetOp(
 			"locality optimized search is not yet supported for more than one row at a time",
 		)
 	}
-	return ef.planner.newUnionNode(typ, all, left.(planNode), right.(planNode), hardLimit)
+	return ef.planner.newUnionNode(
+		typ, all, left.(planNode), right.(planNode), ReqOrdering(reqOrdering), hardLimit,
+	)
 }
 
 // ConstructSort is part of the exec.Factory interface.
@@ -547,7 +553,7 @@ func (ef *execFactory) ConstructIndexJoin(
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	colCfg := makeScanColumnsConfig(table, tableCols)
-	colDescs := makeColDescList(table, tableCols)
+	cols := makeColList(table, tableCols)
 
 	tableScan := ef.planner.Scan()
 
@@ -555,15 +561,14 @@ func (ef *execFactory) ConstructIndexJoin(
 		return nil, err
 	}
 
-	primaryIndex := tabDesc.GetPrimaryIndex()
-	tableScan.index = primaryIndex.IndexDesc()
+	tableScan.index = tabDesc.GetPrimaryIndex()
 	tableScan.disableBatchLimit()
 
 	n := &indexJoinNode{
 		input:         input.(planNode),
 		table:         tableScan,
-		cols:          colDescs,
-		resultColumns: colinfo.ResultColumnsFromColDescs(tabDesc.GetID(), colDescs),
+		cols:          cols,
+		resultColumns: colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
 		reqOrdering:   ReqOrdering(reqOrdering),
 	}
 
@@ -594,7 +599,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
 	}
 	tabDesc := table.(*optTable).desc
-	indexDesc := index.(*optIndex).desc
+	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
@@ -602,7 +607,7 @@ func (ef *execFactory) ConstructLookupJoin(
 		return nil, err
 	}
 
-	tableScan.index = indexDesc
+	tableScan.index = idx
 	if locking != nil {
 		tableScan.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 		tableScan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
@@ -646,6 +651,9 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	if err != nil {
 		return nil, err
 	}
+	if !canQueryVirtualTable(ef.planner.EvalContext(), virtual) {
+		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	}
 	if len(eqCols) > 1 {
 		return nil, errors.AssertionFailedf("vtable indexes with more than one column aren't supported yet")
 	}
@@ -653,7 +661,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	if lookupCols.Contains(0) {
 		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
 	}
-	indexDesc := index.(*optVirtualIndex).desc
+	idx := index.(*optVirtualIndex).idx
 	tableDesc := table.(*optVirtualTable).desc
 	// Build the result columns.
 	inputCols := planColumns(input.(planNode))
@@ -669,12 +677,8 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	if err := tableScan.initTable(context.TODO(), ef.planner, tableDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
-	tableScan.index = indexDesc
-	publicColDescs := make([]descpb.ColumnDescriptor, len(tableDesc.PublicColumns()))
-	for i, col := range tableDesc.PublicColumns() {
-		publicColDescs[i] = *col.ColumnDesc()
-	}
-	vtableCols := colinfo.ResultColumnsFromColDescs(tableDesc.GetID(), publicColDescs)
+	tableScan.index = idx
+	vtableCols := colinfo.ResultColumnsFromColumns(tableDesc.GetID(), tableDesc.PublicColumns())
 	projectedVtableCols := planColumns(&tableScan)
 	outputCols := make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
 	outputCols = append(outputCols, inputCols...)
@@ -688,7 +692,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		virtualTableEntry: virtual,
 		dbName:            tn.Catalog(),
 		table:             tableDesc,
-		index:             indexDesc,
+		index:             idx,
 		eqCol:             int(eqCols[0]),
 		inputCols:         inputCols,
 		vtableCols:        vtableCols,
@@ -712,7 +716,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	indexDesc := index.(*optIndex).desc
+	idx := index.(*optIndex).idx
 	// NB: lookupCols does not include the inverted column, which is only a partial
 	// representation of the original table column. This scan configuration does not
 	// affect what the invertedJoiner implementation retrieves from the inverted
@@ -724,7 +728,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
-	tableScan.index = indexDesc
+	tableScan.index = idx
 
 	n := &invertedJoinNode{
 		input:                     input.(planNode),
@@ -765,9 +769,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 // Helper function to create a scanNode from just a table / index descriptor
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
-	indexDesc *descpb.IndexDescriptor,
-	tableDesc catalog.TableDescriptor,
-	cols exec.TableColumnOrdinalSet,
+	index catalog.Index, tableDesc catalog.TableDescriptor, cols exec.TableColumnOrdinalSet,
 ) (*scanNode, error) {
 
 	colCfg := scanColumnsConfig{
@@ -783,7 +785,7 @@ func (ef *execFactory) constructScanForZigzag(
 		return nil, err
 	}
 
-	scan.index = indexDesc
+	scan.index = index
 
 	return scan, nil
 }
@@ -803,16 +805,16 @@ func (ef *execFactory) ConstructZigzagJoin(
 	onCond tree.TypedExpr,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	leftIndexDesc := leftIndex.(*optIndex).desc
+	leftIdx := leftIndex.(*optIndex).idx
 	leftTabDesc := leftTable.(*optTable).desc
-	rightIndexDesc := rightIndex.(*optIndex).desc
+	rightIdx := rightIndex.(*optIndex).idx
 	rightTabDesc := rightTable.(*optTable).desc
 
-	leftScan, err := ef.constructScanForZigzag(leftIndexDesc, leftTabDesc, leftCols)
+	leftScan, err := ef.constructScanForZigzag(leftIdx, leftTabDesc, leftCols)
 	if err != nil {
 		return nil, err
 	}
-	rightScan, err := ef.constructScanForZigzag(rightIndexDesc, rightTabDesc, rightCols)
+	rightScan, err := ef.constructScanForZigzag(rightIdx, rightTabDesc, rightCols)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,7 +1180,7 @@ func (ef *execFactory) ConstructInsert(
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	colDescs := makeColDescList(table, insertColOrdSet)
+	cols := makeColList(table, insertColOrdSet)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1186,7 +1188,7 @@ func (ef *execFactory) ConstructInsert(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, cols, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1205,12 +1207,12 @@ func (ef *execFactory) ConstructInsert(
 
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
-		ins.columns = colinfo.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
+		returnCols := makeColList(table, returnColOrdSet)
+		ins.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
-		ins.run.tabColIdxToRetIdx = makePublicToReturnColumnIndexMapping(tabDesc, returnColDescs)
+		ins.run.tabColIdxToRetIdx = makePublicToReturnColumnIndexMapping(tabDesc, returnCols)
 		ins.run.rowsNeeded = true
 	}
 
@@ -1244,7 +1246,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	colDescs := makeColDescList(table, insertColOrdSet)
+	cols := makeColList(table, insertColOrdSet)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1252,7 +1254,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// Create the table inserter, which does the bulk of the work.
 	ri, err := row.MakeInserter(
-		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, colDescs, ef.planner.alloc,
+		ctx, ef.planner.txn, ef.planner.ExecCfg().Codec, tabDesc, cols, ef.planner.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -1280,12 +1282,12 @@ func (ef *execFactory) ConstructInsertFastPath(
 
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
-		ins.columns = colinfo.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
+		returnCols := makeColList(table, returnColOrdSet)
+		ins.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
-		ins.run.tabColIdxToRetIdx = makePublicToReturnColumnIndexMapping(tabDesc, returnColDescs)
+		ins.run.tabColIdxToRetIdx = makePublicToReturnColumnIndexMapping(tabDesc, returnCols)
 		ins.run.rowsNeeded = true
 	}
 
@@ -1332,7 +1334,7 @@ func (ef *execFactory) ConstructUpdate(
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	fetchColDescs := makeColDescList(table, fetchColOrdSet)
+	fetchCols := makeColList(table, fetchColOrdSet)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1341,10 +1343,10 @@ func (ef *execFactory) ConstructUpdate(
 	// Add each column to update as a sourceSlot. The CBO only uses scalarSlot,
 	// since it compiles tuples and subqueries into a simple sequence of target
 	// columns.
-	updateColDescs := makeColDescList(table, updateColOrdSet)
-	sourceSlots := make([]sourceSlot, len(updateColDescs))
+	updateCols := makeColList(table, updateColOrdSet)
+	sourceSlots := make([]sourceSlot, len(updateCols))
 	for i := range sourceSlots {
-		sourceSlots[i] = scalarSlot{column: updateColDescs[i], sourceIndex: len(fetchColDescs) + i}
+		sourceSlots[i] = scalarSlot{column: updateCols[i], sourceIndex: len(fetchCols) + i}
 	}
 
 	// Create the table updater, which does the bulk of the work.
@@ -1353,8 +1355,8 @@ func (ef *execFactory) ConstructUpdate(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		updateColDescs,
-		fetchColDescs,
+		updateCols,
+		fetchCols,
 		row.UpdaterDefault,
 		ef.planner.alloc,
 	)
@@ -1366,7 +1368,7 @@ func (ef *execFactory) ConstructUpdate(
 	// the explanatory comments in updateRun.
 	var updateColsIdx catalog.TableColMap
 	for i := range ru.UpdateCols {
-		id := ru.UpdateCols[i].ID
+		id := ru.UpdateCols[i].GetID()
 		updateColsIdx.Set(id, i)
 	}
 
@@ -1390,9 +1392,9 @@ func (ef *execFactory) ConstructUpdate(
 
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
+		returnCols := makeColList(table, returnColOrdSet)
 
-		upd.columns = colinfo.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
+		upd.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 		// Add the passthrough columns to the returning columns.
 		upd.columns = append(upd.columns, passthrough...)
 
@@ -1403,7 +1405,7 @@ func (ef *execFactory) ConstructUpdate(
 		// since the return columns are always a subset of the fetch columns,
 		// we can use use the fetch columns to generate the mapping for the
 		// returned rows.
-		upd.run.rowIdxToRetIdx = row.ColMapping(ru.FetchCols, returnColDescs)
+		upd.run.rowIdxToRetIdx = row.ColMapping(ru.FetchCols, returnCols)
 		upd.run.rowsNeeded = true
 	}
 
@@ -1441,9 +1443,9 @@ func (ef *execFactory) ConstructUpsert(
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	insertColDescs := makeColDescList(table, insertColOrdSet)
-	fetchColDescs := makeColDescList(table, fetchColOrdSet)
-	updateColDescs := makeColDescList(table, updateColOrdSet)
+	insertCols := makeColList(table, insertColOrdSet)
+	fetchCols := makeColList(table, fetchColOrdSet)
+	updateCols := makeColList(table, updateColOrdSet)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1455,7 +1457,7 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		insertColDescs,
+		insertCols,
 		ef.planner.alloc,
 	)
 	if err != nil {
@@ -1468,8 +1470,8 @@ func (ef *execFactory) ConstructUpsert(
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		updateColDescs,
-		fetchColDescs,
+		updateCols,
+		fetchCols,
 		row.UpdaterDefault,
 		ef.planner.alloc,
 	)
@@ -1487,8 +1489,8 @@ func (ef *execFactory) ConstructUpsert(
 			tw: optTableUpserter{
 				ri:            ri,
 				canaryOrdinal: int(canaryCol),
-				fetchCols:     fetchColDescs,
-				updateCols:    updateColDescs,
+				fetchCols:     fetchCols,
+				updateCols:    updateCols,
 				ru:            ru,
 			},
 		},
@@ -1496,14 +1498,14 @@ func (ef *execFactory) ConstructUpsert(
 
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
-		ups.columns = colinfo.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
+		returnCols := makeColList(table, returnColOrdSet)
+		ups.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
 		// non-mutation columns specified, in the same order they are defined
 		// in the table.
-		ups.run.tw.tabColIdxToRetIdx = makePublicToReturnColumnIndexMapping(tabDesc, returnColDescs)
-		ups.run.tw.returnCols = returnColDescs
+		ups.run.tw.tabColIdxToRetIdx = makePublicToReturnColumnIndexMapping(tabDesc, returnCols)
+		ups.run.tw.returnCols = returnCols
 		ups.run.tw.rowsNeeded = true
 	}
 
@@ -1533,7 +1535,7 @@ func (ef *execFactory) ConstructDelete(
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
-	fetchColDescs := makeColDescList(table, fetchColOrdSet)
+	fetchCols := makeColList(table, fetchColOrdSet)
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1543,7 +1545,7 @@ func (ef *execFactory) ConstructDelete(
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
-	rd := row.MakeDeleter(ef.planner.ExecCfg().Codec, tabDesc, fetchColDescs)
+	rd := row.MakeDeleter(ef.planner.ExecCfg().Codec, tabDesc, fetchCols)
 
 	// Now make a delete node. We use a pool.
 	del := deleteNodePool.Get().(*deleteNode)
@@ -1557,12 +1559,12 @@ func (ef *execFactory) ConstructDelete(
 
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
-		returnColDescs := makeColDescList(table, returnColOrdSet)
+		returnCols := makeColList(table, returnColOrdSet)
 		// Delete returns the non-mutation columns specified, in the same
 		// order they are defined in the table.
-		del.columns = colinfo.ResultColumnsFromColDescs(tabDesc.GetID(), returnColDescs)
+		del.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
-		del.run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnColDescs)
+		del.run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnCols)
 		del.run.rowsNeeded = true
 	}
 
@@ -1590,8 +1592,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	indexDesc := tabDesc.GetPrimaryIndex().IndexDesc()
-	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
 
 	if err := ef.planner.maybeSetSystemConfig(tabDesc.GetID()); err != nil {
 		return nil, err
@@ -1668,6 +1669,7 @@ func (ef *execFactory) ConstructCreateView(
 	viewQuery string,
 	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
+	typeDeps opt.ViewTypeDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1687,12 +1689,12 @@ func (ef *execFactory) ConstructCreateView(
 		var ref descpb.TableDescriptor_Reference
 		if d.SpecificIndex {
 			idx := d.DataSource.(cat.Table).Index(d.Index)
-			ref.IndexID = idx.(*optIndex).desc.ID
+			ref.IndexID = idx.(*optIndex).idx.GetID()
 		}
 		if !d.ColumnOrdinals.Empty() {
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
-				ref.ColumnIDs = append(ref.ColumnIDs, desc.PublicColumns()[ord].GetID())
+				ref.ColumnIDs = append(ref.ColumnIDs, desc.AllColumns()[ord].GetID())
 			})
 		}
 		entry := planDeps[desc.GetID()]
@@ -1700,6 +1702,11 @@ func (ef *execFactory) ConstructCreateView(
 		entry.deps = append(entry.deps, ref)
 		planDeps[desc.GetID()] = entry
 	}
+
+	typeDepSet := make(typeDependencies, typeDeps.Len())
+	typeDeps.ForEach(func(id int) {
+		typeDepSet[descpb.ID(id)] = struct{}{}
+	})
 
 	return &createViewNode{
 		viewName:     viewName,
@@ -1711,6 +1718,7 @@ func (ef *execFactory) ConstructCreateView(
 		dbDesc:       schema.(*optSchema).database,
 		columns:      columns,
 		planDeps:     planDeps,
+		typeDeps:     typeDepSet,
 	}, nil
 }
 
@@ -1764,7 +1772,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 
 	return &splitNode{
 		tableDesc:      index.Table().(*optTable).desc,
-		index:          index.(*optIndex).desc,
+		index:          index.(*optIndex).idx,
 		rows:           input.(planNode),
 		expirationTime: expirationTime,
 	}, nil
@@ -1788,7 +1796,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 
 	return &unsplitNode{
 		tableDesc: index.Table().(*optTable).desc,
-		index:     index.(*optIndex).desc,
+		index:     index.(*optIndex).idx,
 		rows:      input.(planNode),
 	}, nil
 }
@@ -1809,23 +1817,24 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 
 	return &unsplitAllNode{
 		tableDesc: index.Table().(*optTable).desc,
-		index:     index.(*optIndex).desc,
+		index:     index.(*optIndex).idx,
 	}, nil
 }
 
 // ConstructAlterTableRelocate is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableRelocate(
-	index cat.Index, input exec.Node, relocateLease bool,
+	index cat.Index, input exec.Node, relocateLease bool, relocateNonVoters bool,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
 	return &relocateNode{
-		relocateLease: relocateLease,
-		tableDesc:     index.Table().(*optTable).desc,
-		index:         index.(*optIndex).desc,
-		rows:          input.(planNode),
+		relocateLease:     relocateLease,
+		relocateNonVoters: relocateNonVoters,
+		tableDesc:         index.Table().(*optTable).desc,
+		index:             index.(*optIndex).idx,
+		rows:              input.(planNode),
 	}, nil
 }
 
@@ -1889,7 +1898,9 @@ func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Nod
 
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, buildFn exec.BuildPlanForExplainFn,
+	options *tree.ExplainOptions,
+	stmtType tree.StatementReturnType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
@@ -1918,6 +1929,9 @@ func (ef *execFactory) ConstructExplain(
 		}, nil
 	}
 	flags := explain.MakeFlags(options)
+	if ef.planner.execCfg.TestingKnobs.DeterministicExplain {
+		flags.Redact = explain.RedactVolatile
+	}
 	n := &explainPlanNode{
 		options: options,
 		flags:   flags,
@@ -1959,18 +1973,18 @@ func (rb *renderBuilder) setOutput(exprs tree.TypedExprs, columns colinfo.Result
 	rb.r.columns = columns
 }
 
-// makeColDescList returns a list of table column descriptors. Columns are
+// makeColList returns a list of table column interfaces. Columns are
 // included if their ordinal position in the table schema is in the cols set.
-func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []descpb.ColumnDescriptor {
+func makeColList(table cat.Table, cols exec.TableColumnOrdinalSet) []catalog.Column {
 	tab := table.(optCatalogTableInterface)
-	colDescs := make([]descpb.ColumnDescriptor, 0, cols.Len())
+	ret := make([]catalog.Column, 0, cols.Len())
 	for i, n := 0, table.ColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
 			continue
 		}
-		colDescs = append(colDescs, *tab.getCol(i).ColumnDesc())
+		ret = append(ret, tab.getCol(i))
 	}
-	return colDescs
+	return ret
 }
 
 // makePublicToReturnColumnIndexMapping returns a map from the ordinals
@@ -1980,12 +1994,7 @@ func makeColDescList(table cat.Table, cols exec.TableColumnOrdinalSet) []descpb.
 //                   the i'th public column, or
 //              -1 if the i'th public column is not found in returnColDescs.
 func makePublicToReturnColumnIndexMapping(
-	tableDesc catalog.TableDescriptor, returnColDescs []descpb.ColumnDescriptor,
+	tableDesc catalog.TableDescriptor, returnCols []catalog.Column,
 ) []int {
-	publicCols := tableDesc.PublicColumns()
-	publicColDescs := make([]descpb.ColumnDescriptor, len(publicCols))
-	for i, col := range publicCols {
-		publicColDescs[i] = *col.ColumnDesc()
-	}
-	return row.ColMapping(publicColDescs, returnColDescs)
+	return row.ColMapping(tableDesc.PublicColumns(), returnCols)
 }

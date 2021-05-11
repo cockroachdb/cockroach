@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -46,12 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -65,6 +60,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -78,6 +75,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -217,7 +215,7 @@ var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.require_explicit_primary_keys.enabled",
 	"default value for requiring explicit primary keys in CREATE TABLE statements",
 	false,
-)
+).WithPublic()
 
 var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_temporary_tables.enabled",
@@ -228,6 +226,19 @@ var temporaryTablesEnabledClusterMode = settings.RegisterBoolSetting(
 var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_implicit_column_partitioning.enabled",
 	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning",
+	false,
+)
+
+var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.drop_enum_value.enabled",
+	"default value for enable_drop_enum_value; allows for dropping enum values",
+	false,
+)
+
+var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.override_multi_region_zone_config.enabled",
+	"default value for override_multi_region_zone_config; "+
+		"allows for overriding the zone configs of a multi-region table or database",
 	false,
 )
 
@@ -297,7 +308,7 @@ var localityOptimizedSearchMode = settings.RegisterBoolSetting(
 	"sql.defaults.locality_optimized_partitioned_index_scan.enabled",
 	"default value for locality_optimized_partitioned_index_scan session setting; "+
 		"enables searching for rows in the current region before searching remote regions",
-	false,
+	true,
 )
 
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
@@ -319,14 +330,34 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var clusterStatementTimeout = settings.RegisterDurationSetting(
+	"sql.defaults.statement_timeout",
+	"default value for the statement_timeout; "+
+		"default value for the statement_timeout session setting; controls the "+
+		"duration a query is permitted to run before it is canceled; if set to 0, "+
+		"there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
+
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
-		"enables automatically killing sessions that exceed the "+
-		"idle_in_session_timeout threshold",
+		"default value for the idle_in_session_timeout session setting; controls the "+
+		"duration a session is permitted to idle before the session is terminated; "+
+		"if set to 0, there is no timeout",
 	0,
 	settings.NonNegativeDuration,
-)
+).WithPublic()
+
+var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
+	"sql.defaults.idle_in_transaction_session_timeout",
+	"default value for the idle_in_transaction_session_timeout; controls the "+
+		"duration a session is permitted to idle in a transaction before the "+
+		"session is terminated; if set to 0, there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
 
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
@@ -337,7 +368,6 @@ var experimentalUniqueWithoutIndexConstraintsMode = settings.RegisterBoolSetting
 	false,
 )
 
-// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"sql.defaults.experimental_new_schema_changer.enabled",
 	"default value for experimental_use_new_schema_changer session setting;"+
@@ -356,6 +386,20 @@ var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
 		"enables the ability to setup a replication stream",
 	false,
 )
+
+var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
+	`sql.defaults.stub_catalog_tables.enabled`,
+	`default value for stub_catalog_tables session setting`,
+	true,
+)
+
+// settingWorkMemBytes is a cluster setting that determines the maximum amount
+// of RAM that a processor can use.
+var settingWorkMemBytes = settings.RegisterByteSizeSetting(
+	"sql.distsql.temp_storage.workmem",
+	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
+	execinfra.DefaultMemoryLimit, /* 64MiB */
+).WithPublic()
 
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
@@ -385,24 +429,9 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondatapb.VectorizeOff): "off",
-		int64(sessiondatapb.VectorizeOn):  "on",
-	},
-)
-
-// VectorizeRowCountThresholdClusterValue controls the cluster default for the
-// vectorize row count threshold. When it is met, the vectorized execution
-// engine will be used if possible.
-var VectorizeRowCountThresholdClusterValue = settings.RegisterIntSetting(
-	"sql.defaults.vectorize_row_count_threshold",
-	"default vectorize row count threshold",
-	colexec.DefaultVectorizeRowCountThreshold,
-	func(v int64) error {
-		if v < 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue,
-				"cannot set sql.defaults.vectorize_row_count_threshold to a negative value: %d", v)
-		}
-		return nil
+		int64(sessiondatapb.VectorizeOff):                "off",
+		int64(sessiondatapb.VectorizeOn):                 "on",
+		int64(sessiondatapb.VectorizeExperimentalAlways): "experimental_always",
 	},
 )
 
@@ -787,6 +816,7 @@ type ExecutorConfig struct {
 	TestingKnobs                  ExecutorTestingKnobs
 	PGWireTestingKnobs            *PGWireTestingKnobs
 	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
+	NewSchemaChangerTestingKnobs  *scexec.NewSchemaChangerTestingKnobs
 	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
 	GCJobTestingKnobs             *GCJobTestingKnobs
 	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
@@ -821,15 +851,10 @@ type ExecutorConfig struct {
 
 	// VersionUpgradeHook is called after validating a `SET CLUSTER SETTING
 	// version` but before executing it. It can carry out arbitrary migrations
-	// that allow us to eventually remove legacy code. It will only be populated
-	// on the system tenant.
-	//
-	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
-	VersionUpgradeHook func(ctx context.Context, user security.SQLUsername, from, to clusterversion.ClusterVersion) error
+	// that allow us to eventually remove legacy code.
+	VersionUpgradeHook VersionUpgradeHook
 
 	// MigrationJobDeps is used to drive migrations.
-	//
-	// TODO(tbg,irfansharif,ajwerner): Hook up for secondary tenants.
 	MigrationJobDeps migration.JobDeps
 
 	// IndexBackfiller is used to backfill indexes. It is another rather circular
@@ -839,7 +864,23 @@ type ExecutorConfig struct {
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry
+
+	// RootMemoryMonitor is the root memory monitor of the entire server. Do not
+	// use this for normal purposes. It is to be used to establish any new
+	// root-level memory accounts that are not related to a user sessions.
+	RootMemoryMonitor *mon.BytesMonitor
+
+	// CompactEngineSpanFunc is used to inform a storage engine of the need to
+	// perform compaction over a key span.
+	CompactEngineSpanFunc tree.CompactEngineSpanFunc
 }
+
+// VersionUpgradeHook is used to run migrations starting in v21.1.
+type VersionUpgradeHook func(
+	ctx context.Context,
+	user security.SQLUsername,
+	from, to clusterversion.ClusterVersion,
+) error
 
 // Organization returns the value of cluster.organization.
 func (cfg *ExecutorConfig) Organization() string {
@@ -934,17 +975,28 @@ type ExecutorTestingKnobs struct {
 	// query (i.e. no subqueries). The physical plan is only safe for use for the
 	// lifetime of this function. Note that returning a nil function is
 	// unsupported and will lead to a panic.
-	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
+	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error
 
-	// DeterministicExplainAnalyze, if set, will result in overriding fields in
-	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
-	DeterministicExplainAnalyze bool
+	// DeterministicExplain, if set, will result in overriding fields in EXPLAIN
+	// and EXPLAIN ANALYZE that can vary between runs (like elapsed times).
+	//
+	// TODO(radu): this flag affects EXPLAIN and EXPLAIN ANALYZE differently. It
+	// hides the vectorization, distribution, and cluster nodes in EXPLAIN ANALYZE
+	// but not in EXPLAIN. This is just a consequence of how the tests we have are
+	// written. We should replace this knob with a session setting that allows
+	// exact control of the redaction flags (and have each test set it as
+	// necessary).
+	DeterministicExplain bool
 
-	// Pretend59315IsFixed pretends that this issue is fixed:
-	// https://github.com/cockroachdb/cockroach/issues/59315
-	// which means that we don't need the WithBypassRegistry option
-	// in resetForNewSQLTxn.
-	Pretend59315IsFixed bool
+	// ForceRealTracingSpans, if set, forces the use of real (i.e. not no-op)
+	// tracing spans for every statement.
+	ForceRealTracingSpans bool
+
+	// DistSQLReceiverPushCallbackFactory, if set, will be called every time a
+	// DistSQLReceiver is created for a new query execution, and it should
+	// return, possibly nil, a callback that will be called every time
+	// DistSQLReceiver.Push is called.
+	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1010,16 +1062,6 @@ var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
-
-// StreamIngestionTestingKnobs contains knobs for stream ingestion behavior.
-type StreamIngestionTestingKnobs struct {
-	Interceptors []func(event streamingccl.Event, pa streamingccl.PartitionAddress)
-}
-
-var _ base.ModuleTestingKnobs = &StreamIngestionTestingKnobs{}
-
-// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
-func (*StreamIngestionTestingKnobs) ModuleTestingKnobs() {}
 
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
@@ -1222,7 +1264,7 @@ func (p *planner) EvalAsOfTimestamp(
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-	if now := p.execCfg.Clock.Now(); now.Less(ts) {
+	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
 		return hlc.Timestamp{}, errors.Errorf(
 			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
 	}
@@ -1476,10 +1518,6 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
-	return &schemaInterface{logical: accessors.NewLogicalAccessor(descsCol, vs)}
-}
-
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
@@ -1574,10 +1612,11 @@ type SessionTracing struct {
 	ex *connExecutor
 
 	// firstTxnSpan is the span of the first txn that was active when session
-	// tracing was enabled.
+	// tracing was enabled. It is finished and unset in StopTracing.
 	firstTxnSpan *tracing.Span
 
-	// connSpan is the connection's span. This is recording.
+	// connSpan is the connection's span. This is recording. It is finished and
+	// unset in StopTracing.
 	connSpan *tracing.Span
 
 	// lastRecording will collect the recording when stopping tracing.
@@ -1653,16 +1692,18 @@ func (st *SessionTracing) StartTracing(
 		return nil
 	}
 
-	// If we're inside a transaction, start recording on the txn span.
+	// If we're inside a transaction, hijack the txn's ctx with one that has a
+	// recording span.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
-		sp := tracing.SpanFromContext(st.ex.state.Ctx)
-		if sp == nil {
+		txnCtx := st.ex.state.Ctx
+		if sp := tracing.SpanFromContext(txnCtx); sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
-		// We want to clear out any existing recordings so they don't show up in
-		// future traces.
-		sp.ResetRecording()
+
+		newTxnCtx, sp := tracing.EnsureChildSpan(txnCtx, st.ex.server.cfg.AmbientCtx.Tracer,
+			"session tracing", tracing.WithForceRealSpan())
 		sp.SetVerbose(true)
+		st.ex.state.Ctx = newTxnCtx
 		st.firstTxnSpan = sp
 	}
 
@@ -1691,7 +1732,6 @@ func (st *SessionTracing) StartTracing(
 }
 
 // StopTracing stops the trace that was started with StartTracing().
-// An error is returned if tracing was not active.
 func (st *SessionTracing) StopTracing() error {
 	if !st.enabled {
 		// We're not currently tracing. No-op.
@@ -1702,18 +1742,16 @@ func (st *SessionTracing) StopTracing() error {
 	st.showResults = false
 	st.recordingType = tracing.RecordingOff
 
+	// Accumulate all recordings and finish the tracing spans.
 	var spans []tracingpb.RecordedSpan
-
 	if st.firstTxnSpan != nil {
 		spans = append(spans, st.firstTxnSpan.GetRecording()...)
-		st.firstTxnSpan.SetVerbose(false)
+		st.firstTxnSpan.Finish()
+		st.firstTxnSpan = nil
 	}
-	st.connSpan.Finish()
 	spans = append(spans, st.connSpan.GetRecording()...)
-	// NOTE: We're stopping recording on the connection's ctx only; the stopping
-	// is not inherited by children. If we are inside of a txn, that span will
-	// continue recording, even though nobody will collect its recording again.
-	st.connSpan.SetVerbose(false)
+	st.connSpan.Finish()
+	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()
 
 	var err error
@@ -2193,6 +2231,10 @@ func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
 
+func (m *sessionDataMutator) SetDistSQLWorkMem(val int64) {
+	m.data.WorkMemLimit = val
+}
+
 func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 	m.data.ForceSavepointRestart = val
 }
@@ -2221,10 +2263,6 @@ func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
 
 func (m *sessionDataMutator) SetVectorize(val sessiondatapb.VectorizeExecMode) {
 	m.data.VectorizeMode = val
-}
-
-func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
-	m.data.VectorizeRowCountThreshold = val
 }
 
 func (m *sessionDataMutator) SetTestingVectorizeInjectPanics(val bool) {
@@ -2316,6 +2354,14 @@ func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 	m.data.ImplicitColumnPartitioningEnabled = val
 }
 
+func (m *sessionDataMutator) SetDropEnumValueEnabled(val bool) {
+	m.data.DropEnumValueEnabled = val
+}
+
+func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {
+	m.data.OverrideMultiRegionZoneConfigEnabled = val
+}
+
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
 	m.data.HashShardedIndexesEnabled = val
 }
@@ -2356,6 +2402,11 @@ func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplayS
 // initSequenceCache creates an empty sequence cache instance for the session.
 func (m *sessionDataMutator) initSequenceCache() {
 	m.data.SequenceCache = sessiondata.SequenceCache{}
+}
+
+// SetStubCatalogTableEnabled sets default value for stub_catalog_tables.
+func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
+	m.data.StubCatalogTablesEnabled = enabled
 }
 
 type sqlStatsCollector struct {
@@ -2399,11 +2450,12 @@ func (s *sqlStatsCollector) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
+	planner *planner,
 ) roachpb.StmtID {
 	return s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn, fullScan,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
-		ovhLat, stats,
+		ovhLat, stats, planner,
 	)
 }
 

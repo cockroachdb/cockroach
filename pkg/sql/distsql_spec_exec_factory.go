@@ -184,10 +184,10 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// Phase 1: set up all necessary infrastructure for table reader planning
 	// below. This phase is equivalent to what execFactory.ConstructScan does.
 	tabDesc := table.(*optTable).desc
-	indexDesc := index.(*optIndex).desc
+	idx := index.(*optIndex).idx
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
 
 	// Note that initColsForScan and setting ResultColumns below are equivalent
 	// to what scan.initTable call does in execFactory.ConstructScan.
@@ -215,7 +215,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
-		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, indexDesc.ID),
+		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, idx.GetID()),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		trSpec.VirtualColumn = vc.ColumnDesc()
 	}
 
-	trSpec.IndexIdx, err = getIndexIdx(indexDesc, tabDesc)
+	trSpec.IndexIdx, err = getIndexIdx(idx, tabDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -592,7 +592,11 @@ func (e *distSQLSpecExecFactory) ConstructDistinct(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSetOp(
-	typ tree.UnionType, all bool, left, right exec.Node, hardLimit uint64,
+	typ tree.UnionType,
+	all bool,
+	left, right exec.Node,
+	reqOrdering exec.OutputOrdering,
+	hardLimit uint64,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: set op")
 }
@@ -752,7 +756,9 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, buildFn exec.BuildPlanForExplainFn,
+	options *tree.ExplainOptions,
+	stmtType tree.StatementReturnType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")
@@ -901,6 +907,7 @@ func (e *distSQLSpecExecFactory) ConstructCreateView(
 	viewQuery string,
 	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
+	typeDeps opt.ViewTypeDeps,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create view")
 }
@@ -951,7 +958,7 @@ func (e *distSQLSpecExecFactory) ConstructAlterTableUnsplitAll(index cat.Index) 
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
-	index cat.Index, input exec.Node, relocateLease bool,
+	index cat.Index, input exec.Node, relocateLease bool, relocateNonVoters bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table relocate")
 }

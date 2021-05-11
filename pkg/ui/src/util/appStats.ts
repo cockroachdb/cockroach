@@ -15,8 +15,8 @@
 import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
-import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
+export type ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
 export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -85,6 +85,12 @@ export function addStatementStats(
     legacy_last_err: "",
     legacy_last_err_redacted: "",
     exec_stats: addExecStats(a.exec_stats, b.exec_stats),
+    sql_type: a.sql_type,
+    last_exec_timestamp:
+      a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
+        ? a.last_exec_timestamp
+        : b.last_exec_timestamp,
+    nodes: combinesUnique(a.nodes, b.nodes),
   };
 }
 
@@ -131,6 +137,17 @@ function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
   };
 }
 
+function combinesUnique<T>(a: Array<T>, b: Array<T>): Array<T> {
+  if (a !== undefined && b !== undefined) {
+    b.forEach((value: any) => {
+      if (!a.includes(value)) a.push(value);
+    });
+  } else if (b !== undefined) {
+    return b;
+  }
+  return a;
+}
+
 function addMaybeUnsetNumericStat(
   a: NumericStat,
   b: NumericStat,
@@ -175,6 +192,7 @@ export function aggregateStatementStats(
 export interface ExecutionStatistics {
   statement: string;
   app: string;
+  database: string;
   distSQL: boolean;
   vec: boolean;
   opt: boolean;
@@ -191,6 +209,7 @@ export function flattenStatementStats(
   return statementStats.map((stmt) => ({
     statement: stmt.key.key_data.query,
     app: stmt.key.key_data.app,
+    database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
     opt: stmt.key.key_data.opt,
@@ -206,4 +225,11 @@ export function combineStatementStats(
   statementStats: StatementStatistics[],
 ): StatementStatistics {
   return _.reduce(statementStats, addStatementStats);
+}
+
+// This function returns a key based on all parameters
+// that should be used to group statements.
+// Parameters being used: node_id, implicit_txn and database.
+export function statementKey(stmt: ExecutionStatistics): string {
+  return stmt.statement + stmt.implicit_txn + stmt.database;
 }

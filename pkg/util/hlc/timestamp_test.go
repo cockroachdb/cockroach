@@ -130,21 +130,22 @@ func TestTimestampPrev(t *testing.T) {
 	}
 }
 
-func TestTimestampFloorPrev(t *testing.T) {
+func TestTimestampFloorPrevWallPrev(t *testing.T) {
 	testCases := []struct {
-		ts, expPrev Timestamp
+		ts, expPrev, expWallPrev Timestamp
 	}{
-		{makeTS(2, 0), makeTS(1, 0)},
-		{makeTS(1, 2), makeTS(1, 1)},
-		{makeTS(1, 1), makeTS(1, 0)},
-		{makeTS(1, 0), makeTS(0, 0)},
-		{makeSynTS(2, 0), makeSynTS(1, 0)},
-		{makeSynTS(1, 2), makeSynTS(1, 1)},
-		{makeSynTS(1, 1), makeSynTS(1, 0)},
-		{makeSynTS(1, 0), makeSynTS(0, 0)},
+		{makeTS(2, 0), makeTS(1, 0), makeTS(1, 0)},
+		{makeTS(1, 2), makeTS(1, 1), makeTS(0, 0)},
+		{makeTS(1, 1), makeTS(1, 0), makeTS(0, 0)},
+		{makeTS(1, 0), makeTS(0, 0), makeTS(0, 0)},
+		{makeSynTS(2, 0), makeSynTS(1, 0), makeSynTS(1, 0)},
+		{makeSynTS(1, 2), makeSynTS(1, 1), makeSynTS(0, 0)},
+		{makeSynTS(1, 1), makeSynTS(1, 0), makeSynTS(0, 0)},
+		{makeSynTS(1, 0), makeSynTS(0, 0), makeSynTS(0, 0)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
+		assert.Equal(t, c.expWallPrev, c.ts.WallPrev())
 	}
 }
 
@@ -222,6 +223,9 @@ func TestAsOfSystemTime(t *testing.T) {
 		{makeTS(145, 0), "145.0000000000"},
 		{makeTS(145, 123), "145.0000000123"},
 		{makeTS(145, 1123456789), "145.1123456789"},
+		{makeSynTS(145, 0), "145.0000000000?"},
+		{makeSynTS(145, 123), "145.0000000123?"},
+		{makeSynTS(145, 1123456789), "145.1123456789?"},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.exp, c.ts.AsOfSystemTime())

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -523,6 +524,33 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 	}
 }
 
+// Ensure that an appropriately structured error is returned when trying to
+// update a clock using a timestamp too far in the future.
+func TestClock_UpdateAndCheckMaxOffset_UntrustworthyValue(t *testing.T) {
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	m := NewManualClock(t0.UnixNano())
+	c := NewClock(m.UnixNano, 500*time.Millisecond)
+	require.NoError(t, c.UpdateAndCheckMaxOffset(context.Background(), ClockTimestamp{
+		WallTime: t0.Add(499 * time.Millisecond).UnixNano(),
+	}))
+	err := c.UpdateAndCheckMaxOffset(context.Background(), ClockTimestamp{
+		WallTime: t0.Add(time.Second).UnixNano(),
+	})
+	require.True(t, IsUntrustworthyRemoteWallTimeError(err), err)
+
+	// Test that the error properly round-trips through protobuf encoding.
+	t.Run("encoding", func(t *testing.T) {
+		err := errors.Wrapf(err, "wrapping")
+		encoded := errors.EncodeError(context.Background(), err)
+		marshaled, err := protoutil.Marshal(&encoded)
+		require.NoError(t, err)
+		var unmarshaled errors.EncodedError
+		require.NoError(t, protoutil.Unmarshal(marshaled, &unmarshaled))
+		decoded := errors.DecodeError(context.Background(), unmarshaled)
+		require.True(t, IsUntrustworthyRemoteWallTimeError(decoded), decoded)
+	})
+}
+
 func TestResetAndRefreshHLCUpperBound(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -631,7 +659,7 @@ func TestSleepUntil(t *testing.T) {
 
 	doneC := make(chan struct{}, 1)
 	go func() {
-		c.SleepUntil(waitUntil)
+		_ = c.SleepUntil(context.Background(), waitUntil)
 		doneC <- struct{}{}
 	}()
 
@@ -643,6 +671,18 @@ func TestSleepUntil(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	<-doneC
+}
+
+func TestSleepUntilContextCancellation(t *testing.T) {
+	m := NewManualClock(100000)
+	c := NewClock(m.UnixNano, 0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	waitUntil := c.Now().Add(100000, 0)
+
+	err := c.SleepUntil(ctx, waitUntil)
+	require.Equal(t, context.DeadlineExceeded, err)
 }
 
 func BenchmarkUpdate(b *testing.B) {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 func registerSQLSmith(r *testRegistry) {
@@ -29,7 +30,7 @@ func registerSQLSmith(r *testRegistry) {
 		"seed":        sqlsmith.Setups["seed"],
 		"rand-tables": sqlsmith.Setups["rand-tables"],
 		"tpch-sf1": func(r *rand.Rand) string {
-			return `RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'defaultdb';`
+			return `RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup?AUTH=implicit' WITH into_db = 'defaultdb';`
 		},
 		"tpcc": func(r *rand.Rand) string {
 			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
@@ -45,7 +46,7 @@ func registerSQLSmith(r *testRegistry) {
 				"stock",
 				"warehouse",
 			} {
-				fmt.Fprintf(&sb, "RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s' WITH into_db = 'defaultdb';\n", t, version)
+				fmt.Fprintf(&sb, "RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures/workload/tpcc/%[2]s/%[1]s?AUTH=implicit' WITH into_db = 'defaultdb';\n", t, version)
 			}
 			return sb.String()
 		},
@@ -121,29 +122,18 @@ func registerSQLSmith(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
-		if err != nil {
+		// We will enable panic injection on this connection in the vectorized
+		// engine (and will ignore the injected errors) in order to test that
+		// the panic-catching mechanism of error propagation works as expected.
+		// Note: it is important to enable this testing knob only after all
+		// other setup queries have already completed, including the smither
+		// instantiation (otherwise, the setup might fail because of the
+		// injected panics).
+		injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
+		if _, err := conn.Exec(injectPanicsStmt); err != nil {
 			t.Fatal(err)
 		}
-		crdbVersion, err := toCRDBVersion(versionString)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if crdbVersion >= crdbVersion21_1 {
-			// We will enable panic injection on this connection in the
-			// vectorized engine (and will ignore the injected errors) in order
-			// to test that the panic-catching mechanism of error propagation
-			// works as expected.
-			// Note: it is important to enable this testing knob only after all
-			// other setup queries have already completed, including the smither
-			// instantiation (otherwise, the setup might fail because of the
-			// injected panics).
-			injectPanicsStmt := "SET testing_vectorize_inject_panics=true;"
-			if _, err := conn.Exec(injectPanicsStmt); err != nil {
-				t.Fatal(err)
-			}
-			logStmt(injectPanicsStmt)
-		}
+		logStmt(injectPanicsStmt)
 
 		t.Status("smithing")
 		until := time.After(t.spec.Timeout / 2)
@@ -159,10 +149,29 @@ func registerSQLSmith(r *testRegistry) {
 				return
 			default:
 			}
-			stmt := smither.Generate()
+
+			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
 				go func(context.Context) {
+					// Generate can potentially panic in bad cases, so
+					// to avoid Go routines from dying we are going
+					// catch that here, and only pass the error into
+					// the channel.
+					defer func() {
+						if r := recover(); r != nil {
+							done <- errors.Newf("Caught error %s", r)
+							return
+						}
+					}()
+
+					stmt = smither.Generate()
+					if stmt == "" {
+						// If an empty statement is generated, then ignore it.
+						done <- errors.Newf("Empty statement returned by generate")
+						return
+					}
+
 					// At the moment, CockroachDB doesn't support pgwire query
 					// cancellation which is needed for correct handling of context
 					// cancellation, so instead of using a context with timeout, we opt
@@ -191,16 +200,30 @@ func registerSQLSmith(r *testRegistry) {
 			}()
 			if err != nil {
 				es := err.Error()
-				// TODO(yuzefovich): we temporarily ignore internal errors that
-				// are because of #39433.
-				if strings.Contains(es, "internal error") && !strings.Contains(es, "internal error: invalid index") {
-					logStmt(stmt)
-					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
+				if strings.Contains(es, "internal error") {
+					// TODO(yuzefovich): we temporarily ignore internal errors
+					// that are because of #39433 and #40929.
+					var expectedError bool
+					for _, exp := range []string{
+						"internal error: subquery eval: invalid index",
+						"could not parse \"0E-2019\" as type decimal",
+					} {
+						expectedError = expectedError || strings.Contains(es, exp)
+					}
+					if !expectedError {
+						logStmt(stmt)
+						t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
+					}
 				} else if strings.Contains(es, "communication error") {
 					// A communication error can be because
 					// a non-gateway node has crashed.
 					logStmt(stmt)
 					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
+				} else if strings.Contains(es, "Empty statement returned by generate") ||
+					stmt == "" {
+					// Either were unable to generate a statement or
+					// we panicked making one.
+					t.Fatalf("Failed generating a query %s", err)
 				}
 				// Ignore other errors because they happen so
 				// frequently (due to sqlsmith not crafting
@@ -220,7 +243,7 @@ func registerSQLSmith(r *testRegistry) {
 		r.Add(testSpec{
 			Name: fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			// NB: sqlsmith failures should never block a release.
-			Owner:      OwnerSQLExec,
+			Owner:      OwnerSQLQueries,
 			Cluster:    makeClusterSpec(4),
 			MinVersion: "v20.2.0",
 			Timeout:    time.Minute * 20,

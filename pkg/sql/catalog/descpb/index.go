@@ -39,19 +39,6 @@ func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error
 	return nil
 }
 
-// GetEncodingType returns the encoding type of this index. For backward
-// compatibility reasons, this might not match what is stored in
-// desc.EncodingType. The primary index's ID must be passed so we can check if
-// this index is primary or secondary.
-func (desc *IndexDescriptor) GetEncodingType(primaryIndexID IndexID) IndexDescriptorEncodingType {
-	if desc.ID == primaryIndexID {
-		// Primary indexes always use the PrimaryIndexEncoding, regardless of what
-		// desc.EncodingType indicates.
-		return PrimaryIndexEncoding
-	}
-	return desc.EncodingType
-}
-
 // IsInterleaved returns whether the index is interleaved or not.
 func (desc *IndexDescriptor) IsInterleaved() bool {
 	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
@@ -131,25 +118,6 @@ func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 		}
 		return nil
 	}) != nil
-}
-
-// FullColumnIDs returns the index column IDs including any extra (implicit or
-// stored (old STORING encoding)) column IDs for non-unique indexes. It also
-// returns the direction with which each column was encoded.
-func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []IndexDescriptor_Direction) {
-	if desc.Unique {
-		return desc.ColumnIDs, desc.ColumnDirections
-	}
-	// Non-unique indexes have some of the primary-key columns appended to
-	// their key.
-	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
-	columnIDs = append(columnIDs, desc.ExtraColumnIDs...)
-	dirs := append([]IndexDescriptor_Direction(nil), desc.ColumnDirections...)
-	for range desc.ExtraColumnIDs {
-		// Extra columns are encoded in ascending order.
-		dirs = append(dirs, IndexDescriptor_ASC)
-	}
-	return columnIDs, dirs
 }
 
 // TODO (tyler): Issue #39771 This method needs more thorough testing, probably

@@ -32,14 +32,15 @@ import "gogoproto/gogo.proto";
 // "pre-canned" rows. This is not intended to be used for very large datasets.
 message ValuesCoreSpec {
   // There is one DatumInfo for each element in a row. Can be empty, in which
-  // case raw_bytes must be empty.
+  // case raw_bytes will be empty.
   repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
 
   // The number of rows is especially useful when we have zero columns.
   optional uint64 num_rows = 3 [(gogoproto.nullable) = false];
 
-  // Each raw block encodes one or more data rows; each datum is encoded
-  // according to the corresponding DatumInfo.
+  // Each raw block encodes one row; each datum is encoded according to the
+  // corresponding DatumInfo. As an optimization, if columns is empty, this will
+  // be empty rather than containing empty byte strings.
   repeated bytes raw_bytes = 2;
 }
 
@@ -844,8 +845,6 @@ message AggregatorSpec {
     reserved 3;
   }
 
-  optional Type type = 5 [(gogoproto.nullable) = false];
-
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.
   repeated uint32 group_cols = 2 [packed = true];
@@ -854,6 +853,13 @@ message AggregatorSpec {
 
   // A subset of the GROUP BY columns which are ordered in the input.
   repeated uint32 ordered_group_cols = 4 [packed = true];
+
+  optional Type type = 5 [(gogoproto.nullable) = false];
+
+  // OutputOrdering specifies the required ordering of the output produced by
+  // the aggregator. The input to the processor *must* already be ordered
+  // according to it.
+  optional Ordering output_ordering = 6 [(gogoproto.nullable) = false];
 }
 
 // ProjectSetSpec is the specification of a processor which applies a set of

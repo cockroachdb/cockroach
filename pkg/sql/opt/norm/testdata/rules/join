@@ -1334,25 +1334,25 @@ inner-join (hash)
  ├── cardinality: [0 - 1]
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
- ├── fd: ()-->(1-5,7,8,10-12,14-16,18,19)
+ ├── fd: ()-->(1-5,7,8,10-12,14-16,18,19), (7)==(1,10,14,18), (14)==(1,7,10,18), (1)==(7,10,14,18), (18)==(1,7,10,14), (10)==(1,7,14,18)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:7!null b.y:8 c.x:10!null c.y:11!null c.z:12!null d.x:14!null d.y:15!null d.z:16!null
  │    ├── cardinality: [0 - 1]
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
- │    ├── fd: ()-->(1-5,7,8,10-12,14-16)
+ │    ├── fd: ()-->(1-5,7,8,10-12,14-16), (10)==(1,7,14), (7)==(1,10,14), (14)==(1,7,10), (1)==(7,10,14)
  │    ├── inner-join (hash)
  │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:7!null b.y:8 c.x:10!null c.y:11!null c.z:12!null
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1-5,7,8,10-12)
+ │    │    ├── fd: ()-->(1-5,7,8,10-12), (1)==(7,10), (10)==(1,7), (7)==(1,10)
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:7!null b.y:8
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1-5,7,8)
+ │    │    │    ├── fd: ()-->(1-5,7,8), (7)==(1), (1)==(7)
  │    │    │    ├── select
  │    │    │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    │    │    │    ├── cardinality: [0 - 1]

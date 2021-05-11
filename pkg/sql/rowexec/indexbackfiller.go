@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -85,7 +84,7 @@ func newIndexBackfiller(
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
-		desc:    tabledesc.NewImmutable(spec.Table),
+		desc:    spec.BuildTableDescriptor(),
 		spec:    spec,
 		flowCtx: flowCtx,
 		output:  output,
@@ -103,6 +102,10 @@ func newIndexBackfiller(
 func (ib *indexBackfiller) OutputTypes() []*types.T {
 	// No output types.
 	return nil
+}
+
+func (ib *indexBackfiller) MustBeStreaming() bool {
+	return false
 }
 
 // indexEntryBatch represents a "batch" of index entries which are constructed
@@ -130,8 +133,12 @@ func (ib *indexBackfiller) constructIndexEntries(
 		todo := ib.spec.Spans[i].Span
 		for todo.Key != nil {
 			startKey := todo.Key
+			readAsOf := ib.spec.ReadAsOf
+			if readAsOf.IsEmpty() { // old gateway
+				readAsOf = ib.spec.WriteAsOf
+			}
 			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo,
-				ib.spec.ReadAsOf)
+				readAsOf)
 			if err != nil {
 				return err
 			}
@@ -187,8 +194,9 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		MaxBufferSize:  maxBufferSize,
 		StepBufferSize: stepSize,
 		SkipDuplicates: ib.ContainsInvertedIndex(),
+		BatchTimestamp: ib.spec.ReadAsOf,
 	}
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.ReadAsOf, opts)
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
 	if err != nil {
 		return err
 	}
@@ -388,7 +396,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
+	desc, err := ib.desc.MakeFirstMutationPublic(catalog.IncludeConstraints)
 	if err != nil {
 		return err
 	}

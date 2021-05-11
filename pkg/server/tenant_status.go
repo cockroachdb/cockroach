@@ -8,11 +8,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// TODO(azhng): The implementation for tenantStatusServer here will need to be updated
+//  once we have pod-to-pod communication implemented. After all dependencies that are
+//  unavailable to tenants have been removed, we can likely remove tenant status server
+//  entirely and use the normal status server.
+
 package server
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -37,6 +43,7 @@ func newTenantStatusServer(
 	sessionRegistry *sql.SessionRegistry,
 	contentionRegistry *contention.Registry,
 	st *cluster.Settings,
+	sqlServer *SQLServer,
 ) *tenantStatusServer {
 	ambient.AddLogTag("tenant-status", nil)
 	return &tenantStatusServer{
@@ -46,6 +53,7 @@ func newTenantStatusServer(
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
 			st:                 st,
+			sqlServer:          sqlServer,
 		},
 	}
 }
@@ -108,4 +116,28 @@ func (t *tenantStatusServer) ListLocalContentionEvents(
 		return nil, err
 	}
 	return &serverpb.ListContentionEventsResponse{Events: events}, nil
+}
+
+func (t *tenantStatusServer) ResetSQLStats(
+	ctx context.Context, _ *serverpb.ResetSQLStatsRequest,
+) (*serverpb.ResetSQLStatsResponse, error) {
+	t.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
+	return &serverpb.ResetSQLStatsResponse{}, nil
+}
+
+func (t *tenantStatusServer) Statements(
+	ctx context.Context, _ *serverpb.StatementsRequest,
+) (*serverpb.StatementsResponse, error) {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+	// Use a dummy value here until pod-to-pod communication is implemented since tenant status server
+	// does not have concept of node.
+	resp, err := statementsLocal(&base.NodeIDContainer{}, t.sqlServer)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }

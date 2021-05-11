@@ -1,5 +1,11 @@
 show_grants_stmt ::=
-	'SHOW' 'GRANTS' 'ON' ( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FOR' user_name ( ( ',' user_name ) )*
-	| 'SHOW' 'GRANTS' 'ON' ( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 
-	| 'SHOW' 'GRANTS'  'FOR' user_name ( ( ',' user_name ) )*
+	'SHOW' 'GRANTS' 'ON' 'ROLE' name ( ( ',' name ) )* 'FOR' name ( ( ',' name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'ROLE' name ( ( ',' name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' 'SCHEMA' schema_name ( ( ',' schema_name ) )* 'FOR' name ( ( ',' name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'SCHEMA' schema_name ( ( ',' schema_name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' 'TYPE' type_name ( ( ',' type_name ) )* 'FOR' name ( ( ',' name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'TYPE' type_name ( ( ',' type_name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' ( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FOR' name ( ( ',' name ) )*
+	| 'SHOW' 'GRANTS' 'ON' ( | 'TABLE' table_name ( ( ',' table_name ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 
+	| 'SHOW' 'GRANTS'  'FOR' name ( ( ',' name ) )*
 	| 'SHOW' 'GRANTS'  

@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -82,7 +82,7 @@ func TestColBatchScanMeta(t *testing.T) {
 			Projection:    true,
 			OutputColumns: []uint32{0},
 		},
-		ResultTypes: rowenc.OneIntCol,
+		ResultTypes: types.OneIntCol,
 	}
 
 	args := &colexecargs.NewColOperatorArgs{
@@ -93,9 +93,9 @@ func TestColBatchScanMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr := res.Op
-	tr.Init()
-	meta := tr.(*colexecutils.CancelChecker).Input.(*colfetcher.ColBatchScan).DrainMeta(ctx)
+	tr := res.Root
+	tr.Init(ctx)
+	meta := tr.(*colexecutils.CancelChecker).Input.(*colfetcher.ColBatchScan).DrainMeta()
 	var txnFinalStateSeen bool
 	for _, m := range meta {
 		if m.LeafTxnFinalState != nil {
@@ -140,7 +140,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					Projection:    true,
 					OutputColumns: []uint32{0, 1},
 				},
-				ResultTypes: rowenc.TwoIntCols,
+				ResultTypes: types.TwoIntCols,
 			}
 
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
@@ -165,11 +165,11 @@ func BenchmarkColBatchScan(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				tr := res.Op
-				tr.Init()
+				tr := res.Root
+				tr.Init(ctx)
 				b.StartTimer()
 				for {
-					bat := tr.Next(ctx)
+					bat := tr.Next()
 					if bat.Length() == 0 {
 						break
 					}

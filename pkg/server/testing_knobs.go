@@ -29,12 +29,13 @@ type TestingKnobs struct {
 	DefaultZoneConfigOverride *zonepb.ZoneConfig
 	// DefaultSystemZoneConfigOverride, if set, overrides the default system zone config defined in `pkg/config/zone.go`
 	DefaultSystemZoneConfigOverride *zonepb.ZoneConfig
-	// PauseAfterGettingRPCAddress, if non-nil, instructs the server to wait until
-	// the channel is closed after getting an RPC serving address.
-	PauseAfterGettingRPCAddress chan struct{}
 	// SignalAfterGettingRPCAddress, if non-nil, is closed after the server gets
-	// an RPC server address.
+	// an RPC server address, and prior to waiting on PauseAfterGettingRPCAddress below.
 	SignalAfterGettingRPCAddress chan struct{}
+	// PauseAfterGettingRPCAddress, if non-nil, instructs the server to wait until
+	// the channel is closed after determining its RPC serving address, and after
+	// closing SignalAfterGettingRPCAddress.
+	PauseAfterGettingRPCAddress chan struct{}
 	// ContextTestingKnobs allows customization of the RPC context testing knobs.
 	ContextTestingKnobs rpc.ContextTestingKnobs
 	// DiagnosticsTestingKnobs allows customization of diagnostics testing knobs.
@@ -83,6 +84,10 @@ type TestingKnobs struct {
 	// Clock Source used to an inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	ClockSource func() int64
+
+	// ImportTimeseriesFile, if set, is a file created via `DumpRaw` that written
+	// back to the KV layer upon server start.
+	ImportTimeseriesFile string
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

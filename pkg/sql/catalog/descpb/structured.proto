@@ -956,6 +956,11 @@ message TableDescriptor {
   repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
            (gogoproto.casttype) = "ID"];
 
+  // The IDs of all types that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 dependsOnTypes = 45 [(gogoproto.customname) = "DependsOnTypes",
+    (gogoproto.casttype) = "ID"];
+
   message Reference {
     option (gogoproto.equal) = true;
     // The ID of the relation that depends on this one.
@@ -999,6 +1004,12 @@ message TableDescriptor {
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  // The job associated with a schema change job run in the new schema changer
+  // (in sql/schemachanger), if one exists. Only one such job can exist at a
+  // time.
+  optional int64 new_schema_change_job_id = 46 [(gogoproto.nullable) = false,
+                                               (gogoproto.customname) = "NewSchemaChangeJobID"];
 
   message SequenceOpts {
     option (gogoproto.equal) = true;
@@ -1219,13 +1230,7 @@ message DatabaseDescriptor {
   message RegionConfig {
     option (gogoproto.equal) = true;
 
-    message Region {
-      option (gogoproto.equal) = true;
-
-      optional string name = 1 [(gogoproto.casttype)="RegionName",(gogoproto.nullable)=false];
-    }
-
-    repeated Region regions = 1 [(gogoproto.nullable)=false];
+    reserved 1;
     optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
     optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="RegionName"];
 

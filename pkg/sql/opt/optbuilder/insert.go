@@ -345,10 +345,11 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 //
 //   1. There are no secondary indexes. Existing values are needed to delete
 //      secondary index rows when the update causes them to move.
-//   2. All non-key columns (including mutation columns) have insert and update
+//   2. There are no implicit partitioning columns in the primary index.
+//   3. All non-key columns (including mutation columns) have insert and update
 //      values specified for them.
-//   3. Each update value is the same as the corresponding insert value.
-//   4. There are no inbound foreign keys containing non-key columns.
+//   4. Each update value is the same as the corresponding insert value.
+//   5. There are no inbound foreign keys containing non-key columns.
 //
 // TODO(andyk): The fast path is currently only enabled when the UPSERT alias
 // is explicitly selected by the user. It's possible to fast path some queries
@@ -357,6 +358,13 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 // this support was removed and needs to re-enabled. See #14482.
 func (mb *mutationBuilder) needExistingRows() bool {
 	if mb.tab.DeletableIndexCount() > 1 {
+		return true
+	}
+
+	// If there are any implicit partitioning columns in the primary index,
+	// these columns will need to be fetched.
+	primaryIndex := mb.tab.Index(cat.PrimaryIndex)
+	if primaryIndex.ImplicitPartitioningColumnCount() > 0 {
 		return true
 	}
 
@@ -607,7 +615,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), inCol.typ)
 
 		// Assign name of input column.
-		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
+		inCol.name = scopeColName(tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias))
 
 		// Record the ID of the column that contains the value to be inserted
 		// into the corresponding target table column.
@@ -644,16 +652,11 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
 	// Project partial index PUT boolean columns.
-	mb.projectPartialIndexPutCols(preCheckScope)
+	mb.projectPartialIndexPutCols()
 
 	mb.buildUniqueChecksForInsert()
 
@@ -861,11 +864,6 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
-	// Keep a reference to the scope before the check constraint columns are
-	// projected. We use this scope when projecting the partial index put
-	// columns because the check columns are not in-scope for those expressions.
-	preCheckScope := mb.outScope
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
@@ -882,9 +880,9 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// mb.fetchScope will be nil. Therefore, we only project partial index
 	// PUT columns.
 	if mb.needExistingRows() {
-		mb.projectPartialIndexPutAndDelCols(preCheckScope, mb.fetchScope)
+		mb.projectPartialIndexPutAndDelCols()
 	} else {
-		mb.projectPartialIndexPutCols(preCheckScope)
+		mb.projectPartialIndexPutCols()
 	}
 
 	mb.buildUniqueChecksForUpsert()
@@ -962,12 +960,11 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 			mb.b.factory.ConstructVariable(updateColID),
 		)
 
-		alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+		name := scopeColName(col.ColName()).WithMetadataName(
+			fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName()),
+		)
 		typ := mb.md.ColumnMeta(insertColID).Type
-		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
-
-		// Assign name to synthesized column.
-		scopeCol.name = col.ColName()
+		scopeCol := mb.b.synthesizeColumn(projectionsScope, name, typ, nil /* expr */, caseExpr)
 
 		// Update the scope ordinals for the update columns that are involved in
 		// the Upsert. The new columns will be used by the Upsert operator in place

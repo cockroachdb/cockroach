@@ -13,7 +13,9 @@ package execinfrapb
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -43,7 +45,7 @@ type AggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFun
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputTypes ...*types.T,
 ) (aggregateConstructor AggregateConstructor, returnType *types.T, err error) {
-	if fn == AggregatorSpec_ANY_NOT_NULL {
+	if fn == AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
@@ -163,7 +165,7 @@ func (spec *AggregatorSpec) IsScalar() bool {
 func (spec *AggregatorSpec) IsRowCount() bool {
 	return len(spec.Aggregations) == 1 &&
 		spec.Aggregations[0].FilterColIdx == nil &&
-		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+		spec.Aggregations[0].Func == CountRows &&
 		!spec.Aggregations[0].Distinct &&
 		spec.IsScalar()
 }
@@ -184,7 +186,7 @@ func GetWindowFuncIdx(funcName string) (int32, error) {
 func GetWindowFunctionInfo(
 	fn WindowerSpec_Func, inputTypes ...*types.T,
 ) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
-	if fn.AggregateFunc != nil && *fn.AggregateFunc == AggregatorSpec_ANY_NOT_NULL {
+	if fn.AggregateFunc != nil && *fn.AggregateFunc == AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
@@ -496,4 +498,44 @@ func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
 		Bounds:    bounds,
 		Exclusion: exclusion,
 	}, nil
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *TableReaderSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *JoinReaderSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptors returns a catalog.TableDescriptor slice wrapping the
+// underlying Tables field.
+func (spec *ZigzagJoinerSpec) BuildTableDescriptors() []catalog.TableDescriptor {
+	ret := make([]catalog.TableDescriptor, len(spec.Tables))
+	for i := range spec.Tables {
+		ret[i] = tabledesc.NewUnsafeImmutable(&spec.Tables[i])
+	}
+	return ret
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *InvertedJoinerSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *BackfillerSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *BulkRowWriterSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
 }

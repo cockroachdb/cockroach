@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cache",
+    srcs = ["cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/cache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "cache_test",
+    srcs = ["cache_test.go"],
+    embed = [":cache"],
+    deps = [
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)

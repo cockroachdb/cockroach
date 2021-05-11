@@ -95,6 +95,9 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	for _, id := range desc.GetDependsOn() {
 		ids.Add(id)
 	}
+	for _, id := range desc.GetDependsOnTypes() {
+		ids.Add(id)
+	}
 	for _, ref := range desc.GetDependedOnBy() {
 		ids.Add(ref.ID)
 	}
@@ -569,11 +572,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		}
 	}
 
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
-
 	// Validate the privilege descriptor.
 	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Table))
 
@@ -624,6 +622,17 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			foundAlterColumnType = true
 			alterColumnTypeMutation = m.MutationID
 		}
+	}
+
+	// Validate that the presence of MutationJobs (from the old schema changer)
+	// and the presence of a NewSchemaChangeJobID are mutually exclusive. (Note
+	// the jobs themselves can be running simultaneously, since a resumer can
+	// still be running after the schema change is complete from the point of view
+	// of the descriptor, in both the new and old schema change jobs.)
+	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
+		vea.Report(errors.AssertionFailedf(
+			"invalid concurrent new-style schema change job %d and old-style schema change jobs %v",
+			desc.NewSchemaChangeJobID, desc.MutationJobs))
 	}
 
 	// Check that all expression strings can be parsed.
@@ -1022,7 +1031,7 @@ func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor
 // indicates how many index columns to skip over.
 func (desc *wrapper) validatePartitioningDescriptor(
 	a *rowenc.DatumAlloc,
-	idxDesc *descpb.IndexDescriptor,
+	idx catalog.Index,
 	partDesc *descpb.PartitioningDescriptor,
 	colOffset int,
 	partitionNames map[string]string,
@@ -1043,9 +1052,9 @@ func (desc *wrapper) validatePartitioningDescriptor(
 	// InterleavedBy is fine, so using the root of the interleave hierarchy will
 	// work. It is expected that this is sufficient for real-world use cases.
 	// Revisit this restriction if that expectation is wrong.
-	if len(idxDesc.Interleave.Ancestors) > 0 {
+	if idx.NumInterleaveAncestors() > 0 {
 		return errors.Errorf("cannot set a zone config for interleaved index %s; "+
-			"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
+			"set it on the root of the interleaved hierarchy instead", idx.GetName())
 	}
 
 	// We don't need real prefixes in the DecodePartitionTuple calls because we're
@@ -1073,10 +1082,10 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// The partitioning descriptor may be invalid and refer to columns
 			// not stored in the index. In that case, skip this check as the
 			// validation will fail later.
-			if i >= len(idxDesc.ColumnIDs) {
+			if i >= idx.NumColumns() {
 				continue
 			}
-			col, err := desc.FindColumnWithID(idxDesc.ColumnIDs[i])
+			col, err := desc.FindColumnWithID(idx.GetColumnID(i))
 			if err != nil {
 				return err
 			}
@@ -1091,12 +1100,12 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			return fmt.Errorf("PARTITION name must be non-empty")
 		}
 		if indexName, exists := partitionNames[name]; exists {
-			if indexName == idxDesc.Name {
+			if indexName == idx.GetName() {
 				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
 					name, indexName)
 			}
 		}
-		partitionNames[name] = idxDesc.Name
+		partitionNames[name] = idx.GetName()
 		return nil
 	}
 
@@ -1119,7 +1128,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
 				tuple, keyPrefix, err := rowenc.DecodePartitionTuple(
-					a, codec, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
+					a, codec, desc, idx, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
@@ -1131,7 +1140,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 
 			newColOffset := colOffset + int(partDesc.NumColumns)
 			if err := desc.validatePartitioningDescriptor(
-				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
+				a, idx, &p.Subpartitioning, newColOffset, partitionNames,
 			); err != nil {
 				return err
 			}
@@ -1148,12 +1157,12 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
 			fromDatums, fromKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
+				a, codec, desc, idx, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
 			toDatums, toKey, err := rowenc.DecodePartitionTuple(
-				a, codec, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
+				a, codec, desc, idx, partDesc, p.ToExclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
@@ -1200,9 +1209,8 @@ func (desc *wrapper) validatePartitioning() error {
 
 	a := &rowenc.DatumAlloc{}
 	return catalog.ForEachNonDropIndex(desc, func(idx catalog.Index) error {
-		idxDesc := idx.IndexDesc()
 		return desc.validatePartitioningDescriptor(
-			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
+			a, idx, &idx.IndexDesc().Partitioning, 0 /* colOffset */, partitionNames,
 		)
 	})
 }
@@ -1253,6 +1261,33 @@ func (desc *wrapper) validateTableLocalityConfig(
 		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", regionsEnumID)
 	}
 
+	// Check non-table items have a correctly set locality.
+	if desc.IsSequence() {
+		if !desc.IsLocalityRegionalByTable() {
+			return errors.AssertionFailedf(
+				"expected sequence %s to have locality REGIONAL BY TABLE",
+				desc.Name,
+			)
+		}
+	}
+	if desc.IsView() {
+		if desc.MaterializedView() {
+			if !desc.IsLocalityGlobal() {
+				return errors.AssertionFailedf(
+					"expected materialized view %s to have locality GLOBAL",
+					desc.Name,
+				)
+			}
+		} else {
+			if !desc.IsLocalityRegionalByTable() {
+				return errors.AssertionFailedf(
+					"expected view %s to have locality REGIONAL BY TABLE",
+					desc.Name,
+				)
+			}
+		}
+	}
+
 	// REGIONAL BY TABLE tables homed in the primary region should include a
 	// reference to the multi-region type descriptor and a corresponding
 	// backreference. All other patterns should only contain a reference if there
@@ -1290,12 +1325,61 @@ func (desc *wrapper) validateTableLocalityConfig(
 		if !desc.IsPartitionAllBy() {
 			return errors.AssertionFailedf("expected REGIONAL BY ROW table to have PartitionAllBy set")
 		}
+		// For REGIONAL BY ROW tables, ensure partitions in the PRIMARY KEY match
+		// the database descriptor. Ensure each public region has a partition,
+		// and each transitioning region name to possibly have a partition.
+		// We do validation that ensures all index partitions are the same on
+		// PARTITION ALL BY.
+		regions, err := regionsEnumDesc.RegionNames()
+		if err != nil {
+			return err
+		}
+		regionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		for _, region := range regions {
+			regionNames[region] = struct{}{}
+		}
+		transitioningRegions, err := regionsEnumDesc.TransitioningRegionNames()
+		if err != nil {
+			return err
+		}
+		transitioningRegionNames := make(map[descpb.RegionName]struct{}, len(regions))
+		for _, region := range transitioningRegions {
+			transitioningRegionNames[region] = struct{}{}
+		}
+
+		for _, partitioning := range desc.GetPrimaryIndex().GetPartitioning().List {
+			regionName := descpb.RegionName(partitioning.Name)
+			// Any transitioning region names may exist.
+			if _, ok := transitioningRegionNames[regionName]; ok {
+				continue
+			}
+			// If a region is not found in any of the region names, we have an unknown
+			// partition.
+			if _, ok := regionNames[regionName]; !ok {
+				return errors.AssertionFailedf(
+					"unknown partition %s on PRIMARY INDEX of table %s",
+					partitioning.Name,
+					desc.GetName(),
+				)
+			}
+			delete(regionNames, regionName)
+		}
+
+		// Any regions that are not deleted from the above loop is missing.
+		for regionName := range regionNames {
+			return errors.AssertionFailedf(
+				"missing partition %s on PRIMARY INDEX of table %s",
+				regionName,
+				desc.GetName(),
+			)
+		}
+
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 
 		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNames()
+			regions, err := regionsEnumDesc.RegionNamesForValidation()
 			if err != nil {
 				return err
 			}

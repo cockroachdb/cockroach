@@ -668,7 +668,7 @@ func (expr *ColumnAccessExpr) TypeCheck(
 		// Go through all of the labels to find a match.
 		expr.ColIndex = -1
 		for i, label := range resolvedType.TupleLabels() {
-			if label == expr.ColName {
+			if label == string(expr.ColName) {
 				if expr.ColIndex != -1 {
 					// Found a duplicate label.
 					return nil, pgerror.Newf(pgcode.AmbiguousColumn, "column reference %q is ambiguous", label)
@@ -679,7 +679,7 @@ func (expr *ColumnAccessExpr) TypeCheck(
 		if expr.ColIndex < 0 {
 			return nil, pgerror.Newf(pgcode.DatatypeMismatch,
 				"could not identify column %q in %s",
-				ErrNameStringP(&expr.ColName), resolvedType,
+				ErrString(&expr.ColName), resolvedType,
 			)
 		}
 	}
@@ -1872,10 +1872,31 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 	}
 	fn, ok := ops.LookupImpl(cmpTypeLeft, cmpTypeRight)
-	if !ok {
+	if !ok || !deepCheckValidCmpOp(ops, cmpTypeLeft, cmpTypeRight) {
 		return nil, nil, nil, false, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
 	}
 	return leftTyped, rightTyped, fn, false, nil
+}
+
+// deepCheckValidCmpOp performs extra checks that a given operation is valid
+// when the types are tuples.
+func deepCheckValidCmpOp(ops cmpOpOverload, leftType, rightType *types.T) bool {
+	if leftType.Family() == types.TupleFamily && rightType.Family() == types.TupleFamily {
+		l := leftType.TupleContents()
+		r := rightType.TupleContents()
+		if len(l) != len(r) {
+			return false
+		}
+		for i := range l {
+			if _, ok := ops.LookupImpl(l[i], r[i]); !ok {
+				return false
+			}
+			if !deepCheckValidCmpOp(ops, l[i], r[i]) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) error {

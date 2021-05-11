@@ -626,7 +626,7 @@ vectorized: true
 • render
 │ columns: (r)
 │ estimated row count: 1,000 (missing stats)
-│ render r: j @> '{"a": 1}'
+│ render r: '{"a": 1}' <@ j
 │
 └── • scan
       columns: (j)
@@ -1201,7 +1201,7 @@ vectorized: true
 • filter
 │ columns: (c0)
 │ estimated row count: 333 (missing stats)
-│ filter: CASE WHEN c0 IN (c0,) THEN ARRAY[NULL] ELSE ARRAY[] END IS NULL
+│ filter: CASE WHEN (c0 IS DISTINCT FROM CAST(NULL AS DECIMAL)) OR CAST(NULL AS BOOL) THEN ARRAY[NULL] ELSE ARRAY[] END IS NULL
 │
 └── • scan
       columns: (c0)

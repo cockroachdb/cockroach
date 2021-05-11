@@ -19,13 +19,18 @@ import (
 // StmtID is the type of a Statement ID.
 type StmtID uint64
 
-// ConstructStatementID constructs an ID by hashing an anonymized query, it's
-// failure status, and if it was part of an implicit txn. At the time of writing,
+// ConstructStatementID constructs an ID by hashing an anonymized query, its database
+// and failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
 // (see stmtKey).
-func ConstructStatementID(anonymizedStmt string, failed bool, implicitTxn bool) StmtID {
+func ConstructStatementID(
+	anonymizedStmt string, failed bool, implicitTxn bool, database string,
+) StmtID {
 	fnv := util.MakeFNV64()
 	for _, c := range anonymizedStmt {
+		fnv.Add(uint64(c))
+	}
+	for _, c := range database {
 		fnv.Add(uint64(c))
 	}
 	if failed {
@@ -125,6 +130,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	if other.MaxRetries > s.MaxRetries {
 		s.MaxRetries = other.MaxRetries
 	}
+	s.SQLType = other.SQLType
 	s.NumRows.Add(other.NumRows, s.Count, other.Count)
 	s.ParseLat.Add(other.ParseLat, s.Count, other.Count)
 	s.PlanLat.Add(other.PlanLat, s.Count, other.Count)
@@ -133,6 +139,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
+	s.Nodes = util.CombinesUniqueInt64(s.Nodes, other.Nodes)
 
 	s.ExecStats.Add(other.ExecStats)
 
@@ -144,11 +151,15 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 		s.SensitiveInfo = other.SensitiveInfo
 	}
 
+	if s.LastExecTimestamp.Before(other.LastExecTimestamp) {
+		s.LastExecTimestamp = other.LastExecTimestamp
+	}
+
 	s.Count += other.Count
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats
-// objects within an window of size eps.
+// objects within an window of size eps, ExecStats are ignored.
 func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float64) bool {
 	return s.Count == other.Count &&
 		s.FirstAttemptCount == other.FirstAttemptCount &&
@@ -161,8 +172,10 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
-		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
-		s.ExecStats.AlmostEqual(&other.ExecStats, eps)
+		s.RowsRead.AlmostEqual(other.RowsRead, eps)
+	// s.ExecStats are deliberately ignored since they are subject to sampling
+	// probability and are not fully deterministic (e.g. the number of network
+	// messages depends on the range cache state).
 }
 
 // Add combines other into this ExecStats.
@@ -181,15 +194,4 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 
 	s.Count += s.Count
-}
-
-// AlmostEqual compares two ExecStats and their contained NumericStats objects
-// within an window of size eps.
-func (s *ExecStats) AlmostEqual(other *ExecStats, eps float64) bool {
-	return s.Count == other.Count &&
-		s.NetworkBytes.AlmostEqual(other.NetworkBytes, eps) &&
-		s.MaxMemUsage.AlmostEqual(other.MaxMemUsage, eps) &&
-		s.ContentionTime.AlmostEqual(other.ContentionTime, eps) &&
-		s.NetworkMessages.AlmostEqual(other.NetworkMessages, eps) &&
-		s.MaxDiskUsage.AlmostEqual(other.MaxDiskUsage, eps)
 }

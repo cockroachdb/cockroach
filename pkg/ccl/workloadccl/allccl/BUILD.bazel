@@ -9,6 +9,7 @@ go_library(
         "//pkg/ccl/workloadccl/roachmartccl",
         "//pkg/workload/bank",
         "//pkg/workload/bulkingest",
+        "//pkg/workload/connectionlatency",
         "//pkg/workload/debug",
         "//pkg/workload/examples",
         "//pkg/workload/geospatial",
@@ -35,7 +36,7 @@ go_library(
 
 go_test(
     name = "allccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "all_test.go",
         "main_test.go",

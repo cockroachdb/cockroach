@@ -72,7 +72,10 @@ func (u UUID) MarshalText() ([]byte, error) {
 //   "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 //   "6ba7b8109dad11d180b400c04fd430c8"
 //   "{6ba7b8109dad11d180b400c04fd430c8}",
-//   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8"
+//   "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}",
+//   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8",
+//   "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+//	 "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8"
 //
 // ABNF for supported UUID text representation follows:
 //
@@ -90,52 +93,28 @@ func (u UUID) MarshalText() ([]byte, error) {
 //   12hexoct := 6hexoct 6hexoct
 //
 //   hashlike := 12hexoct
-//   canonical := 4hexoct '-' 2hexoct '-' 2hexoct '-' 6hexoct
+//   hyphenated := hyphen after any group of 4 hexdig
+//   Ex.6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8
+//   Ex.6ba7-b810-9dad11d1-80b400c0-4fd4-30c8
 //
-//   plain := canonical | hashlike
-//   uuid := canonical | hashlike | braced | urn
+//   uuid := hyphenated | hashlike | braced | urn
 //
-//   braced := '{' plain '}' | '{' hashlike  '}'
-//   urn := URN ':' UUID-NID ':' plain
+//   braced := '{' hyphenated '}' | '{' hashlike  '}'
+//   urn := URN ':' UUID-NID ':' hyphenated
 //
 func (u *UUID) UnmarshalText(text []byte) error {
-	switch len(text) {
-	case 32:
-		return u.decodeHashLike(text)
-	case 34, 38:
-		return u.decodeBraced(text)
-	case 36:
-		return u.decodeCanonical(text)
-	case 41, 45:
-		return u.decodeURN(text)
-	default:
+	l := len(text)
+	stringifiedText := string(text)
+
+	if l < 32 || l > 48 {
 		return fmt.Errorf("uuid: incorrect UUID length: %s", text)
+	} else if stringifiedText[0] == '{' && stringifiedText[l-1] == '}' {
+		return u.decodeHyphenated(text[1 : l-1])
+	} else if bytes.Equal(text[:9], urnPrefix) {
+		return u.decodeHyphenated(text[9:l])
+	} else {
+		return u.decodeHyphenated(text)
 	}
-}
-
-// decodeCanonical decodes UUID strings that are formatted as defined in RFC-4122 (section 3):
-// "6ba7b810-9dad-11d1-80b4-00c04fd430c8".
-func (u *UUID) decodeCanonical(t []byte) error {
-	if t[8] != '-' || t[13] != '-' || t[18] != '-' || t[23] != '-' {
-		return fmt.Errorf("uuid: incorrect UUID format %s", t)
-	}
-
-	src := t
-	dst := u[:]
-
-	for i, byteGroup := range byteGroups {
-		if i > 0 {
-			src = src[1:] // skip dash
-		}
-		_, err := hex.Decode(dst[:byteGroup/2], src[:byteGroup])
-		if err != nil {
-			return err
-		}
-		src = src[byteGroup:]
-		dst = dst[byteGroup/2:]
-	}
-
-	return nil
 }
 
 // decodeHashLike decodes UUID strings that are using the following format:
@@ -148,46 +127,37 @@ func (u *UUID) decodeHashLike(t []byte) error {
 	return err
 }
 
-// decodeBraced decodes UUID strings that are using the following formats:
-//  "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"
-//  "{6ba7b8109dad11d180b400c04fd430c8}".
-func (u *UUID) decodeBraced(t []byte) error {
+// decodeHyphenated decodes UUID strings that are using the following format:
+//  "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8"
+//  "6ba7b810-9dad-11d1-80b400c0-4fd4-30c8"
+func (u *UUID) decodeHyphenated(t []byte) error {
 	l := len(t)
-
-	if t[0] != '{' || t[l-1] != '}' {
-		return fmt.Errorf("uuid: incorrect UUID format %s", t)
-	}
-
-	return u.decodePlain(t[1 : l-1])
-}
-
-// decodeURN decodes UUID strings that are using the following formats:
-//  "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-//  "urn:uuid:6ba7b8109dad11d180b400c04fd430c8".
-func (u *UUID) decodeURN(t []byte) error {
-	total := len(t)
-
-	urnUUIDPrefix := t[:9]
-
-	if !bytes.Equal(urnUUIDPrefix, urnPrefix) {
+	if l < 32 || l > 40 {
 		return fmt.Errorf("uuid: incorrect UUID format: %s", t)
 	}
 
-	return u.decodePlain(t[9:total])
-}
-
-// decodePlain decodes UUID strings that are using the following formats:
-//  "6ba7b810-9dad-11d1-80b4-00c04fd430c8" or in hash-like format
-//  "6ba7b8109dad11d180b400c04fd430c8".
-func (u *UUID) decodePlain(t []byte) error {
-	switch len(t) {
-	case 32:
-		return u.decodeHashLike(t)
-	case 36:
-		return u.decodeCanonical(t)
-	default:
-		return fmt.Errorf("uuid: incorrrect UUID length: %s", t)
+	hashLike := make([]byte, 32)
+	countSinceHyphen := 0
+	i := 0
+	for _, c := range t {
+		if i >= len(hashLike) {
+			return fmt.Errorf("uuid: incorrect UUID format: %s", t)
+		}
+		if c == '-' {
+			if countSinceHyphen == 0 || countSinceHyphen%4 != 0 {
+				return fmt.Errorf("uuid: incorrect UUID format: %s", t)
+			}
+			countSinceHyphen = 0
+			continue
+		}
+		hashLike[i] = c
+		i++
+		countSinceHyphen++
 	}
+	if i != len(hashLike) {
+		return fmt.Errorf("uuid: incorrect UUID format: %s", t)
+	}
+	return u.decodeHashLike(hashLike)
 }
 
 // MarshalBinary implements the encoding.BinaryMarshaler interface.

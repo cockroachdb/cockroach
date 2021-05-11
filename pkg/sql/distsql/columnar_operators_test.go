@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecwindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -36,51 +38,51 @@ const nullProbability = 0.2
 const randTypesProbability = 0.5
 
 var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
-	execinfrapb.AggregatorSpec_ANY_NOT_NULL:         1,
-	execinfrapb.AggregatorSpec_AVG:                  1,
-	execinfrapb.AggregatorSpec_BOOL_AND:             1,
-	execinfrapb.AggregatorSpec_BOOL_OR:              1,
-	execinfrapb.AggregatorSpec_CONCAT_AGG:           1,
-	execinfrapb.AggregatorSpec_COUNT:                1,
-	execinfrapb.AggregatorSpec_MAX:                  1,
-	execinfrapb.AggregatorSpec_MIN:                  1,
-	execinfrapb.AggregatorSpec_STDDEV:               1,
-	execinfrapb.AggregatorSpec_SUM:                  1,
-	execinfrapb.AggregatorSpec_SUM_INT:              1,
-	execinfrapb.AggregatorSpec_VARIANCE:             1,
-	execinfrapb.AggregatorSpec_XOR_AGG:              1,
-	execinfrapb.AggregatorSpec_COUNT_ROWS:           0,
-	execinfrapb.AggregatorSpec_SQRDIFF:              1,
-	execinfrapb.AggregatorSpec_FINAL_VARIANCE:       3,
-	execinfrapb.AggregatorSpec_FINAL_STDDEV:         3,
-	execinfrapb.AggregatorSpec_ARRAY_AGG:            1,
-	execinfrapb.AggregatorSpec_JSON_AGG:             1,
-	execinfrapb.AggregatorSpec_JSONB_AGG:            1,
-	execinfrapb.AggregatorSpec_STRING_AGG:           2,
-	execinfrapb.AggregatorSpec_BIT_AND:              1,
-	execinfrapb.AggregatorSpec_BIT_OR:               1,
-	execinfrapb.AggregatorSpec_CORR:                 2,
-	execinfrapb.AggregatorSpec_PERCENTILE_DISC_IMPL: 2,
-	execinfrapb.AggregatorSpec_PERCENTILE_CONT_IMPL: 2,
-	execinfrapb.AggregatorSpec_JSON_OBJECT_AGG:      2,
-	execinfrapb.AggregatorSpec_JSONB_OBJECT_AGG:     2,
-	execinfrapb.AggregatorSpec_VAR_POP:              1,
-	execinfrapb.AggregatorSpec_STDDEV_POP:           1,
-	execinfrapb.AggregatorSpec_ST_MAKELINE:          1,
-	execinfrapb.AggregatorSpec_ST_EXTENT:            1,
-	execinfrapb.AggregatorSpec_ST_UNION:             1,
-	execinfrapb.AggregatorSpec_ST_COLLECT:           1,
-	execinfrapb.AggregatorSpec_COVAR_POP:            2,
-	execinfrapb.AggregatorSpec_COVAR_SAMP:           2,
-	execinfrapb.AggregatorSpec_REGR_INTERCEPT:       2,
-	execinfrapb.AggregatorSpec_REGR_R2:              2,
-	execinfrapb.AggregatorSpec_REGR_SLOPE:           2,
-	execinfrapb.AggregatorSpec_REGR_SXX:             2,
-	execinfrapb.AggregatorSpec_REGR_SXY:             2,
-	execinfrapb.AggregatorSpec_REGR_SYY:             2,
-	execinfrapb.AggregatorSpec_REGR_COUNT:           2,
-	execinfrapb.AggregatorSpec_REGR_AVGX:            2,
-	execinfrapb.AggregatorSpec_REGR_AVGY:            2,
+	execinfrapb.AnyNotNull:         1,
+	execinfrapb.Avg:                1,
+	execinfrapb.BoolAnd:            1,
+	execinfrapb.BoolOr:             1,
+	execinfrapb.ConcatAgg:          1,
+	execinfrapb.Count:              1,
+	execinfrapb.Max:                1,
+	execinfrapb.Min:                1,
+	execinfrapb.Stddev:             1,
+	execinfrapb.Sum:                1,
+	execinfrapb.SumInt:             1,
+	execinfrapb.Variance:           1,
+	execinfrapb.XorAgg:             1,
+	execinfrapb.CountRows:          0,
+	execinfrapb.Sqrdiff:            1,
+	execinfrapb.FinalVariance:      3,
+	execinfrapb.FinalStddev:        3,
+	execinfrapb.ArrayAgg:           1,
+	execinfrapb.JSONAgg:            1,
+	execinfrapb.JSONBAgg:           1,
+	execinfrapb.StringAgg:          2,
+	execinfrapb.BitAnd:             1,
+	execinfrapb.BitOr:              1,
+	execinfrapb.Corr:               2,
+	execinfrapb.PercentileDiscImpl: 2,
+	execinfrapb.PercentileContImpl: 2,
+	execinfrapb.JSONObjectAgg:      2,
+	execinfrapb.JSONBObjectAgg:     2,
+	execinfrapb.VarPop:             1,
+	execinfrapb.StddevPop:          1,
+	execinfrapb.StMakeline:         1,
+	execinfrapb.StExtent:           1,
+	execinfrapb.StUnion:            1,
+	execinfrapb.StCollect:          1,
+	execinfrapb.CovarPop:           2,
+	execinfrapb.CovarSamp:          2,
+	execinfrapb.RegrIntercept:      2,
+	execinfrapb.RegrR2:             2,
+	execinfrapb.RegrSlope:          2,
+	execinfrapb.RegrSxx:            2,
+	execinfrapb.RegrSxy:            2,
+	execinfrapb.RegrSyy:            2,
+	execinfrapb.RegrCount:          2,
+	execinfrapb.RegrAvgx:           2,
+	execinfrapb.RegrAvgy:           2,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -96,6 +98,7 @@ func TestAggregateFuncToNumArguments(t *testing.T) {
 
 func TestAggregatorAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -129,11 +132,11 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				continue
 			}
 			switch aggFn {
-			case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
+			case execinfrapb.AnyNotNull:
 				// We skip ANY_NOT_NULL aggregate function because it returns
 				// non-deterministic results.
-			case execinfrapb.AggregatorSpec_PERCENTILE_DISC_IMPL,
-				execinfrapb.AggregatorSpec_PERCENTILE_CONT_IMPL:
+			case execinfrapb.PercentileDiscImpl,
+				execinfrapb.PercentileContImpl:
 				// We skip percentile functions because those can only be
 				// planned as window functions.
 			default:
@@ -198,7 +201,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							aggFnInputTypes := make([]*types.T, len(aggregations[i].ColIdx))
 							for {
 								for j := range aggFnInputTypes {
-									aggFnInputTypes[j] = rowenc.RandType(rng)
+									aggFnInputTypes[j] = randgen.RandType(rng)
 								}
 								// There is a special case for some functions when at
 								// least one argument is a tuple.
@@ -209,12 +212,12 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 								// checking, so we hard-code an exception here.
 								invalid := false
 								switch aggFn {
-								case execinfrapb.AggregatorSpec_CONCAT_AGG,
-									execinfrapb.AggregatorSpec_STRING_AGG,
-									execinfrapb.AggregatorSpec_ST_MAKELINE,
-									execinfrapb.AggregatorSpec_ST_EXTENT,
-									execinfrapb.AggregatorSpec_ST_UNION,
-									execinfrapb.AggregatorSpec_ST_COLLECT:
+								case execinfrapb.ConcatAgg,
+									execinfrapb.StringAgg,
+									execinfrapb.StMakeline,
+									execinfrapb.StExtent,
+									execinfrapb.StUnion,
+									execinfrapb.StCollect:
 									for _, typ := range aggFnInputTypes {
 										if typ.Family() == types.TupleFamily {
 											invalid = true
@@ -235,7 +238,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							}
 							inputTypes = append(inputTypes, aggFnInputTypes...)
 						}
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 						groupIdx := 0
 						for _, row := range rows {
 							for i := 0; i < numGroupingCols; i++ {
@@ -335,6 +338,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 
 func TestDistinctAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var da rowenc.DatumAlloc
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
@@ -367,11 +371,13 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 							ordCols    []execinfrapb.Ordering_Column
 						)
 						if rng.Float64() < randTypesProbability {
-							inputTypes = generateRandomSupportedTypes(rng, nCols)
-							rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+							// If we're spilling, don't generate un-key-encodable types, since
+							// the row engine can't handle them.
+							inputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, !spillForced)
+							rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 						} else {
 							inputTypes = intTyps[:nCols]
-							rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							rows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 						}
 						distinctCols := make([]uint32, nDistinctCols)
 						for i, distinctCol := range rng.Perm(nCols)[:nDistinctCols] {
@@ -461,6 +467,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 
 func TestSorterAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -485,11 +492,11 @@ func TestSorterAgainstProcessor(t *testing.T) {
 						inputTypes []*types.T
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypes(rng, nCols)
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						inputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, !spillForced)
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
-						rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						rows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 					}
 
 					// Note: we're only generating column orderings on all nCols columns since
@@ -534,6 +541,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 
 func TestSortChunksAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var da rowenc.DatumAlloc
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -558,11 +566,11 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 						inputTypes []*types.T
 					)
 					if rng.Float64() < randTypesProbability {
-						inputTypes = generateRandomSupportedTypes(rng, nCols)
-						rows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+						inputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, !spillForced)
+						rows = randgen.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
 					} else {
 						inputTypes = intTyps[:nCols]
-						rows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+						rows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 					}
 
 					// Note: we're only generating column orderings on all nCols columns since
@@ -609,6 +617,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 
 func TestHashJoinerAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
@@ -677,7 +686,8 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								usingRandomTypes         bool
 							)
 							if rng.Float64() < randTypesProbability {
-								lInputTypes = generateRandomSupportedTypes(rng, nCols)
+								// HashRowContainers can't deal with non-keyencodable types.
+								lInputTypes = generateRandomSupportedTypesWithUnencodable(rng, nCols, false /* withUnencodable */)
 								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								rInputTypes = append(rInputTypes[:0], lInputTypes...)
 								rEqCols = append(rEqCols[:0], lEqCols...)
@@ -687,14 +697,14 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
 								})
 								rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
-								lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
-								rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
+								lRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+								rRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 								usingRandomTypes = true
 							} else {
 								lInputTypes = intTyps[:nCols]
 								rInputTypes = lInputTypes
-								lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-								rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								lRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+								rRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 								lEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 							}
@@ -801,6 +811,7 @@ func generateEqualityColumns(rng *rand.Rand, nCols int, nEqCols int) []uint32 {
 
 func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var da rowenc.DatumAlloc
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
@@ -883,14 +894,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								rOrderingCols[i], rOrderingCols[j] = rOrderingCols[j], rOrderingCols[i]
 							})
 							rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
-							lRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
-							rRows = rowenc.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
+							lRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
+							rRows = randgen.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 							usingRandomTypes = true
 						} else {
 							lInputTypes = intTyps[:nCols]
 							rInputTypes = lInputTypes
-							lRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
-							rRows = rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							lRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+							rRows = randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 							lOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 							rOrderingCols = generateColumnOrdering(rng, nCols, nOrderingCols)
 						}
@@ -1018,28 +1029,32 @@ func generateFilterExpr(
 	forceConstComparison bool,
 	forceSingleSide bool,
 ) execinfrapb.Expression {
-	var comparison string
-	r := rng.Float64()
-	if r < 0.25 {
-		comparison = "<"
-	} else if r < 0.5 {
-		comparison = ">"
-	} else if r < 0.75 {
-		comparison = "="
-	} else {
-		comparison = "<>"
-	}
+	var colIdx int
 	// When all columns are used in equality comparison between inputs, there is
 	// only one interesting case when a column from either side is compared
 	// against a constant. The second conditional is us choosing to compare
 	// against a constant.
-	if nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison || forceSingleSide {
-		colIdx := rng.Intn(nCols)
+	singleSideComparison := nCols == nEqCols || rng.Float64() < 0.33 || forceConstComparison || forceSingleSide
+	colIdx = rng.Intn(nCols)
+	if singleSideComparison {
 		if !forceSingleSide && rng.Float64() >= 0.5 {
 			// Use right side.
 			colIdx += nCols
 		}
-		constDatum := rowenc.RandDatum(rng, colTypes[colIdx], true /* nullOk */)
+	}
+	colType := colTypes[colIdx]
+
+	var comparison string
+	comparisons := []string{"=", "<>", "<", ">"}
+	n := len(comparisons)
+	if colType.Family() == types.JsonFamily {
+		// JSON can't be sorted, only != and = compared. Pick from the first half
+		// of the list
+		n = 2
+	}
+	comparison = comparisons[rng.Intn(n)]
+	if singleSideComparison {
+		constDatum := randgen.RandDatum(rng, colTypes[colIdx], true /* nullOk */)
 		constDatumString := constDatum.String()
 		switch colTypes[colIdx].Family() {
 		case types.FloatFamily, types.DecimalFamily:
@@ -1048,17 +1063,19 @@ func generateFilterExpr(
 				// We need to surround special numerical values with quotes.
 				constDatumString = fmt.Sprintf("'%s'", constDatumString)
 			}
+		case types.JsonFamily:
+			constDatumString = fmt.Sprintf("%s::json", constDatumString)
 		}
 		return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s %s", colIdx+1, comparison, constDatumString)}
 	}
 	// We will compare a column from the left against a column from the right.
-	leftColIdx := rng.Intn(nCols) + 1
-	rightColIdx := rng.Intn(nCols) + nCols + 1
-	return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s @%d", leftColIdx, comparison, rightColIdx)}
+	rightColIdx := rng.Intn(nCols) + nCols
+	return execinfrapb.Expression{Expr: fmt.Sprintf("@%d %s @%d", colIdx+1, comparison, rightColIdx+1)}
 }
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rng, seed := randutil.NewPseudoRand()
 	nRows := 2 * coldata.BatchSize()
@@ -1086,7 +1103,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						continue
 					}
 					inputTypes := typs[:nCols:nCols]
-					rows := rowenc.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+					rows := randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
 					windowerSpec := &execinfrapb.WindowerSpec{
 						PartitionBy: partitionBy,
@@ -1137,12 +1154,27 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 // generateRandomSupportedTypes generates nCols random types that are supported
 // by the vectorized engine.
 func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
+	return generateRandomSupportedTypesWithUnencodable(rng, nCols, true /* withUnencodable */)
+}
+
+// generateRandomSupportedTypesWithUnencodable generates nCols random types that
+// are supported by the vectorized engine. If withUnencodable is false, it won't
+// generate types that aren't key-encodable.
+func generateRandomSupportedTypesWithUnencodable(
+	rng *rand.Rand, nCols int, withUnencodable bool,
+) []*types.T {
 	typs := make([]*types.T, 0, nCols)
 	for len(typs) < nCols {
-		typ := rowenc.RandType(rng)
-		if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+		typ := randgen.RandType(rng)
+		family := typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family())
+		if family == typeconv.DatumVecCanonicalTypeFamily {
 			// At the moment, we disallow datum-backed types.
 			// TODO(yuzefovich): remove this.
+			continue
+		}
+		if !withUnencodable && (family == types.JsonFamily || family == types.ArrayFamily) {
+			// This is so that the row engine, which has to spill using key encoding,
+			// can avoid running tests with types that don't have a key encoding.
 			continue
 		}
 		typs = append(typs, typ)

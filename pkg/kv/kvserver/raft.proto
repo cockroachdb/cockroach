@@ -141,14 +141,14 @@ message SnapshotRequest {
   // applySnapshot in replica_raftstorage.go.
   enum Type {
     // VIA_SNAPSHOT_QUEUE indicates the snapshots sent by the raft snapshot
-    // queue.
+    // queue to all types of replicas.
     VIA_SNAPSHOT_QUEUE = 0;
-    // LEARNER_INITIAL indicates the initial snapshots sent to LEARNER replicas
-    // for upreplication, before they're promoted to full voters.
+    // INITIAL indicates the initial snapshots sent to LEARNER (before they're
+    // promoted to full voters) and NON_VOTER replicas for upreplication.
     //
     // As of the time of writing, we only send this snapshot from the
-    // execReplicationChangesForVoters after creating a new LEARNER replica.
-    LEARNER_INITIAL = 1;
+    // initializeRaftLearners after creating a new LEARNER or NON_VOTER replica.
+    INITIAL = 1;
     reserved 2;
   }
 

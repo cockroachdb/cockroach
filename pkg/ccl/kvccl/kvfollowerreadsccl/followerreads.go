@@ -13,6 +13,7 @@ package kvfollowerreadsccl
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -57,6 +58,12 @@ func getFollowerReadLag(st *cluster.Settings) time.Duration {
 	targetMultiple := followerReadMultiple.Get(&st.SV)
 	targetDuration := closedts.TargetDuration.Get(&st.SV)
 	closeFraction := closedts.CloseFraction.Get(&st.SV)
+	// Zero targetDuration means follower reads are disabled.
+	if targetDuration == 0 {
+		// Returning an infinitely large negative value would push safe
+		// request timestamp into the distant past thus disabling follower reads.
+		return math.MinInt64
+	}
 	return -1 * time.Duration(float64(targetDuration)*
 		(1+closeFraction*targetMultiple))
 }
@@ -70,16 +77,26 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 	return clock.MaxOffset()
 }
 
+// checkEnterpriseEnabled checks whether the enterprise feature for follower
+// reads is enabled, returning a detailed error if not. It is not suitable for
+// use in hot paths since a new error may be instantiated on each call.
 func checkEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) error {
 	org := sql.ClusterOrganization.Get(&st.SV)
 	return utilccl.CheckEnterpriseEnabled(st, clusterID, org, "follower reads")
+}
+
+// isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
+// for hot paths.
+func isEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
+	org := sql.ClusterOrganization.Get(&st.SV)
+	return utilccl.IsEnterpriseEnabled(st, clusterID, org, "follower reads")
 }
 
 func checkFollowerReadsEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
 	if !kvserver.FollowerReadsEnabled.Get(&st.SV) {
 		return false
 	}
-	return checkEnterpriseEnabled(clusterID, st) == nil
+	return isEnterpriseEnabled(clusterID, st)
 }
 
 func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Duration, error) {
@@ -124,9 +141,10 @@ func canSendToFollower(
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
 	ba roachpb.BatchRequest,
 ) bool {
-	return checkFollowerReadsEnabled(clusterID, st) &&
-		kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
-		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.Txn.RequiredFrontier())
+	return kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
+		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.Txn.RequiredFrontier()) &&
+		// NOTE: this call can be expensive, so perform it last. See #62447.
+		checkFollowerReadsEnabled(clusterID, st)
 }
 
 type followerReadOracle struct {
@@ -181,9 +199,10 @@ func (o *followerReadOracle) useClosestOracle(
 	// sent to the correct replicas once canSendToFollower is checked for each
 	// BatchRequests in the DistSender. This would hurt performance, but would
 	// not violate correctness.
-	return checkFollowerReadsEnabled(o.clusterID.Get(), o.st) &&
-		txn != nil &&
-		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier())
+	return txn != nil &&
+		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier()) &&
+		// NOTE: this call can be expensive, so perform it last. See #62447.
+		checkFollowerReadsEnabled(o.clusterID.Get(), o.st)
 }
 
 // followerReadOraclePolicy is a leaseholder choosing policy that detects

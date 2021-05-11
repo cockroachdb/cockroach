@@ -39,6 +39,11 @@ go_test(
         "proxy_test.go",
         "server_test.go",
     ],
+    data = [
+        ":testserver.crt",
+        ":testserver.key",
+        ":testserver_config.cnf",
+    ],
     embed = [":sqlproxyccl"],
     tags = ["broken_in_bazel"],
     deps = [

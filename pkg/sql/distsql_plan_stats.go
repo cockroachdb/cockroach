@@ -249,7 +249,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		}
 	}
 
-	tableDesc := tabledesc.NewImmutable(details.Table)
+	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
 	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, job)
 }
 
@@ -259,7 +259,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
 	job *jobs.Job,
-	resultRows *RowResultWriter,
+	resultWriter *RowResultWriter,
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
@@ -272,16 +272,17 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	recv := MakeDistSQLReceiver(
 		ctx,
-		resultRows,
+		resultWriter,
 		tree.DDL,
 		evalCtx.ExecCfg.RangeDescriptorCache,
 		txn,
 		evalCtx.ExecCfg.Clock,
 		evalCtx.Tracing,
 		evalCtx.ExecCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
 	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)()
-	return resultRows.Err()
+	return resultWriter.Err()
 }

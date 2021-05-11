@@ -19,6 +19,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -34,7 +37,7 @@ import (
 // will hold a file "descriptors.csv" which is a csv of id,descriptor where
 // descriptor is hex encoded.
 func TestUnwrapValidation(t *testing.T) {
-	testdata := testutils.TestDataPath("testdata", "unwrap_validation")
+	testdata := testutils.TestDataPath(t, "unwrap_validation")
 	const descriptorsCSVFilename = "descriptors.csv"
 	dirs, err := ioutil.ReadDir(testdata)
 	require.NoError(t, err)
@@ -55,13 +58,12 @@ func TestUnwrapValidation(t *testing.T) {
 func unwrapValidationTest(t *testing.T, descriptorCSVPath string) {
 	m := decodeDescriptorDSV(t, descriptorCSVPath)
 	for id, data := range m {
-		var desc descpb.Descriptor
-		require.NoError(t, protoutil.Unmarshal(data, &desc))
-		ts := descpb.GetDescriptorModificationTime(&desc)
-		if ts == (hlc.Timestamp{}) {
-			ts = hlc.Timestamp{WallTime: 1}
-		}
-		_, err := unwrapDescriptor(context.Background(), m, ts, &desc, true)
+		var descProto descpb.Descriptor
+		require.NoError(t, protoutil.Unmarshal(data, &descProto))
+		desc, err := m.GetDesc(context.Background(), id)
+		require.NoErrorf(t, err, "id: %d", id)
+		require.NotNilf(t, desc, "id: %d", id)
+		err = catalog.ValidateSelfAndCrossReferences(context.Background(), m, desc)
 		require.NoErrorf(t, err, "id: %d", id)
 	}
 }
@@ -84,7 +86,27 @@ func (o oneLevelMapDescGetter) GetDesc(
 	if mt == (hlc.Timestamp{}) {
 		mt = hlc.Timestamp{WallTime: 1}
 	}
-	return unwrapDescriptorMutable(ctx, nil, mt, &desc)
+	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
+	v := roachpb.Value{Timestamp: mt}
+	if err := v.SetProto(&desc); err != nil {
+		return nil, err
+	}
+	return descriptorFromKeyValue(
+		ctx,
+		codec,
+		kv.KeyValue{Key: codec.DescMetadataKey(uint32(id)), Value: &v},
+		immutable,
+		catalog.Any,
+		bestEffort,
+		nil, /* dg */ // Not required for self-validation.
+		catalog.ValidationLevelSelfOnly,
+	)
+}
+
+func (o oneLevelMapDescGetter) GetNamespaceEntry(
+	_ context.Context, _, _ descpb.ID, _ string,
+) (descpb.ID, error) {
+	panic("not implemented")
 }
 
 func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDescGetter {

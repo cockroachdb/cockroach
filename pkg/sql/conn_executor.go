@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -260,7 +261,7 @@ type Server struct {
 
 	reCache *tree.RegexpCache
 
-	// pool is the parent monitor for all session monitors except "internal" ones.
+	// pool is the parent monitor for all session monitors.
 	pool *mon.BytesMonitor
 
 	// Metrics is used to account normal queries.
@@ -269,6 +270,8 @@ type Server struct {
 	// InternalMetrics is used to account internal queries.
 	InternalMetrics Metrics
 }
+
+var _ tree.SQLStatsResetter = &Server{}
 
 // Metrics collects timeseries data about SQL activity.
 type Metrics struct {
@@ -576,8 +579,9 @@ func (s *Server) newConnExecutor(
 		sessionData: sd,
 		dataMutator: sdMutator,
 		state: txnState{
-			mon:     txnMon,
-			connCtx: ctx,
+			mon:                          txnMon,
+			connCtx:                      ctx,
+			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,
@@ -631,7 +635,7 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = descs.MakeCollection(
-		s.cfg.LeaseManager, s.cfg.Settings, sd, s.cfg.HydratedTables)
+		s.cfg.LeaseManager, s.cfg.Settings, sd, s.cfg.HydratedTables, s.cfg.VirtualSchemas)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
@@ -762,6 +766,16 @@ func (s *Server) PeriodicallyClearSQLStats(
 	})
 }
 
+// ResetClusterSQLStats resets the collected cluster-wide SQL statistics by calling into the statusServer.
+func (s *Server) ResetClusterSQLStats(ctx context.Context) error {
+	req := &serverpb.ResetSQLStatsRequest{}
+	_, err := s.cfg.SQLStatusServer.ResetSQLStats(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 type closeType int
 
 const (
@@ -821,6 +835,22 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			"connExecutor closing")}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
+		}
+		switch t := ex.machine.CurState().(type) {
+		case stateNoTxn:
+			// No txn to finish.
+		case stateAborted:
+			// A non-retriable error with IsCommit set to true causes the transaction
+			// to be cleaned up.
+		case stateCommitWait:
+			ex.state.finishSQLTxn()
+		default:
+			if util.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unexpected state in conn executor after ApplyWithPayload %T", t))
+			}
+		}
+		if util.CrdbTestBuild && ex.state.Ctx != nil {
+			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
 		}
 	} else if closeType == externalTxnClose {
 		ex.state.finishExternalTxn()
@@ -1064,9 +1094,9 @@ type connExecutor struct {
 
 		schemaChangerState SchemaChangerState
 
-		// shouldCollectExecutionStats specifies whether the statements in this
-		// transaction should collect execution stats.
-		shouldCollectExecutionStats bool
+		// shouldCollectTxnExecutionStats specifies whether the statements in
+		// this transaction should collect execution stats.
+		shouldCollectTxnExecutionStats bool
 		// accumulatedStats are the accumulated stats of all statements.
 		accumulatedStats execstats.QueryLevelStats
 		// rowsRead and bytesRead are separate from QueryLevelStats because they are
@@ -1410,7 +1440,6 @@ func (ex *connExecutor) run(
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
-
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -1447,12 +1476,16 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		return err // err could be io.EOF
 	}
 
+	// Ensure that every statement has a tracing span set up.
 	ctx, sp := tracing.EnsureChildSpan(
 		ctx, ex.server.cfg.AmbientCtx.Tracer,
 		// We print the type of command, not the String() which includes long
 		// statements.
 		cmd.command())
 	defer sp.Finish()
+	// We expect that the span is not used directly, so we'll overwrite the
+	// local variable.
+	sp = nil
 
 	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
@@ -1462,7 +1495,6 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	var ev fsm.Event
 	var payload fsm.EventPayload
 	var res ResultBase
-
 	switch tcmd := cmd.(type) {
 	case ExecStmt:
 		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
@@ -1508,7 +1540,6 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	case ExecPortal:
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
-
 		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 		// When parsing has been done earlier, via a separate parse
 		// message, it is not any more part of the statistics collected
@@ -1968,7 +1999,7 @@ func (ex *connExecutor) execCopyIn(
 // stmtHasNoData returns true if describing a result of the input statement
 // type should return NoData.
 func stmtHasNoData(stmt tree.Statement) bool {
-	return stmt == nil || stmt.StatementType() != tree.Rows
+	return stmt == nil || stmt.StatementReturnType() != tree.Rows
 }
 
 // generateID generates a unique ID based on the SQL instance ID and its current
@@ -2022,7 +2053,8 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil))
+	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
+		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil))
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
@@ -2141,8 +2173,6 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
-	scInterface := newSchemaInterface(&ex.extraTxnState.descCollection, ex.server.cfg.VirtualSchemas)
-
 	ie := MakeInternalExecutor(
 		ctx,
 		ex.server,
@@ -2159,6 +2189,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ClientNoticeSender: p,
 			Sequence:           p,
 			Tenant:             p,
+			JoinTokenCreator:   p,
 			SessionData:        ex.sessionData,
 			Settings:           ex.server.cfg.Settings,
 			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,
@@ -2171,6 +2202,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor:   &ie,
 			DB:                 ex.server.cfg.DB,
 			SQLLivenessReader:  ex.server.cfg.SQLLivenessReader,
+			SQLStatsResetter:   ex.server,
+			CompactEngineSpan:  ex.server.cfg.CompactEngineSpanFunc,
 		},
 		SessionMutator:       ex.dataMutator,
 		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
@@ -2184,7 +2217,6 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:       ex,
 		Jobs:                 &ex.extraTxnState.jobs,
 		SchemaChangeJobCache: ex.extraTxnState.schemaChangeJobsCache,
-		schemaAccessors:      scInterface,
 		sqlStatsCollector:    ex.statsCollector,
 	}
 }
@@ -2277,12 +2309,17 @@ func (ex *connExecutor) resetPlanner(
 func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	ev fsm.Event, payload fsm.EventPayload, res ResultBase, pos CmdPos,
 ) (advanceInfo, error) {
+
 	var implicitTxn bool
+	txnIsOpen := false
 	if os, ok := ex.machine.CurState().(stateOpen); ok {
 		implicitTxn = os.ImplicitTxn.Get()
+		txnIsOpen = true
 	}
 
+	ex.mu.Lock()
 	err := ex.machine.ApplyWithPayload(withStatement(ex.Ctx(), ex.curStmtAST), ev, payload)
+	ex.mu.Unlock()
 	if err != nil {
 		if errors.HasType(err, (*fsm.TransitionNotFoundError)(nil)) {
 			panic(err)
@@ -2291,20 +2328,40 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	}
 
 	advInfo := ex.state.consumeAdvanceInfo()
-
 	if advInfo.code == rewind {
 		ex.extraTxnState.autoRetryCounter++
+	}
+
+	// If we had an error from DDL statement execution due to the presence of
+	// other concurrent schema changes when attempting a schema change, wait for
+	// the completion of those schema changes first.
+	if p, ok := payload.(payloadWithError); ok {
+		if cscErr := (*scbuild.ConcurrentSchemaChangeError)(nil); errors.As(p.errorCause(), &cscErr) {
+			if err := ex.handleWaitingForConcurrentSchemaChanges(cscErr.DescriptorID()); err != nil {
+				return advanceInfo{}, err
+			}
+		}
 	}
 
 	// Handle transaction events which cause updates to txnState.
 	switch advInfo.txnEvent {
 	case noEvent:
+		_, nextStateIsAborted := ex.machine.CurState().(stateAborted)
+		// Update the deadline on the transaction based on the collections,
+		// if the transaction is currently open. If the next state is aborted
+		// then the collection will get reset once we retry or rollback the
+		// transaction, and no deadline needs to be picked up here.
+		if txnIsOpen && !nextStateIsAborted {
+			err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ex.Ctx(), ex.state.mu.txn)
+			if err != nil {
+				return advanceInfo{}, err
+			}
+		}
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
 		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
-
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
@@ -2371,14 +2428,27 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
-
 	return advInfo, nil
+}
+
+func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(descID descpb.ID) error {
+	if err := ex.planner.WaitForDescriptorSchemaChanges(
+		ex.Ctx(), descID, ex.extraTxnState.schemaChangerState,
+	); err != nil {
+		return err
+	}
+	// Restart the transaction at a higher timestamp after waiting.
+	ex.state.mu.Lock()
+	defer ex.state.mu.Unlock()
+	userPriority := ex.state.mu.txn.UserPriority()
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ex.Ctx(), ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+	return ex.state.mu.txn.SetUserPriority(userPriority)
 }
 
 // initStatementResult initializes res according to a query.
 //
 // cols represents the columns of the result rows. Should be nil if
-// stmt.AST.StatementType() != tree.Rows.
+// stmt.AST.StatementReturnType() != tree.Rows.
 //
 // If an error is returned, it is to be considered a query execution error.
 func (ex *connExecutor) initStatementResult(
@@ -2389,7 +2459,7 @@ func (ex *connExecutor) initStatementResult(
 			return err
 		}
 	}
-	if ast.StatementType() == tree.Rows {
+	if ast.StatementReturnType() == tree.Rows {
 		// Note that this call is necessary even if cols is nil.
 		res.SetColumns(ctx, cols)
 	}
@@ -2556,44 +2626,71 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	if len(ex.extraTxnState.schemaChangerState.nodes) == 0 {
+	scs := &ex.extraTxnState.schemaChangerState
+	if len(scs.nodes) == 0 {
 		return nil
 	}
 	executor := scexec.NewExecutor(
 		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
-		nil /* backfiller */, nil, /* jobTracker */
+		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
 	)
 	after, err := runNewSchemaChanger(
-		ctx, scplan.PreCommitPhase,
+		ctx,
+		scplan.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.nodes,
 		executor,
+		scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
-	scs := &ex.extraTxnState.schemaChangerState
 	scs.nodes = after
 	targetSlice := make([]*scpb.Target, len(scs.nodes))
 	states := make([]scpb.State, len(scs.nodes))
+	// TODO(ajwerner): It may be better in the future to have the builder be
+	// responsible for determining this set of descriptors. As of the time of
+	// writing, the descriptors to be "locked," descriptors that need schema
+	// change jobs, and descriptors with schema change mutations all coincide. But
+	// there are future schema changes to be implemented in the new schema changer
+	// (e.g., RENAME TABLE) for which this may no longer be true.
+	descIDSet := catalog.MakeDescriptorIDSet()
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
 		states[i] = scs.nodes[i].State
+		descIDSet.Add(scs.nodes[i].Element().DescriptorID())
 	}
-	_, err = ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
+	descIDs := descIDSet.Ordered()
+	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
 		Description:   "Schema change job", // TODO(ajwerner): use const
-		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
+		Statements:    scs.stmts,
 		Username:      ex.planner.User(),
-		DescriptorIDs: nil, // TODO(ajwerner): populate
-		Details:       jobspb.NewSchemaChangeDetails{Targets: targetSlice},
+		DescriptorIDs: descIDs,
+		Details: jobspb.NewSchemaChangeDetails{
+			Targets: targetSlice,
+		},
 		Progress:      jobspb.NewSchemaChangeProgress{States: states},
 		RunningStatus: "",
 		NonCancelable: false,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// Write the job ID to the affected descriptors.
+	if err := scexec.UpdateDescriptorJobIDs(
+		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
+	); err != nil {
+		return err
+	}
+	log.Infof(ctx, "queued new schema change job %d using the new schema changer", job.ID())
+	return nil
 }
 
 func runNewSchemaChanger(
-	ctx context.Context, phase scplan.Phase, nodes []*scpb.Node, executor *scexec.Executor,
+	ctx context.Context,
+	phase scplan.Phase,
+	nodes []*scpb.Node,
+	executor *scexec.Executor,
+	stmts []string,
 ) (after []*scpb.Node, _ error) {
 	sc, err := scplan.MakePlan(nodes, scplan.Params{
 		ExecutionPhase: phase,
@@ -2604,7 +2701,11 @@ func runNewSchemaChanger(
 	}
 	after = nodes
 	for _, s := range sc.Stages {
-		if err := executor.ExecuteOps(ctx, s.Ops); err != nil {
+		if err := executor.ExecuteOps(ctx, s.Ops,
+			scexec.TestingKnobMetadata{
+				Statements: stmts,
+				Phase:      phase,
+			}); err != nil {
 			return nil, err
 		}
 		after = s.After
@@ -2640,7 +2741,7 @@ type StatementCounters struct {
 	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
 	RollbackToRestartSavepointCount telemetry.CounterWithMetric
 
-	// DdlCount counts all statements whose StatementType is DDL.
+	// DdlCount counts all statements whose StatementReturnType is DDL.
 	DdlCount telemetry.CounterWithMetric
 
 	// MiscCount counts all statements not covered by a more specific stat above.

@@ -480,7 +480,10 @@ type lockTable interface {
 	// evaluation of this request. It adds the lock and enqueues this requester
 	// in its wait-queue. It is required that request evaluation discover such
 	// locks before acquiring its own locks, since the request needs to repeat
-	// ScanAndEnqueue.
+	// ScanAndEnqueue. When consultFinalizedTxnCache=true, and the transaction
+	// holding the lock is finalized, the lock is not added to the lock table
+	// and instead tracked in the list of locks to resolve in the
+	// lockTableGuard.
 	//
 	// The lease sequence is used to detect lease changes between the when
 	// request that found the lock started evaluating and when the discovered
@@ -492,9 +495,13 @@ type lockTable interface {
 	// the span containing the discovered lock's key.
 	//
 	// The method returns a boolean indicating whether the discovered lock was
-	// added to the lockTable (true) or whether it was ignored because the
-	// lockTable is currently disabled (false).
-	AddDiscoveredLock(*roachpb.Intent, roachpb.LeaseSequence, lockTableGuard) (bool, error)
+	// properly handled either by adding it to the lockTable or storing it in
+	// the list of locks to resolve in the lockTableGuard (both cases return
+	// true) or whether it was ignored because the lockTable is currently
+	// disabled (false).
+	AddDiscoveredLock(
+		intent *roachpb.Intent, seq roachpb.LeaseSequence, consultFinalizedTxnCache bool,
+		guard lockTableGuard) (bool, error)
 
 	// AcquireLock informs the lockTable that a new lock was acquired or an
 	// existing lock was updated.
@@ -596,8 +603,10 @@ type lockTableGuard interface {
 	CurState() waitingState
 
 	// ResolveBeforeScanning lists the locks to resolve before scanning again.
-	// This must be called after the waiting state has transitioned to
-	// doneWaiting.
+	// This must be called after:
+	// - the waiting state has transitioned to doneWaiting.
+	// - if locks were discovered during evaluation, it must be called after all
+	//   the discovered locks have been added.
 	ResolveBeforeScanning() []roachpb.LockUpdate
 }
 
@@ -657,6 +666,11 @@ type lockTableWaiter interface {
 	// and, in turn, remove this method. This will likely fall out of pulling
 	// all replicated locks into the lockTable.
 	WaitOnLock(context.Context, Request, *roachpb.Intent) *Error
+
+	// ResolveDeferredIntents resolves the batch of intents if the provided
+	// error is nil. The batch of intents may be resolved more efficiently than
+	// if they were resolved individually.
+	ResolveDeferredIntents(context.Context, []roachpb.LockUpdate) *Error
 }
 
 // txnWaitQueue holds a collection of wait-queues for transaction records.

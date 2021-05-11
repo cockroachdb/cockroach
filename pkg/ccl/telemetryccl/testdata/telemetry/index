@@ -1,0 +1,40 @@
+# This file contains telemetry tests for CCL-related index creation counters.
+
+feature-allowlist
+sql.schema.partitioned_inverted_index
+----
+
+feature-usage
+CREATE TABLE a (
+    a INT PRIMARY KEY,
+    b INT,
+    j JSON,
+    INVERTED INDEX (b, j) PARTITION BY LIST (b) (
+        PARTITION p1 VALUES IN (1),
+        PARTITION pu VALUES IN (NULL)
+    )
+)
+----
+sql.schema.partitioned_inverted_index
+
+feature-usage
+CREATE INVERTED INDEX i ON a (b, j) PARTITION BY LIST (b) (
+    PARTITION p1 VALUES IN (1)
+)
+----
+sql.schema.partitioned_inverted_index
+
+exec
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
+USE multi_region_test_db
+----
+
+feature-usage
+CREATE TABLE regional_by_row_table (
+  pk INT PRIMARY KEY,
+  a INT,
+  j JSON,
+  INVERTED INDEX (a, j)
+) LOCALITY REGIONAL BY ROW
+----
+sql.schema.partitioned_inverted_index
