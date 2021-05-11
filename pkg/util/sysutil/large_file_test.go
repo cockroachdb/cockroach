@@ -45,7 +45,12 @@ func TestLargeFile(t *testing.T) {
 	}
 
 	// Check that an existing file cannot be overwritten.
-	if err = CreateLargeFile(fname, n); !(oserror.IsExist(err) || strings.Contains(err.Error(), "exists")) {
+	if err = CreateLargeFile(fname, n+(8<<10)); !(oserror.IsExist(err) || strings.Contains(err.Error(), "exists")) {
 		t.Fatalf("expected 'already exists' error, got (%T) %+v", err, err)
+	}
+
+	// Check that an existing file of requested size satisfies request.
+	if err = CreateLargeFile(fname, n); err != nil {
+		t.Fatal(err)
 	}
 }

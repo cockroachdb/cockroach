@@ -25,6 +25,12 @@ import (
 func CreateLargeFile(path string, bytes int64) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
 	if err != nil {
+		if f, openErr := os.Open(path); openErr == nil {
+			defer f.Close()
+			if stat, statErr := f.Stat(); statErr == nil && stat.Size() == bytes {
+				return nil
+			}
+		}
 		return err
 	}
 	defer f.Close()
