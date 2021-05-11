@@ -79,9 +79,7 @@ func runTestFlow(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Run(ctx, func() {}); err != nil {
-		t.Fatal(err)
-	}
+	flow.Run(ctx, func() {})
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed() {
