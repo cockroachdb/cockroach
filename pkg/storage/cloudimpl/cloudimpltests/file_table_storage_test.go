@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,7 +43,7 @@ func TestPutUserFileTable(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, filename)
+	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
@@ -51,7 +52,7 @@ func TestPutUserFileTable(t *testing.T) {
 		security.RootUserName(), ie, kvDB)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
-		dest := cloudimpl.MakeUserFileStorageURI("", filename)
+		dest := userfile.MakeUserFileStorageURI("", filename)
 
 		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 		testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
@@ -64,7 +65,7 @@ func TestPutUserFileTable(t *testing.T) {
 		testfile := "listing-test/../basepath"
 		userfileURL := url.URL{Scheme: "userfile", Host: qualifiedTableName, Path: ""}
 
-		store, err := cloudimpl.ExternalStorageFromURI(ctx, userfileURL.String()+"/",
+		store, err := cloud.ExternalStorageFromURI(ctx, userfileURL.String()+"/",
 			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
 			security.RootUserName(), ie, kvDB)
 		require.NoError(t, err)
@@ -102,7 +103,7 @@ func TestUserScoping(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, "")
+	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 
 	// Create two users and grant them all privileges on defaultdb.
@@ -112,13 +113,13 @@ func TestUserScoping(t *testing.T) {
 	require.NoError(t, createUserGrantAllPrivieleges(user2, "defaultdb", sqlDB))
 
 	// Write file as user1.
-	fileTableSystem1, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+	fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB)
 	require.NoError(t, err)
 	require.NoError(t, fileTableSystem1.WriteFile(ctx, filename, bytes.NewReader([]byte("aaa"))))
 
 	// Attempt to read/write file as user2 and expect to fail.
-	fileTableSystem2, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+	fileTableSystem2, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, ie, kvDB)
 	require.NoError(t, err)
 	_, err = fileTableSystem2.ReadFile(ctx, filename)
@@ -126,7 +127,7 @@ func TestUserScoping(t *testing.T) {
 	require.Error(t, fileTableSystem2.WriteFile(ctx, filename, bytes.NewReader([]byte("aaa"))))
 
 	// Read file as root and expect to succeed.
-	fileTableSystem3, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+	fileTableSystem3, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.RootUserName(), ie, kvDB)
 	require.NoError(t, err)
 	_, err = fileTableSystem3.ReadFile(ctx, filename)

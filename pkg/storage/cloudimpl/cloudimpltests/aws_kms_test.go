@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,8 +45,8 @@ func TestEncryptDecryptAWS(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
+		"AWS_ACCESS_KEY_ID":     amazon.AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": amazon.AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -61,7 +61,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	if kmsRegion == "" {
 		skip.IgnoreLint(t, "AWS_KMS_REGION_A env var must be set")
 	}
-	q.Add(cloudimpl.KMSRegionParam, kmsRegion)
+	q.Add(amazon.KMSRegionParam, kmsRegion)
 
 	// The KeyID for AWS can be specified as any of the following:
 	// - AWS_KEY_ARN
@@ -77,16 +77,16 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		t.Run(fmt.Sprintf("auth-empty-no-cred-%s", id), func(t *testing.T) {
 			// Set AUTH to specified but don't provide AccessKey params.
 			params := make(url.Values)
-			params.Add(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
-			params.Add(cloudimpl.KMSRegionParam, kmsRegion)
+			params.Add(cloud.AuthParam, cloud.AuthParamSpecified)
+			params.Add(amazon.KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
 			_, err := cloud.KMSFromURI(uri, &testKMSEnv{})
 			require.EqualError(t, err, fmt.Sprintf(
 				`%s is set to '%s', but %s is not set`,
-				cloudimpl.AuthParam,
-				cloudimpl.AuthParamSpecified,
-				cloudimpl.AWSAccessKeyParam,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				amazon.AWSAccessKeyParam,
 			))
 		})
 
@@ -103,8 +103,8 @@ func TestEncryptDecryptAWS(t *testing.T) {
 
 			// Set the AUTH and REGION params.
 			params := make(url.Values)
-			params.Add(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
-			params.Add(cloudimpl.KMSRegionParam, kmsRegion)
+			params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+			params.Add(amazon.KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
 			testEncryptDecrypt(t, uri, testKMSEnv{
@@ -114,7 +114,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 
 		t.Run(fmt.Sprintf("auth-specified-%s", id), func(t *testing.T) {
 			// Set AUTH to specified.
-			q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
+			q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 
 			testEncryptDecrypt(t, uri, testKMSEnv{
@@ -129,10 +129,10 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_KMS_ENDPOINT":        cloudimpl.AWSEndpointParam,
-		"AWS_KMS_ENDPOINT_KEY":    cloudimpl.AWSAccessKeyParam,
-		"AWS_KMS_ENDPOINT_REGION": cloudimpl.KMSRegionParam,
-		"AWS_KMS_ENDPOINT_SECRET": cloudimpl.AWSSecretParam,
+		"AWS_KMS_ENDPOINT":        amazon.AWSEndpointParam,
+		"AWS_KMS_ENDPOINT_KEY":    amazon.AWSAccessKeyParam,
+		"AWS_KMS_ENDPOINT_REGION": amazon.KMSRegionParam,
+		"AWS_KMS_ENDPOINT_SECRET": amazon.AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -165,10 +165,10 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	q := make(url.Values)
-	q.Add(cloudimpl.KMSRegionParam, "region")
+	q.Add(amazon.KMSRegionParam, "region")
 
 	// Set AUTH to implicit
-	q.Add(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 
 	keyARN := os.Getenv("AWS_KMS_KEY_ARN_A")
 	if keyARN == "" {

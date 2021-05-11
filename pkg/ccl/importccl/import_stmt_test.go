@@ -55,7 +55,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
+	_ "github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -2402,12 +2404,12 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 	filename := "path/to/file"
-	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, filename)
+	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	writeToUserfile := func(filename string) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
-		fileTableSystem1, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.TestUserName(), ie, tc.Server(0).DB())
 		require.NoError(t, err)
 		require.NoError(t, fileTableSystem1.WriteFile(ctx, filename, bytes.NewReader([]byte("1,aaa"))))
@@ -2565,7 +2567,7 @@ func TestURIRequiresAdminRole(t *testing.T) {
 		})
 
 		t.Run(tc.name+"-direct", func(t *testing.T) {
-			conf, err := cloudimpl.ExternalStorageConfFromURI(tc.uri, security.RootUserName())
+			conf, err := cloud.ExternalStorageConfFromURI(tc.uri, security.RootUserName())
 			require.NoError(t, err)
 			require.Equal(t, conf.AccessIsWithExplicitAuth(), !tc.requiresAdmin)
 		})
@@ -5864,7 +5866,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 		sqlDB.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"1"}, {"2"}, {"3"}})
 
 		// Read the unsupported log and verify its contents.
-		store, err := cloudimpl.ExternalStorageFromURI(ctx, ignoredLog,
+		store, err := cloud.ExternalStorageFromURI(ctx, ignoredLog,
 			base.ExternalIODirConfig{},
 			tc.Servers[0].ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,

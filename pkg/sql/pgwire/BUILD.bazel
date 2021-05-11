@@ -96,6 +96,7 @@ go_test(
         "//pkg/sql/sqlutil",
         "//pkg/sql/tests",
         "//pkg/sql/types",
+        "//pkg/storage/cloudimpl",
         "//pkg/testutils",
         "//pkg/testutils/pgtest",
         "//pkg/testutils/serverutils",

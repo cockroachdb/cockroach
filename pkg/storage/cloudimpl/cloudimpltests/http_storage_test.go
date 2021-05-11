@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/httpsink"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -150,11 +150,11 @@ func TestPutHttp(t *testing.T) {
 		srv, _, cleanup := makeServer()
 		defer cleanup()
 
-		conf, err := cloudimpl.ExternalStorageConfFromURI(srv.String(), user)
+		conf, err := cloud.ExternalStorageConfFromURI(srv.String(), user)
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+		s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
 			testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -249,7 +249,7 @@ func TestHttpGet(t *testing.T) {
 			})
 
 			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-			store, err := cloudimpl.MakeHTTPStorage(ctx, cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
+			store, err := httpsink.MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -285,7 +285,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	defer s.Close()
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -303,7 +303,7 @@ func TestCanDisableHttp(t *testing.T) {
 	conf := base.ExternalIODirConfig{
 		DisableHTTP: true,
 	}
-	s, err := cloudimpl.MakeExternalStorage(
+	s, err := cloud.MakeExternalStorage(
 		context.Background(),
 		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_http},
 		conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
@@ -322,7 +322,7 @@ func TestCanDisableOutbound(t *testing.T) {
 		roachpb.ExternalStorageProvider_gs,
 		roachpb.ExternalStorageProvider_nodelocal,
 	} {
-		s, err := cloudimpl.MakeExternalStorage(
+		s, err := cloud.MakeExternalStorage(
 			context.Background(),
 			roachpb.ExternalStorage{Provider: provider},
 			conf, testSettings, blobs.TestEmptyBlobClientFactory, nil, nil)
@@ -349,9 +349,9 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		http.DefaultTransport.(*http.Transport).Proxy = nil
 	}()
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI("http://my-server", security.RootUserName())
+	conf, err := cloud.ExternalStorageConfFromURI("http://my-server", security.RootUserName())
 	require.NoError(t, err)
-	s, err := cloudimpl.MakeExternalStorage(
+	s, err := cloud.MakeExternalStorage(
 		context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
 		nil, nil)
 	require.NoError(t, err)
@@ -401,7 +401,7 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
-	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())

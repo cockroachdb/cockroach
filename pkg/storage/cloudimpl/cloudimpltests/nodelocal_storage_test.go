@@ -18,7 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -30,7 +31,7 @@ func TestPutLocal(t *testing.T) {
 	defer cleanupFn()
 
 	testSettings.ExternalIODir = p
-	dest := cloudimpl.MakeLocalStorageURI(p)
+	dest := nodelocal.MakeLocalStorageURI(p)
 
 	testExportStore(t, dest, false, security.RootUserName(), nil, nil)
 	testListFiles(t, "nodelocal://0/listing-test/basepath",
@@ -47,7 +48,7 @@ func TestLocalIOLimits(t *testing.T) {
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	user := security.RootUserName()
 
-	baseDir, err := cloudimpl.ExternalStorageFromURI(ctx, "nodelocal://0/", base.ExternalIODirConfig{},
+	baseDir, err := cloud.ExternalStorageFromURI(ctx, "nodelocal://0/", base.ExternalIODirConfig{},
 		testSettings, clientFactory, user, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +56,7 @@ func TestLocalIOLimits(t *testing.T) {
 
 	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
 		u := fmt.Sprintf("nodelocal://0%s", dest)
-		e, err := cloudimpl.ExternalStorageFromURI(ctx, u, base.ExternalIODirConfig{}, testSettings,
+		e, err := cloud.ExternalStorageFromURI(ctx, u, base.ExternalIODirConfig{}, testSettings,
 			clientFactory, user, nil, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -76,7 +77,7 @@ func TestLocalIOLimits(t *testing.T) {
 		if expectErr {
 			expected = "host component of nodelocal URI must be a node ID"
 		}
-		if _, err := cloudimpl.ExternalStorageConfFromURI(u, user); !testutils.IsError(err, expected) {
+		if _, err := cloud.ExternalStorageConfFromURI(u, user); !testutils.IsError(err, expected) {
 			t.Fatalf("%q: expected error %q, got %v", u, expected, err)
 		}
 	}

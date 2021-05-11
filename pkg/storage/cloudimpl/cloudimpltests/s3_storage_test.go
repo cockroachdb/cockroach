@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,14 +36,14 @@ import (
 func makeS3Storage(
 	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
-	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory, nil, nil)
 	if err != nil {
 		return nil, err
@@ -70,14 +70,14 @@ func TestPutS3(t *testing.T) {
 	ctx := context.Background()
 	user := security.RootUserName()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := cloudimpl.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
+		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s", bucket,
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
 			blobs.TestEmptyBlobClientFactory, user, nil, nil)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
-			cloudimpl.AuthParam,
-			cloudimpl.AuthParamSpecified,
-			cloudimpl.AWSAccessKeyParam,
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			amazon.AWSAccessKeyParam,
 		))
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
@@ -95,12 +95,12 @@ func TestPutS3(t *testing.T) {
 		testExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s",
 			bucket, "backup-test-default",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit,
+			cloud.AuthParam, cloud.AuthParamImplicit,
 		), false, user, nil, nil)
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		uri := cloudimpl.S3URI(bucket, "backup-test",
+		uri := amazon.S3URI(bucket, "backup-test",
 			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
 		testExportStore(t, uri, false, user, nil, nil)
@@ -123,7 +123,7 @@ func TestPutS3(t *testing.T) {
 		testExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
 			"AES256",
 		), false, user, nil, nil)
 
@@ -134,8 +134,8 @@ func TestPutS3(t *testing.T) {
 		testExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s&%s=%s",
 			bucket, "backup-test-sse-kms",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
-			"aws:kms", cloudimpl.AWSServerSideEncryptionKMSID, v,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
+			"aws:kms", amazon.AWSServerSideEncryptionKMSID, v,
 		), false, user, nil, nil)
 	})
 
@@ -155,7 +155,7 @@ func TestPutS3(t *testing.T) {
 		invalidSSEModeURI := fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
 			"unsupported-algorithm")
 
 		_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
@@ -165,7 +165,7 @@ func TestPutS3(t *testing.T) {
 		invalidKMSURI := fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit, cloudimpl.AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
 			"aws:kms")
 		_, err = makeS3Storage(ctx, invalidKMSURI, user)
 		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
@@ -177,10 +177,10 @@ func TestPutS3Endpoint(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        cloudimpl.AWSEndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    cloudimpl.AWSAccessKeyParam,
-		"AWS_S3_ENDPOINT_REGION": cloudimpl.S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": cloudimpl.AWSSecretParam,
+		"AWS_S3_ENDPOINT":        amazon.AWSEndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    amazon.AWSAccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": amazon.S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": amazon.AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -209,8 +209,8 @@ func TestPutS3Endpoint(t *testing.T) {
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
-	s3, err := cloudimpl.MakeS3Storage(context.Background(),
-		cloudimpl.ExternalStorageContext{
+	s3, err := amazon.MakeS3Storage(context.Background(),
+		cloud.ExternalStorageContext{
 			IOConf: base.ExternalIODirConfig{DisableHTTP: true},
 		},
 		dest,
@@ -221,10 +221,10 @@ func TestS3DisallowCustomEndpoints(t *testing.T) {
 
 func TestS3DisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloudimpl.AuthParamImplicit}}
+	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloud.AuthParamImplicit}}
 
-	s3, err := cloudimpl.MakeS3Storage(context.Background(),
-		cloudimpl.ExternalStorageContext{
+	s3, err := amazon.MakeS3Storage(context.Background(),
+		cloud.ExternalStorageContext{
 			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
 			Settings: testSettings,
 		},
@@ -243,10 +243,10 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        cloudimpl.AWSEndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    cloudimpl.AWSAccessKeyParam,
-		"AWS_S3_ENDPOINT_REGION": cloudimpl.S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": cloudimpl.AWSSecretParam,
+		"AWS_S3_ENDPOINT":        amazon.AWSEndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    amazon.AWSAccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": amazon.S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": amazon.AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -267,14 +267,14 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	ctx := context.Background()
 	user := security.RootUserName()
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI(u.String(), user)
+	conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
+	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -305,8 +305,8 @@ func TestAntagonisticS3Read(t *testing.T) {
 
 	s3file := fmt.Sprintf(
 		"s3://%s/%s?%s=%s", bucket, "antagonistic-read",
-		cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
-	conf, err := cloudimpl.ExternalStorageConfFromURI(s3file, security.RootUserName())
+		cloud.AuthParam, cloud.AuthParamImplicit)
+	conf, err := cloud.ExternalStorageConfFromURI(s3file, security.RootUserName())
 	require.NoError(t, err)
 
 	testAntagonisticRead(t, conf)

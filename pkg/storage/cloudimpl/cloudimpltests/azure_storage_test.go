@@ -17,7 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -31,8 +32,8 @@ type azureConfig struct {
 func (a azureConfig) filePath(f string) string {
 	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 		a.bucket, f,
-		cloudimpl.AzureAccountKeyParam, url.QueryEscape(a.key),
-		cloudimpl.AzureAccountNameParam, url.QueryEscape(a.account))
+		azure.AzureAccountKeyParam, url.QueryEscape(a.key),
+		azure.AzureAccountNameParam, url.QueryEscape(a.account))
 }
 
 func getAzureConfig() (azureConfig, error) {
@@ -71,7 +72,7 @@ func TestAntagonisticAzureRead(t *testing.T) {
 		return
 	}
 
-	conf, err := cloudimpl.ExternalStorageConfFromURI(
+	conf, err := cloud.ExternalStorageConfFromURI(
 		cfg.filePath("antagonistic-read"), security.RootUserName())
 	require.NoError(t, err)
 

@@ -14,11 +14,15 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -105,3 +109,41 @@ var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
+
+// RedactedParams is a helper for making a set of param names to redact in URIs.
+func RedactedParams(strs ...string) map[string]struct{} {
+	if len(strs) == 0 {
+		return nil
+	}
+	m := make(map[string]struct{}, len(strs))
+	for i := range strs {
+		m[strs[i]] = struct{}{}
+	}
+	return m
+}
+
+// ExternalStorageURIContext contains arguments needed to parse external storage
+// URIs.
+type ExternalStorageURIContext struct {
+	CurrentUser security.SQLUsername
+}
+
+// ExternalStorageURIParser functions parses a URL into a structured
+// ExternalStorage configuration.
+type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (roachpb.ExternalStorage, error)
+
+// ExternalStorageContext contains the dependencies passed to external storage
+// implementations during creation.
+type ExternalStorageContext struct {
+	IOConf            base.ExternalIODirConfig
+	Settings          *cluster.Settings
+	BlobClientFactory blobs.BlobClientFactory
+	InternalExecutor  sqlutil.InternalExecutor
+	DB                *kv.DB
+}
+
+// ExternalStorageConstructor is a function registered to create instances
+// of a given external storage implamentation.
+type ExternalStorageConstructor func(
+	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
+) (ExternalStorage, error)

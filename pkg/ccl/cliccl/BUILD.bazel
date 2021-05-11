@@ -40,7 +40,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/storage",
         "//pkg/storage/cloud",
-        "//pkg/storage/cloudimpl",
+        "//pkg/storage/cloud/nodelocal",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/envutil",

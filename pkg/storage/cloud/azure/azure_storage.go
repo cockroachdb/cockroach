@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package azure
 
 import (
 	"context"
@@ -28,7 +28,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func parseAzureURL(_ ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+const (
+	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
+	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
+	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
+	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+)
+
+func parseAzureURL(
+	_ cloud.ExternalStorageURIContext, uri *url.URL,
+) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_azure
 	conf.AzureConfig = &roachpb.ExternalStorage_Azure{
@@ -70,7 +79,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	_ context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
+	_ context.Context, args cloud.ExternalStorageContext, dest roachpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.azure")
 	conf := dest.AzureConfig
@@ -159,7 +168,7 @@ func (s *azureStorage) ReadFileAt(
 	if offset == 0 {
 		size = get.ContentLength()
 	} else {
-		size, err = checkHTTPContentRangeHeader(get.ContentRange(), offset)
+		size, err = cloud.CheckHTTPContentRangeHeader(get.ContentRange(), offset)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -240,4 +249,9 @@ func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error)
 
 func (s *azureStorage) Close() error {
 	return nil
+}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_azure,
+		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), "azure")
 }

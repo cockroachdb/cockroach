@@ -142,7 +142,6 @@ go_library(
         "//pkg/sqlmigrations",
         "//pkg/storage",
         "//pkg/storage/cloud",
-        "//pkg/storage/cloudimpl",
         "//pkg/storage/enginepb",
         "//pkg/testutils/serverutils",
         "//pkg/ts",

@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "userfile",
+    srcs = ["file_table_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
+        "//pkg/storage/cloud",
+        "//pkg/storage/cloudimpl/filetable",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+    ],
+)
