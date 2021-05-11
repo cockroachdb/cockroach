@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1189,8 +1190,9 @@ func (r *restoreResumer) Resume(
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
 		var newDescriptorChangeJobs []*jobs.StartableJob
+		var modifiedDescriptors []descpb.ID
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details, nil)
+			newDescriptorChangeJobs, modifiedDescriptors, err = r.publishDescriptors(ctx, txn, descsCol, details, nil)
 			return err
 		}
 		if err := descs.Txn(
@@ -1198,6 +1200,13 @@ func (r *restoreResumer) Resume(
 			r.execCfg.DB, publishDescriptors,
 		); err != nil {
 			return err
+		}
+		// Wait for the descriptor changes to be visible.
+		for _, desc := range modifiedDescriptors {
+			_, err := r.execCfg.LeaseManager.WaitForOneVersion(ctx, desc, retry.Options{})
+			if err != nil {
+				return err
+			}
 		}
 		// Start the schema change jobs we created.
 		for _, newJob := range newDescriptorChangeJobs {
@@ -1243,7 +1252,7 @@ func (r *restoreResumer) Resume(
 		return errors.Wrap(err, "inserting table statistics")
 	}
 	var newDescriptorChangeJobs []*jobs.StartableJob
-
+	var modifiedDescriptors []descpb.ID
 	var devalidateIndexes map[descpb.ID][]descpb.IndexID
 	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
 		if err := r.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
@@ -1259,7 +1268,7 @@ func (r *restoreResumer) Resume(
 	}
 
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
+		newDescriptorChangeJobs, modifiedDescriptors, err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
 		return err
 	}
 	if err := descs.Txn(
@@ -1267,6 +1276,13 @@ func (r *restoreResumer) Resume(
 		r.execCfg.DB, publishDescriptors,
 	); err != nil {
 		return err
+	}
+	// Wait for the descriptor changes to be visible.
+	for _, desc := range modifiedDescriptors {
+		_, err := r.execCfg.LeaseManager.WaitForOneVersion(ctx, desc, retry.Options{})
+		if err != nil {
+			return err
+		}
 	}
 	// Reload the details as we may have updated the job.
 	details = r.job.Details().(jobspb.RestoreDetails)
@@ -1439,7 +1455,7 @@ func (r *restoreResumer) publishDescriptors(
 	descsCol *descs.Collection,
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,
-) (newDescriptorChangeJobs []*jobs.StartableJob, err error) {
+) (newDescriptorChangeJobs []*jobs.StartableJob, modifiedDescriptors []descpb.ID, err error) {
 	defer func() {
 		if err == nil {
 			return
@@ -1452,11 +1468,11 @@ func (r *restoreResumer) publishDescriptors(
 		newDescriptorChangeJobs = nil
 	}()
 	if details.DescriptorsPublished {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if fn := r.testingKnobs.beforePublishingDescriptors; fn != nil {
 		if err := fn(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	log.VEventf(ctx, 1, "making tables live")
@@ -1482,10 +1498,10 @@ func (r *restoreResumer) publishDescriptors(
 	for _, tbl := range details.TableDescs {
 		mutTable, err := descsCol.GetMutableTableVersionByID(ctx, tbl.GetID(), txn)
 		if err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		if err := checkVersion(mutTable, tbl.Version); err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		badIndexes := devalidateIndexes[mutTable.ID]
 		for _, badIdx := range badIndexes {
@@ -1494,7 +1510,7 @@ func (r *restoreResumer) publishDescriptors(
 				if mutTable.Indexes[i].ID == badIdx {
 					copied := mutTable.Indexes[i]
 					if err := mutTable.AddIndexMutation(&copied, descpb.DescriptorMutation_ADD); err != nil {
-						return newDescriptorChangeJobs, err
+						return newDescriptorChangeJobs, nil, err
 					}
 					mutTable.Indexes = append(mutTable.Indexes[:i], mutTable.Indexes[i+1:]...)
 					found = true
@@ -1502,7 +1518,7 @@ func (r *restoreResumer) publishDescriptors(
 				}
 			}
 			if !found {
-				return newDescriptorChangeJobs, errors.Errorf("did not find invalid index %d in table %d (%q) to drop and re-add", badIdx, mutTable.ID, mutTable.Name)
+				return newDescriptorChangeJobs, nil, errors.Errorf("did not find invalid index %d in table %d (%q) to drop and re-add", badIdx, mutTable.ID, mutTable.Name)
 			}
 		}
 		allMutDescs = append(allMutDescs, mutTable)
@@ -1516,7 +1532,7 @@ func (r *restoreResumer) publishDescriptors(
 			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
 				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, mutTable)
 			if err != nil {
-				return newDescriptorChangeJobs, err
+				return newDescriptorChangeJobs, nil, err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, newJobs...)
 		}
@@ -1526,17 +1542,17 @@ func (r *restoreResumer) publishDescriptors(
 	for _, typDesc := range details.TypeDescs {
 		typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typDesc.GetID())
 		if err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		if err := checkVersion(typ, typDesc.Version); err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		allMutDescs = append(allMutDescs, typ)
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
 			typJob, err := createTypeChangeJobFromDesc(ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().Username, typ)
 			if err != nil {
-				return newDescriptorChangeJobs, err
+				return newDescriptorChangeJobs, nil, err
 			}
 			newDescriptorChangeJobs = append(newDescriptorChangeJobs, typJob)
 		}
@@ -1544,10 +1560,10 @@ func (r *restoreResumer) publishDescriptors(
 	for _, sc := range details.SchemaDescs {
 		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, sc.ID, txn)
 		if err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		if err := checkVersion(mutDesc, sc.Version); err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		mutSchema := mutDesc.(*schemadesc.Mutable)
 		allMutDescs = append(allMutDescs, mutSchema)
@@ -1560,10 +1576,10 @@ func (r *restoreResumer) publishDescriptors(
 		// field in the details?
 		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, dbDesc.ID, txn)
 		if err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		if err := checkVersion(mutDesc, dbDesc.Version); err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 		mutDB := mutDesc.(*dbdesc.Mutable)
 		// TODO(lucy,ajwerner): Remove this in 21.1.
@@ -1576,21 +1592,22 @@ func (r *restoreResumer) publishDescriptors(
 	}
 	b := txn.NewBatch()
 	for _, desc := range allMutDescs {
+		modifiedDescriptors = append(modifiedDescriptors, desc.GetID())
 		desc.SetPublic()
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, desc, b,
 		); err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 	}
 
 	if err := txn.Run(ctx, b); err != nil {
-		return newDescriptorChangeJobs, errors.Wrap(err, "publishing tables")
+		return newDescriptorChangeJobs, nil, errors.Wrap(err, "publishing tables")
 	}
 
 	for _, tenant := range details.Tenants {
 		if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
-			return newDescriptorChangeJobs, err
+			return newDescriptorChangeJobs, nil, err
 		}
 	}
 
@@ -1601,12 +1618,12 @@ func (r *restoreResumer) publishDescriptors(
 	details.SchemaDescs = newSchemas
 	details.DatabaseDescs = newDBs
 	if err := r.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-		return newDescriptorChangeJobs, errors.Wrap(err,
+		return newDescriptorChangeJobs, nil, errors.Wrap(err,
 			"updating job details after publishing tables")
 	}
 	r.job.WithTxn(nil)
 
-	return newDescriptorChangeJobs, nil
+	return newDescriptorChangeJobs, nil, nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface. Removes KV data that
