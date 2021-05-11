@@ -263,27 +263,7 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 	}
 }
 
-// Bulk IO operations cause spikes in our time series chart for service latency. We exclude them from the service
-// latency metrics to avoid confusions.
+// We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
-	switch stmt.AST.(type) {
-	case *tree.Backup:
-		return false
-	case *tree.ShowBackup:
-		return false
-	case *tree.Restore:
-		return false
-	case *tree.Import:
-		return false
-	case *tree.Export:
-		return false
-	case *tree.ScheduledBackup:
-		return false
-	case *tree.StreamIngestion:
-		return false
-	case *tree.ReplicationStream:
-		return false
-	}
-
-	return true
+	return stmt.AST.StatementType() == tree.TypeDML
 }
