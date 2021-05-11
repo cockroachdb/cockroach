@@ -6541,7 +6541,7 @@ func TestImportMultiRegion(t *testing.T) {
 
 	baseDir := filepath.Join("testdata")
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 1 /* numServers */, base.TestingKnobs{}, &baseDir,
+		t, 1 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir),
 	)
 	defer cleanup()
 
@@ -6731,7 +6731,7 @@ func TestMultiRegionExportImportRoundTrip(t *testing.T) {
 	defer dirCleanup()
 
 	_, sqlDB, clusterCleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, base.TestingKnobs{}, &baseDir)
+		t, 3 /* numServers */, base.TestingKnobs{}, multiregionccltestutils.WithBaseDirectory(baseDir))
 	defer clusterCleanup()
 
 	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)

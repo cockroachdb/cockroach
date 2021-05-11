@@ -46,7 +46,7 @@ func TestWorkload(t *testing.T) {
 		t,
 		3, /* numServers */
 		base.TestingKnobs{},
-		&dir,
+		multiregionccltestutils.WithBaseDirectory(dir),
 	)
 	defer cleanup()
 
