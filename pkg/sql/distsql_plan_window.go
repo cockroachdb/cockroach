@@ -142,6 +142,9 @@ func (s *windowPlanState) createWindowFnSpec(
 	return funcInProgressSpec, outputType, nil
 }
 
+// windowers currently cannot maintain the ordering (see #36310).
+var windowerMergeOrdering = execinfrapb.Ordering{}
+
 // addRenderingOrProjection checks whether any of the window functions' outputs
 // are used in another expression and, if they are, adds rendering to the plan.
 // If no rendering is required, it adds a projection to remove all columns that
@@ -175,7 +178,7 @@ func (s *windowPlanState) addRenderingOrProjection() error {
 				columns[i] = uint32(holder.outputColIdx)
 			}
 		}
-		s.plan.AddProjection(columns)
+		s.plan.AddProjection(columns, windowerMergeOrdering)
 		return nil
 	}
 
@@ -207,7 +210,7 @@ func (s *windowPlanState) addRenderingOrProjection() error {
 		outputType := renderExprs[i].ResolvedType()
 		renderTypes = append(renderTypes, outputType)
 	}
-	return s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes)
+	return s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes, windowerMergeOrdering)
 }
 
 // replaceWindowFuncsVisitor is used to populate render expressions containing

@@ -276,6 +276,14 @@ func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
 	return false
 }
 
+// serializeIfRender checks whether n is a renderNode and makes it serializing
+// if so.
+func serializeIfRender(n exec.Node) {
+	if r, ok := n.(*renderNode); ok {
+		r.serialize = true
+	}
+}
+
 // ConstructSerializingProject is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSerializingProject(
 	n exec.Node, cols []exec.NodeColumnOrdinal, colNames []string,
@@ -295,10 +303,18 @@ func (ef *execFactory) ConstructSerializingProject(
 			for i := range inputCols {
 				inputCols[i].Name = colNames[i]
 			}
+			serializeIfRender(n)
 			return n, nil
 		}
 	}
-	return constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+	res, err := constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+	if err != nil {
+		return nil, err
+	}
+	// If we pulled up a spoolNode, we don't need to materialize the ordering
+	// (because all mutations are currently not distributed).
+	serializeIfRender(res)
+	return res, nil
 }
 
 // ConstructRender is part of the exec.Factory interface.
