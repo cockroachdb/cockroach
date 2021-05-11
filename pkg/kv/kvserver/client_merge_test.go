@@ -4276,7 +4276,7 @@ func TestMergeQueue(t *testing.T) {
 			// Drop the load-based splitting merge delay setting, which also dictates
 			// the duration that a leaseholder must measure QPS before considering its
 			// measurements to be reliable enough to base range merging decisions on.
-			kvserver.SplitByLoadMergeDelay.Override(sv, splitByLoadMergeDelay)
+			kvserverbase.SplitByLoadMergeDelay.Override(sv, splitByLoadMergeDelay)
 
 			// Reset both range's load-based splitters, so that QPS measurements do
 			// not leak over between subtests. Then, bump the manual clock so that
