@@ -253,11 +253,12 @@ type Server struct {
 
 	// sqlStats tracks per-application statistics for all applications on each
 	// node. Newly collected statistics flow into sqlStats.
-	sqlStats sqlStats
+	sqlStats *sqlStats
+
 	// reportedStats is a pool of stats that is held for reporting, and is
 	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
 	// into reported stats when sqlStats is cleared.
-	reportedStats sqlStats
+	reportedStats *sqlStats
 
 	reCache *tree.RegexpCache
 
@@ -288,23 +289,39 @@ type Metrics struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements.
 	ExecutedStatementCounters StatementCounters
+
+	// StatsMetrics contains metrics for SQL statistics collection.
+	StatsMetrics StatsMetrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
+	metrics := makeMetrics(cfg, false /* internal */)
 	return &Server{
 		cfg:             cfg,
-		Metrics:         makeMetrics(false /*internal*/),
-		InternalMetrics: makeMetrics(true /*internal*/),
+		Metrics:         metrics,
+		InternalMetrics: makeMetrics(cfg, true /* internal */),
 		pool:            pool,
-		sqlStats:        sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reportedStats:   sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
-		reCache:         tree.NewRegexpCache(512),
+		sqlStats: newSQLStats(
+			cfg.Settings,
+			maxMemSQLStatsStmtFingerprintsPerApp,
+			maxMemSQLStatsTxnFingerprintsPerApp,
+			metrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
+			metrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
+		),
+		reportedStats: newSQLStats(
+			cfg.Settings,
+			maxMemReportedSQLStatsStmtFingerprintsPerApp,
+			maxMemReportedSQLStatsTxnFingerprintsPerApp,
+			metrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
+			metrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
+		),
+		reCache: tree.NewRegexpCache(512),
 	}
 }
 
-func makeMetrics(internal bool) Metrics {
+func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 	return Metrics{
 		EngineMetrics: EngineMetrics{
 			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
@@ -330,31 +347,65 @@ func makeMetrics(internal bool) Metrics {
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
+		StatsMetrics: StatsMetrics{
+			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(
+				getMetricMeta(MetaSQLStatsMemMaxBytes, internal),
+				cfg.HistogramWindowInterval,
+				log10int64times1000,
+				3, /* sigFigs */
+			),
+			SQLStatsMemoryCurBytesCount: metric.NewGauge(
+				getMetricMeta(MetaSQLStatsMemCurBytes, internal)),
+			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(
+				getMetricMeta(MetaReportedSQLStatsMemMaxBytes, internal),
+				cfg.HistogramWindowInterval,
+				log10int64times1000,
+				3, /* sigFigs */
+			),
+			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(
+				getMetricMeta(MetaReportedSQLStatsMemCurBytes, internal)),
+			DiscardedStatsCount: metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
+		},
 	}
 }
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
+	s.sqlStats.init(ctx, s.pool)
+	s.reportedStats.init(ctx, s.pool)
+
 	// Start a loop to clear SQL stats at the max reset interval. This is
 	// to ensure that we always have some worker clearing SQL stats to avoid
 	// continually allocating space for the SQL stats. Additionally, spawn
 	// a loop to clear the reported stats at the same large interval just
 	// in case the telemetry worker fails.
-	s.PeriodicallyClearSQLStats(ctx, stopper, MaxSQLStatReset, &s.sqlStats, s.ResetSQLStats)
-	s.PeriodicallyClearSQLStats(ctx, stopper, MaxSQLStatReset, &s.reportedStats, s.ResetReportedStats)
+	s.PeriodicallyClearSQLStats(ctx, stopper, MaxSQLStatReset, s.sqlStats, s.ResetSQLStats)
+	s.PeriodicallyClearSQLStats(ctx, stopper, MaxSQLStatReset, s.reportedStats, s.ResetReportedStats)
 	// Start a second loop to clear SQL stats at the requested interval.
-	s.PeriodicallyClearSQLStats(ctx, stopper, SQLStatReset, &s.sqlStats, s.ResetSQLStats)
+	s.PeriodicallyClearSQLStats(ctx, stopper, SQLStatReset, s.sqlStats, s.ResetSQLStats)
 }
 
 // ResetSQLStats resets the executor's collected sql statistics.
+// TODO(azhng): now that since ResetSQLStats can potentially return an error, we
+//  need to update the RPC endpoint to handle this.
 func (s *Server) ResetSQLStats(ctx context.Context) {
 	// Dump the SQL stats into the reported stats before clearing the SQL stats.
-	s.sqlStats.resetAndMaybeDumpStats(ctx, &s.reportedStats)
+	err := s.sqlStats.resetAndMaybeDumpStats(ctx, s.reportedStats)
+	if err != nil {
+		if log.V(1) {
+			log.Warningf(ctx, "reported SQL stats memory limited has been exceeded, some fingerprints stats are discarded: %s", err)
+		}
+	}
 }
 
 // ResetReportedStats resets the executor's collected reported stats.
 func (s *Server) ResetReportedStats(ctx context.Context) {
-	s.reportedStats.resetAndMaybeDumpStats(ctx, nil /* target */)
+	err := s.reportedStats.resetAndMaybeDumpStats(ctx, nil /* target */)
+	if err != nil {
+		if log.V(1) {
+			log.Errorf(ctx, "failed to reset reported stats: %s", err)
+		}
+	}
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -745,9 +796,9 @@ func (s *Server) PeriodicallyClearSQLStats(
 	_ = stopper.RunAsyncTask(ctx, "sql-stats-clearer", func(ctx context.Context) {
 		var timer timeutil.Timer
 		for {
-			s.sqlStats.Lock()
-			last := stats.lastReset
-			s.sqlStats.Unlock()
+			s.sqlStats.mu.Lock()
+			last := stats.mu.lastReset
+			s.sqlStats.mu.Unlock()
 
 			next := last.Add(setting.Get(&s.cfg.Settings.SV))
 			wait := next.Sub(timeutil.Now())
@@ -1064,7 +1115,7 @@ type connExecutor struct {
 		// onTxnFinish (if non-nil) will be called when txn is finished (either
 		// committed or aborted). It is set when txn is started but can remain
 		// unset when txn is executed within another higher-level txn.
-		onTxnFinish func(txnEvent)
+		onTxnFinish func(context.Context, txnEvent)
 
 		// onTxnRestart (if non-nil) will be called when a txn is being retried. It
 		// is set when the txn is started but can remain unset when a txn is
@@ -1323,7 +1374,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 		ex.extraTxnState.savepoints.clear()
 		// After txn is finished, we need to call onTxnFinish (if it's non-nil).
 		if ex.extraTxnState.onTxnFinish != nil {
-			ex.extraTxnState.onTxnFinish(ev)
+			ex.extraTxnState.onTxnFinish(ctx, ev)
 			ex.extraTxnState.onTxnFinish = nil
 		}
 	case txnRestart:
@@ -1958,7 +2009,7 @@ func (ex *connExecutor) execCopyIn(
 		// going through the state machine.
 		ex.state.sqlTimestamp = txnTS
 		ex.statsCollector = ex.newStatsCollector()
-		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		ex.initPlanner(ctx, p)
 		ex.resetPlanner(ctx, p, txn, stmtTS)
 	}
@@ -2469,7 +2520,7 @@ func (ex *connExecutor) initStatementResult(
 // newStatsCollector returns a sqlStatsCollector that will record stats in the
 // session's stats containers.
 func (ex *connExecutor) newStatsCollector() *sqlStatsCollector {
-	return newSQLStatsCollector(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	return newSQLStatsCollector(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 }
 
 // cancelQuery is part of the registrySession interface.

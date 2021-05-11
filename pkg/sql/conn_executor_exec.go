@@ -85,7 +85,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := ast.(tree.ObserverStatement); ok {
-		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+		ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
@@ -351,7 +351,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = res
@@ -1106,7 +1106,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 		rwMode = ex.readWriteModeWithSessionDefault(modes.ReadWriteMode)
 		return rwMode, now, nil, nil
 	}
-	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
+	ex.statsCollector.reset(ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
 
 	// NB: this use of p.txn is totally bogus. The planner's txn should
@@ -1502,7 +1502,10 @@ func payloadHasError(payload fsm.EventPayload) bool {
 // recordTransactionStart records the start of the transaction and returns
 // closures to be called once the transaction finishes or if the transaction
 // restarts.
-func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), onTxnRestart func()) {
+func (ex *connExecutor) recordTransactionStart() (
+	onTxnFinish func(context.Context, txnEvent),
+	onTxnRestart func(),
+) {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1526,9 +1529,15 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 
-	onTxnFinish = func(ev txnEvent) {
+	onTxnFinish = func(ctx context.Context, ev txnEvent) {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
-		ex.recordTransaction(ev, implicit, txnStart)
+		err := ex.recordTransaction(ctx, ev, implicit, txnStart)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf(ctx, "failed to record transaction stats: %s", err)
+			}
+			ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+		}
 	}
 	onTxnRestart = func() {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
@@ -1544,7 +1553,9 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	return onTxnFinish, onTxnRestart
 }
 
-func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
+func (ex *connExecutor) recordTransaction(
+	ctx context.Context, ev txnEvent, implicit bool, txnStart time.Time,
+) error {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
@@ -1554,7 +1565,8 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 	txnRetryLat := ex.phaseTimes.getTransactionRetryLatency()
 	commitLat := ex.phaseTimes.getCommitLatency()
 
-	ex.statsCollector.recordTransaction(
+	return ex.statsCollector.recordTransaction(
+		ctx,
 		txnKey(ex.extraTxnState.transactionStatementsHash.Sum()),
 		txnTime.Seconds(),
 		ev,
