@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -237,6 +238,13 @@ func expectResolvedTimestampAvro(
 
 type cdcTestFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)
 
+func configureMetamorphic(s serverutils.TestServerInterface) {
+	rng, _ := randutil.NewPseudoRand()
+	usePushback := rng.Float64() < 0.5
+	log.Infof(context.Background(), "metamorphic config EnableChangefeedPushback=%t", usePushback)
+	changefeedbase.EnableChangefeedPushback.Override(&s.ClusterSettings().SV, usePushback)
+}
+
 func sinklessTestWithServerArgs(
 	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
 ) func(*testing.T) {
@@ -253,6 +261,7 @@ func sinklessTestWithServerArgs(
 		}
 		s, db, _ := serverutils.StartServer(t, args)
 		defer s.Stopper().Stop(ctx)
+		configureMetamorphic(s)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 		// TODO(dan): We currently have to set this to an extremely conservative
@@ -316,6 +325,7 @@ func enterpriseTestWithServerArgs(
 		}
 		s, db, _ := serverutils.StartServer(t, args)
 		defer s.Stopper().Stop(ctx)
+		configureMetamorphic(s)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
@@ -369,6 +379,7 @@ func cloudStorageTest(testFn cdcTestFn) func(*testing.T) {
 			Knobs:         knobs,
 		})
 		defer s.Stopper().Stop(ctx)
+		configureMetamorphic(s)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
