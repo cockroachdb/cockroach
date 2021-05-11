@@ -617,6 +617,10 @@ func maybeFillInDescriptor(
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 	changes.FixedPrivileges = descpb.MaybeFixPrivileges(desc.ID, desc.Privileges)
 
+	fixedUsagePrivilege := descpb.MaybeFixUsagePrivForTablesAndDBs(&desc.Privileges)
+
+	changes.FixedPrivileges = changes.FixedPrivileges || fixedUsagePrivilege
+
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
 			ctx, dg, skipFKsWithNoMatchingTable /* skipFKsWithNoMatchingTable*/, desc)

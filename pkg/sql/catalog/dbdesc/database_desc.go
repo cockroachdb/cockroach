@@ -201,7 +201,8 @@ func (desc *Immutable) Validate() error {
 	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
 	// run again and mixed-version clusters always write "good" descriptors.
 	descpb.MaybeFixPrivileges(desc.GetID(), desc.Privileges)
-
+	privileges := desc.Privileges
+	descpb.MaybeFixUsagePrivForTablesAndDBs(&privileges)
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID(), privilege.Database)
 }
