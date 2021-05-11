@@ -7,6 +7,9 @@ new-txn name=txn2 ts=11,1 epoch=0
 new-txn name=txn3 ts=11,1 epoch=0
 ----
 
+new-txn name=txn4 ts=11,1 epoch=0
+----
+
 new-txn name=txnNoWait ts=12,1 epoch=0
 ----
 
@@ -14,6 +17,7 @@ new-txn name=txnNoWait ts=12,1 epoch=0
 # Prep: Txn 1 acquire locks at key k and key k2
 #       Txn 2 acquire locks at key k3
 #       Txn 3 begins waiting in k2's wait-queue
+#       Txn 4 acquire locks at keys k6, k7, k8
 # -------------------------------------------------------------
 
 new-request name=req1 txn=txn1 ts=10,0
@@ -73,9 +77,38 @@ sequence req=req3
 [3] sequence req3: pushing txn 00000001 to abort
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
 
+new-request name=req4 txn=txn4 ts=11,0
+  put key=k6 value=v1
+  put key=k7 value=v2
+  put key=k8 value=v3
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
+on-lock-acquired req=req4 key=k6
+----
+[-] acquire lock: txn 00000004 @ k6
+
+on-lock-acquired req=req4 key=k7
+----
+[-] acquire lock: txn 00000004 @ k7
+
+on-lock-acquired req=req4 key=k8
+----
+[-] acquire lock: txn 00000004 @ k8
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
 debug-lock-table
 ----
-global: num=3
+global: num=6
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
@@ -85,6 +118,12 @@ global: num=3
    distinguished req: 3
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k6"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k7"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k8"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # -------------------------------------------------------------
@@ -98,13 +137,13 @@ new-request name=reqNoWait1 txn=txnNoWait ts=12,0 wait-policy=error
 
 sequence req=reqNoWait1
 ----
-[4] sequence reqNoWait1: sequencing request
-[4] sequence reqNoWait1: acquiring latches
-[4] sequence reqNoWait1: scanning lock table for conflicting locks
-[4] sequence reqNoWait1: waiting in lock wait-queues
-[4] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
-[4] sequence reqNoWait1: pushee not abandoned
-[4] sequence reqNoWait1: sequencing complete, returned error: conflicting intents on "k"
+[5] sequence reqNoWait1: sequencing request
+[5] sequence reqNoWait1: acquiring latches
+[5] sequence reqNoWait1: scanning lock table for conflicting locks
+[5] sequence reqNoWait1: waiting in lock wait-queues
+[5] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
+[5] sequence reqNoWait1: pushee not abandoned
+[5] sequence reqNoWait1: sequencing complete, returned error: conflicting intents on "k"
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error hits abandoned lock.
@@ -120,15 +159,15 @@ on-txn-updated txn=txn1 status=committed
 
 sequence req=reqNoWait1
 ----
-[5] sequence reqNoWait1: sequencing request
-[5] sequence reqNoWait1: acquiring latches
-[5] sequence reqNoWait1: scanning lock table for conflicting locks
-[5] sequence reqNoWait1: waiting in lock wait-queues
-[5] sequence reqNoWait1: pushing txn 00000001 to check if abandoned
-[5] sequence reqNoWait1: resolving intent "k" for txn 00000001 with COMMITTED status
-[5] sequence reqNoWait1: acquiring latches
-[5] sequence reqNoWait1: scanning lock table for conflicting locks
-[5] sequence reqNoWait1: sequencing complete, returned guard
+[6] sequence reqNoWait1: sequencing request
+[6] sequence reqNoWait1: acquiring latches
+[6] sequence reqNoWait1: scanning lock table for conflicting locks
+[6] sequence reqNoWait1: waiting in lock wait-queues
+[6] sequence reqNoWait1: resolving a batch of 1 intent(s)
+[6] sequence reqNoWait1: resolving intent "k" for txn 00000001 with COMMITTED status
+[6] sequence reqNoWait1: acquiring latches
+[6] sequence reqNoWait1: scanning lock table for conflicting locks
+[6] sequence reqNoWait1: sequencing complete, returned guard
 
 finish req=reqNoWait1
 ----
@@ -136,7 +175,7 @@ finish req=reqNoWait1
 
 debug-lock-table
 ----
-global: num=2
+global: num=5
  lock: "k2"
   res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000011,0, seq: 0
  lock: "k3"
@@ -144,6 +183,12 @@ global: num=2
    queued writers:
     active: true req: 3, txn: 00000003-0000-0000-0000-000000000000
    distinguished req: 3
+ lock: "k6"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k7"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k8"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # -------------------------------------------------------------
@@ -158,11 +203,11 @@ new-request name=reqNoWait2 txn=txnNoWait ts=12,0 wait-policy=error
 
 sequence req=reqNoWait2
 ----
-[6] sequence reqNoWait2: sequencing request
-[6] sequence reqNoWait2: acquiring latches
-[6] sequence reqNoWait2: scanning lock table for conflicting locks
-[6] sequence reqNoWait2: waiting in lock wait-queues
-[6] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on "k2"
+[7] sequence reqNoWait2: sequencing request
+[7] sequence reqNoWait2: acquiring latches
+[7] sequence reqNoWait2: scanning lock table for conflicting locks
+[7] sequence reqNoWait2: waiting in lock wait-queues
+[7] sequence reqNoWait2: sequencing complete, returned error: conflicting intents on "k2"
 
 # -------------------------------------------------------------
 # Read-only request with WaitPolicy_Error discovers lock. The
@@ -175,29 +220,29 @@ new-request name=reqNoWait3 txn=txnNoWait ts=12,0 wait-policy=error
 
 sequence req=reqNoWait3
 ----
-[7] sequence reqNoWait3: sequencing request
-[7] sequence reqNoWait3: acquiring latches
-[7] sequence reqNoWait3: scanning lock table for conflicting locks
-[7] sequence reqNoWait3: sequencing complete, returned guard
+[8] sequence reqNoWait3: sequencing request
+[8] sequence reqNoWait3: acquiring latches
+[8] sequence reqNoWait3: scanning lock table for conflicting locks
+[8] sequence reqNoWait3: sequencing complete, returned guard
 
 handle-write-intent-error req=reqNoWait3 lease-seq=1
   intent txn=txn2 key=k4
 ----
-[8] handle write intent error reqNoWait3: handled conflicting intents on "k4", released latches
+[9] handle write intent error reqNoWait3: handled conflicting intents on "k4", released latches
 
 sequence req=reqNoWait3
 ----
-[9] sequence reqNoWait3: re-sequencing request
-[9] sequence reqNoWait3: acquiring latches
-[9] sequence reqNoWait3: scanning lock table for conflicting locks
-[9] sequence reqNoWait3: waiting in lock wait-queues
-[9] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
-[9] sequence reqNoWait3: pushee not abandoned
-[9] sequence reqNoWait3: sequencing complete, returned error: conflicting intents on "k4"
+[10] sequence reqNoWait3: re-sequencing request
+[10] sequence reqNoWait3: acquiring latches
+[10] sequence reqNoWait3: scanning lock table for conflicting locks
+[10] sequence reqNoWait3: waiting in lock wait-queues
+[10] sequence reqNoWait3: pushing txn 00000002 to check if abandoned
+[10] sequence reqNoWait3: pushee not abandoned
+[10] sequence reqNoWait3: sequencing complete, returned error: conflicting intents on "k4"
 
 debug-lock-table
 ----
-global: num=3
+global: num=6
  lock: "k2"
   res: req: 3, txn: 00000003-0000-0000-0000-000000000000, ts: 0.000000011,0, seq: 0
  lock: "k3"
@@ -207,6 +252,12 @@ global: num=3
    distinguished req: 3
  lock: "k4"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,1, info: repl epoch: 0, seqs: [0]
+ lock: "k6"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k7"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k8"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
 # -------------------------------------------------------------
@@ -228,27 +279,27 @@ new-request name=reqNoWait4 txn=txnNoWait ts=12,0 wait-policy=error
 
 sequence req=reqNoWait4
 ----
-[10] sequence reqNoWait4: sequencing request
-[10] sequence reqNoWait4: acquiring latches
-[10] sequence reqNoWait4: scanning lock table for conflicting locks
-[10] sequence reqNoWait4: sequencing complete, returned guard
+[11] sequence reqNoWait4: sequencing request
+[11] sequence reqNoWait4: acquiring latches
+[11] sequence reqNoWait4: scanning lock table for conflicting locks
+[11] sequence reqNoWait4: sequencing complete, returned guard
 
 handle-write-intent-error req=reqNoWait4 lease-seq=1
   intent txn=txn2 key=k5
 ----
-[11] handle write intent error reqNoWait4: handled conflicting intents on "k5", released latches
+[12] handle write intent error reqNoWait4: handled conflicting intents on "k5", released latches
 
 sequence req=reqNoWait4
 ----
-[12] sequence reqNoWait4: re-sequencing request
-[12] sequence reqNoWait4: acquiring latches
-[12] sequence reqNoWait4: scanning lock table for conflicting locks
-[12] sequence reqNoWait4: waiting in lock wait-queues
-[12] sequence reqNoWait4: pushing txn 00000002 to check if abandoned
-[12] sequence reqNoWait4: resolving intent "k5" for txn 00000002 with ABORTED status
-[12] sequence reqNoWait4: acquiring latches
-[12] sequence reqNoWait4: scanning lock table for conflicting locks
-[12] sequence reqNoWait4: sequencing complete, returned guard
+[13] sequence reqNoWait4: re-sequencing request
+[13] sequence reqNoWait4: acquiring latches
+[13] sequence reqNoWait4: scanning lock table for conflicting locks
+[13] sequence reqNoWait4: waiting in lock wait-queues
+[13] sequence reqNoWait4: resolving a batch of 1 intent(s)
+[13] sequence reqNoWait4: resolving intent "k5" for txn 00000002 with ABORTED status
+[13] sequence reqNoWait4: acquiring latches
+[13] sequence reqNoWait4: scanning lock table for conflicting locks
+[13] sequence reqNoWait4: sequencing complete, returned guard
 
 finish req=reqNoWait4
 ----
@@ -260,10 +311,51 @@ finish req=req3
 
 debug-lock-table
 ----
-global: num=1
+global: num=4
  lock: "k4"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 0.000000011,1, info: repl epoch: 0, seqs: [0]
+ lock: "k6"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k7"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k8"
+  holder: txn: 00000004-0000-0000-0000-000000000000, ts: 0.000000011,0, info: unrepl epoch: 0, seqs: [0]
 local: num=0
+
+# -------------------------------------------------------------
+# Read-only request with WaitPolicy_Error hits abandoned locks.
+# The request resolves abandoned transaction and batch resolves
+# remaining intents.
+# -------------------------------------------------------------
+
+on-txn-updated txn=txn4 status=committed
+----
+[-] update txn: committing txn4
+
+new-request name=reqNoWait5 txn=txnNoWait ts=12,0 wait-policy=error
+  get key=k6
+  get key=k7
+  get key=k8
+----
+
+sequence req=reqNoWait5
+----
+[14] sequence reqNoWait5: sequencing request
+[14] sequence reqNoWait5: acquiring latches
+[14] sequence reqNoWait5: scanning lock table for conflicting locks
+[14] sequence reqNoWait5: waiting in lock wait-queues
+[14] sequence reqNoWait5: pushing txn 00000004 to check if abandoned
+[14] sequence reqNoWait5: resolving intent "k6" for txn 00000004 with COMMITTED status
+[14] sequence reqNoWait5: resolving a batch of 2 intent(s)
+[14] sequence reqNoWait5: resolving intent "k7" for txn 00000004 with COMMITTED status
+[14] sequence reqNoWait5: resolving intent "k8" for txn 00000004 with COMMITTED status
+[14] sequence reqNoWait5: acquiring latches
+[14] sequence reqNoWait5: scanning lock table for conflicting locks
+[14] sequence reqNoWait5: sequencing complete, returned guard
+
+finish req=reqNoWait5
+----
+[-] finish reqNoWait5: finishing request
 
 reset
 ----
