@@ -46,7 +46,7 @@ import (
 
 // - different instances of BoundAccount are associated to different usage
 //   categories in components, in principle to track different object
-//   lifetimes.  Each account tracks the total amount of bytes allocated in
+//   lifetimes. Each account tracks the total amount of bytes allocated in
 //   that category and enables declaring all the bytes as released at once
 //   using Close().
 //

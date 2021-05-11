@@ -43,7 +43,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		t.Helper()
 		applicationStats := server.SQLServer().(*Server).sqlStats.getStatsForApplication("")
 		require.NotNil(t, applicationStats, "could not find app stats for default app")
-		stats, id := applicationStats.getStatsForStmt(stmt, implicitTxn, database, nil /* err */, false /* createIfNonexistent */)
+		stats, _, id, _, _ := applicationStats.getStatsForStmt(stmt, implicitTxn, database, nil /* err */, false /* createIfNonexistent */)
 		require.NotNil(t, stats, "could not find stmt stats for %s", implicitTxn)
 		return stats, id
 	}
@@ -123,7 +123,7 @@ func TestSampledStatsCollection(t *testing.T) {
 
 		applicationStats := s.SQLServer().(*Server).sqlStats.getStatsForApplication("")
 		require.NotNil(t, applicationStats, "could not find app stats for default app")
-		txStats := applicationStats.getStatsForTxnWithKey(txnKey(key.Sum()), nil, false /* createIfNonExistent */)
+		txStats, _, _ := applicationStats.getStatsForTxnWithKey(txnKey(key.Sum()), nil, false /* createIfNonExistent */)
 		require.NotNil(t, txStats, "could not find transaction stats for default app")
 
 		txStats.mu.Lock()

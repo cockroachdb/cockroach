@@ -1691,6 +1691,51 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL Stats"}},
+		Charts: []chartDescription{
+			{
+				Title:   "Memory usage for fingerprint storage",
+				Metrics: []string{"sql.stats.mem.max"},
+			},
+			{
+				Title:   "Current memory usage for fingerprint storage",
+				Metrics: []string{"sql.stats.mem.current"},
+			},
+			{
+				Title:   "Memory usage for reported fingerprint storage",
+				Metrics: []string{"sql.stats.reported.mem.max"},
+			},
+			{
+				Title:   "Current memory usage for reported fingerprint storage",
+				Metrics: []string{"sql.stats.reported.mem.current"},
+			},
+			{
+				Title:   "Number of fingerprint statistics being discarded",
+				Metrics: []string{"sql.stats.discarded.current"},
+			},
+			{
+				Title:   "Memory usage for internal fingerprint storage",
+				Metrics: []string{"sql.stats.mem.max.internal"},
+			},
+			{
+				Title:   "Current memory usage for internal fingerprint storage",
+				Metrics: []string{"sql.stats.mem.current.internal"},
+			},
+			{
+				Title:   "Memory usage for internal reported fingerprint storage",
+				Metrics: []string{"sql.stats.reported.mem.max.internal"},
+			},
+			{
+				Title:   "Current memory usage for internal reported fingerprint storage",
+				Metrics: []string{"sql.stats.reported.mem.current.internal"},
+			},
+			{
+				Title:   "Number of internal fingerprint statistics being discarded",
+				Metrics: []string{"sql.stats.discarded.current.internal"},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "Bulk"}},
 		Charts: []chartDescription{
 			{
