@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package azure
 
 import (
 	"fmt"
@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,8 +33,8 @@ type azureConfig struct {
 func (a azureConfig) filePath(f string) string {
 	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 		a.bucket, f,
-		azure.AzureAccountKeyParam, url.QueryEscape(a.key),
-		azure.AzureAccountNameParam, url.QueryEscape(a.account))
+		AzureAccountKeyParam, url.QueryEscape(a.key),
+		AzureAccountNameParam, url.QueryEscape(a.account))
 }
 
 func getAzureConfig() (azureConfig, error) {

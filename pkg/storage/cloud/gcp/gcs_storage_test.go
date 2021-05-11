@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package gcp
 
 import (
 	"context"
@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/gcp"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -53,7 +52,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
 			bucket,
 			"backup-test-specified",
-			gcp.CredentialsParam,
+			CredentialsParam,
 			url.QueryEscape(encoded),
 		)
 		if specified {
@@ -68,7 +67,7 @@ func TestPutGoogleCloud(t *testing.T) {
 				"listing-test",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
-				gcp.CredentialsParam,
+				CredentialsParam,
 				url.QueryEscape(encoded),
 			),
 			security.RootUserName(), nil, nil, testSettings,

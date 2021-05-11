@@ -32,10 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -126,6 +124,7 @@ func storeFromURI(
 	return s
 }
 
+// CheckExportStore runs an array of tests against a storeURI.
 func CheckExportStore(
 	t *testing.T,
 	storeURI string,
@@ -135,20 +134,7 @@ func CheckExportStore(
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) {
-	CheckExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, user,
-		skipSingleFile, ie, kvDB, testSettings)
-}
-
-func CheckExportStoreWithExternalIOConfig(
-	t *testing.T,
-	ioConf base.ExternalIODirConfig,
-	storeURI string,
-	user security.SQLUsername,
-	skipSingleFile bool,
-	ie sqlutil.InternalExecutor,
-	kvDB *kv.DB,
-	testSettings *cluster.Settings,
-) {
+	ioConf := base.ExternalIODirConfig{}
 	ctx := context.Background()
 
 	conf, err := cloud.ExternalStorageConfFromURI(storeURI, user)
@@ -363,6 +349,21 @@ func CheckListFiles(
 	kvDB *kv.DB,
 	testSettings *cluster.Settings,
 ) {
+	CheckListFilesCanonical(t, storeURI, "", user, ie, kvDB, testSettings)
+}
+
+// CheckListFilesCanonical is like CheckListFiles but takes a canonical prefix
+// that it should expect to see on returned listings, instead of storeURI (e.g.
+// if storeURI automatically expands).
+func CheckListFilesCanonical(
+	t *testing.T,
+	storeURI string,
+	canonical string,
+	user security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	kvDB *kv.DB,
+	testSettings *cluster.Settings,
+) {
 	ctx := context.Background()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
 	dataNumberFiles := []string{"file/numbers/data1.csv", "file/numbers/data2.csv", "file/numbers/data3.csv"}
@@ -381,17 +382,14 @@ func CheckListFiles(
 	}
 
 	uri, _ := url.Parse(storeURI)
+	if canonical != "" {
+		uri, _ = url.Parse(canonical)
+	}
 
 	abs := func(in []string) []string {
 		out := make([]string, len(in))
 		for i := range in {
 			u := *uri
-			if u.Scheme == "userfile" && u.Host == "" {
-				composedTableName := tree.Name(userfile.DefaultQualifiedNamePrefix + user.Normalized())
-				u.Host = userfile.DefaultQualifiedNamespace +
-					// Escape special identifiers as needed.
-					composedTableName.String()
-			}
 			u.Path = u.Path + "/" + in[i]
 			out[i] = u.String()
 		}
@@ -525,7 +523,11 @@ func CheckListFiles(
 }
 
 func uploadData(
-	t *testing.T, testSettings *cluster.Settings, rnd *rand.Rand, dest roachpb.ExternalStorage, basename string,
+	t *testing.T,
+	testSettings *cluster.Settings,
+	rnd *rand.Rand,
+	dest roachpb.ExternalStorage,
+	basename string,
 ) ([]byte, func()) {
 	data := randutil.RandBytes(rnd, 16<<20)
 	ctx := context.Background()
@@ -543,7 +545,9 @@ func uploadData(
 
 // CheckAntagonisticRead checks an external storage is able to perform reads if
 // the HTTP client's dialer artificially degrades its connections.
-func CheckAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage, testSettings *cluster.Settings) {
+func CheckAntagonisticRead(
+	t *testing.T, conf roachpb.ExternalStorage, testSettings *cluster.Settings,
+) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	const basename = "test-antagonistic-read"

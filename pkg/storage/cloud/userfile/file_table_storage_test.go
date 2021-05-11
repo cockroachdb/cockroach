@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package cloudimpltests
+package userfile
 
 import (
 	"bytes"
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +45,7 @@ func TestPutUserFileTable(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
+	dest := MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), ie, kvDB, testSettings)
@@ -55,12 +54,12 @@ func TestPutUserFileTable(t *testing.T) {
 		security.RootUserName(), ie, kvDB, testSettings)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
-		dest := userfile.MakeUserFileStorageURI("", filename)
+		dest := MakeUserFileStorageURI("", filename)
 
 		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 		cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), ie, kvDB, testSettings)
 
-		cloudtestutils.CheckListFiles(t, "userfile:///listing-test/basepath",
+		cloudtestutils.CheckListFilesCanonical(t, "userfile:///listing-test/basepath", "userfile://defaultdb.public.userfiles_root/listing-test/basepath",
 			security.RootUserName(), ie, kvDB, testSettings)
 	})
 
@@ -106,7 +105,7 @@ func TestUserScoping(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
+	dest := MakeUserFileStorageURI(qualifiedTableName, "")
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 
 	// Create two users and grant them all privileges on defaultdb.

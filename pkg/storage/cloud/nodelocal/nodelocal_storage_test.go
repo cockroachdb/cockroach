@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package nodelocal
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -34,7 +33,7 @@ func TestPutLocal(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 	testSettings.ExternalIODir = p
-	dest := nodelocal.MakeLocalStorageURI(p)
+	dest := MakeLocalStorageURI(p)
 
 	cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), nil, nil, testSettings)
 	cloudtestutils.CheckListFiles(t, "nodelocal://0/listing-test/basepath",
