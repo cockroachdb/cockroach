@@ -816,7 +816,8 @@ func postgresCreateTableMutator(
 								if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
 									referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
 									isContextDependentType := referencedType.Family() == types.TimestampFamily ||
-										referencedType.Family() == types.OidFamily
+										referencedType.Family() == types.OidFamily ||
+										referencedType.Family() == types.DateFamily
 									if isContextDependentType &&
 										tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
 										def.Computed.Expr = &tree.CaseExpr{
