@@ -22,6 +22,7 @@ import (
 
 type multiRegionTestClusterParams struct {
 	baseDir         string
+	replicationMode base.TestClusterReplicationMode
 }
 
 type multiRegionTestClusterParamsOption func(params *multiRegionTestClusterParams)
@@ -32,6 +33,13 @@ func WithBaseDirectory(baseDir string) multiRegionTestClusterParamsOption {
 	}
 }
 
+func WithReplicationMode(
+	replicationMode base.TestClusterReplicationMode,
+) multiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.replicationMode = replicationMode
+	}
+}
 
 // TestingCreateMultiRegionCluster creates a test cluster with numServers number
 // of nodes and the provided testing knobs applied to each of the nodes. Every
@@ -61,7 +69,8 @@ func TestingCreateMultiRegionCluster(
 		}
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ReplicationMode:   params.replicationMode,
 		ServerArgsPerNode: serverArgs,
 	})
 
