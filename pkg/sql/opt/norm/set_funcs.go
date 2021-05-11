@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/errors"
 )
 
 // ProjectColMapLeft returns a Projections operator that maps the left side
@@ -83,4 +84,89 @@ func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *
 		}
 	}
 	return &prunedSet
+}
+
+// CanConvertUnionToDistinctUnionAll checks whether a Union can be replaced
+// with a DistinctOn-UnionAll complex. If the replacement is valid, it returns
+// a ColSet with the key columns the DistinctOn will need to group on.
+// Otherwise, returns ok=false. See the ConvertUnionToDistinctUnionAll rule
+// comment for more info on the conditions that allow this transformation.
+//
+// CanConvertUnionToDistinctUnionAll assumes that both expressions have
+// non-empty keys, that all key columns are contained within the given lists,
+// and that the lists contain no duplicates.
+//
+// leftCols and rightCols contain the columns from the left and right inputs of
+// the union that will be unioned together. leftColSet contains all columns from
+// the left input; it is used to ensure that all columns from the key selected
+// from the base table are present in the union.
+func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
+	leftCols, rightCols opt.ColList, leftColSet opt.ColSet,
+) (keyCols opt.ColSet, ok bool) {
+	if len(leftCols) != len(rightCols) || len(leftCols) == 0 {
+		panic(errors.AssertionFailedf("invalid union"))
+	}
+	md := c.mem.Metadata()
+	leftTableID, rightTableID := md.ColumnMeta(leftCols[0]).Table, md.ColumnMeta(rightCols[0]).Table
+	if leftTableID == opt.TableID(0) || rightTableID == opt.TableID(0) {
+		// All columns must come from a base table.
+		return keyCols, false
+	}
+	if md.Table(leftTableID) != md.Table(rightTableID) {
+		// All columns must come from the same base table.
+		return keyCols, false
+	}
+	for i := range leftCols {
+		if leftTableID != md.ColumnMeta(leftCols[i]).Table ||
+			rightTableID != md.ColumnMeta(rightCols[i]).Table {
+			// All columns on a given side must come from the same meta table.
+			return keyCols, false
+		}
+		if leftTableID.ColumnOrdinal(leftCols[i]) != rightTableID.ColumnOrdinal(rightCols[i]) {
+			// Pairs of equivalent columns must come from the same ordinal position in
+			// the original base table.
+			return keyCols, false
+		}
+	}
+
+	// Now check that the columns form a strict key over the base table. Iterate
+	// over the key columns of each index until we find a strict key over the base
+	// table that is a subset of the given columns.
+	table := md.Table(leftTableID)
+	for i := 0; i < table.IndexCount(); i++ {
+		index := table.Index(i)
+		if index.IsInverted() {
+			continue
+		}
+		if _, isPartial := index.Predicate(); isPartial {
+			// Partial constraint keys are only unique for a subset of the rows.
+			continue
+		}
+		foundUsableKey := true
+		for j := 0; j < index.KeyColumnCount(); j++ {
+			ord := index.Column(j).Ordinal()
+			if !leftColSet.Contains(leftTableID.ColumnID(ord)) {
+				// The input does not contain all columns that form this key.
+				foundUsableKey = false
+				break
+			}
+		}
+		if foundUsableKey {
+			// Add the key columns to the keyCols set and return.
+			for j := 0; j < index.KeyColumnCount(); j++ {
+				ord := index.Column(j).Ordinal()
+				keyCols.Add(leftTableID.ColumnID(ord))
+			}
+			return keyCols, true
+		}
+	}
+
+	// No strict key was found that is encompassed by the input columns.
+	return keyCols, false
+}
+
+// TranslateColSet is used to translate a ColSet from one set of column IDs
+// to an equivalent set. See the opt.TranslateColSet comment for more info.
+func (c *CustomFuncs) TranslateColSet(colSetIn opt.ColSet, from, to opt.ColList) opt.ColSet {
+	return opt.TranslateColSet(colSetIn, from, to)
 }
