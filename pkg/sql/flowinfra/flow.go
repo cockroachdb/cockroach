@@ -66,9 +66,9 @@ const (
 // Flow represents a flow which consists of processors and streams.
 type Flow interface {
 	// Setup sets up all the infrastructure for the flow as defined by the flow
-	// spec. The flow will then need to be started and run. A new context (along
+	// spec. The flow will then need to be started or run. A new context (along
 	// with a context cancellation function) is derived. The new context must be
-	// used when running a flow so that all components running in their own
+	// used when running the flow so that all components running in their own
 	// goroutines could listen for a cancellation on the same context.
 	//
 	// The second return argument contains all operator chains planned on the
@@ -80,23 +80,25 @@ type Flow interface {
 	// It needs to be called after Setup() and before Start/Run.
 	SetTxn(*kv.Txn)
 
-	// Start starts the flow. Processors run asynchronously in their own goroutines.
-	// Wait() needs to be called to wait for the flow to finish.
+	// Start starts the flow. Processors run asynchronously in their own
+	// goroutines. Wait() needs to be called to wait for the flow to finish.
 	// See Run() for a synchronous version.
 	//
-	// Generally if errors are encountered during the setup part, they're returned.
-	// But if the flow is a synchronous one, then no error is returned; instead the
-	// setup error is pushed to the rowSyncFlowConsumer. In this case, a subsequent
-	// call to f.Wait() will not block.
+	// If errors are encountered during the setup part, they're returned.
 	Start(_ context.Context, doneFn func()) error
 
 	// Run runs the flow to completion. The last processor is run in the current
-	// goroutine; others may run in different goroutines depending on how the flow
-	// was configured.
+	// goroutine; others may run in different goroutines depending on how the
+	// flow was configured.
+	//
 	// f.Wait() is called internally, so the call blocks until all the flow's
 	// goroutines are done.
+	//
+	// It is assumed that rowSyncFlowConsumer is set, so all errors encountered
+	// when running this flow are sent to it.
+	//
 	// The caller needs to call f.Cleanup().
-	Run(_ context.Context, doneFn func()) error
+	Run(_ context.Context, doneFn func())
 
 	// Wait waits for all the goroutines for this flow to exit. If the context gets
 	// canceled before all goroutines exit, it calls f.cancel().
@@ -143,9 +145,9 @@ type FlowBase struct {
 	// startables are entities that must be started when the flow starts;
 	// currently these are outboxes and routers.
 	startables []Startable
-	// rowSyncFlowConsumer is a special outbox which instead of sending rows to
-	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
-	// or to the local host).
+	// rowSyncFlowConsumer is a special execinfra.RowReceiver which, instead of
+	// sending rows to another host (as the outboxes do), returns them directly
+	// (to the local host). It is always set.
 	rowSyncFlowConsumer execinfra.RowReceiver
 	// batchSyncFlowConsumer, if set, provides an alternative interface for
 	// pushing coldata.Batches to locally.
@@ -362,42 +364,33 @@ func (f *FlowBase) IsVectorized() bool {
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
 	if err := f.StartInternal(ctx, f.processors, doneFn); err != nil {
-		// For sync flows, the error goes to the consumer.
-		if f.rowSyncFlowConsumer != nil {
-			f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			f.rowSyncFlowConsumer.ProducerDone()
-			return nil
-		}
 		return err
 	}
 	return nil
 }
 
 // Run is part of the Flow interface.
-func (f *FlowBase) Run(ctx context.Context, doneFn func()) error {
+func (f *FlowBase) Run(ctx context.Context, doneFn func()) {
 	defer f.Wait()
 
 	// We'll take care of the last processor in particular.
 	var headProc execinfra.Processor
 	if len(f.processors) == 0 {
-		return errors.AssertionFailedf("no processors in flow")
+		f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.AssertionFailedf("no processors in flow")})
+		f.rowSyncFlowConsumer.ProducerDone()
+		return
 	}
 	headProc = f.processors[len(f.processors)-1]
 	otherProcs := f.processors[:len(f.processors)-1]
 
 	var err error
 	if err = f.StartInternal(ctx, otherProcs, doneFn); err != nil {
-		// For sync flows, the error goes to the consumer.
-		if f.rowSyncFlowConsumer != nil {
-			f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
-			f.rowSyncFlowConsumer.ProducerDone()
-			return nil
-		}
-		return err
+		f.rowSyncFlowConsumer.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
+		f.rowSyncFlowConsumer.ProducerDone()
+		return
 	}
 	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
 	headProc.Run(ctx)
-	return nil
 }
 
 // Wait is part of the Flow interface.
