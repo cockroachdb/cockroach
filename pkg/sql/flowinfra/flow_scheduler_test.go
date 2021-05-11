@@ -62,11 +62,10 @@ func (m *mockFlow) Start(_ context.Context, doneCb func()) error {
 	return nil
 }
 
-func (m *mockFlow) Run(_ context.Context, doneCb func()) error {
+func (m *mockFlow) Run(_ context.Context, doneCb func()) {
 	close(m.runCh)
 	<-m.doneCh
 	doneCb()
-	return nil
 }
 
 func (m *mockFlow) Wait() {
