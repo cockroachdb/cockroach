@@ -1,0 +1,67 @@
+name: Create doc issues on PR merge
+
+# Action that creates issues in cockroachdb/docs when a PR is merged from
+# cockroachdb/cockroach in the master or release-* branch and has at
+# least one valid release note in PR commits.
+
+on:
+  pull_request:
+    branches:
+      - master
+      - 'release-*'
+
+    types: [closed]
+
+jobs:
+  create-doc-issue:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.merged == true }}
+    env:
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Get PR commits
+        id: 'get-pr-commits'
+        uses: tim-actions/get-pr-commits@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Iterate through all commit messages on this PR.
+      # For each commit message, check whether it contains at least one release note.
+      # Extract the type(s) of release note(s) and check whether there exists
+      # at least one type that is not "none," "bug"-, or "performance"-related.
+      # If so, format the release note(s) and create a docs issue.
+      - name: Parse PR commits 
+        id: commits
+        uses: stefanprodan/kube-tools@v1
+        env:
+          COMMITS: ${{ steps.get-pr-commits.outputs.commits }}
+        with:
+          command: |
+            COMMITS="${COMMITS//$'\''/'%27'}"
+            echo $COMMITS > commits.json 
+            LEN=$( jq length commits.json )
+            ctr=0
+            while [ $ctr -lt $LEN ]
+            do
+              jq -r --arg i "$ctr" '.[$i|tonumber].commit.message' commits.json > message
+              bool=$( jq -r --arg i "$ctr" '.[$i|tonumber].commit.message|test("[rR]elease [nN]ote")' commits.json )
+              jq -r --arg i "$ctr" '.[$i|tonumber].commit.message|match("[rR]elease [nN]ote (?<type>.*): .*")' commits.json > match.json
+              jq -r '.captures | .[] | .string|test("[nN]one|[bB]ug|[pP]erformance")' match.json > valid
+              if $bool == true && grep -q false valid
+              then
+                echo "https://github.com/cockroachdb/cockroach/pull/${{ env.PR_NUMBER }}" > messages.txt
+                echo "---" >> messages.txt
+                cat message
+                cat message | sed -n '/[rR]elease [nN]ote/,$p' >> messages.txt
+                body=$(cat messages.txt)
+                body="${body//'%'/'%25'}"
+                body="${body//$'\n'/' '}"
+                body="${body//$'\r'/' '}"
+                body="${body//$'\\'/'%5C'}"
+                curl -X POST -H 'Authorization: token ${{ secrets.PAT }}' \
+                  -d '{"title": "${{ env.PR_TITLE }}", "labels": ["C-release-note"], "body": "'"$body"'"}' \
+                  https://api.github.com/repos/cockroachdb/docs/issues
+              fi
+              ctr=`expr $ctr + 1`
+            done
