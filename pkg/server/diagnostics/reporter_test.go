@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
@@ -55,7 +54,7 @@ func TestTenantReport(t *testing.T) {
 	defer rt.Close()
 
 	tenantArgs := base.TestTenantArgs{
-		TenantID:                    roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+		TenantID:                    serverutils.TestTenantID(),
 		AllowSettingClusterSettings: true,
 		TestingKnobs:                rt.testingKnobs,
 	}
