@@ -428,12 +428,20 @@ func initNonArrayToNonArrayConcatenation() {
 			RightType:    rightType,
 			ReturnType:   types.String,
 			NullableArgs: false,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				if _, ok := left.(*DString); ok {
-					return NewDString(string(MustBeDString(left)) + AsStringWithFlags(right, FmtPgwireText)), nil
+			Fn: func(evalCtx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if leftType == types.String {
+					casted, err := PerformCast(evalCtx, right, types.String)
+					if err != nil {
+						return nil, err
+					}
+					return NewDString(string(MustBeDString(left)) + string(MustBeDString(casted))), nil
 				}
-				if _, ok := right.(*DString); ok {
-					return NewDString(AsStringWithFlags(left, FmtPgwireText) + string(MustBeDString(right))), nil
+				if rightType == types.String {
+					casted, err := PerformCast(evalCtx, left, types.String)
+					if err != nil {
+						return nil, err
+					}
+					return NewDString(string(MustBeDString(casted)) + string(MustBeDString(right))), nil
 				}
 				return nil, errors.New("neither LHS or RHS matched DString")
 			},
