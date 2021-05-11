@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -31,7 +31,7 @@ func TestPutLocal(t *testing.T) {
 	defer cleanupFn()
 
 	testSettings.ExternalIODir = p
-	dest := cloudimpl.MakeLocalStorageURI(p)
+	dest := nodelocal.MakeLocalStorageURI(p)
 
 	testExportStore(t, dest, false, security.RootUserName(), nil, nil)
 	testListFiles(t, "nodelocal://0/listing-test/basepath",

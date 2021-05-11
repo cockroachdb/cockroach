@@ -16,6 +16,7 @@ import (
 	"crypto/x509"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -211,4 +212,42 @@ func (r *ResumingReader) Close() error {
 		return r.Reader.Close()
 	}
 	return nil
+}
+
+// CheckHTTPContentRangeHeader parses Content-Range header and ensures that
+// range start offset is the same as the expected 'pos'. It returns the total
+// size of the remote object as extracted from the header.
+// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
+func CheckHTTPContentRangeHeader(h string, pos int64) (int64, error) {
+	if len(h) == 0 {
+		return 0, errors.New("http server does not honor download resume")
+	}
+
+	h = strings.TrimPrefix(h, "bytes ")
+	dash := strings.IndexByte(h, '-')
+	if dash <= 0 {
+		return 0, errors.Errorf("malformed Content-Range header: %s", h)
+	}
+
+	resume, err := strconv.ParseInt(h[:dash], 10, 64)
+	if err != nil {
+		return 0, errors.Errorf("malformed start offset in Content-Range header: %s", h)
+	}
+
+	if resume != pos {
+		return 0, errors.Errorf(
+			"expected resume position %d, found %d instead in Content-Range header: %s",
+			pos, resume, h)
+	}
+
+	slash := strings.IndexByte(h, '/')
+	if slash <= 0 {
+		return 0, errors.Errorf("malformed Content-Range header: %s", h)
+	}
+	size, err := strconv.ParseInt(h[slash+1:], 10, 64)
+	if err != nil {
+		return 0, errors.Errorf("malformed slash offset in Content-Range header: %s", h)
+	}
+
+	return size, nil
 }

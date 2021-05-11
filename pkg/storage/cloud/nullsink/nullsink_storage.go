@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package nullsink
 
 import (
 	"context"
@@ -88,3 +88,8 @@ func (n *nullSinkStorage) Size(_ context.Context, _ string) (int64, error) {
 }
 
 var _ cloud.ExternalStorage = &nullSinkStorage{}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_null,
+		parseNullURL, makeNullSinkStorage, cloud.RedactedParams(), "null")
+}
