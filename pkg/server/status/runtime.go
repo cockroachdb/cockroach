@@ -11,13 +11,11 @@
 package status
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
-	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -25,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/net"
@@ -420,18 +418,6 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 	}
 }
 
-var statsTemplate = template.Must(template.New("runtime stats").Funcs(template.FuncMap{
-	"iBytes":            func(i uint64) string { return humanize.IBytes(i) },
-	"oneDecimal":        func(f float64) string { return fmt.Sprintf("%.1f", f) },
-	"oneDecimalPercent": func(f float64) string { return fmt.Sprintf("%.1f", f*100) },
-	"sub":               func(a, b uint64) string { return humanize.IBytes(a - b) },
-}).Parse(`runtime stats: {{iBytes .Mem.Resident}} RSS, {{.NumGoroutines}} goroutines (stacks: {{iBytes .MS.StackSys}}), ` +
-	`{{iBytes .MS.HeapAlloc}}/{{iBytes .GoTotal}} Go alloc/total{{.StaleMsg}} ` +
-	`(heap fragmentation: {{sub .MS.HeapInuse .MS.HeapAlloc}}, heap reserved: {{sub .MS.HeapIdle .MS.HeapReleased}}, heap released: {{iBytes .MS.HeapReleased}}), ` +
-	`{{iBytes .CS.CGoAllocatedBytes}}/{{iBytes .CS.CGoTotalBytes}} CGO alloc/total ({{oneDecimal .CGORate}} CGO/sec), ` +
-	`{{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %(u/s)time, {{oneDecimalPercent .GCPauseRatio}} %gc ({{.GCCount}}x), ` +
-	`{{iBytes .DeltaNet.BytesRecv}}/{{iBytes .DeltaNet.BytesSent}} (r/w)net`))
-
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -549,24 +535,22 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	}
 	goTotal := ms.Sys - ms.HeapReleased
 
-	var buf bytes.Buffer
-	if err := statsTemplate.Execute(&buf,
-		struct {
-			MS                                  *GoMemStats
-			Mem                                 gosigar.ProcMem
-			DeltaNet                            net.IOCountersStat
-			CS                                  *CGoMemStats
-			GoTotal                             uint64
-			NumGoroutines, GCCount              int
-			CGORate, URate, SRate, GCPauseRatio float64
-			StaleMsg                            string
-		}{
-			MS: ms, Mem: mem, DeltaNet: deltaNet, CS: cs, GoTotal: goTotal, NumGoroutines: numGoroutine,
-			CGORate: cgoRate, URate: urate, SRate: srate, GCPauseRatio: gcPauseRatio, StaleMsg: staleMsg,
-		}); err != nil {
-		log.Warningf(ctx, "failed to render runtime stats: %s", err)
-	}
-	log.Health.Infof(ctx, "%s", redact.Safe(buf.String()))
+	log.StructuredEvent(ctx, &eventpb.RuntimeStats{
+		RSS: humanize.IBytes(mem.Resident),
+		NumGoroutines: fmt.Sprintf("%d", numGoroutine),
+		StackSysMemory: humanize.IBytes(ms.StackSys),
+		GoMemoryRatio: humanize.IBytes(ms.HeapAlloc) + "/" + humanize.IBytes(goTotal) + " (alloc/total)",
+		StaleMessage: staleMsg,
+		HeapFragmentation: humanize.IBytes(ms.HeapInuse - ms.HeapAlloc),
+		HeapReserved: humanize.IBytes(ms.HeapIdle - ms.HeapReleased),
+		HeapReleased: humanize.IBytes(ms.HeapReleased),
+		CGoMemoryRatio: humanize.IBytes(cs.CGoAllocatedBytes) + "/" + humanize.IBytes(cs.CGoTotalBytes) + " (alloc/total)",
+		CGoRate: fmt.Sprintf("%.1f", cgoRate) + " CGO/sec",
+		CPURatio: fmt.Sprintf("%.1f", urate*100) + "%/" + fmt.Sprintf("%.1f", srate*100) + "% (u/s)time",
+		GCPauseRatio: fmt.Sprintf("%.1f", gcPauseRatio*100) + "%",
+		GCCount: fmt.Sprintf("%d", gc.NumGC),
+		HostNetBytesRatio: humanize.IBytes(deltaNet.BytesRecv) + "/" + humanize.IBytes(deltaNet.BytesSent) + " (r/w)",
+	})
 
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC

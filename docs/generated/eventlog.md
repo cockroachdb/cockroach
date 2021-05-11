@@ -137,6 +137,47 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+## Health Events
+
+Events in this category pertain to the health of one or many servers.
+
+They are relative to a particular SQL tenant.
+In a multi-tenant setup, copies of these events are
+preserved in each tenant's own system.eventlog table.
+
+Events in this category are logged to channel HEALTH.
+
+
+### `runtime_stats`
+
+An event of type `runtime_stats` is recorded every 10 seconds as server health metrics.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RSS` | The process RSS. Expressed as mebibytes. | yes |
+| `NumGoroutines` | The number of goroutines. | yes |
+| `StackSysMemory` | The stack system memory used. Expressed as mebibytes. | yes |
+| `GoMemoryRatio` | The ratio of the mebibytes of memory allocated by Go to the total mebibytes of memory allocated by Go but not released. | yes |
+| `StaleMessage` | If the Go memory statistics are stale, the stale message. | yes |
+| `HeapFragmentation` | The amount of heap fragmentation. Expressed as mebibytes. | yes |
+| `HeapReserved` | The amount of heap reserved. Expressed as mebibytes. | yes |
+| `HeapReleased` | The amount of heap released. Expressed as mebibytes. | yes |
+| `CGoMemoryRatio` | The ratio of the mebibytes of memory allocated outside of Go to the total mebibytes of memory allocated outside of Go but not released. | yes |
+| `CGoRate` | The total number of calls outside of Go over time. Expressed as operations per second. | yes |
+| `CPURatio` | The ratio of user CPU percentage to system CPU percentage. | yes |
+| `GCPauseRatio` | The GC pause percentage. | yes |
+| `GCCount` | The total number of GC runs. | yes |
+| `HostNetBytesRatio` | The ratio of kilobytes received to kilobytes sent, on all network interfaces since this process started. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Job events
 
 Events in this category pertain to long-running jobs that are orchestrated by
