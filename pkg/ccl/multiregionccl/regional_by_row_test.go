@@ -520,7 +520,7 @@ func TestRepartitionFailureRollback(t *testing.T) {
 		},
 	}
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, knobs, nil, /* baseDir */
+		t, 3 /* numServers */, knobs,
 	)
 	defer cleanup()
 
@@ -581,7 +581,7 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 						// be inherited.
 						DisableMergeQueue: true,
 					},
-				}, nil, /* baseDir */
+				},
 			)
 			defer cleanup()
 
@@ -803,7 +803,6 @@ USE t;
 							},
 						},
 					},
-					nil, /* baseDir */
 				)
 				defer cleanup()
 
@@ -859,7 +858,6 @@ USE t;
 							},
 						},
 					},
-					nil, /* baseDir */
 				)
 				defer cleanup()
 				setupDB(sqlDB, rbrChange.setup)
