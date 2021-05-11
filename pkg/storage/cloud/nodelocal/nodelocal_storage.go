@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package nodelocal
 
 import (
 	"context"
@@ -31,7 +31,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func parseNodelocalURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+func parseNodelocalURL(
+	_ cloud.ExternalStorageURIContext, uri *url.URL,
+) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	if uri.Host == "" {
 		return conf, errors.Errorf(
@@ -200,4 +202,9 @@ func (l *localFileStorage) Size(ctx context.Context, basename string) (int64, er
 
 func (*localFileStorage) Close() error {
 	return nil
+}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_nodelocal,
+		parseNodelocalURL, makeLocalStorage, cloud.RedactedParams(), "nodelocal")
 }

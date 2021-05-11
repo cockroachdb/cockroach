@@ -571,6 +571,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/sqlmigrations",
         "//pkg/storage",
+        "//pkg/storage/cloudimpl",
         "//pkg/testutils",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/jobutils",

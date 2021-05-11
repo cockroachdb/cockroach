@@ -38,7 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/gcp"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -383,8 +384,8 @@ func testListFiles(
 		for i := range in {
 			u := *uri
 			if u.Scheme == "userfile" && u.Host == "" {
-				composedTableName := tree.Name(cloudimpl.DefaultQualifiedNamePrefix + user.Normalized())
-				u.Host = cloudimpl.DefaultQualifiedNamespace +
+				composedTableName := tree.Name(userfile.DefaultQualifiedNamePrefix + user.Normalized())
+				u.Host = userfile.DefaultQualifiedNamespace +
 					// Escape special identifiers as needed.
 					composedTableName.String()
 			}
@@ -539,11 +540,11 @@ func TestPutGoogleCloud(t *testing.T) {
 		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
 			bucket,
 			"backup-test-specified",
-			cloudimpl.CredentialsParam,
+			gcp.CredentialsParam,
 			url.QueryEscape(encoded),
 		)
 		if specified {
-			uri += fmt.Sprintf("&%s=%s", cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
+			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
 		}
 		t.Log(uri)
 		testExportStore(t, uri, false, user, nil, nil)
@@ -552,9 +553,9 @@ func TestPutGoogleCloud(t *testing.T) {
 				bucket,
 				"backup-test-specified",
 				"listing-test",
-				cloudimpl.AuthParam,
-				cloudimpl.AuthParamSpecified,
-				cloudimpl.CredentialsParam,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				gcp.CredentialsParam,
 				url.QueryEscape(encoded),
 			),
 			security.RootUserName(), nil, nil,
@@ -566,7 +567,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			skip.IgnoreLint(t, err)
 		}
 		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
-			cloudimpl.AuthParam, cloudimpl.AuthParamImplicit), false, user, nil, nil)
+			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil)
 	})
 }
 
@@ -636,7 +637,7 @@ func makeUserfile(
 ) cloud.ExternalStorage {
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 
-	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, "")
+	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 
 	// Create a user and grant them privileges on defaultdb.

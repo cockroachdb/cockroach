@@ -13,7 +13,6 @@ package cloud
 import (
 	"context"
 	"database/sql/driver"
-	"fmt"
 	"io"
 	"net/url"
 
@@ -111,34 +110,6 @@ var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
 
-var redactedQueryParams = map[string]struct{}{}
-var confParsers = map[string]ExternalStorageURIParser{}
-var implementations = map[roachpb.ExternalStorageProvider]ExternalStorageConstructor{}
-
-// RegisterExternalStorageProvider registers an external storage provider for a
-// given URI scheme and provider type.
-func RegisterExternalStorageProvider(
-	providerType roachpb.ExternalStorageProvider,
-	parseFn ExternalStorageURIParser,
-	constructFn ExternalStorageConstructor,
-	redactedParams map[string]struct{},
-	schemes ...string,
-) {
-	for _, scheme := range schemes {
-		if _, ok := confParsers[scheme]; ok {
-			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
-		}
-		confParsers[scheme] = parseFn
-		for param := range redactedParams {
-			redactedQueryParams[param] = struct{}{}
-		}
-	}
-	if _, ok := implementations[providerType]; ok {
-		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
-	}
-	implementations[providerType] = constructFn
-}
-
 // RedactedParams is a helper for making a set of param names to redact in URIs.
 func RedactedParams(strs ...string) map[string]struct{} {
 	if len(strs) == 0 {
@@ -161,74 +132,6 @@ type ExternalStorageURIContext struct {
 // ExternalStorage configuration.
 type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (roachpb.ExternalStorage, error)
 
-// ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
-func ExternalStorageConfFromURI(
-	path string, user security.SQLUsername,
-) (roachpb.ExternalStorage, error) {
-	uri, err := url.Parse(path)
-	if err != nil {
-		return roachpb.ExternalStorage{}, err
-	}
-	if fn, ok := confParsers[uri.Scheme]; ok {
-		return fn(ExternalStorageURIContext{CurrentUser: user}, uri)
-	}
-	// TODO(adityamaru): Link dedicated ExternalStorage scheme docs once ready.
-	return roachpb.ExternalStorage{}, errors.Errorf("unsupported storage scheme: %q - refer to docs to find supported"+
-		" storage schemes", uri.Scheme)
-}
-
-// ExternalStorageFromURI returns an ExternalStorage for the given URI.
-func ExternalStorageFromURI(
-	ctx context.Context,
-	uri string,
-	externalConfig base.ExternalIODirConfig,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	user security.SQLUsername,
-	ie sqlutil.InternalExecutor,
-	kvDB *kv.DB,
-) (ExternalStorage, error) {
-	conf, err := ExternalStorageConfFromURI(uri, user)
-	if err != nil {
-		return nil, err
-	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB)
-}
-
-// SanitizeExternalStorageURI returns the external storage URI with with some
-// secrets redacted, for use when showing these URIs in the UI, to provide some
-// protection from shoulder-surfing. The param is still present -- just
-// redacted -- to make it clearer that that value is indeed persisted interally.
-// extraParams which should be scrubbed -- for params beyond those that the
-// various clound-storage URIs supported by this package know about -- can be
-// passed allowing this function to be used to scrub other URIs too (such as
-// non-cloudstorage changefeed sinks).
-func SanitizeExternalStorageURI(path string, extraParams []string) (string, error) {
-	uri, err := url.Parse(path)
-	if err != nil {
-		return "", err
-	}
-	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" || uri.Scheme == "null" {
-		return path, nil
-	}
-
-	params := uri.Query()
-	for param := range params {
-		if _, ok := redactedQueryParams[param]; ok {
-			params.Set(param, "redacted")
-		} else {
-			for _, p := range extraParams {
-				if param == p {
-					params.Set(param, "redacted")
-				}
-			}
-		}
-	}
-
-	uri.RawQuery = params.Encode()
-	return uri.String(), nil
-}
-
 // ExternalStorageContext contains the dependencies passed to external storage
 // implementations during creation.
 type ExternalStorageContext struct {
@@ -244,29 +147,3 @@ type ExternalStorageContext struct {
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, roachpb.ExternalStorage,
 ) (ExternalStorage, error)
-
-// MakeExternalStorage creates an ExternalStorage from the given config.
-func MakeExternalStorage(
-	ctx context.Context,
-	dest roachpb.ExternalStorage,
-	conf base.ExternalIODirConfig,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	ie sqlutil.InternalExecutor,
-	kvDB *kv.DB,
-) (ExternalStorage, error) {
-	args := ExternalStorageContext{
-		IOConf:            conf,
-		Settings:          settings,
-		BlobClientFactory: blobClientFactory,
-		InternalExecutor:  ie,
-		DB:                kvDB,
-	}
-	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_userfile {
-		return nil, errors.New("external network access is disabled")
-	}
-	if fn, ok := implementations[dest.Provider]; ok {
-		return fn(ctx, args, dest)
-	}
-	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
-}

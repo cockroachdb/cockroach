@@ -162,6 +162,8 @@ go_test(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/cloud",
+        "//pkg/storage/cloud/nodelocal",
+        "//pkg/storage/cloud/userfile",
         "//pkg/storage/cloudimpl",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",

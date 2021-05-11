@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package amazon
 
 import (
 	"context"
@@ -32,6 +32,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+)
+
+const (
+	// AWSAccessKeyParam is the query parameter for access_key in an AWS URI.
+	AWSAccessKeyParam = "AWS_ACCESS_KEY_ID"
+	// AWSSecretParam is the query parameter for the 'secret' in an AWS URI.
+	AWSSecretParam = "AWS_SECRET_ACCESS_KEY"
+	// AWSTempTokenParam is the query parameter for session_token in an AWS URI.
+	AWSTempTokenParam = "AWS_SESSION_TOKEN"
+	// AWSEndpointParam is the query parameter for the 'endpoint' in an AWS URI.
+	AWSEndpointParam = "AWS_ENDPOINT"
+
+	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
+	// mode to be used for server side encryption. It can either be AES256 or
+	// aws:kms.
+	AWSServerSideEncryptionMode = "AWS_SERVER_ENC_MODE"
+
+	// AWSServerSideEncryptionKMSID is the query parameter in an AWS URI, for the
+	// KMS ID to be used for server side encryption.
+	AWSServerSideEncryptionKMSID = "AWS_SERVER_KMS_ID"
+
+	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3RegionParam = "AWS_REGION"
+
+	// KMSRegionParam is the query parameter for the 'region' in every KMS URI.
+	KMSRegionParam = "REGION"
 )
 
 type s3Storage struct {
@@ -65,7 +91,7 @@ func S3URI(bucket, path string, conf *roachpb.ExternalStorage_S3) string {
 	setIf(AWSTempTokenParam, conf.TempToken)
 	setIf(AWSEndpointParam, conf.Endpoint)
 	setIf(S3RegionParam, conf.Region)
-	setIf(AuthParam, conf.Auth)
+	setIf(cloud.AuthParam, conf.Auth)
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 
@@ -90,7 +116,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 		TempToken:     uri.Query().Get(AWSTempTokenParam),
 		Endpoint:      uri.Query().Get(AWSEndpointParam),
 		Region:        uri.Query().Get(S3RegionParam),
-		Auth:          uri.Query().Get(AuthParam),
+		Auth:          uri.Query().Get(cloud.AuthParam),
 		ServerEncMode: uri.Query().Get(AWSServerSideEncryptionMode),
 		ServerKMSID:   uri.Query().Get(AWSServerSideEncryptionKMSID),
 		/* NB: additions here should also update s3QueryParams() serializer */
@@ -139,32 +165,32 @@ func MakeS3Storage(
 	// "": default to `specified`.
 	opts := session.Options{}
 	switch conf.Auth {
-	case "", AuthParamSpecified:
+	case "", cloud.AuthParamSpecified:
 		if conf.AccessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
 				AWSAccessKeyParam,
 			)
 		}
 		if conf.Secret == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
 				AWSSecretParam,
 			)
 		}
 		opts.Config.MergeIn(config)
-	case AuthParamImplicit:
+	case cloud.AuthParamImplicit:
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
 		opts.SharedConfigState = session.SharedConfigEnable
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
 
 	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
@@ -331,7 +357,7 @@ func (s *s3Storage) ReadFileAt(
 		if stream.ContentRange == nil {
 			return nil, 0, errors.New("expected content range for read at offset")
 		}
-		size, err = checkHTTPContentRangeHeader(*stream.ContentRange, offset)
+		size, err = cloud.CheckHTTPContentRangeHeader(*stream.ContentRange, offset)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -453,4 +479,9 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 
 func (s *s3Storage) Close() error {
 	return nil
+}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_s3,
+		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), "s3")
 }

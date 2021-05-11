@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package amazon
 
 import (
 	"context"
@@ -52,7 +52,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 		tempToken: kmsURI.Query().Get(AWSTempTokenParam),
 		endpoint:  kmsURI.Query().Get(AWSEndpointParam),
 		region:    kmsURI.Query().Get(KMSRegionParam),
-		auth:      kmsURI.Query().Get(AuthParam),
+		auth:      kmsURI.Query().Get(cloud.AuthParam),
 	}
 
 	// AWS secrets often contain + characters, which must be escaped when
@@ -108,32 +108,32 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	// "": default to `specified`.
 	opts := session.Options{}
 	switch kmsURIParams.auth {
-	case "", AuthParamSpecified:
+	case "", cloud.AuthParamSpecified:
 		if kmsURIParams.accessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
 				AWSAccessKeyParam,
 			)
 		}
 		if kmsURIParams.secret == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				AuthParam,
-				AuthParamSpecified,
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
 				AWSSecretParam,
 			)
 		}
 		opts.Config.MergeIn(awsConfig)
-	case AuthParamImplicit:
+	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-implicit-credentials flag")
 		}
 		opts.SharedConfigState = session.SharedConfigEnable
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
 	sess, err := session.NewSessionWithOptions(opts)
