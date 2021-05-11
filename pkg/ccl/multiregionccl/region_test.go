@@ -135,7 +135,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 			}
 
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-				t, 5 /* numServers */, knobs, nil, /* baseDir */
+				t, 5 /* numServers */, knobs,
 			)
 			defer cleanup()
 
@@ -287,7 +287,7 @@ func TestRegionAddDropEnclosingRegionalByRowOps(t *testing.T) {
 				}
 
 				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-					t, 4 /* numServers */, knobs, nil, /* baseDir */
+					t, 4 /* numServers */, knobs,
 				)
 				defer cleanup()
 
@@ -356,7 +356,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	}
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 2 /* numServers */, knobs, nil, /* baseDir */
+		t, 2 /* numServers */, knobs,
 	)
 	defer cleanup()
 
@@ -459,7 +459,7 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	}
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 1 /* numServers */, knobs, nil, /* baseDir */
+		t, 1 /* numServers */, knobs,
 	)
 	defer cleanup()
 
@@ -517,7 +517,7 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 
 	// Setup.
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, knobs, nil, /* baseDir */
+		t, 3 /* numServers */, knobs,
 	)
 	defer cleanup()
 	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`)
@@ -671,7 +671,10 @@ func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 				defer tempDirCleanup()
 
 				_, sqlDBBackup, cleanupBackup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-					t, 4 /* numServers */, backupKnobs, &tempExternalIODir,
+					t,
+					4, /* numServers */
+					backupKnobs,
+					multiregionccltestutils.WithBaseDirectory(tempExternalIODir),
 				)
 				defer cleanupBackup()
 
@@ -719,7 +722,10 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 
 				// Start a new cluster (with new testing knobs) for restore.
 				_, sqlDBRestore, cleanupRestore := multiregionccltestutils.TestingCreateMultiRegionCluster(
-					t, 4 /* numServers */, restoreKnobs, &tempExternalIODir,
+					t,
+					4, /* numServers */
+					restoreKnobs,
+					multiregionccltestutils.WithBaseDirectory(tempExternalIODir),
 				)
 				defer cleanupRestore()
 

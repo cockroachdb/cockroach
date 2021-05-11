@@ -16,16 +16,43 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/errors"
 )
+
+type multiRegionTestClusterParams struct {
+	baseDir         string
+	replicationMode base.TestClusterReplicationMode
+}
+
+// MultiRegionTestClusterParamsOption is an option that can be passed to
+// TestingCreateMultiRegionCluster.
+type MultiRegionTestClusterParamsOption func(params *multiRegionTestClusterParams)
+
+// WithBaseDirectory is an option to include a base directory for the
+// created multi-region cluster.
+func WithBaseDirectory(baseDir string) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.baseDir = baseDir
+	}
+}
+
+// WithReplicationMode is an option to control the replication mode for the
+// created multi-region cluster.
+func WithReplicationMode(
+	replicationMode base.TestClusterReplicationMode,
+) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.replicationMode = replicationMode
+	}
+}
 
 // TestingCreateMultiRegionCluster creates a test cluster with numServers number
 // of nodes and the provided testing knobs applied to each of the nodes. Every
 // node is placed in its own locality, named "us-east1", "us-east2", and so on.
 func TestingCreateMultiRegionCluster(
-	t *testing.T, numServers int, knobs base.TestingKnobs, baseDir *string,
-) (serverutils.TestClusterInterface, *gosql.DB, func()) {
+	t *testing.T, numServers int, knobs base.TestingKnobs, opts ...MultiRegionTestClusterParamsOption,
+) (*testcluster.TestCluster, *gosql.DB, func()) {
 	serverArgs := make(map[int]base.TestServerArgs)
 	regionNames := make([]string, numServers)
 	for i := 0; i < numServers; i++ {
@@ -33,22 +60,23 @@ func TestingCreateMultiRegionCluster(
 		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
 	}
 
-	b := ""
-	if baseDir != nil {
-		b = *baseDir
+	params := &multiRegionTestClusterParams{}
+	for _, opt := range opts {
+		opt(params)
 	}
 
 	for i := 0; i < numServers; i++ {
 		serverArgs[i] = base.TestServerArgs{
 			Knobs:         knobs,
-			ExternalIODir: b,
+			ExternalIODir: params.baseDir,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
 			},
 		}
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ReplicationMode:   params.replicationMode,
 		ServerArgsPerNode: serverArgs,
 	})
 
