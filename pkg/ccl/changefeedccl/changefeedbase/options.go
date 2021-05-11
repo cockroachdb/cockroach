@@ -87,24 +87,26 @@ const (
 	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
 	OptKafkaSinkConfig = `kafka_sink_config`
 
-	SinkParamCACert           = `ca_cert`
-	SinkParamClientCert       = `client_cert`
-	SinkParamClientKey        = `client_key`
-	SinkParamFileSize         = `file_size`
-	SinkParamSchemaTopic      = `schema_topic`
-	SinkParamTLSEnabled       = `tls_enabled`
-	SinkParamSkipTLSVerify    = `insecure_tls_skip_verify`
-	SinkParamTopicPrefix      = `topic_prefix`
-	SinkParamTopicName        = `topic_name`
-	SinkSchemeBuffer          = ``
-	SinkSchemeExperimentalSQL = `experimental-sql`
-	SinkSchemeKafka           = `kafka`
-	SinkSchemeNull            = `null`
-	SinkParamSASLEnabled      = `sasl_enabled`
-	SinkParamSASLHandshake    = `sasl_handshake`
-	SinkParamSASLUser         = `sasl_user`
-	SinkParamSASLPassword     = `sasl_password`
-	SinkParamSASLMechanism    = `sasl_mechanism`
+	SinkParamCACert             = `ca_cert`
+	SinkParamClientCert         = `client_cert`
+	SinkParamClientKey          = `client_key`
+	SinkParamFileSize           = `file_size`
+	SinkParamRegistryClientCert = `registry_client_cert`
+	SinkParamRegistryClientKey  = `registry_client_cert`
+	SinkParamSchemaTopic        = `schema_topic`
+	SinkParamTLSEnabled         = `tls_enabled`
+	SinkParamSkipTLSVerify      = `insecure_tls_skip_verify`
+	SinkParamTopicPrefix        = `topic_prefix`
+	SinkParamTopicName          = `topic_name`
+	SinkSchemeBuffer            = ``
+	SinkSchemeExperimentalSQL   = `experimental-sql`
+	SinkSchemeKafka             = `kafka`
+	SinkSchemeNull              = `null`
+	SinkParamSASLEnabled        = `sasl_enabled`
+	SinkParamSASLHandshake      = `sasl_handshake`
+	SinkParamSASLUser           = `sasl_user`
+	SinkParamSASLPassword       = `sasl_password`
+	SinkParamSASLMechanism      = `sasl_mechanism`
 )
 
 // ChangefeedOptionExpectValues is used to parse changefeed options using
