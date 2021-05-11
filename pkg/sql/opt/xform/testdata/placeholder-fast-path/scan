@@ -15,6 +15,14 @@ CREATE TABLE abcd (
 )
 ----
 
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT
+)
+----
+
 placeholder-fast-path
 SELECT * FROM kv WHERE k = $1
 ----
@@ -286,3 +294,9 @@ placeholder-scan partial1@pseudo_ab,partial
  ├── fd: ()-->(2)
  └── span
       └── $1
+
+# Regression test for #64765 - we cannot constrain both columns.
+placeholder-fast-path
+SELECT * FROM xyz WHERE x = $1 AND y = $2
+----
+no fast path
