@@ -354,10 +354,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
-	if err := flow.Run(ctx, func() {}); err != nil {
-		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %v\n"+
-			"The error should have gone to the consumer.", err)
-	}
+	flow.Run(ctx, func() {})
 
 	// TODO(yuzefovich): it feels like this closing should happen after
 	// PlanAndRun. We should refactor this and get rid off ignoreClose field.
