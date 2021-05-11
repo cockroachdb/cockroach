@@ -21,7 +21,8 @@ import (
 )
 
 type multiRegionTestClusterParams struct {
-	baseDir string
+	baseDir         string
+	replicationMode base.TestClusterReplicationMode
 }
 
 // MultiRegionTestClusterParamsOption is an option that can be passed to
@@ -33,6 +34,16 @@ type MultiRegionTestClusterParamsOption func(params *multiRegionTestClusterParam
 func WithBaseDirectory(baseDir string) MultiRegionTestClusterParamsOption {
 	return func(params *multiRegionTestClusterParams) {
 		params.baseDir = baseDir
+	}
+}
+
+// WithReplicationMode is an option to control the replication mode for the
+// created multi-region cluster.
+func WithReplicationMode(
+	replicationMode base.TestClusterReplicationMode,
+) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.replicationMode = replicationMode
 	}
 }
 
@@ -65,6 +76,7 @@ func TestingCreateMultiRegionCluster(
 	}
 
 	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ReplicationMode:   params.replicationMode,
 		ServerArgsPerNode: serverArgs,
 	})
 
