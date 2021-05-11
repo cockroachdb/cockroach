@@ -12,8 +12,6 @@ package cloudimpl
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -23,7 +21,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -61,45 +58,6 @@ func (e *retryableHTTPError) Error() string {
 	return fmt.Sprintf("retryable http error: %s", e.cause)
 }
 
-// HTTPRetryOptions defines the tunable settings which control the retry of HTTP
-// operations.
-var HTTPRetryOptions = retry.Options{
-	InitialBackoff: 100 * time.Millisecond,
-	MaxBackoff:     2 * time.Second,
-	MaxRetries:     32,
-	Multiplier:     4,
-}
-
-func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
-	var tlsConf *tls.Config
-	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
-		roots, err := x509.SystemCertPool()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not load system root CA pool")
-		}
-		if !roots.AppendCertsFromPEM([]byte(pem)) {
-			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
-		}
-		tlsConf = &tls.Config{RootCAs: roots}
-	}
-	// Copy the defaults from http.DefaultTransport. We cannot just copy the
-	// entire struct because it has a sync Mutex. This has the unfortunate problem
-	// that if Go adds fields to DefaultTransport they won't be copied here,
-	// but this is ok for now.
-	t := http.DefaultTransport.(*http.Transport)
-	return &http.Client{Transport: &http.Transport{
-		Proxy:                 t.Proxy,
-		DialContext:           t.DialContext,
-		MaxIdleConns:          t.MaxIdleConns,
-		IdleConnTimeout:       t.IdleConnTimeout,
-		TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
-		ExpectContinueTimeout: t.ExpectContinueTimeout,
-
-		// Add our custom CA.
-		TLSClientConfig: tlsConf,
-	}}, nil
-}
-
 // MakeHTTPStorage returns an instance of HTTPStorage ExternalStorage.
 func MakeHTTPStorage(
 	ctx context.Context, args ExternalStorageContext, dest roachpb.ExternalStorage,
@@ -113,7 +71,7 @@ func MakeHTTPStorage(
 		return nil, errors.Errorf("HTTP storage requested but prefix path not provided")
 	}
 
-	client, err := makeHTTPClient(args.Settings)
+	client, err := cloud.MakeHTTPClient(args.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +157,7 @@ func (h *httpStorage) openStreamAt(
 		headers = map[string]string{"Range": fmt.Sprintf("bytes=%d-", pos)}
 	}
 
-	for attempt, retries := 0, retry.StartWithCtx(ctx, HTTPRetryOptions); retries.Next(); attempt++ {
+	for attempt, retries := 0, retry.StartWithCtx(ctx, cloud.HTTPRetryOptions); retries.Next(); attempt++ {
 		resp, err := h.req(ctx, "GET", url, nil, headers)
 		if err == nil {
 			return resp, err
@@ -238,17 +196,17 @@ func (h *httpStorage) ReadFileAt(
 
 	canResume := stream.Header.Get("Accept-Ranges") == "bytes"
 	if canResume {
-		return &resumingReader{
-			ctx: ctx,
-			opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+		return &cloud.ResumingReader{
+			Ctx: ctx,
+			Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 				s, err := h.openStreamAt(ctx, basename, pos)
 				if err != nil {
 					return nil, err
 				}
 				return s.Body, err
 			},
-			reader: stream.Body,
-			pos:    offset,
+			Reader: stream.Body,
+			Pos:    offset,
 		}, size, nil
 	}
 	return stream.Body, size, nil
@@ -256,7 +214,7 @@ func (h *httpStorage) ReadFileAt(
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("PUT %s", basename),
-		timeoutSetting.Get(&h.settings.SV), func(ctx context.Context) error {
+		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			_, err := h.reqNoBody(ctx, "PUT", basename, content)
 			return err
 		})
@@ -268,7 +226,7 @@ func (h *httpStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
 
 func (h *httpStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("DELETE %s", basename),
-		timeoutSetting.Get(&h.settings.SV), func(ctx context.Context) error {
+		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			_, err := h.reqNoBody(ctx, "DELETE", basename, nil)
 			return err
 		})
@@ -277,7 +235,7 @@ func (h *httpStorage) Delete(ctx context.Context, basename string) error {
 func (h *httpStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var resp *http.Response
 	if err := contextutil.RunWithTimeout(ctx, fmt.Sprintf("HEAD %s", basename),
-		timeoutSetting.Get(&h.settings.SV), func(ctx context.Context) error {
+		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			var err error
 			resp, err = h.reqNoBody(ctx, "HEAD", basename, nil)
 			return err

@@ -159,7 +159,7 @@ func (l *localFileStorage) ListFiles(ctx context.Context, patternSuffix string) 
 
 	pattern := l.base
 	if patternSuffix != "" {
-		if containsGlob(l.base) {
+		if cloud.ContainsGlob(l.base) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = joinRelativePath(pattern, patternSuffix)

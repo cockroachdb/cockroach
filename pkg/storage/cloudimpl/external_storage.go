@@ -13,25 +13,16 @@ package cloudimpl
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/url"
-	"path"
-	"strings"
-	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -82,15 +73,6 @@ const (
 	// CredentialsParam is the query parameter for the base64-encoded contents of
 	// the Google Application Credentials JSON file.
 	CredentialsParam = "CREDENTIALS"
-
-	cloudstoragePrefix = "cloudstorage"
-
-	// CloudstorageHTTPCASetting is the setting whose value is the custom root CA
-	// (appended to system's default CAs) for verifying certificates when
-	// interacting with HTTPS storage.
-	CloudstorageHTTPCASetting = cloudstoragePrefix + ".http.custom_ca"
-
-	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
 )
 
 var redactedQueryParams = map[string]struct{}{}
@@ -268,174 +250,4 @@ func MakeExternalStorage(
 		return fn(ctx, args, dest)
 	}
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
-}
-
-// URINeedsGlobExpansion checks if URI can be expanded by checking if it contains wildcard characters.
-// This should be used before passing a URI into ListFiles().
-func URINeedsGlobExpansion(uri string) bool {
-	parsedURI, err := url.Parse(uri)
-	if err != nil {
-		return false
-	}
-	// We don't support listing files for workload and http.
-	unsupported := []string{"workload", "http", "https", "experimental-workload"}
-	for _, str := range unsupported {
-		if parsedURI.Scheme == str {
-			return false
-		}
-	}
-
-	return containsGlob(parsedURI.Path)
-}
-
-func containsGlob(str string) bool {
-	return strings.ContainsAny(str, "*?[")
-}
-
-var (
-	httpCustomCA = settings.RegisterStringSetting(
-		CloudstorageHTTPCASetting,
-		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
-		"",
-	).WithPublic()
-	timeoutSetting = settings.RegisterDurationSetting(
-		cloudStorageTimeout,
-		"the timeout for import/export storage operations",
-		10*time.Minute,
-	).WithPublic()
-)
-
-// delayedRetry runs fn and re-runs it a limited number of times if it
-// fails. It knows about specific kinds of errors that need longer retry
-// delays than normal.
-func delayedRetry(ctx context.Context, fn func() error) error {
-	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-		var s3err s3.RequestFailure
-		if errors.As(err, &s3err) {
-			// A 503 error could mean we need to reduce our request rate. Impose an
-			// arbitrary slowdown in that case.
-			// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
-			if s3err.StatusCode() == 503 {
-				select {
-				case <-time.After(time.Second * 5):
-				case <-ctx.Done():
-				}
-			}
-		}
-		// See https:github.com/GoogleCloudPlatform/google-cloudimpl-go/issues/1012#issuecomment-393606797
-		// which suggests this GCE error message could be due to auth quota limits
-		// being reached.
-		if strings.Contains(err.Error(), "net/http: timeout awaiting response headers") {
-			select {
-			case <-time.After(time.Second * 5):
-			case <-ctx.Done():
-			}
-		}
-		return err
-	})
-}
-
-// isResumableHTTPError returns true if we can
-// resume download after receiving an error 'err'.
-// We can attempt to resume download if the error is ErrUnexpectedEOF.
-// In particular, we should not worry about a case when error is io.EOF.
-// The reason for this is two-fold:
-//   1. The underlying http library converts io.EOF to io.ErrUnexpectedEOF
-//   if the number of bytes transferred is less than the number of
-//   bytes advertised in the Content-Length header.  So if we see
-//   io.ErrUnexpectedEOF we can simply request the next range.
-//   2. If the server did *not* advertise Content-Length, then
-//   there is really nothing we can do: http standard says that
-//   the stream ends when the server terminates connection.
-// In addition, we treat connection reset by peer errors (which can
-// happen if we didn't read from the connection too long due to e.g. load),
-// the same as unexpected eof errors.
-func isResumableHTTPError(err error) bool {
-	return errors.Is(err, io.ErrUnexpectedEOF) ||
-		sysutil.IsErrConnectionReset(err) ||
-		sysutil.IsErrConnectionRefused(err)
-}
-
-func getPrefixBeforeWildcard(p string) string {
-	globIndex := strings.IndexAny(p, "*?[")
-	if globIndex < 0 {
-		return p
-	}
-	return path.Dir(p[:globIndex])
-}
-
-// MaxDelayedRetryAttempts is the number of times the delayedRetry method will
-// re-run the provided function.
-const MaxDelayedRetryAttempts = 3
-
-// Maximum number of times we can attempt to retry reading from external storage,
-// without making any progress.
-const maxNoProgressReads = 3
-
-type openStreamAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
-
-// resumingReader is a reader which retries reads in case of a transient errors.
-type resumingReader struct {
-	ctx    context.Context // Reader context
-	opener openStreamAt    // Get additional content
-	reader io.ReadCloser   // Currently opened reader
-	pos    int64           // How much data was received so far
-}
-
-var _ io.ReadCloser = &resumingReader{}
-
-func (r *resumingReader) openStream() error {
-	return delayedRetry(r.ctx, func() error {
-		var readErr error
-		r.reader, readErr = r.opener(r.ctx, r.pos)
-		return readErr
-	})
-}
-
-func (r *resumingReader) Read(p []byte) (int, error) {
-	var lastErr error
-	for retries := 0; lastErr == nil; retries++ {
-		if r.reader == nil {
-			lastErr = r.openStream()
-		}
-
-		if lastErr == nil {
-			n, readErr := r.reader.Read(p)
-			if readErr == nil || readErr == io.EOF {
-				r.pos += int64(n)
-				return n, readErr
-			}
-			lastErr = readErr
-		}
-
-		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(r.ctx, "Read err: %s", lastErr)
-		}
-
-		if isResumableHTTPError(lastErr) {
-			if retries >= maxNoProgressReads {
-				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
-			}
-			log.Errorf(r.ctx, "Retry IO: error %s", lastErr)
-			lastErr = nil
-			r.reader = nil
-		}
-	}
-
-	// NB: Go says Read() callers need to expect n > 0 *and* non-nil error, and do
-	// something with what was read before the error, but this mostly applies to
-	// err = EOF case which we handle above, so likely OK that we're discarding n
-	// here and pretending it was zero.
-	return 0, lastErr
-}
-
-func (r *resumingReader) Close() error {
-	if r.reader != nil {
-		return r.reader.Close()
-	}
-	return nil
 }

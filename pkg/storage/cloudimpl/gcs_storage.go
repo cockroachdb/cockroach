@@ -155,7 +155,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 			return err
 		}
 		// Set the timeout within the retry loop.
-		return contextutil.RunWithTimeout(ctx, "put gcs file", timeoutSetting.Get(&g.settings.SV),
+		return contextutil.RunWithTimeout(ctx, "put gcs file", cloud.Timeout.Get(&g.settings.SV),
 			func(ctx context.Context) error {
 				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 				if _, err := io.Copy(w, content); err != nil {
@@ -178,15 +178,15 @@ func (g *gcsStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
 ) (io.ReadCloser, int64, error) {
 	object := path.Join(g.prefix, basename)
-	r := &resumingReader{
-		ctx: ctx,
-		opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	r := &cloud.ResumingReader{
+		Ctx: ctx,
+		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
 		},
-		pos: offset,
+		Pos: offset,
 	}
 
-	if err := r.openStream(); err != nil {
+	if err := r.Open(); err != nil {
 		if errors.Is(err, gcs.ErrObjectNotExist) {
 			// Callers of this method sometimes look at the returned error to determine
 			// if file does not exist.  Regardless why we couldn't open the stream
@@ -196,18 +196,18 @@ func (g *gcsStorage) ReadFileAt(
 		}
 		return nil, 0, err
 	}
-	return r.reader, r.reader.(*gcs.Reader).Attrs.Size, nil
+	return r.Reader, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
 func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	var fileList []string
 	it := g.bucket.Objects(ctx, &gcs.Query{
-		Prefix: getPrefixBeforeWildcard(g.prefix),
+		Prefix: cloud.GetPrefixBeforeWildcard(g.prefix),
 	})
 
 	pattern := g.prefix
 	if patternSuffix != "" {
-		if containsGlob(g.prefix) {
+		if cloud.ContainsGlob(g.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -250,7 +250,7 @@ func (g *gcsStorage) ListFiles(ctx context.Context, patternSuffix string) ([]str
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return contextutil.RunWithTimeout(ctx, "delete gcs file",
-		timeoutSetting.Get(&g.settings.SV),
+		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
 		})
@@ -259,7 +259,7 @@ func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var r *gcs.Reader
 	if err := contextutil.RunWithTimeout(ctx, "size gcs file",
-		timeoutSetting.Get(&g.settings.SV),
+		cloud.Timeout.Get(&g.settings.SV),
 		func(ctx context.Context) error {
 			var err error
 			r, err = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)

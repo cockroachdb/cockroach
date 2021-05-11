@@ -378,7 +378,7 @@ func importPlanHook(
 			files = filenamePatterns
 		} else {
 			for _, file := range filenamePatterns {
-				if cloudimpl.URINeedsGlobExpansion(file) {
+				if cloud.URINeedsGlobExpansion(file) {
 					s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, file, p.User())
 					if err != nil {
 						return err
