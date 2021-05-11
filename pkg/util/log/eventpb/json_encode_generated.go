@@ -2359,6 +2359,182 @@ func (m *ReverseSchemaChange) AppendJSONFields(printComma bool, b redact.Redacta
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.RSS != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RSS\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.RSS)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.NumGoroutines != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumGoroutines\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.NumGoroutines)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.StackSysMemory != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StackSysMemory\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.StackSysMemory)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.GoMemoryRatio != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GoMemoryRatio\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.GoMemoryRatio)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.StaleMessage != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StaleMessage\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.StaleMessage)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.HeapFragmentation != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HeapFragmentation\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HeapFragmentation)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.HeapReserved != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HeapReserved\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HeapReserved)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.HeapReleased != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HeapReleased\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HeapReleased)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.CGoMemoryRatio != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CGoMemoryRatio\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CGoMemoryRatio)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.CGoRate != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CGoRate\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CGoRate)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.CPURatio != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CPURatio\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CPURatio)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.GCPauseRatio != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GCPauseRatio\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.GCPauseRatio)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.GCCount != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GCCount\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.GCCount)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.HostNetBytesRatio != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HostNetBytesRatio\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HostNetBytesRatio)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *SensitiveTableAccess) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

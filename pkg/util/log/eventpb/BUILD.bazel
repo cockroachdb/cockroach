@@ -37,6 +37,7 @@ proto_library(
         "cluster_events.proto",
         "ddl_events.proto",
         "events.proto",
+        "health_events.proto",
         "job_events.proto",
         "misc_sql_events.proto",
         "privilege_events.proto",
