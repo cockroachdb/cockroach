@@ -204,6 +204,13 @@ CREATE TABLE regional_by_table_in_ca_central_1 (
   FAMILY (pk, i)
 ) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
 
+statement ok
+CREATE TABLE regional_by_table_in_ap_southeast_2 (
+  pk INT PRIMARY KEY,
+  i INT,
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+
 query TTT
 SELECT partition_name, index_name, zone_config FROM [SHOW PARTITIONS FROM TABLE global_table]
 ORDER BY partition_name, index_name
@@ -1025,8 +1032,194 @@ USE non_mr_backup
 statement ok
 CREATE TABLE non_mr_table (i int)
 
+# For comparing the zone configurations before restore.
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE non_mr_table
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+                           range_min_bytes = 134217728,
+                           range_max_bytes = 536870912,
+                           gc.ttlseconds = 90000,
+                           num_replicas = 3,
+                           constraints = '[]',
+                           lease_preferences = '[]'
+
 statement ok
 BACKUP TABLE non_mr_table TO 'nodelocal://1/non_mr_table/'
 
-statement error cannot restore individual table
+statement ok
+DROP TABLE non_mr_table
+
+statement ok
+RESTORE TABLE non_mr_table FROM 'nodelocal://1/non_mr_table/'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE non_mr_table
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+                           range_min_bytes = 134217728,
+                           range_max_bytes = 536870912,
+                           gc.ttlseconds = 90000,
+                           num_replicas = 3,
+                           constraints = '[]',
+                           lease_preferences = '[]'
+
+statement ok
 RESTORE TABLE non_mr_table FROM 'nodelocal://1/non_mr_table/' WITH into_db = 'mr-backup-1'
+
+statement ok
+USE 'mr-backup-1'
+
+# Verify that the zone configurations of non_mr_table that is restored to a multi-region database are set.
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE non_mr_table
+----
+DATABASE "mr-backup-1"  ALTER DATABASE "mr-backup-1" CONFIGURE ZONE USING
+                                    range_min_bytes = 134217728,
+                                    range_max_bytes = 536870912,
+                                    gc.ttlseconds = 90000,
+                                    num_replicas = 5,
+                                    num_voters = 3,
+                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                    voter_constraints = '[+region=ca-central-1]',
+                                    lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW CREATE TABLE non_mr_table
+----
+non_mr_table   CREATE TABLE public.non_mr_table (
+                 i INT8 NULL,
+                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                 CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                 FAMILY "primary" (i, rowid)
+               ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+
+statement ok
+USE "mr-backup-2"
+
+statement ok
+DROP TABLE regional_by_row_table;
+DROP TABLE regional_by_table_in_primary_region;
+DROP TABLE regional_by_table_in_ca_central_1;
+DROP TABLE global_table;
+
+# Restore individual tables into a database with the same regions.
+subtest restore_tables_into_database_with_same_regions
+
+statement error cannot restore REGIONAL BY ROW table regional_by_row_table .* individually into a multi-region database
+RESTORE TABLE regional_by_row_table FROM 'nodelocal://1/mr-backup-2/'
+
+statement ok
+RESTORE TABLE regional_by_table_in_primary_region FROM 'nodelocal://1/mr-backup-2/'
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+
+statement ok
+RESTORE TABLE regional_by_table_in_ca_central_1 FROM 'nodelocal://1/mr-backup-2/'
+
+# REGIONAL BY TABLE tables with a specific region are permitted if that region
+# exists in the database.
+query TT
+SHOW CREATE TABLE regional_by_table_in_ca_central_1
+----
+regional_by_table_in_ca_central_1    CREATE TABLE public.regional_by_table_in_ca_central_1 (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN "ca-central-1"
+
+statement ok
+RESTORE TABLE global_table FROM 'nodelocal://1/mr-backup-2/'
+
+query TT
+SHOW CREATE TABLE global_table
+----
+global_table       CREATE TABLE public.global_table (
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY GLOBAL
+
+# Restore individual tables into a database with different regions.
+subtest restore_tables_into_database_with_different_regions
+
+# Create a database with different regions (missing ca-central-1).
+statement ok
+CREATE DATABASE "mr-restore-1" primary region "ap-southeast-2" regions "us-east-1"
+
+statement ok
+RESTORE TABLE "mr-backup-2".global_table FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+USE "mr-restore-1";
+
+query TT
+SHOW CREATE TABLE global_table
+----
+global_table       CREATE TABLE public.global_table (
+                     pk INT8 NOT NULL,
+                     i INT8 NULL,
+                     CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                     FAMILY fam_0_pk_i (pk, i)
+                   ) LOCALITY GLOBAL
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE global_table
+----
+TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 90000,
+                    global_reads = true,
+                    num_replicas = 4,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ap-southeast-2]',
+                    lease_preferences = '[[+region=ap-southeast-2]]'
+
+
+statement ok
+RESTORE TABLE "mr-backup-2".regional_by_table_in_primary_region FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+
+query TT
+SHOW CREATE TABLE regional_by_table_in_primary_region
+----
+regional_by_table_in_primary_region  CREATE TABLE public.regional_by_table_in_primary_region (
+                                       pk INT8 NOT NULL,
+                                       i INT8 NULL,
+                                       CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                                       FAMILY fam_0_pk_i (pk, i)
+                                     ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE regional_by_table_in_primary_region
+----
+DATABASE "mr-restore-1"  ALTER DATABASE "mr-restore-1" CONFIGURE ZONE USING
+                         range_min_bytes = 134217728,
+                         range_max_bytes = 536870912,
+                         gc.ttlseconds = 90000,
+                         num_replicas = 4,
+                         num_voters = 3,
+                         constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                         voter_constraints = '[+region=ap-southeast-2]',
+                         lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement error "crdb_internal_region" is not compatible with type "crdb_internal_region" existing in cluster: could not find enum value "ca-central-1" in "crdb_internal_region"
+RESTORE TABLE "mr-backup-2".regional_by_table_in_ap_southeast_2 FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1';
+
+# Cannot restore a REGIONAL BY TABLE table that has different regions.
+statement error cannot restore REGIONAL BY TABLE regional_by_table_in_ca_central_1 IN REGION "ca-central-1" \(table ID: [0-9]+\) into database "mr-restore-1"; region "ca-central-1" not found in database regions "ap-southeast-2", "us-east-1"
+RESTORE TABLE "mr-backup-2".regional_by_table_in_ca_central_1 FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1'
+
+statement error cannot restore REGIONAL BY ROW table regional_by_row_table
+RESTORE TABLE "mr-backup-2".regional_by_row_table FROM 'nodelocal://1/mr-backup-2/' WITH into_db='mr-restore-1'
