@@ -14,6 +14,20 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+const (
+	// AuthParam is the query parameter for the cluster settings named
+	// key in a URI.
+	AuthParam = "AUTH"
+	// AuthParamImplicit is the query parameter for the implicit authentication
+	// mode in a URI.
+	AuthParamImplicit = roachpb.ExternalStorageAuthImplicit
+	// AuthParamSpecified is the query parameter for the specified authentication
+	// mode in a URI.
+	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-

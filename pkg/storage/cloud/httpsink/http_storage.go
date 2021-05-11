@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package httpsink
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -33,7 +32,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func parseHTTPURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
+func parseHTTPURL(
+	_ cloud.ExternalStorageURIContext, uri *url.URL,
+) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_http
 	conf.HttpPath.BaseUri = uri.String()
@@ -105,44 +106,6 @@ func (h *httpStorage) Settings() *cluster.Settings {
 	return h.settings
 }
 
-// checkHTTPContentRangeHeader parses Content-Range header and ensures that
-// range start offset is the same as the expected 'pos'. It returns the total
-// size of the remote object as extracted from the header.
-// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
-func checkHTTPContentRangeHeader(h string, pos int64) (int64, error) {
-	if len(h) == 0 {
-		return 0, errors.New("http server does not honor download resume")
-	}
-
-	h = strings.TrimPrefix(h, "bytes ")
-	dash := strings.IndexByte(h, '-')
-	if dash <= 0 {
-		return 0, errors.Errorf("malformed Content-Range header: %s", h)
-	}
-
-	resume, err := strconv.ParseInt(h[:dash], 10, 64)
-	if err != nil {
-		return 0, errors.Errorf("malformed start offset in Content-Range header: %s", h)
-	}
-
-	if resume != pos {
-		return 0, errors.Errorf(
-			"expected resume position %d, found %d instead in Content-Range header: %s",
-			pos, resume, h)
-	}
-
-	slash := strings.IndexByte(h, '/')
-	if slash <= 0 {
-		return 0, errors.Errorf("malformed Content-Range header: %s", h)
-	}
-	size, err := strconv.ParseInt(h[slash+1:], 10, 64)
-	if err != nil {
-		return 0, errors.Errorf("malformed slash offset in Content-Range header: %s", h)
-	}
-
-	return size, nil
-}
-
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	stream, _, err := h.ReadFileAt(ctx, basename, 0)
@@ -188,7 +151,7 @@ func (h *httpStorage) ReadFileAt(
 	if offset == 0 {
 		size = stream.ContentLength
 	} else {
-		size, err = checkHTTPContentRangeHeader(stream.Header.Get("Content-Range"), offset)
+		size, err = cloud.CheckHTTPContentRangeHeader(stream.Header.Get("Content-Range"), offset)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -312,4 +275,9 @@ func (h *httpStorage) req(
 		return nil, err
 	}
 	return resp, nil
+}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_http,
+		parseHTTPURL, MakeHTTPStorage, cloud.RedactedParams(), "http", "https")
 }

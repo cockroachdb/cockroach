@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package gcp
 
 import (
 	"context"
@@ -32,13 +32,22 @@ import (
 	"google.golang.org/api/option"
 )
 
+const (
+	// GoogleBillingProjectParam is the query parameter for the billing project
+	// in a gs URI.
+	GoogleBillingProjectParam = "GOOGLE_BILLING_PROJECT"
+	// CredentialsParam is the query parameter for the base64-encoded contents of
+	// the Google Application Credentials JSON file.
+	CredentialsParam = "CREDENTIALS"
+)
+
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.ExternalStorage, error) {
 	conf := roachpb.ExternalStorage{}
 	conf.Provider = roachpb.ExternalStorageProvider_gs
 	conf.GoogleCloudConfig = &roachpb.ExternalStorage_GCS{
 		Bucket:         uri.Host,
 		Prefix:         uri.Path,
-		Auth:           uri.Query().Get(AuthParam),
+		Auth:           uri.Query().Get(cloud.AuthParam),
 		BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		Credentials:    uri.Query().Get(CredentialsParam),
 		/* NB: additions here should also update gcsQueryParams() serializer */
@@ -50,7 +59,7 @@ func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (roachpb.Extern
 func gcsQueryParams(conf *roachpb.ExternalStorage_GCS) string {
 	q := make(url.Values)
 	if conf.Auth != "" {
-		q.Set(AuthParam, conf.Auth)
+		q.Set(cloud.AuthParam, conf.Auth)
 	}
 	if conf.Credentials != "" {
 		q.Set(CredentialsParam, conf.Credentials)
@@ -102,13 +111,13 @@ func makeGCSStorage(
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
-	if args.IOConf.DisableImplicitCredentials && conf.Auth == AuthParamImplicit {
+	if args.IOConf.DisableImplicitCredentials && conf.Auth == cloud.AuthParamImplicit {
 		return nil, errors.New(
 			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
 	}
 
 	switch conf.Auth {
-	case AuthParamImplicit:
+	case cloud.AuthParamImplicit:
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
@@ -116,8 +125,8 @@ func makeGCSStorage(
 			return nil, errors.Errorf(
 				"%s must be set unless %q is %q",
 				CredentialsParam,
-				AuthParam,
-				AuthParamImplicit,
+				cloud.AuthParam,
+				cloud.AuthParamImplicit,
 			)
 		}
 		decodedKey, err := base64.StdEncoding.DecodeString(conf.Credentials)
@@ -274,4 +283,9 @@ func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
 
 func (g *gcsStorage) Close() error {
 	return g.client.Close()
+}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_gs,
+		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam), "gs")
 }

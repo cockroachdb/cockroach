@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "azure",
+    srcs = ["azure_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/azure",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+        "//pkg/util/contextutil",
+        "@com_github_azure_azure_storage_blob_go//azblob",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

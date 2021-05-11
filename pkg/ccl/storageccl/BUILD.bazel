@@ -76,6 +76,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/rowenc",
         "//pkg/storage",
+        "//pkg/storage/cloud",
         "//pkg/storage/cloudimpl",
         "//pkg/storage/enginepb",
         "//pkg/testutils",

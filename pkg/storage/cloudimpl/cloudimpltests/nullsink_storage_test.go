@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nullsink"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	dest := cloudimpl.MakeNullSinkStorageURI("foo")
+	dest := nullsink.MakeNullSinkStorageURI("foo")
 
 	conf, err := cloud.ExternalStorageConfFromURI(dest, security.RootUserName())
 	if err != nil {

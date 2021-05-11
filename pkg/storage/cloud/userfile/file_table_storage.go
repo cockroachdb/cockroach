@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpl
+package userfile
 
 import (
 	"context"
@@ -396,4 +396,9 @@ func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, er
 		return 0, err
 	}
 	return f.fs.FileSize(ctx, filepath)
+}
+
+func init() {
+	cloud.RegisterExternalStorageProvider(roachpb.ExternalStorageProvider_userfile,
+		parseUserfileURL, makeFileTableStorage, cloud.RedactedParams(), "userfile")
 }

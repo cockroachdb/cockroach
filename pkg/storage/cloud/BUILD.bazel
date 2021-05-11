@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cloud_io.go",
         "external_storage.go",
+        "impl_registry.go",
         "kms.go",
         "uris.go",
     ],

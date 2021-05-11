@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/httpsink"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -249,7 +249,7 @@ func TestHttpGet(t *testing.T) {
 			})
 
 			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-			store, err := cloudimpl.MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
+			store, err := httpsink.MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -285,7 +285,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	defer s.Close()
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -401,7 +401,7 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
-	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
