@@ -24,8 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,6 +42,7 @@ func makeS3Storage(
 	if err != nil {
 		return nil, err
 	}
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
@@ -67,6 +70,8 @@ func TestPutS3(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	ctx := context.Background()
 	user := security.RootUserName()
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
@@ -92,19 +97,19 @@ func TestPutS3(t *testing.T) {
 				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
-		testExportStore(t, fmt.Sprintf(
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s",
 			bucket, "backup-test-default",
 			cloud.AuthParam, cloud.AuthParamImplicit,
-		), false, user, nil, nil)
+		), false, user, nil, nil, testSettings)
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := amazon.S3URI(bucket, "backup-test",
 			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
-		testExportStore(t, uri, false, user, nil, nil)
-		testListFiles(t, uri, user, nil, nil)
+		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, testSettings)
 	})
 
 	// Tests that we can put an object with server side encryption specified.
@@ -120,23 +125,23 @@ func TestPutS3(t *testing.T) {
 				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
-		testExportStore(t, fmt.Sprintf(
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
 			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
 			"AES256",
-		), false, user, nil, nil)
+		), false, user, nil, nil, testSettings)
 
 		v := os.Getenv("AWS_KMS_KEY_ARN_A")
 		if v == "" {
 			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
 		}
-		testExportStore(t, fmt.Sprintf(
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s&%s=%s",
 			bucket, "backup-test-sse-kms",
 			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
 			"aws:kms", amazon.AWSServerSideEncryptionKMSID, v,
-		), false, user, nil, nil)
+		), false, user, nil, nil, testSettings)
 	})
 
 	t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
@@ -203,7 +208,9 @@ func TestPutS3Endpoint(t *testing.T) {
 		RawQuery: q.Encode(),
 	}
 
-	testExportStore(t, u.String(), false, user, nil, nil)
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	cloudtestutils.CheckExportStore(t, u.String(), false, user, nil, nil, testSettings)
 }
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
@@ -223,6 +230,8 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloud.AuthParamImplicit}}
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	s3, err := amazon.MakeS3Storage(context.Background(),
 		cloud.ExternalStorageContext{
 			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
@@ -240,6 +249,8 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 // This test attempts to ReadFile from a bucket which does not exist.
 func TestS3BucketDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	q := make(url.Values)
 	expect := map[string]string{
@@ -303,11 +314,13 @@ func TestAntagonisticS3Read(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	s3file := fmt.Sprintf(
 		"s3://%s/%s?%s=%s", bucket, "antagonistic-read",
 		cloud.AuthParam, cloud.AuthParamImplicit)
 	conf, err := cloud.ExternalStorageConfFromURI(s3file, security.RootUserName())
 	require.NoError(t, err)
 
-	testAntagonisticRead(t, conf)
+	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
 }
