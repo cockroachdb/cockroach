@@ -119,7 +119,7 @@ func (s *azureStorage) Settings() *cluster.Settings {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	err := contextutil.RunWithTimeout(ctx, "write azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "write azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			_, err := blob.Upload(
@@ -172,7 +172,7 @@ func (s *azureStorage) ReadFileAt(
 func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]string, error) {
 	pattern := s.prefix
 	if patternSuffix != "" {
-		if containsGlob(s.prefix) {
+		if cloud.ContainsGlob(s.prefix) {
 			return nil, errors.New("prefix cannot contain globs pattern when passing an explicit pattern")
 		}
 		pattern = path.Join(pattern, patternSuffix)
@@ -180,7 +180,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 	var fileList []string
 	response, err := s.container.ListBlobsFlatSegment(ctx,
 		azblob.Marker{},
-		azblob.ListBlobsSegmentOptions{Prefix: getPrefixBeforeWildcard(s.prefix)},
+		azblob.ListBlobsSegmentOptions{Prefix: cloud.GetPrefixBeforeWildcard(s.prefix)},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to list files for specified blob")
@@ -214,7 +214,7 @@ func (s *azureStorage) ListFiles(ctx context.Context, patternSuffix string) ([]s
 }
 
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
-	err := contextutil.RunWithTimeout(ctx, "delete azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
@@ -225,7 +225,7 @@ func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
 	var props *azblob.BlobGetPropertiesResponse
-	err := contextutil.RunWithTimeout(ctx, "size azure file", timeoutSetting.Get(&s.settings.SV),
+	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
 			blob := s.getBlob(basename)
 			var err error

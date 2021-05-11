@@ -3,8 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "cloud",
     srcs = [
+        "cloud_io.go",
         "external_storage.go",
         "kms.go",
+        "uris.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud",
     visibility = ["//visibility:public"],
@@ -12,7 +14,11 @@ go_library(
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

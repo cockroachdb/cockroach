@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -86,7 +87,7 @@ func TestPutHttp(t *testing.T) {
 
 		u := testSettings.MakeUpdater()
 		if err := u.Set(
-			cloudimpl.CloudstorageHTTPCASetting,
+			"cloudstorage.http.custom_ca",
 			string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
 			"s",
 		); err != nil {
@@ -95,7 +96,7 @@ func TestPutHttp(t *testing.T) {
 
 		cleanup := func() {
 			srv.Close()
-			if err := u.Set(cloudimpl.CloudstorageHTTPCASetting, "", "s"); err != nil {
+			if err := u.Set("cloudstorage.http.custom_ca", "", "s"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -195,12 +196,12 @@ func TestHttpGet(t *testing.T) {
 	data := []byte("to serve, or not to serve.  c'est la question")
 
 	defer func(opts retry.Options) {
-		cloudimpl.HTTPRetryOptions = opts
-	}(cloudimpl.HTTPRetryOptions)
+		cloud.HTTPRetryOptions = opts
+	}(cloud.HTTPRetryOptions)
 
-	cloudimpl.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
-	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
-	cloudimpl.HTTPRetryOptions.MaxRetries = 25
+	cloud.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
+	cloud.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
+	cloud.HTTPRetryOptions.MaxRetries = 25
 
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
@@ -392,12 +393,12 @@ func TestExhaustRetries(t *testing.T) {
 
 	// Override retry options to retry faster.
 	defer func(opts retry.Options) {
-		cloudimpl.HTTPRetryOptions = opts
-	}(cloudimpl.HTTPRetryOptions)
+		cloud.HTTPRetryOptions = opts
+	}(cloud.HTTPRetryOptions)
 
-	cloudimpl.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
-	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
-	cloudimpl.HTTPRetryOptions.MaxRetries = 10
+	cloud.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
+	cloud.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
+	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
 	store, err := cloudimpl.MakeHTTPStorage(context.Background(), cloudimpl.ExternalStorageContext{Settings: testSettings}, conf)
