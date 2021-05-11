@@ -259,4 +259,8 @@ type TestTenantArgs struct {
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig *TempStorageConfig
+
+	// ExternalIODirConfig is used to initialize the same-named
+	// field on the server.Config struct.
+	ExternalIODirConfig ExternalIODirConfig
 }
