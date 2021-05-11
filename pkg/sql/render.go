@@ -49,6 +49,11 @@ type renderNode struct {
 	// columns is the set of result columns.
 	columns colinfo.ResultColumns
 
+	// if set, join any distributed streams before applying the rendering; used to
+	// "materialize" an ordering before removing the ordering columns (at the root
+	// of a query or subquery).
+	serialize bool
+
 	reqOrdering ReqOrdering
 }
 
