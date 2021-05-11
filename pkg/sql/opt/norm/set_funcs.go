@@ -84,3 +84,91 @@ func (c *CustomFuncs) PruneSetPrivate(needed opt.ColSet, set *memo.SetPrivate) *
 	}
 	return &prunedSet
 }
+
+// CanConvertUnionToDistinctUnionAll indicates whether a Union can be replaced
+// with a DistinctOn-UnionAll complex. If the replacement is valid, also returns
+// a ColSet with the key columns the DistinctOn will need to group on. See the
+// ConvertUnionToDistinctUnionAll comment for more info on the conditions that
+// allow this transformation.
+//
+// CanConvertUnionToDistinctUnionAll assumes that both expressions have
+// non-empty keys, that all key columns are contained within the given lists,
+// and that the lists contain no duplicates.
+func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
+	leftCols, rightCols opt.ColList, leftColSet opt.ColSet,
+) (bool, opt.ColSet) {
+	var keyCols opt.ColSet
+	if len(leftCols) != len(rightCols) || len(leftCols) == 0 {
+		return false, keyCols
+	}
+	md := c.mem.Metadata()
+	var leftTableID, rightTableID opt.TableID
+	for i := range leftCols {
+		if leftTableID == opt.TableID(0) {
+			leftTableID = md.ColumnMeta(leftCols[i]).Table
+		}
+		if rightTableID == opt.TableID(0) {
+			rightTableID = md.ColumnMeta(rightCols[i]).Table
+		}
+		if leftTableID == opt.TableID(0) || rightTableID == opt.TableID(0) {
+			// Both columns must come from a table, all columns must come
+			// from the same base table, and all columns on a given side must come from the same meta table.
+			return false, keyCols
+		}
+		if leftTableID != md.ColumnMeta(leftCols[i]).Table ||
+			rightTableID != md.ColumnMeta(rightCols[i]).Table {
+			// All columns on a given side must come from the same meta table.
+			return false, keyCols
+		}
+		if md.Table(leftTableID) != md.Table(rightTableID) {
+			// All columns must come from the same base table.m
+			return false, keyCols
+		}
+		if leftTableID.ColumnOrdinal(leftCols[i]) != rightTableID.ColumnOrdinal(rightCols[i]) {
+			// Pairs of equivalent columns must come from the same ordinal position in
+			// the original base table.
+			return false, keyCols
+		}
+	}
+
+	// Now check that the columns form a strict key over the base table. Iterate
+	// over the key columns of each index until we find a strict key that is a
+	// subset of the given columns.
+	table := md.Table(leftTableID)
+	for i := 0; i < table.IndexCount(); i++ {
+		index := table.Index(i)
+		if index.IsInverted() {
+			continue
+		}
+		if _, isPartial := index.Predicate(); isPartial {
+			// Partial constraint keys are only unique for a subset of the rows.
+			continue
+		}
+		foundUsableKey := true
+		for j := 0; j < index.KeyColumnCount(); j++ {
+			ord := index.Column(j).Ordinal()
+			if !leftColSet.Contains(leftTableID.ColumnID(ord)) {
+				// The input does not contain all columns that form this key.
+				foundUsableKey = false
+				break
+			}
+		}
+		if foundUsableKey {
+			// Add the key columns to the keyCols set and return.
+			for j := 0; j < index.KeyColumnCount(); j++ {
+				ord := index.Column(j).Ordinal()
+				keyCols.Add(leftTableID.ColumnID(ord))
+			}
+			return true, keyCols
+		}
+	}
+
+	// No strict key was found that is encompassed by the input columns.
+	return false, keyCols
+}
+
+// TranslateColSet is used to translate a ColSet from one set of column IDs
+// to an equivalent set. See the opt.TranslateColSet comment for more info.
+func (c *CustomFuncs) TranslateColSet(colSetIn opt.ColSet, from, to opt.ColList) opt.ColSet {
+	return opt.TranslateColSet(colSetIn, from, to)
+}

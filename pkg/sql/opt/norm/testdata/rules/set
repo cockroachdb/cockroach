@@ -6,6 +6,22 @@ exec-ddl
 CREATE TABLE a (v INT PRIMARY KEY, w INT, x FLOAT, y STRING NOT NULL, z JSON)
 ----
 
+exec-ddl
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)
+----
+
+exec-ddl
+CREATE TABLE t2 (
+  a INT,
+  b INT,
+  c INT NOT NULL,
+  d INT,
+  PRIMARY KEY(a, b),
+  UNIQUE INDEX (c),
+  UNIQUE INDEX (d)
+)
+----
+
 # --------------------------------------------------
 # EliminateUnionAllLeft
 # --------------------------------------------------
@@ -55,3 +71,415 @@ values
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(13)
+
+# --------------------------------------------------
+# ConvertUnionToDistinctUnionAll
+# -------------------------------------------------
+
+norm expect=ConvertUnionToDistinctUnionAll
+SELECT a, b, c FROM
+  (SELECT a, b, c FROM t WHERE a < 0)
+  UNION
+  (SELECT a, b, c FROM t WHERE b > 10)
+----
+distinct-on
+ ├── columns: a:9!null b:10 c:11
+ ├── grouping columns: a:9!null
+ ├── key: (9)
+ ├── fd: (9)-->(10,11)
+ ├── union-all
+ │    ├── columns: a:9!null b:10 c:11
+ │    ├── left columns: t.a:1 t.b:2 t.c:3
+ │    ├── right columns: t.a:5 t.b:6 t.c:7
+ │    ├── select
+ │    │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3)
+ │    │    ├── scan t
+ │    │    │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,3)
+ │    │    └── filters
+ │    │         └── t.a:1 < 0 [outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+ │    └── select
+ │         ├── columns: t.a:5!null t.b:6!null t.c:7
+ │         ├── key: (5)
+ │         ├── fd: (5)-->(6,7)
+ │         ├── scan t
+ │         │    ├── columns: t.a:5!null t.b:6 t.c:7
+ │         │    ├── key: (5)
+ │         │    └── fd: (5)-->(6,7)
+ │         └── filters
+ │              └── t.b:6 > 10 [outer=(6), constraints=(/6: [/11 - ]; tight)]
+ └── aggregations
+      ├── const-agg [as=b:10, outer=(10)]
+      │    └── b:10
+      └── const-agg [as=c:11, outer=(11)]
+           └── c:11
+
+# Case with union between three same-table scans. The rule doesn't match on the
+# outer Union because the inner Union's output columns do not have an associated
+# meta table.
+norm expect=ConvertUnionToDistinctUnionAll
+SELECT a, b, c FROM
+  (SELECT a, b, c FROM t WHERE a < 0)
+  UNION
+  (SELECT a, b, c FROM t WHERE b > 10 AND b < 100)
+  UNION
+  (SELECT a, b, c FROM t WHERE b > 1000)
+----
+union
+ ├── columns: a:16!null b:17 c:18
+ ├── left columns: a:9 b:10 c:11
+ ├── right columns: t.a:12 t.b:13 t.c:14
+ ├── key: (16-18)
+ ├── distinct-on
+ │    ├── columns: a:9!null b:10 c:11
+ │    ├── grouping columns: a:9!null
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(10,11)
+ │    ├── union-all
+ │    │    ├── columns: a:9!null b:10 c:11
+ │    │    ├── left columns: t.a:1 t.b:2 t.c:3
+ │    │    ├── right columns: t.a:5 t.b:6 t.c:7
+ │    │    ├── select
+ │    │    │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    ├── scan t
+ │    │    │    │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    │    │    │    ├── key: (1)
+ │    │    │    │    └── fd: (1)-->(2,3)
+ │    │    │    └── filters
+ │    │    │         └── t.a:1 < 0 [outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+ │    │    └── select
+ │    │         ├── columns: t.a:5!null t.b:6!null t.c:7
+ │    │         ├── key: (5)
+ │    │         ├── fd: (5)-->(6,7)
+ │    │         ├── scan t
+ │    │         │    ├── columns: t.a:5!null t.b:6 t.c:7
+ │    │         │    ├── key: (5)
+ │    │         │    └── fd: (5)-->(6,7)
+ │    │         └── filters
+ │    │              └── (t.b:6 > 10) AND (t.b:6 < 100) [outer=(6), constraints=(/6: [/11 - /99]; tight)]
+ │    └── aggregations
+ │         ├── const-agg [as=b:10, outer=(10)]
+ │         │    └── b:10
+ │         └── const-agg [as=c:11, outer=(11)]
+ │              └── c:11
+ └── select
+      ├── columns: t.a:12!null t.b:13!null t.c:14
+      ├── key: (12)
+      ├── fd: (12)-->(13,14)
+      ├── scan t
+      │    ├── columns: t.a:12!null t.b:13 t.c:14
+      │    ├── key: (12)
+      │    └── fd: (12)-->(13,14)
+      └── filters
+           └── t.b:13 > 1000 [outer=(13), constraints=(/13: [/1001 - ]; tight)]
+
+# The DistinctOn should group on the entire primary key (a, b) instead of just
+# on column b, otherwise extra rows will be removed.
+norm expect=ConvertUnionToDistinctUnionAll
+SELECT a, b FROM
+  (SELECT a, b FROM t2 WHERE a = 1)
+  UNION
+  (SELECT a, b FROM t2 WHERE a = 2)
+----
+distinct-on
+ ├── columns: a:11!null b:12!null
+ ├── grouping columns: a:11!null b:12!null
+ ├── key: (11,12)
+ └── union-all
+      ├── columns: a:11!null b:12!null
+      ├── left columns: t2.a:1 t2.b:2
+      ├── right columns: t2.a:6 t2.b:7
+      ├── select
+      │    ├── columns: t2.a:1!null t2.b:2!null
+      │    ├── key: (2)
+      │    ├── fd: ()-->(1)
+      │    ├── scan t2
+      │    │    ├── columns: t2.a:1!null t2.b:2!null
+      │    │    └── key: (1,2)
+      │    └── filters
+      │         └── t2.a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── select
+           ├── columns: t2.a:6!null t2.b:7!null
+           ├── key: (7)
+           ├── fd: ()-->(6)
+           ├── scan t2
+           │    ├── columns: t2.a:6!null t2.b:7!null
+           │    └── key: (6,7)
+           └── filters
+                └── t2.a:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
+
+# Case where the inputs have empty keys. Should group on the entire primary
+# key nevertheless.
+norm expect=ConvertUnionToDistinctUnionAll
+SELECT a, b FROM
+  (SELECT a, b FROM t2 LIMIT 1)
+  UNION
+  (SELECT a, b FROM t2 LIMIT 1)
+----
+distinct-on
+ ├── columns: a:11!null b:12!null
+ ├── grouping columns: a:11!null b:12!null
+ ├── cardinality: [0 - 2]
+ ├── key: (11,12)
+ └── union-all
+      ├── columns: a:11!null b:12!null
+      ├── left columns: t2.a:1 t2.b:2
+      ├── right columns: t2.a:6 t2.b:7
+      ├── cardinality: [0 - 2]
+      ├── limit
+      │    ├── columns: t2.a:1!null t2.b:2!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2)
+      │    ├── scan t2
+      │    │    ├── columns: t2.a:1!null t2.b:2!null
+      │    │    ├── key: (1,2)
+      │    │    └── limit hint: 1.00
+      │    └── 1
+      └── limit
+           ├── columns: t2.a:6!null t2.b:7!null
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(6,7)
+           ├── scan t2
+           │    ├── columns: t2.a:6!null t2.b:7!null
+           │    ├── key: (6,7)
+           │    └── limit hint: 1.00
+           └── 1
+
+# Case where a secondary index key is used for the grouping.
+norm expect=ConvertUnionToDistinctUnionAll
+SELECT c FROM
+  (SELECT c FROM t2 LIMIT 1)
+  UNION
+  (SELECT c FROM t2 WHERE a = 1)
+----
+distinct-on
+ ├── columns: c:11!null
+ ├── grouping columns: c:11!null
+ ├── key: (11)
+ └── union-all
+      ├── columns: c:11!null
+      ├── left columns: t2.c:3
+      ├── right columns: t2.c:8
+      ├── limit
+      │    ├── columns: t2.c:3!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(3)
+      │    ├── scan t2
+      │    │    ├── columns: t2.c:3!null
+      │    │    ├── key: (3)
+      │    │    └── limit hint: 1.00
+      │    └── 1
+      └── project
+           ├── columns: t2.c:8!null
+           ├── key: (8)
+           └── select
+                ├── columns: a:6!null t2.c:8!null
+                ├── key: (8)
+                ├── fd: ()-->(6)
+                ├── scan t2
+                │    ├── columns: a:6!null t2.c:8!null
+                │    ├── key: (8)
+                │    └── fd: (8)-->(6)
+                └── filters
+                     └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+
+# No-op case because there is no key.
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT b, c FROM
+  (SELECT b, c FROM t WHERE c < 0)
+  UNION
+  (SELECT b, c FROM t WHERE b > 10)
+----
+union
+ ├── columns: b:9 c:10
+ ├── left columns: t.b:2 t.c:3
+ ├── right columns: t.b:6 t.c:7
+ ├── key: (9,10)
+ ├── select
+ │    ├── columns: t.b:2 t.c:3!null
+ │    ├── scan t
+ │    │    └── columns: t.b:2 t.c:3
+ │    └── filters
+ │         └── t.c:3 < 0 [outer=(3), constraints=(/3: (/NULL - /-1]; tight)]
+ └── select
+      ├── columns: t.b:6!null t.c:7
+      ├── scan t
+      │    └── columns: t.b:6 t.c:7
+      └── filters
+           └── t.b:6 > 10 [outer=(6), constraints=(/6: [/11 - ]; tight)]
+
+# No-op case because of the projection.
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT a, b, c FROM
+  (SELECT a, b, c FROM t WHERE a < 0)
+  UNION
+  (SELECT a, b, c*2 FROM t WHERE b > 10)
+----
+union
+ ├── columns: a:10!null b:11 c:12
+ ├── left columns: t.a:1 t.b:2 t.c:3
+ ├── right columns: t.a:5 t.b:6 "?column?":9
+ ├── immutable
+ ├── key: (10-12)
+ ├── select
+ │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── scan t
+ │    │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    └── filters
+ │         └── t.a:1 < 0 [outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+ └── project
+      ├── columns: "?column?":9 t.a:5!null t.b:6!null
+      ├── immutable
+      ├── key: (5)
+      ├── fd: (5)-->(6,9)
+      ├── select
+      │    ├── columns: t.a:5!null t.b:6!null t.c:7
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6,7)
+      │    ├── scan t
+      │    │    ├── columns: t.a:5!null t.b:6 t.c:7
+      │    │    ├── key: (5)
+      │    │    └── fd: (5)-->(6,7)
+      │    └── filters
+      │         └── t.b:6 > 10 [outer=(6), constraints=(/6: [/11 - ]; tight)]
+      └── projections
+           └── t.c:7 * 2 [as="?column?":9, outer=(7), immutable]
+
+# No-op case because the columns don't all have the same ordinal positions.
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT a, b, c FROM
+  (SELECT a, b, c FROM t WHERE a < 0)
+  UNION
+  (SELECT a, c, b FROM t WHERE b > 10)
+----
+union
+ ├── columns: a:9!null b:10 c:11
+ ├── left columns: t.a:1 t.b:2 t.c:3
+ ├── right columns: t.a:5 t.c:7 t.b:6
+ ├── key: (9-11)
+ ├── select
+ │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── scan t
+ │    │    ├── columns: t.a:1!null t.b:2 t.c:3
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,3)
+ │    └── filters
+ │         └── t.a:1 < 0 [outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+ └── select
+      ├── columns: t.a:5!null t.b:6!null t.c:7
+      ├── key: (5)
+      ├── fd: (5)-->(6,7)
+      ├── scan t
+      │    ├── columns: t.a:5!null t.b:6 t.c:7
+      │    ├── key: (5)
+      │    └── fd: (5)-->(6,7)
+      └── filters
+           └── t.b:6 > 10 [outer=(6), constraints=(/6: [/11 - ]; tight)]
+
+# No-op case because there is no base table.
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT * FROM
+  (SELECT * FROM (VALUES (1, 1), (2, 1)))
+  UNION
+  (SELECT * FROM (VALUES (1, 1), (2, 1)))
+----
+union
+ ├── columns: column1:5!null column2:6!null
+ ├── left columns: column1:1 column2:2
+ ├── right columns: column1:3 column2:4
+ ├── cardinality: [1 - 4]
+ ├── key: (5,6)
+ ├── values
+ │    ├── columns: column1:1!null column2:2!null
+ │    ├── cardinality: [2 - 2]
+ │    ├── (1, 1)
+ │    └── (2, 1)
+ └── values
+      ├── columns: column1:3!null column2:4!null
+      ├── cardinality: [2 - 2]
+      ├── (1, 1)
+      └── (2, 1)
+
+# No-op case because the index key is nullable.
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT d FROM
+  (SELECT d FROM t2 LIMIT 1)
+  UNION
+  (SELECT d FROM t2 WHERE a = 1)
+----
+union
+ ├── columns: d:11
+ ├── left columns: t2.d:4
+ ├── right columns: t2.d:9
+ ├── key: (11)
+ ├── limit
+ │    ├── columns: t2.d:4
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(4)
+ │    ├── scan t2
+ │    │    ├── columns: t2.d:4
+ │    │    ├── lax-key: (4)
+ │    │    └── limit hint: 1.00
+ │    └── 1
+ └── project
+      ├── columns: t2.d:9
+      ├── lax-key: (9)
+      └── select
+           ├── columns: a:6!null t2.d:9
+           ├── lax-key: (9)
+           ├── fd: ()-->(6)
+           ├── scan t2
+           │    ├── columns: a:6!null t2.d:9
+           │    ├── lax-key: (6,9)
+           │    └── fd: (9)~~>(6)
+           └── filters
+                └── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+
+# No-op case because the left side has columns from more than one meta table.
+norm expect-not=ConvertUnionToDistinctUnionAll
+SELECT a, b, c FROM
+  (SELECT t.a, t.b, foo.c FROM t FULL JOIN t as foo ON False)
+  UNION
+  (SELECT a, b, c FROM t WHERE a > 10)
+----
+union
+ ├── columns: a:13 b:14 c:15
+ ├── left columns: t.a:1 t.b:2 foo.c:7
+ ├── right columns: t.a:9 t.b:10 t.c:11
+ ├── key: (13-15)
+ ├── full-join (cross)
+ │    ├── columns: t.a:1 t.b:2 foo.c:7
+ │    ├── fd: (1)-->(2)
+ │    ├── scan t
+ │    │    ├── columns: t.a:1!null t.b:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan t [as=foo]
+ │    │    └── columns: foo.c:7
+ │    └── filters
+ │         └── false [constraints=(contradiction; tight)]
+ └── select
+      ├── columns: t.a:9!null t.b:10 t.c:11
+      ├── key: (9)
+      ├── fd: (9)-->(10,11)
+      ├── scan t
+      │    ├── columns: t.a:9!null t.b:10 t.c:11
+      │    ├── key: (9)
+      │    └── fd: (9)-->(10,11)
+      └── filters
+           └── t.a:9 > 10 [outer=(9), constraints=(/9: [/11 - ]; tight)]

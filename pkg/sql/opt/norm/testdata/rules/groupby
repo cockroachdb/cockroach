@@ -609,19 +609,28 @@ project
       ├── grouping columns: i:14!null
       ├── key: (14)
       ├── fd: (14)-->(18)
-      ├── union
-      │    ├── columns: k:13!null i:14!null f:15 s:16!null j:17
-      │    ├── left columns: a.k:1 a.i:2 a.f:3 a.s:4 a.j:5
-      │    ├── right columns: a.k:7 a.i:8 a.f:9 a.s:10 a.j:11
-      │    ├── key: (13-17)
-      │    ├── scan a
-      │    │    ├── columns: a.k:1!null a.i:2!null a.f:3 a.s:4!null a.j:5
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-5), (2,4)-->(1,3,5), (2,3)~~>(1,4,5)
-      │    └── scan a
-      │         ├── columns: a.k:7!null a.i:8!null a.f:9 a.s:10!null a.j:11
-      │         ├── key: (7)
-      │         └── fd: (7)-->(8-11), (8,10)-->(7,9,11), (8,9)~~>(7,10,11)
+      ├── distinct-on
+      │    ├── columns: k:13!null i:14!null s:16!null
+      │    ├── grouping columns: k:13!null
+      │    ├── key: (13)
+      │    ├── fd: (13)-->(14,16)
+      │    ├── union-all
+      │    │    ├── columns: k:13!null i:14!null s:16!null
+      │    │    ├── left columns: a.k:1 a.i:2 a.s:4
+      │    │    ├── right columns: a.k:7 a.i:8 a.s:10
+      │    │    ├── scan a
+      │    │    │    ├── columns: a.k:1!null a.i:2!null a.s:4!null
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2,4), (2,4)-->(1)
+      │    │    └── scan a
+      │    │         ├── columns: a.k:7!null a.i:8!null a.s:10!null
+      │    │         ├── key: (7)
+      │    │         └── fd: (7)-->(8,10), (8,10)-->(7)
+      │    └── aggregations
+      │         ├── const-agg [as=i:14, outer=(14)]
+      │         │    └── i:14
+      │         └── const-agg [as=s:16, outer=(16)]
+      │              └── s:16
       └── aggregations
            └── min [as=min:18, outer=(16)]
                 └── s:16
@@ -635,19 +644,26 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(18)
- ├── union
- │    ├── columns: k:13!null i:14!null f:15 s:16!null j:17
- │    ├── left columns: a.k:1 a.i:2 a.f:3 a.s:4 a.j:5
- │    ├── right columns: a.k:7 a.i:8 a.f:9 a.s:10 a.j:11
- │    ├── key: (13-17)
- │    ├── scan a
- │    │    ├── columns: a.k:1!null a.i:2!null a.f:3 a.s:4!null a.j:5
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5), (2,4)-->(1,3,5), (2,3)~~>(1,4,5)
- │    └── scan a
- │         ├── columns: a.k:7!null a.i:8!null a.f:9 a.s:10!null a.j:11
- │         ├── key: (7)
- │         └── fd: (7)-->(8-11), (8,10)-->(7,9,11), (8,9)~~>(7,10,11)
+ ├── distinct-on
+ │    ├── columns: k:13!null s:16!null
+ │    ├── grouping columns: k:13!null
+ │    ├── key: (13)
+ │    ├── fd: (13)-->(16)
+ │    ├── union-all
+ │    │    ├── columns: k:13!null s:16!null
+ │    │    ├── left columns: a.k:1 a.s:4
+ │    │    ├── right columns: a.k:7 a.s:10
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1!null a.s:4!null
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(4)
+ │    │    └── scan a
+ │    │         ├── columns: a.k:7!null a.s:10!null
+ │    │         ├── key: (7)
+ │    │         └── fd: (7)-->(10)
+ │    └── aggregations
+ │         └── const-agg [as=s:16, outer=(16)]
+ │              └── s:16
  └── aggregations
       └── min [as=min:18, outer=(16)]
            └── s:16
@@ -661,19 +677,28 @@ distinct-on
  ├── grouping columns: i:14!null
  ├── key: (14)
  ├── fd: (14)-->(16)
- ├── union
- │    ├── columns: k:13!null i:14!null f:15 s:16!null j:17
- │    ├── left columns: a.k:1 a.i:2 a.f:3 a.s:4 a.j:5
- │    ├── right columns: a.k:7 a.i:8 a.f:9 a.s:10 a.j:11
- │    ├── key: (13-17)
- │    ├── scan a
- │    │    ├── columns: a.k:1!null a.i:2!null a.f:3 a.s:4!null a.j:5
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5), (2,4)-->(1,3,5), (2,3)~~>(1,4,5)
- │    └── scan a
- │         ├── columns: a.k:7!null a.i:8!null a.f:9 a.s:10!null a.j:11
- │         ├── key: (7)
- │         └── fd: (7)-->(8-11), (8,10)-->(7,9,11), (8,9)~~>(7,10,11)
+ ├── distinct-on
+ │    ├── columns: k:13!null i:14!null s:16!null
+ │    ├── grouping columns: k:13!null
+ │    ├── key: (13)
+ │    ├── fd: (13)-->(14,16)
+ │    ├── union-all
+ │    │    ├── columns: k:13!null i:14!null s:16!null
+ │    │    ├── left columns: a.k:1 a.i:2 a.s:4
+ │    │    ├── right columns: a.k:7 a.i:8 a.s:10
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1!null a.i:2!null a.s:4!null
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,4), (2,4)-->(1)
+ │    │    └── scan a
+ │    │         ├── columns: a.k:7!null a.i:8!null a.s:10!null
+ │    │         ├── key: (7)
+ │    │         └── fd: (7)-->(8,10), (8,10)-->(7)
+ │    └── aggregations
+ │         ├── const-agg [as=i:14, outer=(14)]
+ │         │    └── i:14
+ │         └── const-agg [as=s:16, outer=(16)]
+ │              └── s:16
  └── aggregations
       └── first-agg [as=s:16, outer=(16)]
            └── s:16
