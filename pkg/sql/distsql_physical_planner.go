@@ -1359,9 +1359,8 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		}
 	}
 
-	p.AddNoInputStage(
-		corePlacement, info.post, typs, dsp.convertOrdering(info.reqOrdering, info.colsToTableOrdinalMap),
-	)
+	// Note: we will set a merge ordering below.
+	p.AddNoInputStage(corePlacement, info.post, typs, execinfrapb.Ordering{})
 
 	outCols := getOutputColumnsFromColsForScan(info.cols, info.colsToTableOrdinalMap)
 	planToStreamColMap := make([]int, len(info.cols))
@@ -1383,28 +1382,34 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			}
 		}
 	}
-	p.AddProjection(outCols)
+	p.AddProjection(outCols, dsp.convertOrdering(info.reqOrdering, planToStreamColMap))
 
 	p.PlanToStreamColMap = planToStreamColMap
 	return nil
 }
 
-// selectRenders takes a PhysicalPlan that produces the results corresponding to
-// the select data source (a n.source) and updates it to produce results
-// corresponding to the render node itself. An evaluator stage is added if the
-// render node has any expressions which are not just simple column references.
-func (dsp *DistSQLPlanner) selectRenders(
+// createPlanForRender takes a PhysicalPlan and updates it to produce results
+// corresponding to the render node. An evaluator stage is added if the render
+// node has any expressions which are not just simple column references.
+func (dsp *DistSQLPlanner) createPlanForRender(
 	p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
 ) error {
 	typs, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
 		return err
 	}
-	err = p.AddRendering(n.render, planCtx, p.PlanToStreamColMap, typs)
+	if n.serialize {
+		p.EnsureSingleStreamOnGateway()
+	}
+	newColMap := identityMap(p.PlanToStreamColMap, len(n.render))
+	newMergeOrdering := dsp.convertOrdering(n.reqOrdering, newColMap)
+	err = p.AddRendering(
+		n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering,
+	)
 	if err != nil {
 		return err
 	}
-	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(n.render))
+	p.PlanToStreamColMap = newColMap
 	return nil
 }
 
@@ -2026,7 +2031,12 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		}
 		pkCols[i] = uint32(streamColOrd)
 	}
-	plan.AddProjection(pkCols)
+	// Note that we're using an empty merge ordering because we know for sure
+	// that we won't join streams before the next stage (below, we call either
+	// AddNoGroupingStage or AddSingleGroupStage, and neither function joins the
+	// streams). The former does set the correct new merge ordering after the
+	// index join planning is done.
+	plan.AddProjection(pkCols, execinfrapb.Ordering{})
 
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Table:             *n.table.desc.TableDesc(),
@@ -2733,7 +2743,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if err != nil {
 			return nil, err
 		}
-		err = dsp.selectRenders(plan, n, planCtx)
+		err = dsp.createPlanForRender(plan, n, planCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -3320,7 +3330,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// TODO(solon): We could skip this stage if there is a strong key on
 				// the result columns.
 				plan.AddNoGroupingStage(distinctSpecs[side], execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), distinctOrds[side])
-				plan.AddProjection(streamCols)
 			}
 		}
 	}
@@ -3711,8 +3720,8 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 			projection = append(projection, uint32(outputCol))
 		}
 	}
-	plan.AddProjection(projection)
-	// Update PlanToStreamColMap to nil since it is no longer necessary.
+	plan.AddProjection(projection, execinfrapb.Ordering{})
+	// PlanToStreamColMap is no longer necessary.
 	plan.PlanToStreamColMap = nil
 
 	if len(metadataSenders) > 0 {
