@@ -425,7 +425,7 @@ func (md *Metadata) DuplicateTable(
 		col := tab.Column(i)
 		oldColID := tabID.ColumnID(i)
 		newColID := md.AddColumn(string(col.ColName()), col.DatumType())
-		md.ColumnMeta(newColID).Table = tabID
+		md.ColumnMeta(newColID).Table = newTabID
 		colMap.Set(int(oldColID), int(newColID))
 	}
 
