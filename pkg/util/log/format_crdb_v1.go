@@ -128,18 +128,18 @@ Each line of output starts with the following prefix:
 
 	buf.WriteString(`
 
-| Field           | Description                                                                                                               |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., ` + "`I`" + ` for ` + "`INFO`" + `). |
-| yy              | The year (zero padded; i.e., 2016 is ` + "`16`" + `).                                                                     |
-| mm              | The month (zero padded; i.e., May is ` + "`05`" + `).                                                                     |
-| dd              | The day (zero padded).                                                                                                    |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
-| goid            | The goroutine id (omitted if zero for use by tests).                                                                      |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
-| file            | The file name where the entry originated.                                                                                 |
-| line            | The line number where the entry originated.                                                                               |
-| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                       |`)
+| Field           | Description                                                                                                                          |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., ` + "`I`" + ` for ` + "`INFO`" + `). |
+| yy              | The year (zero padded; i.e., 2016 is ` + "`16`" + `).                                                                                |
+| mm              | The month (zero padded; i.e., May is ` + "`05`" + `).                                                                                |
+| dd              | The day (zero padded).                                                                                                               |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
+| goid            | The goroutine id (omitted if zero for use by tests).                                                                                 |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
+| file            | The file name where the entry originated.                                                                                            |
+| line            | The line number where the entry originated.                                                                                          |
+| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                                  |`)
 
 	if withCounter {
 		buf.WriteString(`
