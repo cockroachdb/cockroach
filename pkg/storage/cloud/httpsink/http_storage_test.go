@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package httpsink
 
 import (
 	"bytes"
@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/httpsink"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -255,7 +254,7 @@ func TestHttpGet(t *testing.T) {
 			})
 
 			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-			store, err := httpsink.MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
+			store, err := MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -292,7 +291,7 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -416,7 +415,7 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
-	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package amazon
 
 import (
 	"context"
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -82,19 +81,19 @@ func TestPutS3(t *testing.T) {
 			`%s is set to '%s', but %s is not set`,
 			cloud.AuthParam,
 			cloud.AuthParamSpecified,
-			amazon.AWSAccessKeyParam,
+			AWSAccessKeyParam,
 		))
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
 		// You can create an IAM that can access S3
 		// in the AWS console, then set it up locally.
-		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
 		credentialsProvider := credentials.SharedCredentialsProvider{}
 		_, err := credentialsProvider.Retrieve()
 		if err != nil {
 			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
@@ -105,7 +104,7 @@ func TestPutS3(t *testing.T) {
 	})
 
 	t.Run("auth-specified", func(t *testing.T) {
-		uri := amazon.S3URI(bucket, "backup-test",
+		uri := S3URI(bucket, "backup-test",
 			&roachpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, testSettings)
@@ -116,19 +115,19 @@ func TestPutS3(t *testing.T) {
 	t.Run("server-side-encryption", func(t *testing.T) {
 		// You can create an IAM that can access S3
 		// in the AWS console, then set it up locally.
-		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
 		credentialsProvider := credentials.SharedCredentialsProvider{}
 		_, err := credentialsProvider.Retrieve()
 		if err != nil {
 			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 			"AES256",
 		), false, user, nil, nil, testSettings)
 
@@ -139,28 +138,28 @@ func TestPutS3(t *testing.T) {
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s&%s=%s",
 			bucket, "backup-test-sse-kms",
-			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
-			"aws:kms", amazon.AWSServerSideEncryptionKMSID, v,
+			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+			"aws:kms", AWSServerSideEncryptionKMSID, v,
 		), false, user, nil, nil, testSettings)
 	})
 
 	t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
 		// You can create an IAM that can access S3
 		// in the AWS console, then set it up locally.
-		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
 		credentialsProvider := credentials.SharedCredentialsProvider{}
 		_, err := credentialsProvider.Retrieve()
 		if err != nil {
 			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 
 		// Unsupported server side encryption option.
 		invalidSSEModeURI := fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 			"unsupported-algorithm")
 
 		_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
@@ -170,7 +169,7 @@ func TestPutS3(t *testing.T) {
 		invalidKMSURI := fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, amazon.AWSServerSideEncryptionMode,
+			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
 			"aws:kms")
 		_, err = makeS3Storage(ctx, invalidKMSURI, user)
 		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
@@ -182,10 +181,10 @@ func TestPutS3Endpoint(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        amazon.AWSEndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    amazon.AWSAccessKeyParam,
-		"AWS_S3_ENDPOINT_REGION": amazon.S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": amazon.AWSSecretParam,
+		"AWS_S3_ENDPOINT":        AWSEndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    AWSAccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -216,7 +215,7 @@ func TestPutS3Endpoint(t *testing.T) {
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dest := roachpb.ExternalStorage{S3Config: &roachpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
-	s3, err := amazon.MakeS3Storage(context.Background(),
+	s3, err := MakeS3Storage(context.Background(),
 		cloud.ExternalStorageContext{
 			IOConf: base.ExternalIODirConfig{DisableHTTP: true},
 		},
@@ -232,7 +231,7 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	s3, err := amazon.MakeS3Storage(context.Background(),
+	s3, err := MakeS3Storage(context.Background(),
 		cloud.ExternalStorageContext{
 			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
 			Settings: testSettings,
@@ -254,10 +253,10 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        amazon.AWSEndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    amazon.AWSAccessKeyParam,
-		"AWS_S3_ENDPOINT_REGION": amazon.S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": amazon.AWSSecretParam,
+		"AWS_S3_ENDPOINT":        AWSEndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    AWSAccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": AWSSecretParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
