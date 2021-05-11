@@ -1934,6 +1934,16 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_linecrossingdirection"></a><code>st_linecrossingdirection(linestringA: geometry, linestringB: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns diffrent interger value defining behaviour of crossing of lines
+0: Line No Cross
+-1: Line2 crosses Line 1 from Right to Left
+1: Line2 crosses Line 1 from Left to Right
+-2: Line2 Multicrosses Line1 from Right to Left
+2: Line2 Multicrosses Line1 from Left to Right
+-3: Line2 Multicrosses Line1 from Left to Left
+3: Line2 Multicrosses Line1 from Right to Right</p>
+<p>Function implements PostGIS behaviour where top vetex of segment touching the another line not counted as crossing but bottom vetex of segment touching the another line is counted as crossing</p>
+</span></td></tr>
 <tr><td><a name="st_linefromencodedpolyline"></a><code>st_linefromencodedpolyline(encoded_polyline: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a LineString from an Encoded Polyline string.</p>
 <p>Returns valid results only if the polyline was encoded with 5 decimal places.</p>
 <p>See <a href="http://developers.google.com/maps/documentation/utilities/polylinealgorithm" rel="nofollow">http://developers.google.com/maps/documentation/utilities/polylinealgorithm</a></p>

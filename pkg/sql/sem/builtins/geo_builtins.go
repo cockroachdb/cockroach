@@ -6670,43 +6670,76 @@ May return a Point or LineString in the case of degenerate inputs.`,
 			},
 		}),
 
+	"st_linecrossingdirection": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"linestringA", types.Geometry},
+				{"linestringB", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				linestringA := tree.MustBeDGeometry(args[0])
+				linestringB := tree.MustBeDGeometry(args[1])
+
+				ret, err := geomfn.LineCrossingDirection(linestringA.Geometry, linestringB.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns diffrent interger value defining behaviour of crossing of lines\n" +
+					"0: Line No Cross\n" +
+					"-1: Line2 crosses Line 1 from Right to Left\n" +
+					"1: Line2 crosses Line 1 from Left to Right\n" +
+					"-2: Line2 Multicrosses Line1 from Right to Left\n" +
+					"2: Line2 Multicrosses Line1 from Left to Right\n" +
+					"-3: Line2 Multicrosses Line1 from Left to Left\n" +
+					"3: Line2 Multicrosses Line1 from Right to Right\n\n" +
+					"Function implements PostGIS behaviour where top vetex of segment touching the another line not " +
+					"counted as crossing but bottom vetex of segment touching the another line is counted as crossing",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
 	//
 	// Unimplemented.
 	//
 
-	"st_asgml":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
-	"st_aslatlontext":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
-	"st_assvg":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
-	"st_boundingdiagonal":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
-	"st_buildarea":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
-	"st_chaikinsmoothing":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
-	"st_cleangeometry":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
-	"st_clusterdbscan":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
-	"st_clusterintersecting":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
-	"st_clusterkmeans":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
-	"st_clusterwithin":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
-	"st_concavehull":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
-	"st_delaunaytriangles":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
-	"st_dump":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
-	"st_dumppoints":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
-	"st_dumprings":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_geometricmedian":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
-	"st_interpolatepoint":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
-	"st_isvaliddetail":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
-	"st_length2dspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
-	"st_lengthspheroid":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
-	"st_linecrossingdirection": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48969}),
-	"st_polygonize":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
-	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
-	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
-	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
-	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
-	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
-	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
-	"st_bdpolyfromtext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
-	"st_geomfromgml":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
-	"st_geomfromtwkb":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
-	"st_gmltosql":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
+	"st_asgml":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
+	"st_aslatlontext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
+	"st_assvg":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
+	"st_boundingdiagonal":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
+	"st_buildarea":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
+	"st_chaikinsmoothing":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),
+	"st_cleangeometry":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48895}),
+	"st_clusterdbscan":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48898}),
+	"st_clusterintersecting": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48899}),
+	"st_clusterkmeans":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48900}),
+	"st_clusterwithin":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48901}),
+	"st_concavehull":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48906}),
+	"st_delaunaytriangles":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48915}),
+	"st_dump":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
+	"st_dumppoints":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
+	"st_dumprings":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
+	"st_geometricmedian":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
+	"st_interpolatepoint":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
+	"st_isvaliddetail":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
+	"st_length2dspheroid":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
+	"st_lengthspheroid":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48968}),
+	"st_polygonize":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49011}),
+	"st_quantizecoordinates": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
+	"st_seteffectivearea":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
+	"st_simplifyvw":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
+	"st_split":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
+	"st_tileenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
+	"st_wrapx":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
+	"st_bdpolyfromtext":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48801}),
+	"st_geomfromgml":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
+	"st_geomfromtwkb":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
+	"st_gmltosql":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48810}),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
