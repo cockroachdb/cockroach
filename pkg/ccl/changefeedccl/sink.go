@@ -444,6 +444,7 @@ func makeKafkaSink(
 	config.ClientID = `CockroachDB`
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
+	config.Version = sarama.V1_0_0_0
 
 	if cfg.caCert != nil {
 		if !cfg.tlsEnabled {
