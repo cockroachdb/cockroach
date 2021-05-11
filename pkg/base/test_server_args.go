@@ -251,4 +251,8 @@ type TestTenantArgs struct {
 	// Test server starts with secure mode by default. When this is set to true
 	// it will switch to insecure
 	ForceInsecure bool
+
+	// ExternalIODirConfig is used to initialize the same-named
+	// field on the server.Config struct.
+	ExternalIODirConfig ExternalIODirConfig
 }
