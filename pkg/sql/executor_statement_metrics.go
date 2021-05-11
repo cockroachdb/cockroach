@@ -145,11 +145,28 @@ type EngineMetrics struct {
 	FullTableOrIndexScanCount *metric.Counter
 }
 
-// EngineMetrics implements the metric.Struct interface
+// EngineMetrics implements the metric.Struct interface.
 var _ metric.Struct = EngineMetrics{}
 
 // MetricStruct is part of the metric.Struct interface.
 func (EngineMetrics) MetricStruct() {}
+
+// StatsMetrics groups metrics related to SQL Stats collection.
+type StatsMetrics struct {
+	SQLStatsMemoryMaxBytesHist  *metric.Histogram
+	SQLStatsMemoryCurBytesCount *metric.Gauge
+
+	ReportedSQLStatsMemoryMaxBytesHist  *metric.Histogram
+	ReportedSQLStatsMemoryCurBytesCount *metric.Gauge
+
+	DiscardedStatsCount *metric.Counter
+}
+
+// StatsMetrics is part of the metric.Struct interface.
+var _ metric.Struct = StatsMetrics{}
+
+// MetricStruct is part of the metric.Struct interface.
+func (StatsMetrics) MetricStruct() {}
 
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
@@ -164,7 +181,7 @@ func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	automaticRetryCount int,
 	rowsAffected int,
-	err error,
+	stmtErr error,
 	stats topLevelQueryStats,
 ) {
 	phaseTimes := &ex.statsCollector.phaseTimes
@@ -204,14 +221,19 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 	}
 
-	stmtID := ex.statsCollector.recordStatement(
-		stmt, planner.instrumentation.PlanForStats(ctx),
+	stmtID, err := ex.statsCollector.recordStatement(
+		ctx, stmt, planner.instrumentation.PlanForStats(ctx),
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn),
 		flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
-		automaticRetryCount, rowsAffected, err,
+		automaticRetryCount, rowsAffected, stmtErr,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats, planner,
 	)
+
+	if err != nil {
+		log.Warningf(ctx, "failed to record statement: %s", err)
+		ex.metrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+	}
 
 	// Do some transaction level accounting for the transaction this statement is
 	// a part of.
