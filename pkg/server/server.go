@@ -1654,11 +1654,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
-	)
-
 	var graphiteOnce sync.Once
 	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
@@ -1867,6 +1862,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	log.Event(ctx, "server initialized")
 
+	// Begin recording time series data collected by the status monitor.
+	// This will perform the first write synchronously, which is now
+	// acceptable.
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+	)
+
 	return maybeImportTS(ctx, s)
 }
 
@@ -1897,6 +1899,9 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 	b := &kv.Batch{}
 	var n int
 	maybeFlush := func(force bool) error {
+		if n == 0 {
+			return nil
+		}
 		if n < 100 && !force {
 			return nil
 		}
