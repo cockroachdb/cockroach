@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cloud_io.go",
         "external_storage.go",
+        "impl_registry.go",
         "kms.go",
         "uris.go",
     ],
@@ -12,10 +13,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/sysutil",

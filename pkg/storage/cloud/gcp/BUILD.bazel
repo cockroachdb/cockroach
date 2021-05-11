@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gcp",
+    srcs = ["gcs_storage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/gcp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/server/telemetry",
+        "//pkg/settings/cluster",
+        "//pkg/storage/cloud",
+        "//pkg/util/contextutil",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
+        "@org_golang_google_api//option",
+        "@org_golang_x_oauth2//google",
+    ],
+)

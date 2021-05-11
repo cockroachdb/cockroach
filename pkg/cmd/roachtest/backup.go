@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	cloudstorage "github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -540,9 +541,9 @@ func registerBackup(r *testRegistry) {
 func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 	q := make(url.Values)
 	expect := map[string]string{
-		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
-		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
-		regionEnvVariable:       cloudimpl.KMSRegionParam,
+		"AWS_ACCESS_KEY_ID":     amazon.AWSAccessKeyParam,
+		"AWS_SECRET_ACCESS_KEY": amazon.AWSSecretParam,
+		regionEnvVariable:       amazon.KMSRegionParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -559,7 +560,7 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 	}
 
 	// Set AUTH to implicit
-	q.Add(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
+	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 
 	return correctURI, nil

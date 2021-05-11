@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -279,14 +279,14 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 func externalStorageFromURIFactory(
 	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
-	return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
+	return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
 		cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
 }
 
 func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {
 
 	if !strings.Contains(path, "://") {
-		path = cloudimpl.MakeLocalStorageURI(path)
+		path = nodelocal.MakeLocalStorageURI(path)
 	}
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
@@ -323,7 +323,7 @@ func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	if !strings.Contains(path, "://") {
-		path = cloudimpl.MakeLocalStorageURI(path)
+		path = nodelocal.MakeLocalStorageURI(path)
 	}
 	ctx := context.Background()
 	store, err := externalStorageFromURIFactory(ctx, path, security.RootUserName())
@@ -351,7 +351,7 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	if !strings.Contains(path, "://") {
-		path = cloudimpl.MakeLocalStorageURI(path)
+		path = nodelocal.MakeLocalStorageURI(path)
 	}
 
 	uri, err := url.Parse(path)
@@ -534,7 +534,7 @@ func makeIters(
 	for i, file := range files {
 		var err error
 		clusterSettings := cluster.MakeClusterSettings()
-		dirStorage[i], err = cloudimpl.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
+		dirStorage[i], err = cloud.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
 			clusterSettings, newBlobFactory, nil /*internal executor*/, nil /*kvDB*/)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "making external storage")

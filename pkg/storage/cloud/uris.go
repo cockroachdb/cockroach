@@ -14,6 +14,20 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+const (
+	// AuthParam is the query parameter for the cluster settings named
+	// key in a URI.
+	AuthParam = "AUTH"
+	// AuthParamImplicit is the query parameter for the implicit authentication
+	// mode in a URI.
+	AuthParamImplicit = roachpb.ExternalStorageAuthImplicit
+	// AuthParamSpecified is the query parameter for the specified authentication
+	// mode in a URI.
+	AuthParamSpecified = roachpb.ExternalStorageAuthSpecified
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-
@@ -48,4 +62,21 @@ func URINeedsGlobExpansion(uri string) bool {
 // ContainsGlob indicates if the string contains a glob-matching char.
 func ContainsGlob(str string) bool {
 	return strings.ContainsAny(str, "*?[")
+}
+
+// RedactKMSURI redacts the Master Key ID and the ExternalStorage secret
+// credentials.
+func RedactKMSURI(kmsURI string) (string, error) {
+	sanitizedKMSURI, err := SanitizeExternalStorageURI(kmsURI, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Redact the path which contains the KMS Master Key identifier.
+	uri, err := url.ParseRequestURI(sanitizedKMSURI)
+	if err != nil {
+		return "", err
+	}
+	uri.Path = "/redacted"
+	return uri.String(), nil
 }

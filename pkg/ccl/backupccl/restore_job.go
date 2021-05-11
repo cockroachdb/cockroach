@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -580,7 +579,7 @@ func makeBackupLocalityMap(
 		storesByLocalityKV := make(storeByLocalityKV)
 		if localityInfo.URIsByOriginalLocalityKV != nil {
 			for kv, uri := range localityInfo.URIsByOriginalLocalityKV {
-				conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
+				conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 				if err != nil {
 					return nil, errors.Wrap(err,
 						"creating locality external storage configuration")
@@ -1535,7 +1534,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}
