@@ -2290,17 +2290,13 @@ func NewTableDesc(
 
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
-	computedColValidator := schemaexpr.MakeComputedColumnValidator(
-		ctx,
-		&desc,
-		semaCtx,
-		&n.Table,
-	)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
 			if d.IsComputed() {
-				serializedExpr, err := computedColValidator.Validate(d)
+				serializedExpr, err := schemaexpr.ValidateComputedColumnExpression(
+					ctx, &desc, d, &n.Table, semaCtx,
+				)
 				if err != nil {
 					return nil, err
 				}
