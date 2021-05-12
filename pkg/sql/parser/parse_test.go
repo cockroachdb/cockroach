@@ -409,7 +409,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`, ``},
 		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
-		{`CREATE OPERATOR a`, 0, `create operator`, ``},
+		{`CREATE OPERATOR a`, 65017, ``, ``},
 		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
 		{`CREATE RULE a`, 0, `create rule`, ``},
 		{`CREATE SERVER a`, 0, `create server`, ``},
@@ -573,6 +573,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 
 		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+
+		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
 	}
 	for _, d := range testData {
 		t.Run(d.sql, func(t *testing.T) {

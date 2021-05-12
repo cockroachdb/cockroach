@@ -71,6 +71,49 @@ func unimplementedWithIssueDetail(sqllex sqlLexer, issue int, detail string) int
     return 1
 }
 
+func processBinaryQualOp(
+  sqllex sqlLexer,
+  op tree.Operator,
+  lhs tree.Expr,
+  rhs tree.Expr,
+) (tree.Expr, int) {
+    switch op := op.(type) {
+    case tree.BinaryOperator:
+      return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
+    case tree.ComparisonOperator:
+      return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
+    default:
+      sqllex.Error(fmt.Sprintf("unknown binary operator %s", op))
+      return nil, 1
+    }
+}
+
+func processUnaryQualOp(
+  sqllex sqlLexer,
+  op tree.Operator,
+  expr tree.Expr,
+) (tree.Expr, int) {
+  switch op := op.(type) {
+  case tree.UnaryOperator:
+    return &tree.UnaryExpr{Operator: op, Expr: expr}, 0
+  case tree.BinaryOperator:
+    // We have some binary operators which have the same symbol as the unary
+    // operator, so adjust accordingly.
+    switch op {
+    case tree.Plus:
+      return expr, 0
+    case tree.Minus:
+      return unaryNegation(expr), 0
+    }
+  case tree.ComparisonOperator:
+    switch op {
+    case tree.RegMatch:
+      return &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: expr}, 0
+    }
+  }
+  sqllex.Error(fmt.Sprintf("unknown unary operator %s", op))
+  return nil, 1
+}
 
 %}
 
@@ -1011,7 +1054,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <*tree.TableIndexName> table_index_name
 %type <tree.TableIndexNames> table_index_name_list
 
-%type <tree.Operator> math_op
+%type <tree.Operator> all_op qual_op operator_op
 
 %type <tree.IsolationLevel> iso_level
 %type <tree.UserPriority> user_priority
@@ -1278,6 +1321,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %left      '#'
 %left      '&'
 %left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS AND_AND SQRT CBRT
+%left      OPERATOR // if changing the last token before OPERATOR, change all instances of %prec <last token>
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
@@ -3237,7 +3281,7 @@ create_unsupported:
 | CREATE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE OR REPLACE FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "create function") }
 | CREATE opt_or_replace opt_trusted opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "create language " + $6) }
-| CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
+| CREATE OPERATOR error { return unimplementedWithIssue(sqllex, 65017) }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
@@ -8891,9 +8935,6 @@ opt_nulls_order:
     $$.val = tree.DefaultNullsOrder
   }
 
-// TODO(pmattis): Support ordering using arbitrary math ops?
-// | a_expr USING math_op {}
-
 select_limit:
   limit_clause offset_clause
   {
@@ -10246,7 +10287,7 @@ a_expr:
   // operators will have the same precedence.
   //
   // If you add more explicitly-known operators, be sure to add them also to
-  // b_expr and to the math_op list below.
+  // b_expr and to the all_op list below.
 | '+' a_expr %prec UMINUS
   {
     // Unary plus is a no-op. Desugar immediately.
@@ -10395,6 +10436,24 @@ a_expr:
 | a_expr NOT_EQUALS a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NE, Left: $1.expr(), Right: $3.expr()}
+  }
+| qual_op a_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processUnaryQualOp(sqllex, $1.op(), $2.expr())
+    if retCode != 0 {
+      return retCode
+    }
+  }
+| a_expr qual_op a_expr %prec CBRT
+  {
+    {
+      var retCode int
+      $$.val, retCode = processBinaryQualOp(sqllex, $2.op(), $1.expr(), $3.expr())
+      if retCode != 0 {
+        return retCode
+      }
+    }
   }
 | a_expr AND a_expr
   {
@@ -10694,6 +10753,24 @@ b_expr:
 | b_expr NOT_EQUALS b_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.NE, Left: $1.expr(), Right: $3.expr()}
+  }
+| qual_op b_expr %prec CBRT
+  {
+    var retCode int
+    $$.val, retCode = processUnaryQualOp(sqllex, $1.op(), $2.expr())
+    if retCode != 0 {
+      return retCode
+    }
+  }
+| b_expr qual_op b_expr %prec CBRT
+  {
+    {
+      var retCode int
+      $$.val, retCode = processBinaryQualOp(sqllex, $2.op(), $1.expr(), $3.expr())
+      if retCode != 0 {
+        return retCode
+      }
+    }
   }
 | b_expr IS DISTINCT FROM b_expr %prec IS
   {
@@ -11461,26 +11538,81 @@ sub_type:
     $$.val = tree.All
   }
 
-math_op:
+// We combine mathOp and Op from PostgreSQL's gram.y there.
+// In PostgreSQL, mathOp have an order of operations as defined by the
+// assoc rules.
+//
+// In CockroachDB, we have defined further operations that have a defined
+// order of operations (e.g. <@, |, &, ~, #, FLOORDIV) which is broken
+// if we split them up to math_ops and ops, which breaks compatibility
+// with PostgreSQL's qual_op.
+//
+// Ensure you also update process.*QualOp above when adding to this.
+all_op:
+  // exactly from MathOp
   '+' { $$.val = tree.Plus  }
 | '-' { $$.val = tree.Minus }
 | '*' { $$.val = tree.Mult  }
 | '/' { $$.val = tree.Div   }
-| FLOORDIV { $$.val = tree.FloorDiv }
 | '%' { $$.val = tree.Mod    }
-| '&' { $$.val = tree.Bitand }
-| '|' { $$.val = tree.Bitor  }
 | '^' { $$.val = tree.Pow }
-| '#' { $$.val = tree.Bitxor }
 | '<' { $$.val = tree.LT }
 | '>' { $$.val = tree.GT }
 | '=' { $$.val = tree.EQ }
 | LESS_EQUALS    { $$.val = tree.LE }
 | GREATER_EQUALS { $$.val = tree.GE }
 | NOT_EQUALS     { $$.val = tree.NE }
+  // partial set of operators from from Op
+| '?' { $$.val = tree.JSONExists }
+| '&' { $$.val = tree.Bitand }
+| '|' { $$.val = tree.Bitor  }
+| '#' { $$.val = tree.Bitxor }
+| FLOORDIV { $$.val = tree.FloorDiv }
+| CONTAINS { $$.val = tree.Contains }
+| CONTAINED_BY { $$.val = tree.ContainedBy }
+| LSHIFT { $$.val = tree.LShift }
+| RSHIFT { $$.val = tree.RShift }
+| CONCAT { $$.val = tree.Concat }
+| FETCHVAL { $$.val = tree.JSONFetchVal }
+| FETCHTEXT { $$.val = tree.JSONFetchText }
+| FETCHVAL_PATH { $$.val = tree.JSONFetchValPath }
+| FETCHTEXT_PATH { $$.val = tree.JSONFetchTextPath }
+| JSON_SOME_EXISTS { $$.val = tree.JSONSomeExists }
+| JSON_ALL_EXISTS { $$.val = tree.JSONAllExists }
+| NOT_REGMATCH { $$.val = tree.NotRegMatch }
+| REGIMATCH { $$.val = tree.RegIMatch }
+| NOT_REGIMATCH { $$.val = tree.NotRegIMatch }
+| AND_AND { $$.val = tree.Overlaps }
+| '~' { $$.val = tree.UnaryComplement }
+| SQRT { $$.val = tree.UnarySqrt }
+| CBRT { $$.val = tree.UnaryCbrt }
+
+operator_op:
+  all_op
+| name '.' all_op
+  {
+    // Only support operators on pg_catalog.
+    if $1 != "pg_catalog" {
+      return unimplementedWithIssue(sqllex, 65017)
+    }
+    $$ = $3
+  }
+
+// qual_op partially matches qualOp PostgreSQL's gram.y.
+// In an ideal circumstance, we also include non math_ops in this
+// definition. However, this would break cross compatibility as we
+// need %prec (keyword before OPERATOR) in a_expr/b_expr, which
+// breaks order of operations for older versions of CockroachDB.
+// See #64699 for the attempt.
+qual_op:
+  OPERATOR '(' operator_op ')'
+  {
+    $$ = $3
+  }
 
 subquery_op:
-  math_op
+  all_op
+| qual_op
 | LIKE         { $$.val = tree.Like     }
 | NOT_LA LIKE  { $$.val = tree.NotLike  }
 | ILIKE        { $$.val = tree.ILike    }
