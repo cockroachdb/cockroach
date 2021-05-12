@@ -60,11 +60,13 @@ When we have confirmed that both DB Console can be built successfully and the Cl
 
 As a final step, the `cluster-ui` code in `cockroachdb/ui` (`/packages/cluster-ui`) should be deprecated, the `package.json` set to private, and the Github Action for publishing removed. We should keep the code around for reference or back up until we are confident it is no longer needed.
 
-# Next Step and recommendations for team
+# Next Steps and recommendations for teams
+
+With the Cluster UI package being located in the CockroachDB repository, this will naturally be the place to create features that need to be shared between DB Console and CockroachCloud Console. Which features these are specifically will be left to the discretion of teams owning and maintaining these features. Large components (such as "pages") are a good candidate for such features as there will be an established pattern to follow in integrating them into both applications. For more granular UI components (buttons, dropdowns, notifications, etc) we would recommend using the UI Components package (`cockroachdb/ui/packages/ui-components`) instead. For common non user interface utilities utilized by components in both applications, the `cluster-ui` package remains a good candidate. Again, this falls to the discretion of each engineer and team, but it is our hope that UI consistency can be increased by abstracting common UI components out of an application context and consolidating them into the UI components package.
 
 ## Cluster UI
 
-The Cluster UI team has the most familiarity with the current architecture. To assist in the transition of ownership of these components (to the SQL Observability team) we can commit to doing the bulk of the work mentioned in the above section. Cluster UI would take on moving the code and git commit history into the CRDB repository, updating the build systems, tools, and dependencies required, and configuring npm publishing to allow the SQL <abbr title="observability">o11y</abbr> team to manually publish the package. We could also commit to updating the dependency versions in CockroachCloud console and confirming no unexpected breakage.
+The Cluster UI team has the most familiarity with the current architecture. To assist in the transition of ownership of these components (to the SQL Observability team) we can commit to doing the bulk of the work mentioned in the above section. Cluster UI would take on moving the code and git commit history into the CRDB repository, updating the build systems, tools, and dependencies required, and configuring npm publishing to allow the SQL <abbr title="Observability">O11y</abbr> team to manually publish the package. We could also commit to updating the dependency versions in CockroachCloud console and confirming no unexpected breakage.
 
 ## SQL Observability
 
