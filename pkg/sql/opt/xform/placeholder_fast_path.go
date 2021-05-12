@@ -149,8 +149,9 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 			}
 		}
 
-		idxColCount := index.ColumnCount()
-		if idxColCount < numConstrained {
+		// Verify that the constraint columns are (in some permutation) a prefix of
+		// the indexed columns.
+		if index.LaxKeyColumnCount() < numConstrained {
 			continue
 		}
 
@@ -166,7 +167,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 
 		// Check if the index is covering.
 		indexCols := prefixCols.Copy()
-		for i := numConstrained; i < idxColCount; i++ {
+		for i, n := numConstrained, index.ColumnCount(); i < n; i++ {
 			ord := index.Column(i).Ordinal()
 			indexCols.Add(tabMeta.MetaID.ColumnID(ord))
 		}
