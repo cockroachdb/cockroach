@@ -329,6 +329,8 @@ func WriteDescriptors(
 						desc.GetID(), desc)
 				}
 			}
+			privilegeDesc := desc.GetPrivileges()
+			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			wroteDBs[desc.GetID()] = desc
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
@@ -380,6 +382,8 @@ func WriteDescriptors(
 						table.GetID(), table)
 				}
 			}
+			privilegeDesc := table.GetPrivileges()
+			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			// If the table descriptor is being written to a multi-region database and
 			// the table does not have a locality config setup, set one up here. The
 			// table's locality config will be set to the default locality - REGIONAL
