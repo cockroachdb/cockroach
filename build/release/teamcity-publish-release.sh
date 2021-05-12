@@ -4,7 +4,6 @@ set -euxo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
-
 tc_start_block "Variable Setup"
 export BUILDER_HIDE_GOPATH_SRC=1
 
