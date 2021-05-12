@@ -249,7 +249,7 @@ func readInputFiles(
 						return err
 					}
 					defer rejectedStorage.Close()
-					if err := rejectedStorage.WriteFile(ctx, "", bytes.NewReader(buf)); err != nil {
+					if err := cloud.WriteFile(ctx, "", bytes.NewReader(buf), rejectedStorage); err != nil {
 						return err
 					}
 					return nil

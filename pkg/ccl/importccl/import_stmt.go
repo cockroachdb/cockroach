@@ -1693,7 +1693,7 @@ func (u *unsupportedStmtLogger) flush() error {
 	} else {
 		logFileName = path.Join(logFileName, pgDumpUnsupportedSchemaStmtLog, fmt.Sprintf("%d.log", u.flushCount))
 	}
-	err = s.WriteFile(u.ctx, logFileName, bytes.NewReader(u.logBuffer.Bytes()))
+	err = cloud.WriteFile(u.ctx, logFileName, bytes.NewReader(u.logBuffer.Bytes()), s)
 	if err != nil {
 		return errors.Wrap(err, "failed to log unsupported stmts to log during IMPORT PGDUMP")
 	}

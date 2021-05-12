@@ -63,7 +63,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, uri, security.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, storage.WriteFile(ctx, backupManifestName, emptyReader))
+		require.NoError(t, cloud.WriteFile(ctx, backupManifestName, emptyReader, storage))
 	}
 
 	// writeLatest writes latestBackupSuffix to the LATEST file in the given
@@ -72,7 +72,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 		storage, err := externalStorageFromURI(ctx, collectionURI, security.RootUserName())
 		defer storage.Close()
 		require.NoError(t, err)
-		require.NoError(t, storage.WriteFile(ctx, latestFileName, bytes.NewReader([]byte(latestBackupSuffix))))
+		require.NoError(t, cloud.WriteFile(ctx, latestFileName, bytes.NewReader([]byte(latestBackupSuffix)), storage))
 	}
 
 	// localizeURI returns a slice of just the base URI if localities is nil.
