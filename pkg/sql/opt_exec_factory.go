@@ -295,10 +295,33 @@ func (ef *execFactory) ConstructSerializingProject(
 			for i := range inputCols {
 				inputCols[i].Name = colNames[i]
 			}
+			// TODO(yuzefovich): if n is not a renderNode, we won't serialize
+			// it, but this is breaking the contract of
+			// ConstructSerializingProject. We should clean this up, but in the
+			// mean time it seems acceptable given that the method is called
+			// only for the root node.
+			if r, ok := n.(*renderNode); ok {
+				r.serialize = true
+			}
 			return n, nil
 		}
 	}
-	return constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+	res, err := constructSimpleProjectForPlanNode(node, cols, colNames, nil /* reqOrdering */)
+	if err != nil {
+		return nil, err
+	}
+	switch r := res.(type) {
+	case *renderNode:
+		r.serialize = true
+	case *spoolNode:
+		// If we pulled up a spoolNode, we don't need to materialize the
+		// ordering (because all mutations are currently not distributed).
+		// TODO(yuzefovich): evaluate whether we still need to push renderings
+		// through the spoolNode.
+	default:
+		return nil, errors.AssertionFailedf("unexpected planNode type %T in ConstructSerializingProject", res)
+	}
+	return res, nil
 }
 
 // ConstructRender is part of the exec.Factory interface.

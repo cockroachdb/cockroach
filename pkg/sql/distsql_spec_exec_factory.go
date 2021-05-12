@@ -356,12 +356,15 @@ func (e *distSQLSpecExecFactory) ConstructSimpleProject(
 	for i := range cols {
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
-	physPlan.AddProjection(projection)
+	newColMap := identityMap(physPlan.PlanToStreamColMap, len(cols))
+	physPlan.AddProjection(
+		projection,
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
+	)
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(
 		cols, nil /* colNames */, physPlan.GetResultTypes(), physPlan.ResultColumns,
 	)
-	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	physPlan.PlanToStreamColMap = newColMap
 	return plan, nil
 }
 
@@ -374,7 +377,7 @@ func (e *distSQLSpecExecFactory) ConstructSerializingProject(
 	for i := range cols {
 		projection[i] = uint32(cols[physPlan.PlanToStreamColMap[i]])
 	}
-	physPlan.AddProjection(projection)
+	physPlan.AddProjection(projection, execinfrapb.Ordering{})
 	physPlan.ResultColumns = getResultColumnsForSimpleProject(cols, colNames, physPlan.GetResultTypes(), physPlan.ResultColumns)
 	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(cols))
 	return plan, nil
@@ -388,14 +391,16 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	recommendation := e.checkExprsAndMaybeMergeLastStage(exprs, physPlan)
+
+	newColMap := identityMap(physPlan.PlanToStreamColMap, len(exprs))
 	if err := physPlan.AddRendering(
 		exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
 	); err != nil {
 		return nil, err
 	}
 	physPlan.ResultColumns = columns
-	physPlan.PlanToStreamColMap = identityMap(physPlan.PlanToStreamColMap, len(exprs))
-	physPlan.SetMergeOrdering(e.dsp.convertOrdering(ReqOrdering(reqOrdering), physPlan.PlanToStreamColMap))
+	physPlan.PlanToStreamColMap = newColMap
 	return plan, nil
 }
 
