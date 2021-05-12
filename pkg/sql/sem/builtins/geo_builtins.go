@@ -4297,6 +4297,8 @@ The paths themselves are given in the direction of the first geometry.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
+				// TODO(#spatial): post v21.1, use the geomfn.Simplify we have implemented internally.
+				// GEOS currently preserves collapsed for linestrings and not for polygons.
 				ret, err := geomfn.SimplifyGEOS(g.Geometry, tolerance)
 				if err != nil {
 					return nil, err
@@ -4317,7 +4319,17 @@ The paths themselves are given in the direction of the first geometry.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, unimplemented.NewWithIssueDetail(49037, "st_simplify", "this version of st_simplify is not yet implemented")
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+				preserveCollapsed := bool(tree.MustBeDBool(args[2]))
+				ret, collapsed, err := geomfn.Simplify(g.Geometry, tolerance, preserveCollapsed)
+				if err != nil {
+					return nil, err
+				}
+				if collapsed {
+					return tree.DNull, nil
+				}
+				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
 				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.`,
