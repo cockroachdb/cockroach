@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/sha512"
 	"fmt"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -298,4 +299,43 @@ func getMatchingStore(
 		}
 	}
 	return "", roachpb.ExternalStorage{}, false
+}
+
+type bufWriter struct {
+	buf       bytes.Buffer
+	sink      io.WriteCloser
+	sinkAfter int
+	makeSink  func() (io.WriteCloser, error)
+}
+
+func (b *bufWriter) Write(p []byte) (int, error) {
+	// If we started writing to the sink, just keep writing to it.
+	if b.sink != nil {
+		return b.sink.Write(p)
+	}
+	// Write to the buffer.
+	n, err := b.buf.Write(p)
+	if err != nil {
+		return n, err
+	}
+	// If the buffer has exceeded the threshold, open the sink and flush it.
+	if b.buf.Len() > b.sinkAfter {
+		sink, err := b.makeSink()
+		if err != nil {
+			return n, err
+		}
+		if _, err := b.buf.WriteTo(sink); err != nil {
+			return n, err
+		}
+		b.sink = sink          // set sink for all future writes.
+		b.buf = bytes.Buffer{} // release buffer to GC
+	}
+	return n, nil
+}
+
+func (b *bufWriter) Close() error {
+	if b.sink != nil {
+		return b.sink.Close()
+	}
+	return nil
 }

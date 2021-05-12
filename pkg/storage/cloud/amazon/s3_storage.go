@@ -244,7 +244,7 @@ func s3ErrDelay(err error) time.Duration {
 	return 0
 }
 
-func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
+func (s *s3Storage) newSession(ctx context.Context) (*session.Session, error) {
 	sess, err := session.NewSessionWithOptions(s.opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
@@ -259,6 +259,14 @@ func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
 		}
 	}
 	sess.Config.Region = aws.String(s.conf.Region)
+	return sess, err
+}
+
+func (s *s3Storage) newS3Client(ctx context.Context) (*s3.S3, error) {
+	sess, err := s.newSession(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return s3.New(sess), nil
 }
 
@@ -277,39 +285,24 @@ func (s *s3Storage) Settings() *cluster.Settings {
 	return s.settings
 }
 
-func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	client, err := s.newS3Client(ctx)
+func (s *s3Storage) Writer(ctx context.Context, basename string) (cloud.WriteCloserWithError, error) {
+	sess, err := s.newSession(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = contextutil.RunWithTimeout(ctx, "put s3 object",
-		cloud.Timeout.Get(&s.settings.SV),
-		func(ctx context.Context) error {
-			putObjectInput := s3.PutObjectInput{
-				Bucket: s.bucket,
-				Key:    aws.String(path.Join(s.prefix, basename)),
-				Body:   content,
-			}
+	uploader := s3manager.NewUploader(sess)
 
-			// If a server side encryption mode is provided in the URI, we must set
-			// the header values to enable SSE before writing the file to the s3
-			// bucket.
-			if s.conf.ServerEncMode != "" {
-				switch s.conf.ServerEncMode {
-				case string(aes256Enc):
-					putObjectInput.SetServerSideEncryption(s.conf.ServerEncMode)
-				case string(kmsEnc):
-					putObjectInput.SetServerSideEncryption(s.conf.ServerEncMode)
-					putObjectInput.SetSSEKMSKeyId(s.conf.ServerKMSID)
-				default:
-					return errors.Newf("unsupported server encryption mode %s. "+
-						"Supported values are `aws:kms` and `AES256`.", s.conf.ServerEncMode)
-				}
-			}
-			_, err := client.PutObjectWithContext(ctx, &putObjectInput)
-			return err
+	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		// Upload the file to S3.
+		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
+			Bucket:               s.bucket,
+			Key:                  aws.String(path.Join(s.prefix, basename)),
+			Body:                 r,
+			ServerSideEncryption: nilIfEmpty(s.conf.ServerEncMode),
+			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
 		})
-	return errors.Wrap(err, "failed to put s3 object")
+		return errors.Wrap(err, "upload failed")
+	}), nil
 }
 
 func (s *s3Storage) openStreamAt(
@@ -479,6 +472,13 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 
 func (s *s3Storage) Close() error {
 	return nil
+}
+
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return aws.String(s)
 }
 
 func init() {
