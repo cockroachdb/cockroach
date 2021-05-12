@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "bulkccl",
+    srcs = ["request_deadline_processor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/bulkccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/kv/bulk",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

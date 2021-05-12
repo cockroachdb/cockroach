@@ -42,6 +42,7 @@
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
 /pkg/cli/userfile.go         @cockroachdb/bulk-prs
+/pkg/ccl/bulkccl/            @cockroachdb/bulk-prs
 # last-rule-wins so *after* CDC takes most of streamingccl we take ingest pkg.
 /pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
 

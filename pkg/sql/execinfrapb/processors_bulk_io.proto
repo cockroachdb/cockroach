@@ -143,6 +143,9 @@ message ReadImportDataSpec {
   // NEXTID: 16
 }
 
+message RequestDeadlineSpec{
+}
+
 message StreamIngestionDataSpec {
   // PartitionAddresses locate the partitions that produce events to be
   // ingested. We don't set the casttype to avoid depending on ccl packages.

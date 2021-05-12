@@ -37,7 +37,9 @@ var (
 		"size below which a 'bulk' write will be performed as a normal write instead",
 		400*1<<10, // 400 Kib
 	)
-	addSSTableRequestDeadlineWindow = 10 * time.Second
+	// AddSSTableRequestDeadlineWindow is the deadline window applied to
+	// an AddSSTableRequest.
+	AddSSTableRequestDeadlineWindow = 10 * time.Second
 )
 
 type sz int64
@@ -383,7 +385,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	// then set one now.
 	deadline := b.requestDeadline.GetDeadline()
 	if deadline.IsEmpty() {
-		deadline = hlc.Timestamp{WallTime: timeutil.Now().Add(addSSTableRequestDeadlineWindow).UnixNano()}
+		deadline = hlc.Timestamp{WallTime: timeutil.Now().Add(AddSSTableRequestDeadlineWindow).UnixNano()}
 	}
 
 	beforeSend := timeutil.Now()
