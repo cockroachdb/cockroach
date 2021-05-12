@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -252,8 +253,58 @@ func CheckHTTPContentRangeHeader(h string, pos int64) (int64, error) {
 	return size, nil
 }
 
+// BackgroundPipe is a helper for providing a Writer that is backed by a pipe
+// that has a background process reading from it. It *must* be Closed().
+func BackgroundPipe(
+	ctx context.Context, fn func(ctx context.Context, pr io.Reader) error,
+) WriteCloserWithError {
+	pr, pw := io.Pipe()
+	w := &backroundPipe{w: pw, grp: ctxgroup.WithContext(ctx)}
+	w.grp.GoCtx(func(ctc context.Context) error {
+		err := fn(ctx, pr)
+		if err != nil {
+			pr.CloseWithError(err)
+		} else {
+			err = pr.Close()
+		}
+		return err
+	})
+	return w
+}
+
+type backroundPipe struct {
+	w   *io.PipeWriter
+	grp ctxgroup.Group
+}
+
+// Write writes to the writer.
+func (s *backroundPipe) Write(p []byte) (int, error) {
+	return s.w.Write(p)
+}
+
+// Close closes the writer, finishing the write operation.
+func (s *backroundPipe) Close() error {
+	err := s.w.Close()
+	return errors.CombineErrors(err, s.grp.Wait())
+}
+
+// CloseWithError closes the Writer with an error, which may discard prior
+// writes and abort the overall write operation.
+func (s *backroundPipe) CloseWithError(err error) error {
+	e := s.w.CloseWithError(err)
+	return errors.CombineErrors(e, s.grp.Wait())
+}
+
 // WriteFile is a helper for writing the content of a Reader to the given path
 // of an ExternalStorage.
 func WriteFile(ctx context.Context, basename string, src io.Reader, dest ExternalStorage) error {
-	return dest.WriteFile(ctx, basename, src)
+	w, err := dest.Writer(ctx, basename)
+	if err != nil {
+		return errors.Wrap(err, "opening object for writing")
+	}
+	if _, err := io.Copy(w, src); err != nil {
+		_ = w.CloseWithError(err)
+		return err
+	}
+	return errors.Wrap(w.Close(), "closing object")
 }
