@@ -184,7 +184,7 @@ func testExportStoreWithExternalIOConfig(
 		for i := 0; i < 10; i++ {
 			name := fmt.Sprintf("%s-%d", sampleName, i)
 			payload := []byte(strings.Repeat(sampleBytes, i))
-			if err := s.WriteFile(ctx, name, bytes.NewReader(payload)); err != nil {
+			if err := cloud.WriteFile(ctx, name, bytes.NewReader(payload), s); err != nil {
 				t.Fatal(err)
 			}
 
@@ -269,7 +269,7 @@ func testExportStoreWithExternalIOConfig(
 	}
 	t.Run("read-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "A"
-		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
+		if err := cloud.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa")), s); err != nil {
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
@@ -297,7 +297,7 @@ func testExportStoreWithExternalIOConfig(
 			user, ie, kvDB)
 		defer singleFile.Close()
 
-		if err := singleFile.WriteFile(ctx, "", bytes.NewReader([]byte("bbb"))); err != nil {
+		if err := cloud.WriteFile(ctx, "", bytes.NewReader([]byte("bbb")), singleFile); err != nil {
 			t.Fatal(err)
 		}
 
@@ -322,7 +322,7 @@ func testExportStoreWithExternalIOConfig(
 	// (based on the storage system) could not be found.
 	t.Run("file-does-not-exist", func(t *testing.T) {
 		const testingFilename = "A"
-		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
+		if err := cloud.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa")), s); err != nil {
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
@@ -371,7 +371,7 @@ func testListFiles(
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for _, fileName := range fileNames {
 		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
-		if err := file.WriteFile(ctx, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
+		if err := cloud.WriteFile(ctx, fileName, bytes.NewReader([]byte("bbb")), file); err != nil {
 			t.Fatal(err)
 		}
 		_ = file.Close()
@@ -582,7 +582,7 @@ func uploadData(
 		nil, nil, nil)
 	require.NoError(t, err)
 	defer s.Close()
-	require.NoError(t, s.WriteFile(ctx, basename, bytes.NewReader(data)))
+	require.NoError(t, cloud.WriteFile(ctx, basename, bytes.NewReader(data), s))
 	return data, func() {
 		_ = s.Delete(ctx, basename)
 	}
@@ -703,7 +703,7 @@ func TestFileExistence(t *testing.T) {
 
 		// Create a file that exists and assert that we don't get the error.
 		filename := "exists"
-		require.NoError(t, es.WriteFile(ctx, filename, bytes.NewReader([]byte("data"))))
+		require.NoError(t, cloud.WriteFile(ctx, filename, bytes.NewReader([]byte("data")), es))
 
 		_, err = es.ReadFile(ctx, filename)
 		require.NoError(t, err)

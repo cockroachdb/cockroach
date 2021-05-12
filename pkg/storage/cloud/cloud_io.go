@@ -251,3 +251,9 @@ func CheckHTTPContentRangeHeader(h string, pos int64) (int64, error) {
 
 	return size, nil
 }
+
+// WriteFile is a helper for writing the content of a Reader to the given path
+// of an ExternalStorage.
+func WriteFile(ctx context.Context, basename string, src io.Reader, dest ExternalStorage) error {
+	return dest.WriteFile(ctx, basename, src)
+}

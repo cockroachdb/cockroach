@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -136,7 +137,7 @@ func newFileUploadMachine(
 
 	f.wg.Add(1)
 	go func() {
-		err := store.WriteFile(ctx, "", &noopReadSeeker{pr})
+		err := cloud.WriteFile(ctx, "", &noopReadSeeker{pr}, store)
 		if err != nil {
 			_ = pr.CloseWithError(err)
 		}

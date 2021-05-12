@@ -71,7 +71,7 @@ func TestPutUserFileTable(t *testing.T) {
 		require.NoError(t, err)
 		defer store.Close()
 
-		err = store.WriteFile(ctx, testfile, bytes.NewReader([]byte{0}))
+		err = cloud.WriteFile(ctx, testfile, bytes.NewReader([]byte{0}), store)
 		require.True(t, testutils.IsError(err, "does not permit such constructs"))
 	})
 }
@@ -116,7 +116,7 @@ func TestUserScoping(t *testing.T) {
 	fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB)
 	require.NoError(t, err)
-	require.NoError(t, fileTableSystem1.WriteFile(ctx, filename, bytes.NewReader([]byte("aaa"))))
+	require.NoError(t, cloud.WriteFile(ctx, filename, bytes.NewReader([]byte("aaa")), fileTableSystem1))
 
 	// Attempt to read/write file as user2 and expect to fail.
 	fileTableSystem2, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
@@ -124,7 +124,7 @@ func TestUserScoping(t *testing.T) {
 	require.NoError(t, err)
 	_, err = fileTableSystem2.ReadFile(ctx, filename)
 	require.Error(t, err)
-	require.Error(t, fileTableSystem2.WriteFile(ctx, filename, bytes.NewReader([]byte("aaa"))))
+	require.Error(t, cloud.WriteFile(ctx, filename, bytes.NewReader([]byte("aaa")), fileTableSystem2))
 
 	// Read file as root and expect to succeed.
 	fileTableSystem3, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},

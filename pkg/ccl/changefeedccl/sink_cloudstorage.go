@@ -452,7 +452,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	if log.V(1) {
 		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
-	return s.es.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload))
+	return cloud.WriteFile(ctx, filepath.Join(part, filename), bytes.NewReader(payload), s.es)
 }
 
 // flushTopicVersions flushes all open files for the provided topic up to and
@@ -553,7 +553,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 			"precedes a file emitted before: %s", filename, s.prevFilename)
 	}
 	s.prevFilename = filename
-	if err := s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
+	if err := cloud.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes()), s.es); err != nil {
 		return err
 	}
 	return nil

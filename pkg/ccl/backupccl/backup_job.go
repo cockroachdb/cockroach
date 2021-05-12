@@ -524,7 +524,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		defer c.Close()
-		if err := c.WriteFile(ctx, latestFileName, strings.NewReader(suffix)); err != nil {
+		if err := cloud.WriteFile(ctx, latestFileName, strings.NewReader(suffix), c); err != nil {
 			return err
 		}
 	}
