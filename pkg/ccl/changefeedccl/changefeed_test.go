@@ -215,15 +215,10 @@ func TestChangefeedTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
-
-	kvServer, kvSQLdb, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODirConfig: base.ExternalIODirConfig{
-			DisableOutbound: true,
-		},
+	kvServer, kvSQLdb, cleanup := startTestServer(t, func(args *base.TestServerArgs) {
+		args.ExternalIODirConfig.DisableOutbound = true
 	})
-	defer kvServer.Stopper().Stop(ctx)
+	defer cleanup()
 
 	tenantArgs := base.TestTenantArgs{
 		// crdb_internal.create_tenant called by StartTenant
@@ -234,27 +229,16 @@ func TestChangefeedTenants(t *testing.T) {
 		ExternalIODirConfig: base.ExternalIODirConfig{
 			DisableOutbound: true,
 		},
+		UseDatabase: `d`,
 	}
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
-	// TODO(ssd): Cleanup this shared setup code once the refactor
-	// in #64693 is setttled.
-	tenantSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tenantSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	tenantSQL.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	tenantSQL.Exec(t, serverSetupStatements)
 
-	// Database `d` is hardcoded in a number of places. Create it
-	// and create a new connection to that database.
-	tenantSQL.Exec(t, `CREATE DATABASE d`)
-	tenantSQL = sqlutils.MakeSQLRunner(
-		serverutils.OpenDBConn(t,
-			tenantServer.SQLAddr(), `d`, false /* insecure */, kvServer.Stopper()))
 	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
-
 	t.Run("changefeed on non-tenant table fails", func(t *testing.T) {
 		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
-		kvSQL.Exec(t, `CREATE DATABASE d`)
 		kvSQL.Exec(t, `CREATE TABLE d.foo (pk INT PRIMARY KEY)`)
 
 		tenantSQL.ExpectErr(t, `table "foo" does not exist`,
