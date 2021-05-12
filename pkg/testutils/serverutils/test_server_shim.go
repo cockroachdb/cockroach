@@ -351,7 +351,7 @@ func StartTenant(
 	}
 
 	goDB := OpenDBConn(
-		t, tenant.SQLAddr(), "", false /* insecure */, stopper)
+		t, tenant.SQLAddr(), params.UseDatabase, false /* insecure */, stopper)
 	return tenant, goDB
 }
 

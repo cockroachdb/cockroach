@@ -234,24 +234,14 @@ func TestChangefeedTenants(t *testing.T) {
 		ExternalIODirConfig: base.ExternalIODirConfig{
 			DisableOutbound: true,
 		},
+		UseDatabase: `d`,
 	}
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
-	// TODO(ssd): Cleanup this shared setup code once the refactor
-	// in #64693 is setttled.
-	tenantSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tenantSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	tenantSQL.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	sinklessApplyDefaultSettings(t, tenantSQL)
 
-	// Database `d` is hardcoded in a number of places. Create it
-	// and create a new connection to that database.
-	tenantSQL.Exec(t, `CREATE DATABASE d`)
-	tenantSQL = sqlutils.MakeSQLRunner(
-		serverutils.OpenDBConn(t,
-			tenantServer.SQLAddr(), `d`, false /* insecure */, kvServer.Stopper()))
 	tenantSQL.Exec(t, `CREATE TABLE foo_in_tenant (pk INT PRIMARY KEY)`)
-
 	t.Run("changefeed on non-tenant table fails", func(t *testing.T) {
 		kvSQL := sqlutils.MakeSQLRunner(kvSQLdb)
 		kvSQL.Exec(t, `CREATE DATABASE d`)
