@@ -1265,6 +1265,19 @@ Square (left)                             POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
 Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
+query TTT
+SELECT
+  ST_AsEWKT(ST_Simplify(g, 10)),
+  ST_AsEWKT(ST_Simplify(g, 10, false)),
+  ST_AsEWKT(ST_Simplify(g, 10, true))
+FROM ( VALUES
+  ('POLYGON((-1 -1, -1 1, 1 1, 1 -1, -1 -1), (0 0, 100 0, 100 100, 0 100, 0 0))'::geometry),
+  ('LINESTRING(-1 -1, -1 1, 1 1, 1 -1, -1 -1)'::geometry)
+) t(g)
+----
+POLYGON EMPTY              NULL  POLYGON ((-1 -1, -1 1, 1 1, -1 -1), (0 0, 100 0, 100 100, 0 100, 0 0))
+LINESTRING (-1 -1, -1 -1)  NULL  LINESTRING (-1 -1, -1 -1)
+
 query TT
 SELECT
   a.dsc,
