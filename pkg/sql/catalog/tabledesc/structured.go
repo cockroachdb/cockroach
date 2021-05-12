@@ -80,6 +80,11 @@ type PostDeserializationTableDescriptorChanges struct {
 	// removed.
 	FixedPrivileges bool
 
+	// PopulatedPrimaryIndexStoredColumns indicates that the stored column IDs and
+	// names fields were filled in in the primary index. Previously they were
+	// implicit.
+	PopulatedPrimaryIndexStoredColumns bool
+
 	// UpgradedForeignKeyRepresentation indicates that the foreign key
 	// representation was upgraded.
 	UpgradedForeignKeyRepresentation bool
@@ -688,7 +693,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				if err != nil {
 					return err
 				}
-				if desc.PrimaryIndex.ContainsColumnID(col.GetID()) {
+				if desc.GetPrimaryIndex().ContainsExplicitColumnID(col.GetID()) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
 					err = pgerror.Newf(

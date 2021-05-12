@@ -156,6 +156,7 @@ type Index interface {
 
 	ForEachColumnID(func(id descpb.ColumnID) error) error
 	ContainsColumnID(colID descpb.ColumnID) bool
+	ContainsExplicitColumnID(colID descpb.ColumnID) bool
 	InvertedColumnID() descpb.ColumnID
 	InvertedColumnName() string
 

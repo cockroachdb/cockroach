@@ -2372,7 +2372,8 @@ CREATE TABLE crdb_internal.index_columns (
 					idxName := tree.NewDString(idx.GetName())
 
 					// Report the main (key) columns.
-					for i, c := range idx.IndexDesc().ColumnIDs {
+					for i := 0; i < idx.NumColumns(); i++ {
+						c := idx.GetColumnID(i)
 						colName := tree.DNull
 						colDir := tree.DNull
 						if i >= len(idx.IndexDesc().ColumnNames) {
@@ -2406,7 +2407,8 @@ CREATE TABLE crdb_internal.index_columns (
 					notImplicit := tree.DBoolFalse
 
 					// Report the stored columns.
-					for _, c := range idx.IndexDesc().StoreColumnIDs {
+					for i := 0; i < idx.NumStoredColumns() && !idx.Primary(); i++ {
+						c := idx.GetStoredColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2417,7 +2419,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the extra columns.
-					for _, c := range idx.IndexDesc().ExtraColumnIDs {
+					for i := 0; i < idx.NumExtraColumns(); i++ {
+						c := idx.GetExtraColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2428,7 +2431,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the composite columns
-					for _, c := range idx.IndexDesc().CompositeColumnIDs {
+					for i := 0; i < idx.NumCompositeColumns(); i++ {
+						c := idx.GetCompositeColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,

@@ -686,11 +686,7 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 			ib.added = append(ib.added, idx)
 			for i := range ib.cols {
 				id := ib.cols[i].GetID()
-				idxContainsColumn := idx.ContainsColumnID(id)
-				isPrimaryIndex := idx.GetEncodingType() == descpb.PrimaryIndexEncoding
-				if (idxContainsColumn || isPrimaryIndex) &&
-					!ib.cols[i].IsVirtual() &&
-					i < len(desc.PublicColumns()) {
+				if idx.ContainsColumnID(id) && i < len(desc.PublicColumns()) {
 					valNeededForCol.Add(i)
 				}
 			}

@@ -507,7 +507,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.GetID()) {
+			if catalog.MakeTableColSet(n.tableDesc.GetPrimaryIndex().IndexDesc().ColumnIDs...).Contains(colToDrop.GetID()) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.GetName())
 			}
@@ -530,7 +530,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if !containsThisColumn {
 					for j := 0; j < idx.NumExtraColumns(); j++ {
 						id := idx.GetExtraColumnID(j)
-						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
+						if catalog.MakeTableColSet(n.tableDesc.GetPrimaryIndex().IndexDesc().ColumnIDs...).Contains(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -1155,7 +1155,7 @@ func applyColumnMutation(
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.GetID()) {
+		if tableDesc.GetPrimaryIndex().ContainsExplicitColumnID(col.GetID()) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.GetName())
 		}

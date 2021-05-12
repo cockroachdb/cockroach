@@ -190,6 +190,8 @@ func maybeFillInDescriptor(
 	// run again and mixed-version clusters always write "good" descriptors.
 	changes.FixedPrivileges = descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
 
+	changes.PopulatedPrimaryIndexStoredColumns = maybePopulatePrimaryIndexStoredColumns(desc)
+
 	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
 			ctx, dg, skipFKsWithNoMatchingTable /* skipFKsWithNoMatchingTable*/, desc)
@@ -198,6 +200,46 @@ func maybeFillInDescriptor(
 		return PostDeserializationTableDescriptorChanges{}, err
 	}
 	return changes, nil
+}
+
+// maybePopulatePrimaryIndexStoredColumns fills in the StoreColumnIDs and
+// StoreColumnNames slices in the table's primary index if necessary.
+func maybePopulatePrimaryIndexStoredColumns(desc *descpb.TableDescriptor) bool {
+	idx := &desc.PrimaryIndex
+	if len(idx.StoreColumnIDs) > 0 {
+		return false
+	}
+	excludedIDs := catalog.MakeTableColSet(idx.ColumnIDs...)
+	excludedIDs.Add(0) // handle edge case
+	stored := make([]*descpb.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+
+	maybeAddCol := func(col *descpb.ColumnDescriptor) {
+		if col == nil {
+			return
+		}
+		if col.Virtual {
+			return
+		}
+		if !excludedIDs.Contains(col.ID) {
+			return
+		}
+		stored = append(stored, col)
+		excludedIDs.Add(col.ID)
+	}
+
+	for i := range desc.Columns {
+		maybeAddCol(&desc.Columns[i])
+	}
+	for _, mut := range desc.Mutations {
+		maybeAddCol(mut.GetColumn())
+	}
+	idx.StoreColumnIDs = make([]descpb.ColumnID, len(stored))
+	idx.StoreColumnNames = make([]string, len(stored))
+	for i, col := range stored {
+		idx.StoreColumnIDs[i] = col.ID
+		idx.StoreColumnNames[i] = col.Name
+	}
+	return true
 }
 
 // maybeUpgradeForeignKeyRepresentation destructively modifies the input table

@@ -1485,8 +1485,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
-					for i := 0; i < index.NumStoredColumns(); i++ {
-						colIDs = append(colIDs, index.GetStoredColumnID(i))
+					if !index.Primary() {
+						for i := 0; i < index.NumStoredColumns(); i++ {
+							colIDs = append(colIDs, index.GetStoredColumnID(i))
+						}
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
 					indnatts := len(colIDs)
@@ -1569,13 +1571,18 @@ func indexDefFromDescriptor(
 	index catalog.Index,
 	tableLookup tableLookupFn,
 ) (string, error) {
+	adjustedNumStored := index.NumStoredColumns()
+	if index.Primary() {
+		// STORING is implicit for primary indexes.
+		adjustedNumStored = 0
+	}
 	colNames := index.IndexDesc().ColumnNames[index.ExplicitColumnStartIdx():]
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.GetName()),
 		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
 		Unique:   index.IsUnique(),
 		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, index.NumStoredColumns()),
+		Storing:  make(tree.NameList, adjustedNumStored),
 		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
 	}
 	for i, name := range colNames {
@@ -1588,7 +1595,7 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Columns[i] = elem
 	}
-	for i := 0; i < index.NumStoredColumns(); i++ {
+	for i := 0; i < adjustedNumStored; i++ {
 		name := index.GetStoredColumnName(i)
 		indexDef.Storing[i] = tree.Name(name)
 	}

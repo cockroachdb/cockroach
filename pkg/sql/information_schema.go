@@ -1356,7 +1356,7 @@ CREATE TABLE information_schema.statistics (
 						sequence++
 						delete(implicitCols, col)
 					}
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumStoredColumns() && !index.Primary(); i++ {
 						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
 						if err := appendRow(index, col, sequence,

@@ -174,6 +174,17 @@ func (w index) ContainsColumnID(colID descpb.ColumnID) bool {
 	return w.desc.ContainsColumnID(colID)
 }
 
+// ContainsExplicitColumnID returns true if the index descriptor contains the
+// specified column ID in its explicit column IDs.
+func (w index) ContainsExplicitColumnID(colID descpb.ColumnID) bool {
+	for _, id := range w.desc.ColumnIDs {
+		if id == colID {
+			return true
+		}
+	}
+	return false
+}
+
 // GetGeoConfig returns the geo config in the index descriptor.
 func (w index) GetGeoConfig() geoindex.Config {
 	return w.desc.GeoConfig

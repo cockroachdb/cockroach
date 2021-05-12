@@ -275,7 +275,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetShardColumnName", idx.GetName())
 		require.Equal(t, idx == s4, !(&descpb.ShardedDescriptor{}).Equal(idx.GetSharded()),
 			errMsgFmt, "GetSharded", idx.GetName())
-		require.Equalf(t, idx != s3, idx.NumStoredColumns() == 0,
+		require.Equalf(t, idx != s3 && idx != pk, idx.NumStoredColumns() == 0,
 			errMsgFmt, "NumStoredColumns", idx.GetName())
 	}
 

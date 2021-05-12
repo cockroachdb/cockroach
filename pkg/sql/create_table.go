@@ -2181,16 +2181,15 @@ func NewTableDesc(
 			// if they are detected, ensure each index contains the implicitly
 			// partitioned column.
 			if numImplicitCols := newPrimaryIndex.Partitioning.NumImplicitColumns; numImplicitCols > 0 {
-				for _, idx := range desc.AllIndexes() {
-					if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
-						for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
-							if !idx.ContainsColumnID(implicitPrimaryColID) {
-								idx.IndexDesc().ExtraColumnIDs = append(
-									idx.IndexDesc().ExtraColumnIDs,
-									implicitPrimaryColID,
-								)
-							}
+				for _, idx := range desc.DeletableNonPrimaryIndexes() {
+					if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
+						continue
+					}
+					for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
+						if idx.ContainsColumnID(implicitPrimaryColID) {
+							continue
 						}
+						idx.IndexDesc().ExtraColumnIDs = append(idx.IndexDesc().ExtraColumnIDs, implicitPrimaryColID)
 					}
 				}
 			}
