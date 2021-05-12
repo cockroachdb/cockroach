@@ -168,7 +168,18 @@ func (w *lockTableWaiterImpl) WaitOn(
 					// raise an error immediately, we know the reservation holder is
 					// active.
 					if state.held {
-						err = w.pushLockTxn(ctx, req, state)
+						// First check transaction cache, if transaction if already
+						// finalized we could proceed immediately and batch resolve
+						// intents from finalized transactions.
+						// See livenessPush handling below on more explanation about
+						// how it works.
+						if pusheeTxn, ok := w.finalizedTxnCache.get(state.txn.ID); ok {
+							resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: state.key})
+							deferredResolution = append(deferredResolution, resolve)
+							w.lm.OnLockUpdated(ctx, &deferredResolution[len(deferredResolution)-1])
+						} else {
+							err = w.pushLockTxn(ctx, req, state)
+						}
 					} else {
 						err = newWriteIntentErr(state)
 					}
