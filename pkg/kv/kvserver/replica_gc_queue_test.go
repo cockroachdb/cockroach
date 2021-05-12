@@ -31,39 +31,39 @@ func TestReplicaGCShouldQueue(t *testing.T) {
 	var (
 		z       = ts(0)
 		bTS     = ts(base)
-		cTS     = ts(base + ReplicaGCQueueSuspectTimeout)
-		cTSnext = ts(base + ReplicaGCQueueSuspectTimeout + 1)
-		iTSprev = ts(base + ReplicaGCQueueInactivityThreshold - 1)
+		sTS     = ts(base + ReplicaGCQueueSuspectTimeout)
+		sTSnext = ts(base + ReplicaGCQueueSuspectTimeout + 1)
 		iTS     = ts(base + ReplicaGCQueueInactivityThreshold)
+		iTSnext = ts(base + ReplicaGCQueueInactivityThreshold + 1)
 	)
 
 	for i, test := range []struct {
 		now, lastCheck, lastActivity hlc.Timestamp
-		isCandidate                  bool
+		isSuspect                    bool
 
 		shouldQ  bool
 		priority float64
 	}{
-		// Test outcomes when range is in candidate state.
+		// Test outcomes when range is in suspect state.
 
-		// All timestamps current: candidacy plays no role.
-		{now: z, lastCheck: z, lastActivity: z, isCandidate: true, shouldQ: false, priority: 0},
+		// All timestamps current: suspect plays no role.
+		{now: z, lastCheck: z, lastActivity: z, isSuspect: true, shouldQ: false, priority: 0},
 		// Threshold: no action taken.
-		{now: cTS, lastCheck: z, lastActivity: bTS, isCandidate: true, shouldQ: false, priority: 0},
+		{now: sTS, lastCheck: z, lastActivity: bTS, isSuspect: true, shouldQ: false, priority: 0},
 		// Queue with priority.
-		{now: cTSnext, lastCheck: z, lastActivity: bTS, isCandidate: true, shouldQ: true, priority: 1},
-		// Last processed recently: candidate still gets processed eagerly.
-		{now: cTSnext, lastCheck: bTS, lastActivity: z, isCandidate: true, shouldQ: true, priority: 1},
-		// Last processed recently: non-candidate stays put.
-		{now: cTSnext, lastCheck: bTS, lastActivity: z, isCandidate: false, shouldQ: false, priority: 0},
-		// Still no effect until iTS reached.
-		{now: iTSprev, lastCheck: bTS, lastActivity: z, isCandidate: false, shouldQ: false, priority: 0},
-		{now: iTS, lastCheck: bTS, lastActivity: z, isCandidate: true, shouldQ: true, priority: 1},
+		{now: sTSnext, lastCheck: z, lastActivity: bTS, isSuspect: true, shouldQ: true, priority: 1},
+		// Last processed recently: suspect still gets processed eagerly.
+		{now: sTSnext, lastCheck: bTS, lastActivity: z, isSuspect: true, shouldQ: true, priority: 1},
+		// Last processed recently: non-suspect stays put.
+		{now: sTSnext, lastCheck: bTS, lastActivity: z, isSuspect: false, shouldQ: false, priority: 0},
+		// Still no effect until iTS crossed.
+		{now: iTS, lastCheck: bTS, lastActivity: z, isSuspect: false, shouldQ: false, priority: 0},
+		{now: iTSnext, lastCheck: bTS, lastActivity: z, isSuspect: false, shouldQ: true, priority: 0},
 		// Verify again that candidacy increases priority.
-		{now: iTS, lastCheck: bTS, lastActivity: z, isCandidate: false, shouldQ: true, priority: 0},
+		{now: iTSnext, lastCheck: bTS, lastActivity: z, isSuspect: true, shouldQ: true, priority: 1},
 	} {
 		if sq, pr := replicaGCShouldQueueImpl(
-			test.now, test.lastCheck, test.lastActivity, test.isCandidate,
+			test.now, test.lastCheck, test.lastActivity, test.isSuspect,
 		); sq != test.shouldQ || pr != test.priority {
 			t.Errorf("%d: %+v: got (%t,%f)", i, test, sq, pr)
 		}
