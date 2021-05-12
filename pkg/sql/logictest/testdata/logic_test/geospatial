@@ -5814,3 +5814,18 @@ SELECT
   ST_EstimatedExtent('a', 'b')
 ----
 NULL  NULL  NULL
+
+query II
+SELECT ST_LineCrossingDirection(line1, line2), ST_LineCrossingDirection(line2, line1) FROM ( VALUES
+    ((ST_GeomFromText('LINESTRING(0 -20, 0 20)')), (ST_GeomFromText('LINESTRING(5 5, 5 10)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING(171 154,20 140,71 74,161 53)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING (20 140, 71 74, 161 53)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING (171 154, 20 140, 71 74, 2.99 90.16)'))),
+    ((ST_GeomFromText('LINESTRING(25 169,89 114,40 70,86 43)')), (ST_GeomFromText('LINESTRING(2.99 90.16,71 74,20 140,171 154)')))
+) line_crossing_direction_test(line1, line2);
+----
+0   0
+3   -3
+-1  1
+2   -2
+-2  2
