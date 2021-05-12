@@ -304,12 +304,12 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, ok)
 
-			require.Same(t, schema.Desc, resolved.Desc)
+			require.Same(t, schema, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.ID, txn)
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.GetID(), txn)
 			require.NoError(t, err)
 
-			require.Same(t, schema.Desc, byID)
+			require.Same(t, schema, byID)
 			return nil
 		}))
 	})
@@ -497,7 +497,7 @@ CREATE TABLE test.schema.t(x INT);
 					return err
 				}
 				// Write garbage privileges into the schema desc.
-				privs := schemaDesc.Desc.GetPrivileges()
+				privs := schemaDesc.GetPrivileges()
 				for i := range privs.Users {
 					// SELECT is valid on a database but not a schema, however
 					// due to issue #65697, after running ALTER DATABASE ...
@@ -510,7 +510,7 @@ CREATE TABLE test.schema.t(x INT);
 				}
 
 				descsCol.SkipValidationOnWrite()
-				return descsCol.WriteDesc(ctx, false, schemaDesc.Desc.(catalog.MutableDescriptor), txn)
+				return descsCol.WriteDesc(ctx, false, schemaDesc.(catalog.MutableDescriptor), txn)
 			}),
 	)
 

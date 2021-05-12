@@ -419,10 +419,10 @@ func (n *createTypeNode) ReadingOwnWrites()                   {}
 // this seems to be how Postgres does it.
 // Add a test for this when we support granting privileges to schemas #50879.
 func inheritUsagePrivilegeFromSchema(
-	resolvedSchema catalog.ResolvedSchema, privs *descpb.PrivilegeDescriptor,
+	schema catalog.SchemaDescriptor, privs *descpb.PrivilegeDescriptor,
 ) {
 
-	switch resolvedSchema.Kind {
+	switch kind := schema.SchemaKind(); kind {
 	case catalog.SchemaPublic:
 		// If the type is in the public schema, the public role has USAGE on it.
 		privs.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
@@ -430,10 +430,9 @@ func inheritUsagePrivilegeFromSchema(
 		// No types should be created in a temporary schema or a virtual schema.
 		panic(errors.AssertionFailedf(
 			"type being created in schema kind %d with id %d",
-			resolvedSchema.Kind, resolvedSchema.ID))
+			kind, schema.GetID()))
 	case catalog.SchemaUserDefined:
-		schemaDesc := resolvedSchema.Desc
-		schemaPrivs := schemaDesc.GetPrivileges()
+		schemaPrivs := schema.GetPrivileges()
 
 		// Look for all users that have USAGE on the schema and add it to the
 		// privilege descriptor.
@@ -443,6 +442,6 @@ func inheritUsagePrivilegeFromSchema(
 			}
 		}
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
 	}
 }

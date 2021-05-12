@@ -433,12 +433,12 @@ func importPlanHook(
 				}
 			}
 			parentID = dbDesc.GetID()
-			switch schema.Kind {
+			switch schema.SchemaKind() {
 			case catalog.SchemaVirtual:
 				return pgerror.Newf(pgcode.InvalidSchemaName,
 					"cannot import into schema %q", table.SchemaName)
 			case catalog.SchemaUserDefined, catalog.SchemaPublic, catalog.SchemaTemporary:
-				parentSchemaID = schema.ID
+				parentSchemaID = schema.GetID()
 			}
 		} else {
 			// No target table means we're importing whatever we find into the session
