@@ -42,7 +42,12 @@ func TestChangefeedNemeses(t *testing.T) {
 			t.Error(failure)
 		}
 	}
-	t.Run(`sinkless`, sinklessTest(testFn))
+	// Tenant tests disabled because ALTER TABLE .. SPLIT is not
+	// support in multi-tenancy mode:
+	//
+	// nemeses_test.go:39: pq: unimplemented: operation is
+	// unsupported in multi-tenancy mode
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	log.Flush()
