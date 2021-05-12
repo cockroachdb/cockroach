@@ -779,6 +779,7 @@ func (b *Batch) addSSTable(
 	disallowShadowing bool,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
+	deadline hlc.Timestamp,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -799,6 +800,7 @@ func (b *Batch) addSSTable(
 		DisallowShadowing: disallowShadowing,
 		MVCCStats:         stats,
 		IngestAsWrites:    ingestAsWrites,
+		Deadline:          deadline,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

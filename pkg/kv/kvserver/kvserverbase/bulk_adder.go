@@ -63,6 +63,9 @@ type BulkAdderOptions struct {
 	// different from the timestamp used to construct the adder which is what is
 	// actually applied to each key).
 	BatchTimestamp hlc.Timestamp
+
+	// Deadline is the timestamp to use on AddSSTable requests.
+	Deadline hlc.Timestamp
 }
 
 // DisableExplicitSplits can be returned by a SplitAndScatterAfter function to

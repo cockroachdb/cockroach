@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -188,8 +189,11 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		iters = append(iters, iter)
 	}
 
+	// TODO(adityamaru): Pass in a valid deadline timestamp once we have a
+	// deadline oracle.
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
+		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) },
+		hlc.Timestamp{} /* deadline */, rd.FlowCtx.Cfg.RPCContext.Clock.MaxOffset())
 	if err != nil {
 		return summary, err
 	}
