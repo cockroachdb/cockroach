@@ -2286,7 +2286,7 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		require.NoError(t, err)
 
 		data := []byte("1,2")
-		require.NoError(t, userfileStorage.WriteFile(ctx, "", bytes.NewReader(data)))
+		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
 
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE foo (id INT PRIMARY KEY, "+
 			"id2 INT) CSV DATA ('%s')", userfileURI))
@@ -2302,7 +2302,7 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		require.NoError(t, err)
 
 		data := []byte("1,2")
-		require.NoError(t, userfileStorage.WriteFile(ctx, "", bytes.NewReader(data)))
+		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
 
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE baz (id INT PRIMARY KEY, "+
 			"id2 INT) CSV DATA ('%s')", userfileURI))
@@ -2412,7 +2412,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.TestUserName(), ie, tc.Server(0).DB())
 		require.NoError(t, err)
-		require.NoError(t, fileTableSystem1.WriteFile(ctx, filename, bytes.NewReader([]byte("1,aaa"))))
+		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte("1,aaa"))))
 	}
 
 	t.Run("import-RBAC", func(t *testing.T) {
@@ -3440,7 +3440,7 @@ func TestImportIntoCSV(t *testing.T) {
 		require.NoError(t, err)
 
 		data := []byte("1,2")
-		require.NoError(t, userfileStorage.WriteFile(ctx, "", bytes.NewReader(data)))
+		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
 
 		sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, id2 INT)")
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO foo (id, id2) CSV DATA ('%s')", userfileURI))
@@ -3507,7 +3507,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 		require.NoError(b, err)
 		content, err := ioutil.ReadAll(r)
 		require.NoError(b, err)
-		err = userfileStorage.WriteFile(ctx, "", bytes.NewReader(content))
+		err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content))
 		require.NoError(b, err)
 		numBytes = int64(len(content))
 	} else {

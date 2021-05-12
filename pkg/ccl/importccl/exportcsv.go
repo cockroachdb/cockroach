@@ -268,7 +268,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 			size := writer.Len()
 
-			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
+			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
