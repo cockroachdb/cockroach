@@ -92,7 +92,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 			log.Warningf(ctx, "could not find schema %s under database %d", schema, dbDesc.ID)
 			continue
 		}
-		if err := d.collectObjectsInSchema(ctx, p, dbDesc, &res); err != nil {
+		if err := d.collectObjectsInSchema(ctx, p, dbDesc, res); err != nil {
 			return nil, err
 		}
 	}
@@ -133,7 +133,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	var schemasIDsToDelete []descpb.ID
 	for _, schemaWithDbDesc := range n.d.schemasToDelete {
 		schemaToDelete := schemaWithDbDesc.schema
-		switch schemaToDelete.Kind {
+		switch schemaToDelete.SchemaKind() {
 		case catalog.SchemaTemporary, catalog.SchemaPublic:
 			// The public schema and temporary schemas are cleaned up by just removing
 			// the existing namespace entries.
@@ -142,20 +142,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 				p.txn,
 				p.ExecCfg().Codec,
 				n.dbDesc.GetID(),
-				schemaToDelete.Name,
+				schemaToDelete.GetName(),
 			); err != nil {
 				return err
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, ok := schemaToDelete.Desc.(*schemadesc.Mutable)
+			mutDesc, ok := schemaToDelete.(*schemadesc.Mutable)
 			if !ok {
-				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete.Desc)
+				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete)
 			}
 			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
 				return err
 			}
-			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.ID)
+			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.GetID())
 		}
 	}
 

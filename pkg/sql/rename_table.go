@@ -107,7 +107,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	prevDBID := tableDesc.ParentID
 
 	var targetDbDesc catalog.DatabaseDescriptor
-	var targetSchemaDesc catalog.ResolvedSchema
+	var targetSchemaDesc catalog.SchemaDescriptor
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn
@@ -210,7 +210,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		params.p.txn,
 		p.ExecCfg().Codec,
 		targetDbDesc.GetID(),
-		targetSchemaDesc.ID,
+		targetSchemaDesc.GetID(),
 		newTn,
 	)
 	if err != nil {

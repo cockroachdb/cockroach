@@ -65,11 +65,11 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if !found {
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "schema %q does not exist", n.Schema.String())
 	}
-	switch schema.Kind {
+	switch schema.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		desc := schema.Desc.(*schemadesc.Mutable)
+		desc := schema.(*schemadesc.Mutable)
 		// The user must be a superuser or the owner of the schema to modify it.
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {

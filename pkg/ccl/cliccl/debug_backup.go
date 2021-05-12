@@ -35,13 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nodelocal"
@@ -751,7 +751,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 
 	dbIDToName := make(map[descpb.ID]string)
 	schemaIDToFullyQualifiedName := make(map[descpb.ID]string)
-	schemaIDToFullyQualifiedName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+	schemaIDToFullyQualifiedName[keys.PublicSchemaID] = catconstants.PublicSchemaName
 	typeIDToFullyQualifiedName := make(map[descpb.ID]string)
 	tableIDToFullyQualifiedName := make(map[descpb.ID]string)
 
@@ -767,7 +767,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 			schemaIDToFullyQualifiedName[id] = dbName + "." + schemaName
 		} else if typeDesc != nil {
 			parentSchema := schemaIDToFullyQualifiedName[typeDesc.GetParentSchemaID()]
-			if parentSchema == sessiondata.PublicSchemaName {
+			if parentSchema == catconstants.PublicSchemaName {
 				parentSchema = dbIDToName[typeDesc.GetParentID()] + "." + parentSchema
 			}
 			typeName := descpb.GetDescriptorName(d)
@@ -775,7 +775,7 @@ func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 		} else if tableDesc != nil {
 			tbDesc := tabledesc.NewBuilder(tableDesc).BuildImmutable()
 			parentSchema := schemaIDToFullyQualifiedName[tbDesc.GetParentSchemaID()]
-			if parentSchema == sessiondata.PublicSchemaName {
+			if parentSchema == catconstants.PublicSchemaName {
 				parentSchema = dbIDToName[tableDesc.GetParentID()] + "." + parentSchema
 			}
 			tableName := descpb.GetDescriptorName(d)
