@@ -705,6 +705,19 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		},
 		{
 			userPrivileges{
+				fooUser: privilege.List{privilege.ALL},
+			},
+			false,
+			userPrivileges{
+				fooUser: privilege.List{privilege.ALL},
+			},
+			privilege.Table,
+			InitialVersion,
+			"ALL should stay as ALL",
+			true,
+		},
+		{
+			userPrivileges{
 				fooUser: privilege.List{privilege.USAGE},
 			},
 			false,
