@@ -353,6 +353,7 @@ func sinklessTenantTestWithServerArgs(
 			ExternalIODirConfig: base.ExternalIODirConfig{
 				DisableOutbound: true,
 			},
+			UseDatabase: `d`,
 		}
 
 		tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
@@ -360,10 +361,6 @@ func sinklessTenantTestWithServerArgs(
 		// Re-run setup on the tenant as well
 		_, err := tenantDB.ExecContext(ctx, serverSetupStatements)
 		require.NoError(t, err)
-
-		// Database `d` is hardcoded in a number of
-		// places. Create a new connection to that database.
-		tenantDB = serverutils.OpenDBConn(t, tenantServer.SQLAddr(), `d`, false /* insecure */, kvServer.Stopper())
 
 		sink, cleanup := sqlutils.PGUrl(t, tenantServer.SQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
