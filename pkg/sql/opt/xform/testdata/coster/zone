@@ -715,7 +715,7 @@ locality-optimized-search
  ├── right columns: t.public.abc_part.r:11(string) t.public.abc_part.a:12(int) t.public.abc_part.b:13(int) t.public.abc_part.c:14(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.910000001, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
- ├── cost: 5.101218
+ ├── cost: 3.419846
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1,2)
@@ -725,7 +725,7 @@ locality-optimized-search
  │    ├── constraint: /6/8/9: [/'east'/1/'foo' - /'east'/1/'foo']
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.9001, distinct(6)=0.9001, null(6)=0, distinct(8)=0.9001, null(8)=0, distinct(9)=0.9001, null(9)=0, distinct(6,8,9)=0.9001, null(6,8,9)=0]
- │    ├── cost: 2.532058
+ │    ├── cost: 1.691372
  │    ├── key: ()
  │    ├── fd: ()-->(6-9)
  │    ├── prune: (6-9)
@@ -735,7 +735,7 @@ locality-optimized-search
       ├── constraint: /11/13/14: [/'west'/1/'foo' - /'west'/1/'foo']
       ├── cardinality: [0 - 1]
       ├── stats: [rows=0.9001, distinct(11)=0.9001, null(11)=0, distinct(13)=0.9001, null(13)=0, distinct(14)=0.9001, null(14)=0, distinct(11,13,14)=0.9001, null(11,13,14)=0]
-      ├── cost: 2.532058
+      ├── cost: 1.691372
       ├── key: ()
       ├── fd: ()-->(11-14)
       ├── prune: (11-14)

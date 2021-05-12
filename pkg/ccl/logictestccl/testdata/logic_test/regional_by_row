@@ -2275,3 +2275,36 @@ INSERT INTO t63109 VALUES (1, 'one');
 UPSERT INTO t63109 VALUES (1, 'two');
 UPSERT INTO t63109 (crdb_region, a, b) VALUES ('ap-southeast-2', 1, 'three');
 UPSERT INTO t63109 (a, b) VALUES (1, 'four');
+
+# Regression test for #65064. We should always choose locality optimized scan
+# even if the stats show zero rows.
+statement ok
+CREATE DATABASE db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+USE db;
+CREATE TABLE t65064 (username STRING NOT NULL UNIQUE) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t65064 INJECT STATISTICS '[
+  {
+    "columns": ["username"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0
+  }
+]';
+
+query T
+SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
+----
+·
+• union all
+│ estimated row count: 1
+│ limit: 1
+│
+├── • scan
+│     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+│     table: t65064@t65064_username_key
+│     spans: [/'ap-southeast-2'/'kharris' - /'ap-southeast-2'/'kharris']
+│
+└── • scan
+      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+      table: t65064@t65064_username_key
+      spans: [/'ca-central-1'/'kharris' - /'ca-central-1'/'kharris'] [/'us-east-1'/'kharris' - /'us-east-1'/'kharris']
