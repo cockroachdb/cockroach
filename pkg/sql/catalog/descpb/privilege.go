@@ -206,7 +206,6 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **PrivilegeDescriptor) bool {
 		*ptr = &PrivilegeDescriptor{}
 	}
 	p := *ptr
-	modified := false
 
 	if p.Version > InitialVersion {
 		// InitialVersion is for descriptors that were created in versions 20.1 and
@@ -217,6 +216,7 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **PrivilegeDescriptor) bool {
 		return false
 	}
 
+	modified := false
 	for i := range p.Users {
 		// Users is a slice of values, we need pointers to make them mutable.
 		userPrivileges := &p.Users[i]

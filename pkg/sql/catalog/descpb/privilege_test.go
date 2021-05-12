@@ -628,11 +628,11 @@ func TestValidateOwnership(t *testing.T) {
 // be ZONECONFIG privilege and should be updated.
 func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 
-	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	barUser := security.MakeSQLUsernameFromPreNormalizedString("bar")
-	bazUser := security.MakeSQLUsernameFromPreNormalizedString("baz")
+	fooUser := "foo"
+	barUser := "bar"
+	bazUser := "baz"
 
-	type userPrivileges map[security.SQLUsername]privilege.List
+	type userPrivileges map[string]privilege.List
 
 	testCases := []struct {
 		input           userPrivileges
@@ -670,6 +670,19 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 			InitialVersion,
 			"A privilege descriptor from a database created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
+			true,
+		},
+		{
+			userPrivileges{
+				fooUser: privilege.List{privilege.ALL},
+			},
+			false,
+			userPrivileges{
+				fooUser: privilege.List{privilege.ALL},
+			},
+			privilege.Table,
+			InitialVersion,
+			"ALL should stay as ALL",
 			true,
 		},
 		{

@@ -326,6 +326,8 @@ func WriteDescriptors(
 						desc.GetID(), desc)
 				}
 			}
+			privilegeDesc := desc.GetPrivileges()
+			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			wroteDBs[desc.GetID()] = desc
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
@@ -377,6 +379,8 @@ func WriteDescriptors(
 						table.GetID(), table)
 				}
 			}
+			privilegeDesc := table.GetPrivileges()
+			descpb.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
 			if err := descsCol.WriteDescToBatch(
 				ctx, false /* kvTrace */, tables[i].(catalog.MutableDescriptor), b,
 			); err != nil {

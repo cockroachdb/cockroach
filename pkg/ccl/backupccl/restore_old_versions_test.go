@@ -57,6 +57,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		fkRevDirs       = testdataBase + "/fk-rev-history"
 		clusterDirs     = testdataBase + "/cluster"
 		exceptionalDirs = testdataBase + "/exceptional"
+		privilegeDirs   = testdataBase + "/privileges"
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
@@ -150,6 +151,17 @@ ORDER BY object_type, object_name`, [][]string{
 			})
 		})
 	})
+
+	t.Run("zoneconfig_privilege_restore", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(privilegeDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(privilegeDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreV201ZoneconfigPrivilegeTest(exportDir))
+		}
+	})
 }
 
 func restoreOldVersionTest(exportDir string) func(t *testing.T) {
@@ -179,6 +191,46 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t2 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t4 ORDER BY k`, results)
+	}
+}
+
+// restoreV201ZoneconfigPrivilegeTest checks that privilege descriptors with
+// ZONECONFIG from tables and databases are correctly restored.
+// The ZONECONFIG bit was overwritten to be USAGE in 20.2 onwards.
+// We only need to test restoring with full cluster backup / restore as
+// it is the only form of restore that restores privileges.
+func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
+		defer cleanupFn()
+
+		_, _, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitNone, base.TestClusterArgs{})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+		sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
+		testDBGrants := [][]string{
+			{"test", "public", "admin", "ALL"},
+			{"test", "public", "root", "ALL"},
+			{"test", "public", "testuser", "ZONECONFIG"},
+		}
+		sqlDB.CheckQueryResults(t, `show grants on database test`, testDBGrants)
+
+		testTableGrants := [][]string{
+			{"test", "public", "test_table", "admin", "ALL"},
+			{"test", "public", "test_table", "root", "ALL"},
+			{"test", "public", "test_table", "testuser", "ZONECONFIG"},
+		}
+		sqlDB.CheckQueryResults(t, `show grants on test.test_table`, testTableGrants)
+
+		testTable2Grants := [][]string{
+			{"test", "public", "test_table2", "admin", "ALL"},
+			{"test", "public", "test_table2", "root", "ALL"},
+			{"test", "public", "test_table2", "testuser", "ALL"},
+		}
+		sqlDB.CheckQueryResults(t, `show grants on test.test_table2`, testTable2Grants)
 	}
 }
 
