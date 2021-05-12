@@ -73,6 +73,7 @@ func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
+func (*AlterTableSetVisible) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
@@ -89,6 +90,7 @@ var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
+var _ AlterTableCmd = &AlterTableSetVisible{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
@@ -405,6 +407,33 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 		ctx.WriteString(" SET DEFAULT ")
 		ctx.FormatNode(node.Default)
 	}
+}
+
+// AlterTableSetVisible represents an ALTER COLUMN SET VISIBLE or NOT VISIBLE command.
+type AlterTableSetVisible struct {
+	Column  Name
+	Visible bool
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableSetVisible) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableSetVisible) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "set_visible")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetVisible) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" SET ")
+	if !node.Visible {
+		ctx.WriteString("NOT ")
+	}
+	ctx.WriteString("VISIBLE")
 }
 
 // AlterTableSetNotNull represents an ALTER COLUMN SET NOT NULL

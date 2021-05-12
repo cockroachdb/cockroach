@@ -1763,3 +1763,34 @@ ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
 
 statement ok
 ROLLBACK
+
+# Visible values can be added and removed after table creation.
+statement ok
+CREATE TABLE visible_table (a int primary key)
+
+statement ok
+ALTER TABLE visible_table ALTER COLUMN a SET VISIBLE
+
+statement error column "non_existent_column" does not exist
+ALTER TABLE visible_table ALTER COLUMN non_existent_column SET VISIBLE
+
+query TT
+SHOW CREATE TABLE visible_table
+----
+visible_table  CREATE TABLE public.visible_table (
+               a INT8 NOT NULL,
+               CONSTRAINT "primary" PRIMARY KEY (a ASC),
+               FAMILY "primary" (a)
+)
+
+statement ok
+ALTER TABLE visible_table ALTER COLUMN a SET NOT VISIBLE
+
+query TT
+SHOW CREATE TABLE visible_table
+----
+visible_table  CREATE TABLE public.visible_table (
+               a INT8 NOT VISIBLE NOT NULL,
+               CONSTRAINT "primary" PRIMARY KEY (a ASC),
+               FAMILY "primary" (a)
+)
