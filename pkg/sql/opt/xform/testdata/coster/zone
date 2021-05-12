@@ -715,7 +715,7 @@ locality-optimized-search
  ├── right columns: t.public.abc_part.r:11(string) t.public.abc_part.a:12(int) t.public.abc_part.b:13(int) t.public.abc_part.c:14(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.910000001, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
- ├── cost: 5.083216
+ ├── cost: 3.401844
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1,2)
@@ -724,7 +724,7 @@ locality-optimized-search
  │    ├── constraint: /6/8/9: [/'east'/1/'foo' - /'east'/1/'foo']
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.9001, distinct(6)=0.9001, null(6)=0, distinct(8)=0.9001, null(8)=0, distinct(9)=0.9001, null(9)=0, distinct(6,8,9)=0.9001, null(6,8,9)=0]
- │    ├── cost: 2.532058
+ │    ├── cost: 1.691372
  │    ├── key: ()
  │    ├── fd: ()-->(6-9)
  │    └── prune: (6-9)
@@ -733,7 +733,7 @@ locality-optimized-search
       ├── constraint: /11/13/14: [/'west'/1/'foo' - /'west'/1/'foo']
       ├── cardinality: [0 - 1]
       ├── stats: [rows=0.9001, distinct(11)=0.9001, null(11)=0, distinct(13)=0.9001, null(13)=0, distinct(14)=0.9001, null(14)=0, distinct(11,13,14)=0.9001, null(11,13,14)=0]
-      ├── cost: 2.532058
+      ├── cost: 1.691372
       ├── key: ()
       ├── fd: ()-->(11-14)
       └── prune: (11-14)
@@ -752,7 +752,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │         └── a2.r:6 = 'west' [outer=(6), constraints=(/6: [/'west' - /'west']; tight), fd=()-->(6)]
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 19.7431618
+ ├── cost: 18.0617898
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── anti-join (lookup abc_part@bc_idx [as=a2])
@@ -763,7 +763,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         └── a2.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.900900001, distinct(1)=0.89738934, null(1)=0, distinct(2)=0.900900001, null(2)=0, distinct(3)=0.900900001, null(3)=0, distinct(4)=0.900900001, null(4)=0]
- │    ├── cost: 12.4499727
+ │    ├── cost: 10.7686007
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── locality-optimized-search
@@ -772,7 +772,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── right columns: a1.r:16 a1.a:17 a1.b:18 a1.c:19
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── stats: [rows=0.910000001, distinct(1)=0.906282579, null(1)=0, distinct(2)=0.910000001, null(2)=0, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
- │    │    ├── cost: 5.083216
+ │    │    ├── cost: 3.401844
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── scan abc_part@bc_idx [as=a1]
@@ -780,7 +780,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    │    ├── constraint: /11/13/14: [/'east'/1/'foo' - /'east'/1/'foo']
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=0.9001, distinct(11)=0.9001, null(11)=0, distinct(13)=0.9001, null(13)=0, distinct(14)=0.9001, null(14)=0, distinct(11,13,14)=0.9001, null(11,13,14)=0]
- │    │    │    ├── cost: 2.532058
+ │    │    │    ├── cost: 1.691372
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(11-14)
  │    │    └── scan abc_part@bc_idx [as=a1]
@@ -788,7 +788,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── constraint: /16/18/19: [/'west'/1/'foo' - /'west'/1/'foo']
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── stats: [rows=0.9001, distinct(16)=0.9001, null(16)=0, distinct(18)=0.9001, null(18)=0, distinct(19)=0.9001, null(19)=0, distinct(16,18,19)=0.9001, null(16,18,19)=0]
- │    │         ├── cost: 2.532058
+ │    │         ├── cost: 1.691372
  │    │         ├── key: ()
  │    │         └── fd: ()-->(16-19)
  │    └── filters (true)
