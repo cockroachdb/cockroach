@@ -6,13 +6,11 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package storageccl
+package backupccl
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -23,6 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -31,6 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/storage/cloudimpl" // register cloud storage providers
@@ -58,18 +61,19 @@ func TestMaxImportBatchSize(t *testing.T) {
 	}
 	for i, testCase := range testCases {
 		st := cluster.MakeTestingClusterSettings()
-		importBatchSize.Override(&st.SV, testCase.importBatchSize)
+		storageccl.ImportBatchSize.Override(&st.SV, testCase.importBatchSize)
 		kvserver.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
-		if e, a := MaxImportBatchSize(st), testCase.expected; e != a {
+		if e, a := storageccl.MaxImportBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
 	}
 }
 
 func slurpSSTablesLatestKey(
-	t *testing.T, dir string, paths []string, kr prefixRewriter,
+	t *testing.T, dir string, paths []string, oldPrefix, newPrefix []byte,
 ) []storage.MVCCKeyValue {
 	start, end := storage.MVCCKey{Key: keys.LocalMax}, storage.MVCCKey{Key: keys.MaxKey}
+	kr := prefixRewriter{rewrites: []prefixRewrite{{OldPrefix: oldPrefix, NewPrefix: newPrefix}}}
 
 	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
@@ -166,7 +170,7 @@ func TestImport(t *testing.T) {
 		// The test normally doesn't trigger the batching behavior, so lower
 		// the threshold to force it.
 		init := func(st *cluster.Settings) {
-			importBatchSize.Override(&st.SV, 1)
+			storageccl.ImportBatchSize.Override(&st.SV, 1)
 		}
 		runTestImport(t, init)
 	})
@@ -187,12 +191,12 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		indexID = 1
 	)
 
-	srcPrefix := makeKeyRewriterPrefixIgnoringInterleaved(oldID, indexID)
-	var keys []roachpb.Key
+	srcPrefix := MakeKeyRewriterPrefixIgnoringInterleaved(oldID, indexID)
+	var keySlice []roachpb.Key
 	for i := 0; i < 8; i++ {
 		key := append([]byte(nil), srcPrefix...)
 		key = encoding.EncodeStringAscending(key, fmt.Sprintf("k%d", i))
-		keys = append(keys, key)
+		keySlice = append(keySlice, key)
 	}
 
 	writeSST := func(t *testing.T, offsets []int) string {
@@ -204,7 +208,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")
 		for _, idx := range offsets {
-			key := keys[idx]
+			key := keySlice[idx]
 			value.ClearChecksum()
 			value.InitChecksum(key)
 			if err := sst.Put(storage.MVCCKey{Key: key, Timestamp: ts}, value.RawBytes); err != nil {
@@ -253,13 +257,27 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	defer s.Stopper().Stop(ctx)
 	init(s.ClusterSettings())
 
+	evalCtx := tree.EvalContext{Settings: s.ClusterSettings()}
+	flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
+		ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+			return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+				s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+		},
+		Settings: s.ClusterSettings(),
+		Codec:    keys.SystemSQLCodec,
+	},
+		EvalCtx: &tree.EvalContext{
+			Codec:    keys.SystemSQLCodec,
+			Settings: s.ClusterSettings(),
+		}}
+
 	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUserName())
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 
 	const splitKey1, splitKey2 = 3, 5
-	// Each test case consists of some number of batches of keys, represented as
+	// Each test case consists of some number of batches of keySlice, represented as
 	// ints [0, 8). Splits are at 3 and 5.
 	for i, testCase := range [][][]int{
 		// Simple cases, no spanning splits, try first, last, middle, etc in each.
@@ -307,11 +325,9 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	} {
 		t.Run(fmt.Sprintf("%d-%v", i, testCase), func(t *testing.T) {
 			newID := descpb.ID(100 + i)
-			kr := prefixRewriter{rewrites: []prefixRewrite{{
-				OldPrefix: srcPrefix,
-				NewPrefix: makeKeyRewriterPrefixIgnoringInterleaved(newID, indexID),
-			}}}
-			rekeys := []roachpb.ImportRequest_TableRekey{
+			newPrefix := MakeKeyRewriterPrefixIgnoringInterleaved(newID, indexID)
+			kr := prefixRewriter{rewrites: []prefixRewrite{{OldPrefix: srcPrefix, NewPrefix: newPrefix}}}
+			rekeys := []execinfrapb.TableRekey{
 				{
 					OldID: oldID,
 					NewDesc: mustMarshalDesc(t, &descpb.TableDescriptor{
@@ -323,22 +339,22 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 				},
 			}
 
-			first := keys[testCase[0][0]]
-			last := keys[testCase[len(testCase)-1][len(testCase[len(testCase)-1])-1]]
+			first := keySlice[testCase[0][0]]
+			last := keySlice[testCase[len(testCase)-1][len(testCase[len(testCase)-1])-1]]
 
-			reqStartKey, ok := kr.rewriteKey(append([]byte(nil), keys[0]...))
+			reqStartKey, ok := kr.rewriteKey(append([]byte(nil), keySlice[0]...))
 			if !ok {
 				t.Fatalf("failed to rewrite key: %s", reqStartKey)
 			}
-			reqEndKey, ok := kr.rewriteKey(append([]byte(nil), keys[len(keys)-1].PrefixEnd()...))
+			reqEndKey, ok := kr.rewriteKey(append([]byte(nil), keySlice[len(keySlice)-1].PrefixEnd()...))
 			if !ok {
 				t.Fatalf("failed to rewrite key: %s", reqEndKey)
 			}
-			reqMidKey1, ok := kr.rewriteKey(append([]byte(nil), keys[splitKey1]...))
+			reqMidKey1, ok := kr.rewriteKey(append([]byte(nil), keySlice[splitKey1]...))
 			if !ok {
 				t.Fatalf("failed to rewrite key: %s", reqMidKey1)
 			}
-			reqMidKey2, ok := kr.rewriteKey(append([]byte(nil), keys[splitKey2]...))
+			reqMidKey2, ok := kr.rewriteKey(append([]byte(nil), keySlice[splitKey2]...))
 			if !ok {
 				t.Fatalf("failed to rewrite key: %s", reqMidKey2)
 			}
@@ -352,42 +368,40 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 
 			atomic.StoreInt64(&remainingAmbiguousSubReqs, initialAmbiguousSubReqs)
 
-			req := &roachpb.ImportRequest{
-				RequestHeader: roachpb.RequestHeader{Key: reqStartKey},
-				DataSpan:      roachpb.Span{Key: first, EndKey: last.PrefixEnd()},
-				Rekeys:        rekeys,
+			mockRestoreDataSpec := execinfrapb.RestoreDataSpec{
+				Rekeys: rekeys,
+			}
+			restoreSpanEntry := execinfrapb.RestoreSpanEntry{
+				Span: roachpb.Span{Key: first, EndKey: last.PrefixEnd()},
 			}
 
 			var slurp []string
 			for ks := range testCase {
 				f := writeSST(t, testCase[ks])
 				slurp = append(slurp, f)
-				req.Files = append(req.Files, roachpb.ImportRequest_File{Dir: storage, Path: f})
+				restoreSpanEntry.Files = append(restoreSpanEntry.Files, execinfrapb.RestoreFileSpec{Dir: storage, Path: f})
 			}
-			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, kr)
+			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, srcPrefix, newPrefix)
 
-			// Import may be retried by DistSender if it takes too long to return, so
-			// make sure it's idempotent.
-			for j := 0; j < 2; j++ {
-				b := &kv.Batch{}
-				b.AddRawRequest(req)
-				if err := kvDB.Run(ctx, b); err != nil {
-					t.Fatalf("%+v", err)
-				}
-				clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
-				if err != nil {
-					t.Fatalf("%+v", err)
-				}
-				kvs := clientKVsToEngineKVs(clientKVs)
+			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx,
+				mockRestoreDataSpec)
+			require.NoError(t, err)
+			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(restoreSpanEntry, reqStartKey)
+			require.NoError(t, err)
 
-				if !reflect.DeepEqual(kvs, expectedKVs) {
-					for i := 0; i < len(kvs) || i < len(expectedKVs); i++ {
-						if i < len(expectedKVs) {
-							t.Logf("expected %d\t%v\t%v", i, expectedKVs[i].Key, expectedKVs[i].Value)
-						}
-						if i < len(kvs) {
-							t.Logf("got      %d\t%v\t%v", i, kvs[i].Key, kvs[i].Value)
-						}
+			clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			kvs := clientKVsToEngineKVs(clientKVs)
+
+			if !reflect.DeepEqual(kvs, expectedKVs) {
+				for i := 0; i < len(kvs) || i < len(expectedKVs); i++ {
+					if i < len(expectedKVs) {
+						t.Logf("expected %d\t%v\t%v", i, expectedKVs[i].Key, expectedKVs[i].Value)
+					}
+					if i < len(kvs) {
+						t.Logf("got      %d\t%v\t%v", i, kvs[i].Key, kvs[i].Value)
 					}
 					t.Fatalf("got %+v expected %+v", kvs, expectedKVs)
 				}
@@ -398,60 +412,4 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			}
 		})
 	}
-}
-
-func TestSSTReaderCache(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var openCalls, expectedOpenCalls int
-	const sz, suffix = 100, 10
-	raw := &sstReader{
-		sz:   sizeStat(sz),
-		body: ioutil.NopCloser(bytes.NewReader(nil)),
-		openAt: func(offset int64) (io.ReadCloser, error) {
-			openCalls++
-			return ioutil.NopCloser(bytes.NewReader(make([]byte, sz-int(offset)))), nil
-		},
-	}
-
-	require.Equal(t, 0, openCalls)
-	_ = raw.readAndCacheSuffix(suffix)
-	expectedOpenCalls++
-
-	discard := make([]byte, 5)
-
-	// Reading in the suffix doesn't make another call.
-	_, _ = raw.ReadAt(discard, 90)
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Reading in the suffix again doesn't make another call.
-	_, _ = raw.ReadAt(discard, 95)
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Reading outside the suffix makes a new call.
-	_, _ = raw.ReadAt(discard, 85)
-	expectedOpenCalls++
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Reading at same offset, outside the suffix, does make a new call to rewind.
-	_, _ = raw.ReadAt(discard, 85)
-	expectedOpenCalls++
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Read at new pos does makes a new call.
-	_, _ = raw.ReadAt(discard, 0)
-	expectedOpenCalls++
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Read at cur pos (where last read stopped) does not reposition.
-	_, _ = raw.ReadAt(discard, 5)
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Read at in suffix between non-suffix reads does not make a call.
-	_, _ = raw.ReadAt(discard, 92)
-	require.Equal(t, expectedOpenCalls, openCalls)
-
-	// Read at where prior non-suffix read finished does not make a new call.
-	_, _ = raw.ReadAt(discard, 10)
-	require.Equal(t, expectedOpenCalls, openCalls)
 }

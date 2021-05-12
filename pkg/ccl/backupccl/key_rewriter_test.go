@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package storageccl
+package backupccl
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,7 +67,7 @@ func TestKeyRewriter(t *testing.T) {
 	oldID := desc.ID
 	newID := desc.ID + 1
 	desc.ID = newID
-	rekeys := []roachpb.ImportRequest_TableRekey{
+	rekeys := []execinfrapb.TableRekey{
 		{
 			OldID:   uint32(oldID),
 			NewDesc: mustMarshalDesc(t, desc.TableDesc()),
@@ -75,7 +76,7 @@ func TestKeyRewriter(t *testing.T) {
 
 	const notSpan = false
 
-	kr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys)
+	kr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, rekeys)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +123,7 @@ func TestKeyRewriter(t *testing.T) {
 		desc.ID = oldID + 10
 		desc2 := tabledesc.NewBuilder(&desc.TableDescriptor).BuildCreatedMutableTable()
 		desc2.ID += 10
-		newKr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, []roachpb.ImportRequest_TableRekey{
+		newKr, err := makeKeyRewriterFromRekeys(keys.SystemSQLCodec, []execinfrapb.TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
 			{OldID: uint32(desc.ID), NewDesc: mustMarshalDesc(t, desc2.TableDesc())},
 		})
@@ -152,7 +153,7 @@ func TestKeyRewriter(t *testing.T) {
 			desc.ID = oldID + 10
 			srcCodec := keys.MakeSQLCodec(srcTenant)
 			destCodec := keys.MakeSQLCodec(destTenant)
-			newKr, err := MakeKeyRewriterFromRekeys(destCodec, []roachpb.ImportRequest_TableRekey{
+			newKr, err := makeKeyRewriterFromRekeys(destCodec, []execinfrapb.TableRekey{
 				{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
 			})
 			require.NoError(t, err)
@@ -194,6 +195,7 @@ func TestKeyRewriter(t *testing.T) {
 
 }
 
+// mustMarshalDesc marshals the provided TableDescriptor.
 func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
 	desc := tabledesc.NewBuilder(tableDesc).BuildImmutable().DescriptorProto()
 	// Set the timestamp to a non-zero value.
