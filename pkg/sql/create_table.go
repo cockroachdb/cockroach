@@ -1879,7 +1879,6 @@ func NewTableDesc(
 		return newColumns, nil
 	}
 
-	idxValidator := schemaexpr.MakeIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef, *tree.LikeTableDef:
@@ -1964,7 +1963,9 @@ func NewTableDesc(
 				}
 			}
 			if d.Predicate != nil {
-				expr, err := idxValidator.Validate(d.Predicate)
+				expr, err := schemaexpr.ValidatePartialIndexPredicate(
+					ctx, &desc, d.Predicate, &n.Table, semaCtx,
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -2061,7 +2062,9 @@ func NewTableDesc(
 				}
 			}
 			if d.Predicate != nil {
-				expr, err := idxValidator.Validate(d.Predicate)
+				expr, err := schemaexpr.ValidatePartialIndexPredicate(
+					ctx, &desc, d.Predicate, &n.Table, semaCtx,
+				)
 				if err != nil {
 					return nil, err
 				}
