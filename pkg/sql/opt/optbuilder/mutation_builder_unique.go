@@ -41,7 +41,6 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		return
 	}
 
-	mb.ensureWithID()
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {

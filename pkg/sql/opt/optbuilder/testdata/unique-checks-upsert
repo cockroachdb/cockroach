@@ -1507,7 +1507,6 @@ upsert uniq_fk_child
  ├── upsert-mapping:
  │    ├── column1:5 => k:1
  │    └── column2:6 => uniq_fk_child.a:2
- ├── input binding: &1
  ├── values
  │    ├── columns: column1:5!null column2:6!null
  │    └── (1, 2)
@@ -1515,10 +1514,9 @@ upsert uniq_fk_child
       └── f-k-checks-item: uniq_fk_child(a) -> uniq_fk_parent(a)
            └── anti-join (hash)
                 ├── columns: a:7!null
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: a:7!null
-                │    └── mapping:
-                │         └──  column2:6 => a:7
+                │    └── (2,)
                 ├── scan uniq_fk_parent
                 │    └── columns: uniq_fk_parent.a:8
                 └── filters

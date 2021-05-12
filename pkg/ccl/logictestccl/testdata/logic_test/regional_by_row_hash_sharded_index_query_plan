@@ -50,42 +50,43 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ into: t_child(id, pid)
 │   │
-│   └── • buffer
-│       │ columns: (column1, column2)
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             columns: (column1, column2)
-│             size: 2 columns, 1 row
-│             row 0, expr 0: 123
-│             row 0, expr 1: 321
+│   └── • values
+│         columns: (column1, column2)
+│         size: 2 columns, 1 row
+│         row 0, expr 0: 123
+│         row 0, expr 1: 321
 │
 └── • constraint-check
     │
     └── • error if rows
         │ columns: ()
         │
-        └── • lookup join (anti)
-            │ columns: (column2)
+        └── • cross join (anti)
+            │ columns: (pid)
             │ estimated row count: 0 (missing stats)
-            │ table: t_parent@t_parent_pkey
-            │ equality cols are key
-            │ lookup condition: ((column2 = id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
             │
-            └── • lookup join (anti)
-                │ columns: (column2)
+            ├── • values
+            │     columns: (pid)
+            │     size: 1 column, 1 row
+            │     row 0, expr 0: 321
+            │
+            └── • union all
+                │ columns: (id)
                 │ estimated row count: 1 (missing stats)
-                │ table: t_parent@t_parent_pkey
-                │ equality cols are key
-                │ lookup condition: ((column2 = id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+                │ limit: 1
                 │
-                └── • project
-                    │ columns: (column2)
-                    │ estimated row count: 1
-                    │
-                    └── • scan buffer
-                          columns: (column1, column2)
-                          label: buffer 1
+                ├── • scan
+                │     columns: (id)
+                │     estimated row count: 1 (missing stats)
+                │     table: t_parent@t_parent_pkey
+                │     spans: /"@"/10/321/0
+                │
+                └── • scan
+                      columns: (id)
+                      estimated row count: 1 (missing stats)
+                      table: t_parent@t_parent_pkey
+                      spans: /"\x80"/10/321/0 /"\xc0"/10/321/0
+                      parallel
 
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard
@@ -104,17 +105,13 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ into: t_child_regional(id, pid, crdb_region)
 │   │
-│   └── • buffer
-│       │ columns: (column1, column2, crdb_region_default, check1)
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             columns: (column1, column2, crdb_region_default, check1)
-│             size: 4 columns, 1 row
-│             row 0, expr 0: 123
-│             row 0, expr 1: 321
-│             row 0, expr 2: 'ap-southeast-2'
-│             row 0, expr 3: true
+│   └── • values
+│         columns: (column1, column2, crdb_region_default, check1)
+│         size: 4 columns, 1 row
+│         row 0, expr 0: 123
+│         row 0, expr 1: 321
+│         row 0, expr 2: 'ap-southeast-2'
+│         row 0, expr 3: true
 │
 ├── • constraint-check
 │   │
@@ -122,50 +119,56 @@ vectorized: true
 │       │ columns: ()
 │       │
 │       └── • project
-│           │ columns: (column1)
-│           │ estimated row count: 0 (missing stats)
+│           │ columns: (id)
+│           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • lookup join (semi)
-│               │ columns: (column1, crdb_region_default)
-│               │ estimated row count: 0 (missing stats)
-│               │ table: t_child_regional@t_child_regional_pkey
-│               │ lookup condition: (column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│               │ pred: crdb_region_default != crdb_region
+│           └── • cross join (inner)
+│               │ columns: (id, id, crdb_region)
+│               │ estimated row count: 1 (missing stats)
 │               │
-│               └── • project
-│                   │ columns: (column1, crdb_region_default)
-│                   │ estimated row count: 1
-│                   │
-│                   └── • scan buffer
-│                         columns: (column1, column2, crdb_region_default, check1)
-│                         label: buffer 1
+│               ├── • values
+│               │     columns: (id)
+│               │     size: 1 column, 1 row
+│               │     row 0, expr 0: 123
+│               │
+│               └── • scan
+│                     columns: (id, crdb_region)
+│                     estimated row count: 1 (missing stats)
+│                     table: t_child_regional@t_child_regional_pkey
+│                     spans: /"\x80"/123/0 /"\xc0"/123/0
+│                     limit: 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │ columns: ()
         │
-        └── • lookup join (anti)
-            │ columns: (column2)
+        └── • cross join (anti)
+            │ columns: (pid)
             │ estimated row count: 0 (missing stats)
-            │ table: t_parent@t_parent_pkey
-            │ equality cols are key
-            │ lookup condition: ((column2 = id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
             │
-            └── • lookup join (anti)
-                │ columns: (column2)
+            ├── • values
+            │     columns: (pid)
+            │     size: 1 column, 1 row
+            │     row 0, expr 0: 321
+            │
+            └── • union all
+                │ columns: (id)
                 │ estimated row count: 1 (missing stats)
-                │ table: t_parent@t_parent_pkey
-                │ equality cols are key
-                │ lookup condition: ((column2 = id) AND (crdb_region = 'ap-southeast-2')) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
+                │ limit: 1
                 │
-                └── • project
-                    │ columns: (column2)
-                    │ estimated row count: 1
-                    │
-                    └── • scan buffer
-                          columns: (column1, column2, crdb_region_default, check1)
-                          label: buffer 1
+                ├── • scan
+                │     columns: (id)
+                │     estimated row count: 1 (missing stats)
+                │     table: t_parent@t_parent_pkey
+                │     spans: /"@"/10/321/0
+                │
+                └── • scan
+                      columns: (id)
+                      estimated row count: 1 (missing stats)
+                      table: t_parent@t_parent_pkey
+                      spans: /"\x80"/10/321/0 /"\xc0"/10/321/0
+                      parallel
 
 subtest test_uniqueness_check_uuid
 
@@ -366,18 +369,14 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ into: t_unique_hash_pk(crdb_internal_id_shard_16, id, crdb_region)
 │   │
-│   └── • buffer
-│       │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-│             size: 5 columns, 1 row
-│             row 0, expr 0: 4321
-│             row 0, expr 1: 'ap-southeast-2'
-│             row 0, expr 2: 9
-│             row 0, expr 3: true
-│             row 0, expr 4: true
+│   └── • values
+│         columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
+│         size: 5 columns, 1 row
+│         row 0, expr 0: 4321
+│         row 0, expr 1: 'ap-southeast-2'
+│         row 0, expr 2: 9
+│         row 0, expr 3: true
+│         row 0, expr 4: true
 │
 └── • constraint-check
     │
@@ -385,23 +384,44 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column1)
-            │ estimated row count: 0 (missing stats)
+            │ columns: (id)
+            │ estimated row count: 1 (missing stats)
             │
-            └── • lookup join (semi)
-                │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-                │ lookup condition: ((column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (crdb_internal_id_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                │ pred: (crdb_internal_id_shard_16_comp != crdb_internal_id_shard_16) OR (crdb_region_default != crdb_region)
+            └── • cross join (inner)
+                │ columns: (id, crdb_internal_id_shard_16, id, crdb_region)
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • project
-                    │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default)
-                    │ estimated row count: 1
+                ├── • values
+                │     columns: (id)
+                │     size: 1 column, 1 row
+                │     row 0, expr 0: 4321
+                │
+                └── • limit
+                    │ columns: (crdb_internal_id_shard_16, id, crdb_region)
+                    │ estimated row count: 1 (missing stats)
+                    │ count: 1
                     │
-                    └── • scan buffer
-                          columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, check1, check2)
-                          label: buffer 1
+                    └── • filter
+                        │ columns: (crdb_internal_id_shard_16, id, crdb_region)
+                        │ estimated row count: 7 (missing stats)
+                        │ filter: (crdb_internal_id_shard_16 != 9) OR (crdb_region != 'ap-southeast-2')
+                        │
+                        └── • union all
+                            │ columns: (crdb_internal_id_shard_16, id, crdb_region)
+                            │ estimated row count: 1 (missing stats)
+                            │ limit: 3
+                            │
+                            ├── • scan
+                            │     columns: (crdb_internal_id_shard_16, id, crdb_region)
+                            │     estimated row count: 1 (missing stats)
+                            │     table: t_unique_hash_pk@t_unique_hash_pk_pkey
+                            │     spans: /"@"/9/4321/0
+                            │
+                            └── • scan
+                                  columns: (crdb_internal_id_shard_16, id, crdb_region)
+                                  estimated row count: 1 (missing stats)
+                                  table: t_unique_hash_pk@t_unique_hash_pk_pkey
+                                  spans: /"\x80"/9/4321/0 /"\xc0"/9/4321/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_pk (id) VALUES (4321) ON CONFLICT DO NOTHING;
@@ -1009,19 +1029,15 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ into: t_unique_hash_sec_key(id, email, crdb_region, crdb_internal_email_shard_16)
 │   │
-│   └── • buffer
-│       │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│             size: 6 columns, 1 row
-│             row 0, expr 0: 4321
-│             row 0, expr 1: 'some_email'
-│             row 0, expr 2: 'ap-southeast-2'
-│             row 0, expr 3: 13
-│             row 0, expr 4: true
-│             row 0, expr 5: true
+│   └── • values
+│         columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
+│         size: 6 columns, 1 row
+│         row 0, expr 0: 4321
+│         row 0, expr 1: 'some_email'
+│         row 0, expr 2: 'ap-southeast-2'
+│         row 0, expr 3: 13
+│         row 0, expr 4: true
+│         row 0, expr 5: true
 │
 ├── • constraint-check
 │   │
@@ -1029,23 +1045,24 @@ vectorized: true
 │       │ columns: ()
 │       │
 │       └── • project
-│           │ columns: (column1)
-│           │ estimated row count: 0 (missing stats)
+│           │ columns: (id)
+│           │ estimated row count: 1 (missing stats)
 │           │
-│           └── • lookup join (semi)
-│               │ columns: (column1, crdb_region_default)
-│               │ estimated row count: 0 (missing stats)
-│               │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-│               │ lookup condition: (column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-│               │ pred: crdb_region_default != crdb_region
+│           └── • cross join (inner)
+│               │ columns: (id, id, crdb_region)
+│               │ estimated row count: 1 (missing stats)
 │               │
-│               └── • project
-│                   │ columns: (column1, crdb_region_default)
-│                   │ estimated row count: 1
-│                   │
-│                   └── • scan buffer
-│                         columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│                         label: buffer 1
+│               ├── • values
+│               │     columns: (id)
+│               │     size: 1 column, 1 row
+│               │     row 0, expr 0: 4321
+│               │
+│               └── • scan
+│                     columns: (id, crdb_region)
+│                     estimated row count: 1 (missing stats)
+│                     table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+│                     spans: /"\x80"/4321/0 /"\xc0"/4321/0
+│                     limit: 1
 │
 └── • constraint-check
     │
@@ -1053,23 +1070,60 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column2)
-            │ estimated row count: 0 (missing stats)
+            │ columns: (email)
+            │ estimated row count: 1 (missing stats)
             │
-            └── • lookup join (semi)
-                │ columns: (column1, column2, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@idx_uniq_hash_email
-                │ lookup condition: ((column2 = email) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))) AND (crdb_internal_email_shard_16 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15))
-                │ pred: (column1 != id) OR (crdb_region_default != crdb_region)
+            └── • cross join (inner)
+                │ columns: (email, id, email, crdb_region)
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • project
-                    │ columns: (column1, column2, crdb_region_default)
-                    │ estimated row count: 1
+                ├── • values
+                │     columns: (email)
+                │     size: 1 column, 1 row
+                │     row 0, expr 0: 'some_email'
+                │
+                └── • limit
+                    │ columns: (id, email, crdb_region)
+                    │ estimated row count: 1 (missing stats)
+                    │ count: 1
                     │
-                    └── • scan buffer
-                          columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-                          label: buffer 1
+                    └── • distinct
+                        │ columns: (id, email, crdb_region)
+                        │ estimated row count: 7 (missing stats)
+                        │ distinct on: id, crdb_region
+                        │
+                        └── • union all
+                            │ columns: (id, email, crdb_region)
+                            │ estimated row count: 2 (missing stats)
+                            │
+                            ├── • filter
+                            │   │ columns: (id, email, crdb_region)
+                            │   │ estimated row count: 1 (missing stats)
+                            │   │ filter: id != 4321
+                            │   │
+                            │   └── • union all
+                            │       │ columns: (id, email, crdb_region)
+                            │       │ estimated row count: 1 (missing stats)
+                            │       │ limit: 1
+                            │       │
+                            │       ├── • scan
+                            │       │     columns: (id, email, crdb_region)
+                            │       │     estimated row count: 1 (missing stats)
+                            │       │     table: t_unique_hash_sec_key@idx_uniq_hash_email
+                            │       │     spans: /"@"/13/"some_email"/0
+                            │       │
+                            │       └── • scan
+                            │             columns: (id, email, crdb_region)
+                            │             estimated row count: 1 (missing stats)
+                            │             table: t_unique_hash_sec_key@idx_uniq_hash_email
+                            │             spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
+                            │             parallel
+                            │
+                            └── • scan
+                                  columns: (id, email, crdb_region)
+                                  estimated row count: 1 (missing stats)
+                                  table: t_unique_hash_sec_key@idx_uniq_hash_email
+                                  spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_unique_hash_sec_key (id, email) VALUES (4321, 'some_email') ON CONFLICT DO NOTHING;
@@ -1213,53 +1267,49 @@ vectorized: true
 │   │ into: t_unique_hash_sec_key(id, email, crdb_region, crdb_internal_email_shard_16)
 │   │ arbiter constraints: idx_uniq_hash_email
 │   │
-│   └── • buffer
+│   └── • render
 │       │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-│       │ label: buffer 1
+│       │ estimated row count: 0 (missing stats)
+│       │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+│       │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+│       │ render column1: column1
+│       │ render column2: column2
+│       │ render crdb_region_default: crdb_region_default
+│       │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
 │       │
-│       └── • render
-│           │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
+│       └── • cross join (anti)
+│           │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
 │           │ estimated row count: 0 (missing stats)
-│           │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-│           │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
-│           │ render column1: column1
-│           │ render column2: column2
-│           │ render crdb_region_default: crdb_region_default
-│           │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
 │           │
-│           └── • cross join (anti)
-│               │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-│               │ estimated row count: 0 (missing stats)
+│           ├── • values
+│           │     columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
+│           │     size: 4 columns, 1 row
+│           │     row 0, expr 0: 4321
+│           │     row 0, expr 1: 'some_email'
+│           │     row 0, expr 2: 'ap-southeast-2'
+│           │     row 0, expr 3: 13
+│           │
+│           └── • project
+│               │ columns: ()
+│               │ estimated row count: 1 (missing stats)
 │               │
-│               ├── • values
-│               │     columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp)
-│               │     size: 4 columns, 1 row
-│               │     row 0, expr 0: 4321
-│               │     row 0, expr 1: 'some_email'
-│               │     row 0, expr 2: 'ap-southeast-2'
-│               │     row 0, expr 3: 13
-│               │
-│               └── • project
-│                   │ columns: ()
+│               └── • union all
+│                   │ columns: (email)
 │                   │ estimated row count: 1 (missing stats)
+│                   │ limit: 1
 │                   │
-│                   └── • union all
-│                       │ columns: (email)
-│                       │ estimated row count: 1 (missing stats)
-│                       │ limit: 1
-│                       │
-│                       ├── • scan
-│                       │     columns: (email)
-│                       │     estimated row count: 1 (missing stats)
-│                       │     table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                       │     spans: /"@"/13/"some_email"/0
-│                       │
-│                       └── • scan
-│                             columns: (email)
-│                             estimated row count: 1 (missing stats)
-│                             table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                             spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
-│                             parallel
+│                   ├── • scan
+│                   │     columns: (email)
+│                   │     estimated row count: 1 (missing stats)
+│                   │     table: t_unique_hash_sec_key@idx_uniq_hash_email
+│                   │     spans: /"@"/13/"some_email"/0
+│                   │
+│                   └── • scan
+│                         columns: (email)
+│                         estimated row count: 1 (missing stats)
+│                         table: t_unique_hash_sec_key@idx_uniq_hash_email
+│                         spans: /"\x80"/13/"some_email"/0 /"\xc0"/13/"some_email"/0
+│                         parallel
 │
 └── • constraint-check
     │
@@ -1267,23 +1317,24 @@ vectorized: true
         │ columns: ()
         │
         └── • project
-            │ columns: (column1)
-            │ estimated row count: 0 (missing stats)
+            │ columns: (id)
+            │ estimated row count: 1 (missing stats)
             │
-            └── • lookup join (semi)
-                │ columns: (column1, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
-                │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-                │ lookup condition: (column1 = id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
-                │ pred: crdb_region_default != crdb_region
+            └── • cross join (inner)
+                │ columns: (id, id, crdb_region)
+                │ estimated row count: 1 (missing stats)
                 │
-                └── • project
-                    │ columns: (column1, crdb_region_default)
-                    │ estimated row count: 0 (missing stats)
-                    │
-                    └── • scan buffer
-                          columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, check1, check2)
-                          label: buffer 1
+                ├── • values
+                │     columns: (id)
+                │     size: 1 column, 1 row
+                │     row 0, expr 0: 4321
+                │
+                └── • scan
+                      columns: (id, crdb_region)
+                      estimated row count: 1 (missing stats)
+                      table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+                      spans: /"\x80"/4321/0 /"\xc0"/4321/0
+                      limit: 1
 
 # TODO (mgartner): there is a lookup join with lookup condition checking every
 # single shard. This is unnecessary and could be improved by having the shard

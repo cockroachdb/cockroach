@@ -61,6 +61,32 @@ upsert c1
                 └── filters
                      └── p:9 = p.p:10
 
+# Build a Values expression instead of a WithScan when the INSERT FK columns are
+# constant.
+build
+UPSERT INTO c1 VALUES (100, 1, 10)
+----
+upsert c1
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:6 => c:1
+ │    ├── column2:7 => c1.p:2
+ │    └── column3:8 => i:3
+ ├── values
+ │    ├── columns: column1:6!null column2:7!null column3:8!null
+ │    └── (100, 1, 10)
+ └── f-k-checks
+      └── f-k-checks-item: c1(p) -> p(p)
+           └── anti-join (hash)
+                ├── columns: p:9!null
+                ├── values
+                │    ├── columns: p:9!null
+                │    └── (1,)
+                ├── scan p
+                │    └── columns: p.p:10!null
+                └── filters
+                     └── p:9 = p.p:10
+
 build
 UPSERT INTO c1(c) VALUES (100), (200)
 ----
@@ -570,7 +596,6 @@ upsert cpq
  │    ├── column2:8 => cpq.p:2
  │    ├── column3:9 => cpq.q:3
  │    └── column4:10 => cpq.other:4
- ├── input binding: &1
  ├── values
  │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
  │    └── (1, 1, 1, 1)
@@ -578,11 +603,9 @@ upsert cpq
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
                 ├── columns: p:11!null q:12!null
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: p:11!null q:12!null
-                │    └── mapping:
-                │         ├──  column2:8 => p:11
-                │         └──  column3:9 => q:12
+                │    └── (1, 1)
                 ├── scan pq
                 │    └── columns: pq.p:14 pq.q:15
                 └── filters
@@ -771,7 +794,6 @@ upsert cpq
  │    ├── p_default:14 => cpq.p:2
  │    ├── q_default:15 => cpq.q:3
  │    └── other_default:16 => cpq.other:4
- ├── input binding: &1
  ├── project
  │    ├── columns: p_default:14!null q_default:15!null other_default:16 x:7
  │    ├── project
@@ -786,11 +808,9 @@ upsert cpq
       └── f-k-checks-item: cpq(p,q) -> pq(p,q)
            └── anti-join (hash)
                 ├── columns: p:17!null q:18!null
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: p:17!null q:18!null
-                │    └── mapping:
-                │         ├──  p_default:14 => p:17
-                │         └──  q_default:15 => q:18
+                │    └── (4, 8)
                 ├── scan pq
                 │    └── columns: pq.p:20 pq.q:21
                 └── filters

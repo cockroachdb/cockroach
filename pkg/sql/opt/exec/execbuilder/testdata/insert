@@ -630,19 +630,46 @@ statement ok
 CREATE TABLE t62270_parent (id INT PRIMARY KEY);
 CREATE TABLE t62270_child (c UUID DEFAULT (gen_random_uuid()), p INT REFERENCES t62270_parent (id));
 
+# TODO(mgartner/radu): This query should use the insert fast path. Inlining the
+# values removes the lookup join in the FK check  that the insert fast path
+# relies on.
 query T
 EXPLAIN (VERBOSE) INSERT INTO t62270_child (p) VALUES (1)
 ----
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  columns: ()
-  estimated row count: 0 (missing stats)
-  into: t62270_child(c, p, rowid)
-  auto commit
-  FK check: t62270_parent@t62270_parent_pkey
-  size: 3 columns, 1 row
-  row 0, expr 0: gen_random_uuid()
-  row 0, expr 1: 1
-  row 0, expr 2: unique_rowid()
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: t62270_child(c, p, rowid)
+│   │
+│   └── • values
+│         columns: (c_default, column1, rowid_default)
+│         size: 3 columns, 1 row
+│         row 0, expr 0: 1
+│         row 0, expr 1: gen_random_uuid()
+│         row 0, expr 2: unique_rowid()
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • cross join (anti)
+            │ columns: (p)
+            │ estimated row count: 0 (missing stats)
+            │
+            ├── • values
+            │     columns: (p)
+            │     size: 1 column, 1 row
+            │     row 0, expr 0: 1
+            │
+            └── • scan
+                  columns: (id)
+                  estimated row count: 1 (missing stats)
+                  table: t62270_parent@t62270_parent_pkey
+                  spans: /1/0
