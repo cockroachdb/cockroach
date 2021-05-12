@@ -10,7 +10,7 @@ WITH
 		)
 SELECT * FROM with_t1
 ----
-SELECT 1 / 0;
+SELECT 0 / 0;
 
 reduce
 WITH
@@ -26,7 +26,7 @@ SELECT
 FROM
 	w;
 ----
-VALUES (1 / 0);
+VALUES (0 / 0);
 
 reduce
 SELECT
@@ -34,7 +34,7 @@ SELECT
 FROM
 	(SELECT 1), (SELECT 2);
 ----
-SELECT 1 / 0;
+SELECT 0 / 0;
 
 reduce
 CREATE TABLE a (i) AS VALUES (1);
@@ -47,7 +47,7 @@ FROM
 	a, a AS c JOIN b ON true;
 ----
 ----
-CREATE TABLE a (i) AS VALUES (1);
+CREATE TABLE a (i) AS VALUES (0);
 
 CREATE TABLE b (j) AS VALUES (0);
 
