@@ -215,7 +215,7 @@ func evalExport(
 			if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxUploadRetries, func() error {
 				// We blindly retry any error here because we expect the caller to have
 				// verified the target is writable before sending ExportRequests for it.
-				if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(data)); err != nil {
+				if err := cloud.WriteFile(ctx, exportStore, exported.Path, bytes.NewReader(data)); err != nil {
 					log.VEventf(ctx, 1, "failed to put file: %+v", err)
 					return err
 				}
