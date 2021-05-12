@@ -653,9 +653,6 @@ func (*WriteBatchRequest) Method() Method { return WriteBatch }
 func (*ExportRequest) Method() Method { return Export }
 
 // Method implements the Request interface.
-func (*ImportRequest) Method() Method { return Import }
-
-// Method implements the Request interface.
 func (*AdminScatterRequest) Method() Method { return AdminScatter }
 
 // Method implements the Request interface.
@@ -889,12 +886,6 @@ func (r *WriteBatchRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ekr *ExportRequest) ShallowCopy() Request {
 	shallowCopy := *ekr
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (r *ImportRequest) ShallowCopy() Request {
-	shallowCopy := *r
 	return &shallowCopy
 }
 
@@ -1275,7 +1266,6 @@ func (*ComputeChecksumRequest) flags() int               { return isWrite }
 func (*CheckConsistencyRequest) flags() int              { return isAdmin | isRange }
 func (*WriteBatchRequest) flags() int                    { return isWrite | isRange }
 func (*ExportRequest) flags() int                        { return isRead | isRange | updatesTSCache }
-func (*ImportRequest) flags() int                        { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() int { return isAdmin | isRange | isAlone }
 func (*AddSSTableRequest) flags() int {

@@ -107,7 +107,7 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.Replica
 	return func(_ context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 		for _, ru := range br.Responses {
 			switch ru.GetInner().(type) {
-			case *roachpb.ExportResponse, *roachpb.ImportResponse, *roachpb.AddSSTableResponse:
+			case *roachpb.ExportResponse, *roachpb.AddSSTableResponse:
 				<-*allowProgressIota
 			}
 		}

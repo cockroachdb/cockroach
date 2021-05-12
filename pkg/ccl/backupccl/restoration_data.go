@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // restorationData specifies the data that is to be restored in a restoration flow.
@@ -32,7 +33,7 @@ type restorationData interface {
 
 	// Peripheral data that is needed in the restoration flow relating to the data
 	// included in this bundle.
-	getRekeys() []roachpb.ImportRequest_TableRekey
+	getRekeys() []execinfrapb.TableRekey
 	getPKIDs() map[uint64]bool
 
 	// addTenant extends the set of data needed to restore to include a new tenant.
@@ -62,7 +63,7 @@ type restorationDataBase struct {
 	// spans is the spans included in this bundle.
 	spans []roachpb.Span
 	// rekeys maps old table IDs to their new table descriptor.
-	rekeys []roachpb.ImportRequest_TableRekey
+	rekeys []execinfrapb.TableRekey
 	// pkIDs stores the ID of the primary keys for all of the tables that we're
 	// restoring for RowCount calculation.
 	pkIDs map[uint64]bool
@@ -76,7 +77,7 @@ type restorationDataBase struct {
 var _ restorationData = &restorationDataBase{}
 
 // getRekeys implements restorationData.
-func (b *restorationDataBase) getRekeys() []roachpb.ImportRequest_TableRekey {
+func (b *restorationDataBase) getRekeys() []execinfrapb.TableRekey {
 	return b.rekeys
 }
 

@@ -698,16 +698,6 @@ func (r *Replica) executeAdminBatch(
 		reply, pErr = r.CheckConsistency(ctx, *tArgs)
 		resp = &reply
 
-	case *roachpb.ImportRequest:
-		cArgs := batcheval.CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, todoSpanSet),
-			Header:  ba.Header,
-			Args:    args,
-		}
-		var err error
-		resp, err = importCmdFn(ctx, cArgs)
-		pErr = roachpb.NewError(err)
-
 	case *roachpb.AdminScatterRequest:
 		reply, err := r.adminScatter(ctx, *tArgs)
 		pErr = roachpb.NewError(err)

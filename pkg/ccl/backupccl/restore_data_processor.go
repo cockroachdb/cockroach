@@ -40,13 +40,36 @@ type restoreDataProcessor struct {
 	output  execinfra.RowReceiver
 
 	alloc rowenc.DatumAlloc
-	kr    *storageccl.KeyRewriter
+	kr    *KeyRewriter
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
 var _ execinfra.RowSource = &restoreDataProcessor{}
 
 const restoreDataProcName = "restoreDataProcessor"
+
+func newTestingRestoreDataProcessor(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	flowCtx *execinfra.FlowCtx,
+	spec execinfrapb.RestoreDataSpec,
+) (*restoreDataProcessor, error) {
+	rd := &restoreDataProcessor{
+		ProcessorBase: execinfra.ProcessorBase{
+			Ctx:     ctx,
+			EvalCtx: evalCtx,
+		},
+		flowCtx: flowCtx,
+		spec:    spec,
+	}
+	var err error
+	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
+	if err != nil {
+		return nil, err
+	}
+
+	return rd, nil
+}
 
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -64,7 +87,7 @@ func newRestoreDataProcessor(
 	}
 
 	var err error
-	rd.kr, err = storageccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
+	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
 	if err != nil {
 		return nil, err
 	}

@@ -122,14 +122,6 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	1<<40,
 ).WithPublic()
 
-// importRequestsLimit limits concurrent import requests.
-var importRequestsLimit = settings.RegisterIntSetting(
-	"kv.bulk_io_write.concurrent_import_requests",
-	"number of import requests a store will handle concurrently before queuing",
-	1,
-	settings.PositiveInt,
-)
-
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
@@ -853,12 +845,6 @@ func NewStore(
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
-	})
-	s.limiters.ConcurrentImportRequests = limit.MakeConcurrentRequestLimiter(
-		"importRequestLimiter", int(importRequestsLimit.Get(&cfg.Settings.SV)),
-	)
-	importRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
-		s.limiters.ConcurrentImportRequests.SetLimit(int(importRequestsLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
