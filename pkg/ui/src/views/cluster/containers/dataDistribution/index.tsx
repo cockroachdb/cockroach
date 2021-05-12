@@ -16,7 +16,7 @@ import Helmet from "react-helmet";
 import { withRouter } from "react-router-dom";
 
 import { Loading } from "@cockroachlabs/cluster-ui";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { InfoTooltip } from "src/components/infoTooltip";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
@@ -125,14 +125,7 @@ class DataDistribution extends React.Component<DataDistributionProps> {
       <div className="data-distribution">
         <div className="data-distribution__zone-config-sidebar">
           <h2 className="base-heading">
-            Zone Configs{" "}
-            <div className="section-heading__tooltip">
-              <ToolTipWrapper text={ZONE_CONFIG_TEXT}>
-                <div className="section-heading__tooltip-hover-area">
-                  <div className="section-heading__info-icon">i</div>
-                </div>
-              </ToolTipWrapper>
-            </div>
+            Zone Configs <InfoTooltip text={ZONE_CONFIG_TEXT} />
           </h2>
           {this.renderZoneConfigs()}
           <p style={{ maxWidth: 300, paddingTop: 10 }}>
