@@ -200,7 +200,7 @@ func TestDifference(t *testing.T) {
 	})
 }
 
-func TestSimplify(t *testing.T) {
+func TestSimplifyGEOS(t *testing.T) {
 	testCases := []struct {
 		wkt       string
 		tolerance float64
@@ -237,7 +237,7 @@ func TestSimplify(t *testing.T) {
 		t.Run(fmt.Sprintf("%s_%f", tc.wkt, tc.tolerance), func(t *testing.T) {
 			g, err := geo.ParseGeometry(tc.wkt)
 			require.NoError(t, err)
-			ret, err := Simplify(g, tc.tolerance)
+			ret, err := SimplifyGEOS(g, tc.tolerance)
 			require.NoError(t, err)
 
 			expected, err := geo.ParseGeometry(tc.expected)
