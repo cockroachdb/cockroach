@@ -146,7 +146,6 @@ insert order
  │    ├── o_carrier_id_default:17 => o_carrier_id:6
  │    ├── column6:15 => o_ol_cnt:7
  │    └── column7:16 => o_all_local:8
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -157,22 +156,29 @@ insert order
  │    └── (100, 5, 10, 50, '2019-08-26 16:50:41', 10, 1, NULL)
  └── f-k-checks
       └── f-k-checks-item: order(o_w_id,o_d_id,o_c_id) -> customer(c_w_id,c_d_id,c_id)
-           └── anti-join (lookup customer)
+           └── anti-join (cross)
                 ├── columns: o_w_id:18!null o_d_id:19!null o_c_id:20!null
-                ├── key columns: [18 19 20] = [23 22 21]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(18-20)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: o_w_id:18!null o_d_id:19!null o_c_id:20!null
-                │    ├── mapping:
-                │    │    ├──  column3:12 => o_w_id:18
-                │    │    ├──  column2:11 => o_d_id:19
-                │    │    └──  column4:13 => o_c_id:20
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(18-20)
+                │    ├── fd: ()-->(18-20)
+                │    └── (10, 5, 50)
+                ├── select
+                │    ├── columns: c_id:21!null c_d_id:22!null c_w_id:23!null
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(21-23)
+                │    ├── scan customer@customer_idx
+                │    │    ├── columns: c_id:21!null c_d_id:22!null c_w_id:23!null
+                │    │    ├── constraint: /23/22/26/24/21: [/10/5 - /10/5]
+                │    │    ├── key: (21)
+                │    │    └── fd: ()-->(22,23)
+                │    └── filters
+                │         └── c_id:21 = 50 [outer=(21), constraints=(/21: [/50 - /50]; tight), fd=()-->(21)]
                 └── filters (true)
 
 opt format=hide-qual
@@ -184,7 +190,6 @@ insert new_order
  │    ├── column1:5 => new_order.no_o_id:1
  │    ├── column2:6 => new_order.no_d_id:2
  │    └── column3:7 => new_order.no_w_id:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -195,22 +200,23 @@ insert new_order
  │    └── (2000, 100, 10)
  └── f-k-checks
       └── f-k-checks-item: new_order(no_w_id,no_d_id,no_o_id) -> order(o_w_id,o_d_id,o_id)
-           └── anti-join (lookup order)
+           └── anti-join (cross)
                 ├── columns: no_w_id:8!null no_d_id:9!null no_o_id:10!null
-                ├── key columns: [8 9 10] = [13 12 11]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(8-10)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: no_w_id:8!null no_d_id:9!null no_o_id:10!null
-                │    ├── mapping:
-                │    │    ├──  column3:7 => no_w_id:8
-                │    │    ├──  column2:6 => no_d_id:9
-                │    │    └──  column1:5 => no_o_id:10
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(8-10)
+                │    ├── fd: ()-->(8-10)
+                │    └── (10, 100, 2000)
+                ├── scan order
+                │    ├── columns: o_id:11!null o_d_id:12!null o_w_id:13!null
+                │    ├── constraint: /13/12/-11: [/10/100/2000 - /10/100/2000]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(11-13)
                 └── filters (true)
 
 opt format=hide-qual
@@ -606,7 +612,6 @@ insert history
  │    ├── column7:17 => h_date:7
  │    ├── h_amount:20 => history.h_amount:8
  │    └── column8:18 => h_data:9
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -618,39 +623,48 @@ insert history
  │    └── (1343, 5, 10, 5, 10, '2019-08-26 16:50:41', '8    Kdcgphy3', gen_random_uuid(), 3860.61)
  └── f-k-checks
       ├── f-k-checks-item: history(h_c_w_id,h_c_d_id,h_c_id) -> customer(c_w_id,c_d_id,c_id)
-      │    └── anti-join (lookup customer)
+      │    └── anti-join (cross)
       │         ├── columns: h_c_w_id:21!null h_c_d_id:22!null h_c_id:23!null
-      │         ├── key columns: [21 22 23] = [26 25 24]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(21-23)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: h_c_w_id:21!null h_c_d_id:22!null h_c_id:23!null
-      │         │    ├── mapping:
-      │         │    │    ├──  column3:13 => h_c_w_id:21
-      │         │    │    ├──  column2:12 => h_c_d_id:22
-      │         │    │    └──  column1:11 => h_c_id:23
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(21-23)
+      │         │    ├── fd: ()-->(21-23)
+      │         │    └── (10, 5, 1343)
+      │         ├── select
+      │         │    ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(24-26)
+      │         │    ├── scan customer@customer_idx
+      │         │    │    ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null
+      │         │    │    ├── constraint: /26/25/29/27/24: [/10/5 - /10/5]
+      │         │    │    ├── key: (24)
+      │         │    │    └── fd: ()-->(25,26)
+      │         │    └── filters
+      │         │         └── c_id:24 = 1343 [outer=(24), constraints=(/24: [/1343 - /1343]; tight), fd=()-->(24)]
       │         └── filters (true)
       └── f-k-checks-item: history(h_w_id,h_d_id) -> district(d_w_id,d_id)
-           └── anti-join (lookup district)
+           └── anti-join (cross)
                 ├── columns: h_w_id:46!null h_d_id:47!null
-                ├── key columns: [46 47] = [49 48]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(46,47)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: h_w_id:46!null h_d_id:47!null
-                │    ├── mapping:
-                │    │    ├──  column5:15 => h_w_id:46
-                │    │    └──  column4:14 => h_d_id:47
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(46,47)
+                │    ├── fd: ()-->(46,47)
+                │    └── (10, 5)
+                ├── scan district
+                │    ├── columns: d_id:48!null d_w_id:49!null
+                │    ├── constraint: /49/48: [/10/5 - /10/5]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(48,49)
                 └── filters (true)
 
 # --------------------------------------------------

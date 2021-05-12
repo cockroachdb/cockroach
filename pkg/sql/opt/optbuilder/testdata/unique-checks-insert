@@ -354,7 +354,6 @@ insert uniq
  │    ├── column3:9 => uniq.w:3
  │    ├── column4:10 => uniq.x:4
  │    └── column5:11 => uniq.y:5
- ├── input binding: &1
  ├── upsert-distinct-on
  │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null
  │    ├── grouping columns: column3:9!null
@@ -382,14 +381,9 @@ insert uniq
                 ├── columns: x:27!null y:28!null
                 └── semi-join (hash)
                      ├── columns: k:24!null v:25!null w:26!null x:27!null y:28!null
-                     ├── with-scan &1
+                     ├── values
                      │    ├── columns: k:24!null v:25!null w:26!null x:27!null y:28!null
-                     │    └── mapping:
-                     │         ├──  column1:7 => k:24
-                     │         ├──  column2:8 => v:25
-                     │         ├──  column3:9 => w:26
-                     │         ├──  column4:10 => x:27
-                     │         └──  column5:11 => y:28
+                     │    └── (1, 2, 3, 4, 5)
                      ├── scan uniq
                      │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
                      └── filters
@@ -1303,6 +1297,13 @@ CREATE TABLE uniq_partial_constraint_and_index (
 # Use a pseudo-partial index as the only arbiter. Note that we use the "norm"
 # directive instead of "build" to ensure that partial index predicates are fully
 # normalized when choosing arbiter indexes.
+# TODO(mgartner): There is no need to plan a uniqueness check because the
+# pseudo-partial index arbiter ensures that the unique constraint is not
+# violated. In this particular case, with one constant row being inserted, the
+# unique check is normalized to an empty Values expression. One option is to
+# recognize an empty Values uniqueness check and eliminate it. Eliminating this
+# uniqueness check in more general cases would require recognizing that the
+# check is not necessary and not building it in the first place.
 norm
 INSERT INTO uniq_partial_constraint_and_index VALUES (1, 1, 1)
 ON CONFLICT (a) WHERE b > 10 DO NOTHING
@@ -1315,7 +1316,6 @@ insert uniq_partial_constraint_and_index
  │    ├── column2:6 => uniq_partial_constraint_and_index.a:2
  │    └── column3:7 => uniq_partial_constraint_and_index.b:3
  ├── partial index put columns: partial_index_put1:13
- ├── input binding: &1
  ├── project
  │    ├── columns: partial_index_put1:13!null column1:5!null column2:6!null column3:7!null
  │    ├── anti-join (cross)
@@ -1336,31 +1336,8 @@ insert uniq_partial_constraint_and_index
  │         └── true [as=partial_index_put1:13]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
-           └── project
-                ├── columns: a:19!null
-                └── semi-join (hash)
-                     ├── columns: k:18!null a:19!null b:20!null
-                     ├── select
-                     │    ├── columns: k:18!null a:19!null b:20!null
-                     │    ├── with-scan &1
-                     │    │    ├── columns: k:18!null a:19!null b:20!null
-                     │    │    └── mapping:
-                     │    │         ├──  column1:5 => k:18
-                     │    │         ├──  column2:6 => a:19
-                     │    │         └──  column3:7 => b:20
-                     │    └── filters
-                     │         └── b:20 > 10
-                     ├── select
-                     │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16!null
-                     │    ├── scan uniq_partial_constraint_and_index
-                     │    │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16
-                     │    │    └── partial index predicates
-                     │    │         └── secondary: filters (true)
-                     │    └── filters
-                     │         └── uniq_partial_constraint_and_index.b:16 > 10
-                     └── filters
-                          ├── a:19 = uniq_partial_constraint_and_index.a:15
-                          └── k:18 != uniq_partial_constraint_and_index.k:14
+           └── values
+                └── columns: a:19!null
 
 exec-ddl
 CREATE TABLE uniq_constraint_and_partial_index (
@@ -1574,3 +1551,45 @@ insert uniq_computed_pk
                      └── filters
                           ├── d:40 = uniq_computed_pk.d:32
                           └── (i:38 != uniq_computed_pk.i:30) OR (c_i_expr:41 != uniq_computed_pk.c_i_expr:33)
+
+exec-ddl
+CREATE TABLE uniq_default (
+  k INT PRIMARY KEY,
+  a INT DEFAULT (10),
+  b INT,
+  UNIQUE WITHOUT INDEX (a, b)
+)
+----
+
+# Inline default values in uniqueness check. The norm directive is used so that
+# the projection of the default value is normalized into the values expression.
+# This normalization is required for the values to be inlined in the constraint
+# check.
+norm
+INSERT INTO uniq_default (k, b) VALUES (1, 100)
+----
+insert uniq_default
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => uniq_default.k:1
+ │    ├── a_default:7 => uniq_default.a:2
+ │    └── column2:6 => uniq_default.b:3
+ ├── values
+ │    ├── columns: column1:5!null column2:6!null a_default:7!null
+ │    └── (1, 100, 10)
+ └── unique-checks
+      └── unique-checks-item: uniq_default(a,b)
+           └── semi-join (cross)
+                ├── columns: a:13!null b:14!null
+                ├── values
+                │    ├── columns: a:13!null b:14!null
+                │    └── (10, 100)
+                ├── select
+                │    ├── columns: uniq_default.k:8!null uniq_default.a:9!null uniq_default.b:10!null
+                │    ├── scan uniq_default
+                │    │    └── columns: uniq_default.k:8!null uniq_default.a:9 uniq_default.b:10
+                │    └── filters
+                │         ├── uniq_default.a:9 = 10
+                │         ├── uniq_default.b:10 = 100
+                │         └── uniq_default.k:8 != 1
+                └── filters (true)

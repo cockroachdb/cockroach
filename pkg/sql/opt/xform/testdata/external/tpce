@@ -477,7 +477,6 @@ insert trade_history
  │    ├── column1:5 => trade_history.th_t_id:1
  │    ├── column2:6 => th_dts:2
  │    └── column3:7 => trade_history.th_st_id:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -488,36 +487,42 @@ insert trade_history
  │    └── (0, '2020-06-17 22:27:42.148484', 'SBMT')
  └── f-k-checks
       ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: th_t_id:8!null
-      │         ├── key columns: [8] = [9]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(8)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: th_t_id:8!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:5 => th_t_id:8
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(8)
+      │         │    ├── fd: ()-->(8)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:9!null
+      │         │    ├── constraint: /9: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
       │         └── filters (true)
       └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
-           └── anti-join (lookup status_type)
+           └── anti-join (cross)
                 ├── columns: th_st_id:25!null
-                ├── key columns: [25] = [26]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(25)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: th_st_id:25!null
-                │    ├── mapping:
-                │    │    └──  column3:7 => th_st_id:25
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(25)
+                │    ├── fd: ()-->(25)
+                │    └── ('SBMT',)
+                ├── scan status_type
+                │    ├── columns: st_id:26!null
+                │    ├── constraint: /26: [/'SBMT' - /'SBMT']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(26)
                 └── filters (true)
 
 # --------------------------------------------------
@@ -1735,7 +1740,6 @@ insert trade
  │    ├── t_tax:36 => trade.t_tax:14
  │    └── column15:31 => t_lifo:15
  ├── check columns: check1:37 check2:38 check3:39 check4:40 check5:41
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -1746,68 +1750,80 @@ insert trade
  │    └── (0, '2020-06-17 22:27:42.148484', 'SBMT', 'TMB', true, 'SYMB', 10, 0, 'Name', true, 1E+2, NULL, 1, 0, 0, true, true, true, true, true)
  └── f-k-checks
       ├── f-k-checks-item: trade(t_st_id) -> status_type(st_id)
-      │    └── anti-join (lookup status_type)
+      │    └── anti-join (cross)
       │         ├── columns: t_st_id:42!null
-      │         ├── key columns: [42] = [43]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(42)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: t_st_id:42!null
-      │         │    ├── mapping:
-      │         │    │    └──  column3:19 => t_st_id:42
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(42)
+      │         │    ├── fd: ()-->(42)
+      │         │    └── ('SBMT',)
+      │         ├── scan status_type
+      │         │    ├── columns: st_id:43!null
+      │         │    ├── constraint: /43: [/'SBMT' - /'SBMT']
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(43)
       │         └── filters (true)
       ├── f-k-checks-item: trade(t_tt_id) -> trade_type(tt_id)
-      │    └── anti-join (lookup trade_type)
+      │    └── anti-join (cross)
       │         ├── columns: t_tt_id:46!null
-      │         ├── key columns: [46] = [47]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(46)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: t_tt_id:46!null
-      │         │    ├── mapping:
-      │         │    │    └──  column4:20 => t_tt_id:46
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(46)
+      │         │    ├── fd: ()-->(46)
+      │         │    └── ('TMB',)
+      │         ├── scan trade_type
+      │         │    ├── columns: tt_id:47!null
+      │         │    ├── constraint: /47: [/'TMB' - /'TMB']
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(47)
       │         └── filters (true)
       ├── f-k-checks-item: trade(t_s_symb) -> security(s_symb)
-      │    └── anti-join (lookup security)
+      │    └── anti-join (cross)
       │         ├── columns: t_s_symb:52!null
-      │         ├── key columns: [52] = [53]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(52)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: t_s_symb:52!null
-      │         │    ├── mapping:
-      │         │    │    └──  column6:22 => t_s_symb:52
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(52)
+      │         │    ├── fd: ()-->(52)
+      │         │    └── ('SYMB',)
+      │         ├── scan security
+      │         │    ├── columns: s_symb:53!null
+      │         │    ├── constraint: /53: [/'SYMB' - /'SYMB']
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(53)
       │         └── filters (true)
       └── f-k-checks-item: trade(t_ca_id) -> customer_account(ca_id)
-           └── anti-join (lookup customer_account)
+           └── anti-join (cross)
                 ├── columns: t_ca_id:70!null
-                ├── key columns: [70] = [71]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(70)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: t_ca_id:70!null
-                │    ├── mapping:
-                │    │    └──  column9:25 => t_ca_id:70
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(70)
+                │    ├── fd: ()-->(70)
+                │    └── (0,)
+                ├── scan customer_account
+                │    ├── columns: ca_id:71!null
+                │    ├── constraint: /71: [/0 - /0]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(71)
                 └── filters (true)
 
 # Q20
@@ -1825,7 +1841,6 @@ insert trade_request
  │    ├── tr_bid_price:14 => trade_request.tr_bid_price:5
  │    └── column6:13 => trade_request.tr_b_id:6
  ├── check columns: check1:15 check2:16
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -1836,68 +1851,80 @@ insert trade_request
  │    └── (0, 'TMB', 'SYMB', 10, 0, 1E+2, true, true)
  └── f-k-checks
       ├── f-k-checks-item: trade_request(tr_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: tr_t_id:17!null
-      │         ├── key columns: [17] = [18]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(17)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: tr_t_id:17!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:8 => tr_t_id:17
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(17)
+      │         │    ├── fd: ()-->(17)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:18!null
+      │         │    ├── constraint: /18: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(18)
       │         └── filters (true)
       ├── f-k-checks-item: trade_request(tr_tt_id) -> trade_type(tt_id)
-      │    └── anti-join (lookup trade_type)
+      │    └── anti-join (cross)
       │         ├── columns: tr_tt_id:34!null
-      │         ├── key columns: [34] = [35]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(34)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: tr_tt_id:34!null
-      │         │    ├── mapping:
-      │         │    │    └──  column2:9 => tr_tt_id:34
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(34)
+      │         │    ├── fd: ()-->(34)
+      │         │    └── ('TMB',)
+      │         ├── scan trade_type
+      │         │    ├── columns: tt_id:35!null
+      │         │    ├── constraint: /35: [/'TMB' - /'TMB']
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(35)
       │         └── filters (true)
       ├── f-k-checks-item: trade_request(tr_s_symb) -> security(s_symb)
-      │    └── anti-join (lookup security)
+      │    └── anti-join (cross)
       │         ├── columns: tr_s_symb:40!null
-      │         ├── key columns: [40] = [41]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(40)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: tr_s_symb:40!null
-      │         │    ├── mapping:
-      │         │    │    └──  column3:10 => tr_s_symb:40
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(40)
+      │         │    ├── fd: ()-->(40)
+      │         │    └── ('SYMB',)
+      │         ├── scan security
+      │         │    ├── columns: s_symb:41!null
+      │         │    ├── constraint: /41: [/'SYMB' - /'SYMB']
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(41)
       │         └── filters (true)
       └── f-k-checks-item: trade_request(tr_b_id) -> broker(b_id)
-           └── anti-join (lookup broker)
+           └── anti-join (cross)
                 ├── columns: tr_b_id:58!null
-                ├── key columns: [58] = [59]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(58)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: tr_b_id:58!null
-                │    ├── mapping:
-                │    │    └──  column6:13 => tr_b_id:58
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(58)
+                │    ├── fd: ()-->(58)
+                │    └── (0,)
+                ├── scan broker
+                │    ├── columns: b_id:59!null
+                │    ├── constraint: /59: [/0 - /0]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(59)
                 └── filters (true)
 
 # Q21
@@ -1911,7 +1938,6 @@ insert trade_history
  │    ├── column1:5 => trade_history.th_t_id:1
  │    ├── column2:6 => th_dts:2
  │    └── column3:7 => trade_history.th_st_id:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -1922,36 +1948,42 @@ insert trade_history
  │    └── (0, '2020-06-15 22:27:42.148484', 'SBMT')
  └── f-k-checks
       ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: th_t_id:8!null
-      │         ├── key columns: [8] = [9]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(8)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: th_t_id:8!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:5 => th_t_id:8
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(8)
+      │         │    ├── fd: ()-->(8)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:9!null
+      │         │    ├── constraint: /9: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
       │         └── filters (true)
       └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
-           └── anti-join (lookup status_type)
+           └── anti-join (cross)
                 ├── columns: th_st_id:25!null
-                ├── key columns: [25] = [26]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(25)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: th_st_id:25!null
-                │    ├── mapping:
-                │    │    └──  column3:7 => th_st_id:25
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(25)
+                │    ├── fd: ()-->(25)
+                │    └── ('SBMT',)
+                ├── scan status_type
+                │    ├── columns: st_id:26!null
+                │    ├── constraint: /26: [/'SBMT' - /'SBMT']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(26)
                 └── filters (true)
 
 # --------------------------------------------------
@@ -2049,7 +2081,6 @@ insert holding_summary
  │    ├── column1:5 => holding_summary.hs_ca_id:1
  │    ├── column2:6 => holding_summary.hs_s_symb:2
  │    └── column3:7 => hs_qty:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2060,36 +2091,42 @@ insert holding_summary
  │    └── (0, 'SYMB', 10)
  └── f-k-checks
       ├── f-k-checks-item: holding_summary(hs_ca_id) -> customer_account(ca_id)
-      │    └── anti-join (lookup customer_account)
+      │    └── anti-join (cross)
       │         ├── columns: hs_ca_id:8!null
-      │         ├── key columns: [8] = [9]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(8)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: hs_ca_id:8!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:5 => hs_ca_id:8
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(8)
+      │         │    ├── fd: ()-->(8)
+      │         │    └── (0,)
+      │         ├── scan customer_account
+      │         │    ├── columns: ca_id:9!null
+      │         │    ├── constraint: /9: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
       │         └── filters (true)
       └── f-k-checks-item: holding_summary(hs_s_symb) -> security(s_symb)
-           └── anti-join (lookup security)
+           └── anti-join (cross)
                 ├── columns: hs_s_symb:16!null
-                ├── key columns: [16] = [17]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(16)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: hs_s_symb:16!null
-                │    ├── mapping:
-                │    │    └──  column2:6 => hs_s_symb:16
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(16)
+                │    ├── fd: ()-->(16)
+                │    └── ('SYMB',)
+                ├── scan security
+                │    ├── columns: s_symb:17!null
+                │    ├── constraint: /17: [/'SYMB' - /'SYMB']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(17)
                 └── filters (true)
 
 # Q6
@@ -2176,7 +2213,6 @@ insert holding_history
  │    ├── column2:7 => holding_history.hh_t_id:2
  │    ├── column3:8 => hh_before_qty:3
  │    └── column4:9 => hh_after_qty:4
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2187,36 +2223,42 @@ insert holding_history
  │    └── (0, 0, 0, 10)
  └── f-k-checks
       ├── f-k-checks-item: holding_history(hh_h_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: hh_h_t_id:10!null
-      │         ├── key columns: [10] = [11]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(10)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: hh_h_t_id:10!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:6 => hh_h_t_id:10
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(10)
+      │         │    ├── fd: ()-->(10)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:11!null
+      │         │    ├── constraint: /11: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(11)
       │         └── filters (true)
       └── f-k-checks-item: holding_history(hh_t_id) -> trade(t_id)
-           └── anti-join (lookup trade)
+           └── anti-join (cross)
                 ├── columns: hh_t_id:27!null
-                ├── key columns: [27] = [28]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(27)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: hh_t_id:27!null
-                │    ├── mapping:
-                │    │    └──  column2:7 => hh_t_id:27
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(27)
+                │    ├── fd: ()-->(27)
+                │    └── (0,)
+                ├── scan trade
+                │    ├── columns: t_id:28!null
+                │    ├── constraint: /28: [/0 - /0]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(28)
                 └── filters (true)
 
 # Q10
@@ -2282,7 +2324,6 @@ insert holding
  │    ├── h_price:14 => holding.h_price:5
  │    └── column6:13 => h_qty:6
  ├── check columns: check1:15
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2293,37 +2334,42 @@ insert holding
  │    └── (0, 0, 'SYMB', '2020-06-17 22:27:42.148484', 10, 1E+2, true)
  └── f-k-checks
       ├── f-k-checks-item: holding(h_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: h_t_id:16!null
-      │         ├── key columns: [16] = [17]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(16)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: h_t_id:16!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:8 => h_t_id:16
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(16)
+      │         │    ├── fd: ()-->(16)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:17!null
+      │         │    ├── constraint: /17: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(17)
       │         └── filters (true)
       └── f-k-checks-item: holding(h_ca_id,h_s_symb) -> holding_summary(hs_ca_id,hs_s_symb)
-           └── anti-join (lookup holding_summary)
+           └── anti-join (cross)
                 ├── columns: h_ca_id:33!null h_s_symb:34!null
-                ├── key columns: [33 34] = [35 36]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(33,34)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: h_ca_id:33!null h_s_symb:34!null
-                │    ├── mapping:
-                │    │    ├──  column2:9 => h_ca_id:33
-                │    │    └──  column3:10 => h_s_symb:34
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(33,34)
+                │    ├── fd: ()-->(33,34)
+                │    └── (0, 'SYMB')
+                ├── scan holding_summary
+                │    ├── columns: hs_ca_id:35!null hs_s_symb:36!null
+                │    ├── constraint: /35/36: [/0/'SYMB' - /0/'SYMB']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(35,36)
                 └── filters (true)
 
 # Q13
@@ -2371,7 +2417,6 @@ insert holding_summary
  │    ├── column1:5 => holding_summary.hs_ca_id:1
  │    ├── column2:6 => holding_summary.hs_s_symb:2
  │    └── column3:7 => hs_qty:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2382,36 +2427,42 @@ insert holding_summary
  │    └── (0, 'SYMB', 10)
  └── f-k-checks
       ├── f-k-checks-item: holding_summary(hs_ca_id) -> customer_account(ca_id)
-      │    └── anti-join (lookup customer_account)
+      │    └── anti-join (cross)
       │         ├── columns: hs_ca_id:8!null
-      │         ├── key columns: [8] = [9]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(8)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: hs_ca_id:8!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:5 => hs_ca_id:8
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(8)
+      │         │    ├── fd: ()-->(8)
+      │         │    └── (0,)
+      │         ├── scan customer_account
+      │         │    ├── columns: ca_id:9!null
+      │         │    ├── constraint: /9: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
       │         └── filters (true)
       └── f-k-checks-item: holding_summary(hs_s_symb) -> security(s_symb)
-           └── anti-join (lookup security)
+           └── anti-join (cross)
                 ├── columns: hs_s_symb:16!null
-                ├── key columns: [16] = [17]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(16)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: hs_s_symb:16!null
-                │    ├── mapping:
-                │    │    └──  column2:6 => hs_s_symb:16
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(16)
+                │    ├── fd: ()-->(16)
+                │    └── ('SYMB',)
+                ├── scan security
+                │    ├── columns: s_symb:17!null
+                │    ├── constraint: /17: [/'SYMB' - /'SYMB']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(17)
                 └── filters (true)
 
 
@@ -2456,7 +2507,6 @@ insert holding_history
  │    ├── column2:7 => holding_history.hh_t_id:2
  │    ├── column3:8 => hh_before_qty:3
  │    └── column4:9 => hh_after_qty:4
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2467,36 +2517,42 @@ insert holding_history
  │    └── (0, 0, 0, 10)
  └── f-k-checks
       ├── f-k-checks-item: holding_history(hh_h_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: hh_h_t_id:10!null
-      │         ├── key columns: [10] = [11]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(10)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: hh_h_t_id:10!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:6 => hh_h_t_id:10
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(10)
+      │         │    ├── fd: ()-->(10)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:11!null
+      │         │    ├── constraint: /11: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(11)
       │         └── filters (true)
       └── f-k-checks-item: holding_history(hh_t_id) -> trade(t_id)
-           └── anti-join (lookup trade)
+           └── anti-join (cross)
                 ├── columns: hh_t_id:27!null
-                ├── key columns: [27] = [28]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(27)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: hh_t_id:27!null
-                │    ├── mapping:
-                │    │    └──  column2:7 => hh_t_id:27
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(27)
+                │    ├── fd: ()-->(27)
+                │    └── (0,)
+                ├── scan trade
+                │    ├── columns: t_id:28!null
+                │    ├── constraint: /28: [/0 - /0]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(28)
                 └── filters (true)
 
 # Q17
@@ -2711,7 +2767,6 @@ insert trade_history
  │    ├── column1:5 => trade_history.th_t_id:1
  │    ├── column2:6 => th_dts:2
  │    └── column3:7 => trade_history.th_st_id:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2722,36 +2777,42 @@ insert trade_history
  │    └── (0, '2020-06-17 22:27:42.148484', 'SBMT')
  └── f-k-checks
       ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: th_t_id:8!null
-      │         ├── key columns: [8] = [9]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(8)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: th_t_id:8!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:5 => th_t_id:8
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(8)
+      │         │    ├── fd: ()-->(8)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:9!null
+      │         │    ├── constraint: /9: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
       │         └── filters (true)
       └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
-           └── anti-join (lookup status_type)
+           └── anti-join (cross)
                 ├── columns: th_st_id:25!null
-                ├── key columns: [25] = [26]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(25)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: th_st_id:25!null
-                │    ├── mapping:
-                │    │    └──  column3:7 => th_st_id:25
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(25)
+                │    ├── fd: ()-->(25)
+                │    └── ('SBMT',)
+                ├── scan status_type
+                │    ├── columns: st_id:26!null
+                │    ├── constraint: /26: [/'SBMT' - /'SBMT']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(26)
                 └── filters (true)
 
 # Q24
@@ -2797,7 +2858,6 @@ insert settlement
  │    ├── column2:7 => se_cash_type:2
  │    ├── column3:8 => se_cash_due_date:3
  │    └── se_amt:10 => settlement.se_amt:4
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2808,20 +2868,23 @@ insert settlement
  │    └── (0, 'Cash Account', '2020-06-19', 1E+2)
  └── f-k-checks
       └── f-k-checks-item: settlement(se_t_id) -> trade(t_id)
-           └── anti-join (lookup trade)
+           └── anti-join (cross)
                 ├── columns: se_t_id:11!null
-                ├── key columns: [11] = [12]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(11)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: se_t_id:11!null
-                │    ├── mapping:
-                │    │    └──  column1:6 => se_t_id:11
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(11)
+                │    ├── fd: ()-->(11)
+                │    └── (0,)
+                ├── scan trade
+                │    ├── columns: t_id:12!null
+                │    ├── constraint: /12: [/0 - /0]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(12)
                 └── filters (true)
 
 # Q26
@@ -2880,7 +2943,6 @@ insert cash_transaction
  │    ├── column2:7 => ct_dts:2
  │    ├── ct_amt:10 => cash_transaction.ct_amt:3
  │    └── column4:9 => ct_name:4
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -2891,20 +2953,23 @@ insert cash_transaction
  │    └── (0, '2020-06-18 22:27:42.148484', 'Market Buy 10 shares of SYMB', 1E+2)
  └── f-k-checks
       └── f-k-checks-item: cash_transaction(ct_t_id) -> trade(t_id)
-           └── anti-join (lookup trade)
+           └── anti-join (cross)
                 ├── columns: ct_t_id:11!null
-                ├── key columns: [11] = [12]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(11)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: ct_t_id:11!null
-                │    ├── mapping:
-                │    │    └──  column1:6 => ct_t_id:11
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(11)
+                │    ├── fd: ()-->(11)
+                │    └── (0,)
+                ├── scan trade
+                │    ├── columns: t_id:12!null
+                │    ├── constraint: /12: [/0 - /0]
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(12)
                 └── filters (true)
 
 # Q28
@@ -4218,7 +4283,6 @@ insert trade_history
  │    ├── column1:5 => trade_history.th_t_id:1
  │    ├── column2:6 => th_dts:2
  │    └── column3:7 => trade_history.th_st_id:3
- ├── input binding: &1
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── values
@@ -4229,36 +4293,42 @@ insert trade_history
  │    └── (0, '2020-06-17 22:27:42.148484', 'SBMT')
  └── f-k-checks
       ├── f-k-checks-item: trade_history(th_t_id) -> trade(t_id)
-      │    └── anti-join (lookup trade)
+      │    └── anti-join (cross)
       │         ├── columns: th_t_id:8!null
-      │         ├── key columns: [8] = [9]
-      │         ├── lookup columns are key
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
       │         ├── fd: ()-->(8)
-      │         ├── with-scan &1
+      │         ├── values
       │         │    ├── columns: th_t_id:8!null
-      │         │    ├── mapping:
-      │         │    │    └──  column1:5 => th_t_id:8
       │         │    ├── cardinality: [1 - 1]
       │         │    ├── key: ()
-      │         │    └── fd: ()-->(8)
+      │         │    ├── fd: ()-->(8)
+      │         │    └── (0,)
+      │         ├── scan trade
+      │         │    ├── columns: t_id:9!null
+      │         │    ├── constraint: /9: [/0 - /0]
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── key: ()
+      │         │    └── fd: ()-->(9)
       │         └── filters (true)
       └── f-k-checks-item: trade_history(th_st_id) -> status_type(st_id)
-           └── anti-join (lookup status_type)
+           └── anti-join (cross)
                 ├── columns: th_st_id:25!null
-                ├── key columns: [25] = [26]
-                ├── lookup columns are key
                 ├── cardinality: [0 - 1]
                 ├── key: ()
                 ├── fd: ()-->(25)
-                ├── with-scan &1
+                ├── values
                 │    ├── columns: th_st_id:25!null
-                │    ├── mapping:
-                │    │    └──  column3:7 => th_st_id:25
                 │    ├── cardinality: [1 - 1]
                 │    ├── key: ()
-                │    └── fd: ()-->(25)
+                │    ├── fd: ()-->(25)
+                │    └── ('SBMT',)
+                ├── scan status_type
+                │    ├── columns: st_id:26!null
+                │    ├── constraint: /26: [/'SBMT' - /'SBMT']
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    └── fd: ()-->(26)
                 └── filters (true)
 
 # Q3
