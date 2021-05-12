@@ -1,0 +1,70 @@
+# Test binding calls which reference names via either types or oid casts work
+# after a bizarre turn of events whereby we used to set the planner txn to nil.
+# The long and the short of it is that we totally abuse the planner when
+# performing BIND and the fact that it continues to carry a transaction that
+# does not correspond to the connExecutor's transaction is, generally, a big
+# problem. Before the changes made in the commit adding this test, this test
+# would result in a nil pointer panic.
+
+send
+Query {"String": "CREATE TABLE t (a INT PRIMARY KEY)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# 83 = ASCII 'S' for Statement
+# 84 = ASCII 'T'
+# ParameterFormatCodes = [0] for text format
+send
+Parse {"Name": "s7", "Query": "SELECT $1::REGCLASS::INT8"}
+Describe {"ObjectType": 83, "Name": "s7"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[2205]}
+{"Type":"RowDescription","Fields":[{"Name":"int8","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The below incantation used to trigger a code path which would nil the
+# planner transaction but never set it. This was pretty much the only
+# way you could do such a thing.
+
+send
+Query {"String": "BEGIN AS OF SYSTEM TIME '1s'"}
+Sync
+----
+
+
+# TODO(ajwerner): Why are there two ReadyForQuery?
+
+until
+ErrorResponse
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"XXUUU"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p7", "PreparedStatement": "s7", "ParameterFormatCodes": [0], "Parameters": [[84]]}
+Execute {"Portal": "p7"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"52"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
