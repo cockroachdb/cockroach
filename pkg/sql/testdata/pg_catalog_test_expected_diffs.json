@@ -30,32 +30,6 @@
       "expectedDataType": "name"
     }
   },
-  "pg_constraint": {
-    "confdeltype": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    },
-    "confmatchtype": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    },
-    "confupdtype": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    },
-    "contype": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    }
-  },
   "pg_conversion": {
     "conproc": {
       "oid": 26,
@@ -113,25 +87,11 @@
       "expectedOid": 24,
       "expectedDataType": "regproc"
     },
-    "oprkind": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    },
     "oprrest": {
       "oid": 26,
       "dataType": "oid",
       "expectedOid": 24,
       "expectedDataType": "regproc"
-    }
-  },
-  "pg_proc": {
-    "proargmodes": {
-      "oid": 1009,
-      "dataType": "_text",
-      "expectedOid": 1002,
-      "expectedDataType": "_char"
     }
   },
   "pg_range": {
@@ -148,20 +108,6 @@
       "expectedDataType": "regproc"
     }
   },
-  "pg_rewrite": {
-    "ev_enabled": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    },
-    "ev_type": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
-    }
-  },
   "pg_seclabel": {
     "objsubid": {
       "oid": 20,
@@ -176,14 +122,6 @@
       "dataType": "text",
       "expectedOid": 1009,
       "expectedDataType": "_text"
-    }
-  },
-  "pg_trigger": {
-    "tgenabled": {
-      "oid": 25,
-      "dataType": "text",
-      "expectedOid": 18,
-      "expectedDataType": "char"
     }
   },
   "pg_user": {
