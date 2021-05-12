@@ -97,7 +97,11 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 		// Verify the cluster is ok by torturing the prometheus endpoint until it
 		// returns success. A side-effect is to prevent regression of #19559.
 		for !done() {
-			base := `http://` + c.ExternalAdminUIAddr(ctx, nodes)[0]
+			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, nodes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			base := `http://` + adminUIAddrs[0]
 			// Torture the prometheus endpoint to prevent regression of #19559.
 			url := base + `/_status/vars`
 			resp, err := httpClient.Get(ctx, url)

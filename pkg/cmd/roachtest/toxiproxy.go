@@ -121,7 +121,14 @@ func Toxify(ctx context.Context, c *cluster, node nodeListOption) (*ToxiCluster,
 			return nil, errors.Wrap(err, "toxify")
 		}
 
-		externalAddr, port := addrToHostPort(c, c.ExternalAddr(ctx, n)[0])
+		externalAddrs, err := c.ExternalAddr(ctx, n)
+		if err != nil {
+			return nil, err
+		}
+		externalAddr, port, err := addrToHostPort(c, externalAddrs[0])
+		if err != nil {
+			return nil, err
+		}
 		tc.toxClients[i] = toxiproxy.NewClient(fmt.Sprintf("http://%s:%d", externalAddr, toxPort))
 		proxy, err := tc.toxClients[i].CreateProxy("cockroach", fmt.Sprintf(":%d", tc.poisonedPort(port)), fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
@@ -150,29 +157,43 @@ func (tc *ToxiCluster) Proxy(i int) *toxiproxy.Proxy {
 
 // ExternalAddr gives the external host:port of the node(s), bypassing the
 // toxiproxy interception.
-func (tc *ToxiCluster) ExternalAddr(ctx context.Context, node nodeListOption) []string {
+func (tc *ToxiCluster) ExternalAddr(ctx context.Context, node nodeListOption) ([]string, error) {
 	return tc.cluster.ExternalAddr(ctx, node)
 }
 
 // PoisonedExternalAddr gives the external host:port of the toxiproxy process
 // for the given nodes (i.e. the connection will be affected by toxics).
-func (tc *ToxiCluster) PoisonedExternalAddr(ctx context.Context, node nodeListOption) []string {
+func (tc *ToxiCluster) PoisonedExternalAddr(
+	ctx context.Context, node nodeListOption,
+) ([]string, error) {
 	var out []string
 
-	extAddrs := tc.ExternalAddr(ctx, node)
+	extAddrs, err := tc.ExternalAddr(ctx, node)
+	if err != nil {
+		return nil, err
+	}
 	for _, addr := range extAddrs {
-		host, port := addrToHostPort(tc.cluster, addr)
+		host, port, err := addrToHostPort(tc.cluster, addr)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, fmt.Sprintf("%s:%d", host, tc.poisonedPort(port)))
 	}
-	return out
+	return out, nil
 }
 
 // PoisonedPGAddr gives a connection to the given node that passes through toxiproxy.
-func (tc *ToxiCluster) PoisonedPGAddr(ctx context.Context, node nodeListOption) []string {
+func (tc *ToxiCluster) PoisonedPGAddr(ctx context.Context, node nodeListOption) ([]string, error) {
 	var out []string
 
-	urls := tc.ExternalPGUrl(ctx, node)
-	exts := tc.PoisonedExternalAddr(ctx, node)
+	urls, err := tc.ExternalPGUrl(ctx, node)
+	if err != nil {
+		return nil, err
+	}
+	exts, err := tc.PoisonedExternalAddr(ctx, node)
+	if err != nil {
+		return nil, err
+	}
 	for i, s := range urls {
 		u, err := url.Parse(s)
 		if err != nil {
@@ -181,13 +202,16 @@ func (tc *ToxiCluster) PoisonedPGAddr(ctx context.Context, node nodeListOption) 
 		u.Host = exts[i]
 		out = append(out, u.String())
 	}
-	return out
+	return out, nil
 }
 
 // PoisonedConn returns an SQL connection to the specified node through toxiproxy.
 func (tc *ToxiCluster) PoisonedConn(ctx context.Context, node int) *gosql.DB {
-	url := tc.PoisonedPGAddr(ctx, tc.cluster.Node(node))[0]
-	db, err := gosql.Open("postgres", url)
+	urls, err := tc.PoisonedPGAddr(ctx, tc.cluster.Node(node))
+	if err != nil {
+		tc.cluster.t.Fatal(err)
+	}
+	db, err := gosql.Open("postgres", urls[0])
 	if err != nil {
 		tc.cluster.t.Fatal(err)
 	}
@@ -205,7 +229,14 @@ var measureRE = regexp.MustCompile(`real[^0-9]+([0-9.]+)`)
 // of `./cockroach sql`. This is simplistic and does not perform proper
 // escaping. It's not useful for anything but simple sanity checks.
 func (tc *ToxiCluster) Measure(ctx context.Context, fromNode int, stmt string) time.Duration {
-	_, port := addrToHostPort(tc.cluster, tc.ExternalAddr(ctx, tc.Node(fromNode))[0])
+	externalAddrs, err := tc.ExternalAddr(ctx, tc.Node(fromNode))
+	if err != nil {
+		tc.cluster.t.Fatal(err)
+	}
+	_, port, err := addrToHostPort(tc.cluster, externalAddrs[0])
+	if err != nil {
+		tc.cluster.t.Fatal(err)
+	}
 	b, err := tc.cluster.RunWithBuffer(ctx, tc.cluster.l, tc.cluster.Node(fromNode), "time", "-p", "./cockroach", "sql", "--insecure", "--port", strconv.Itoa(port), "-e", "'"+stmt+"'")
 	tc.cluster.l.Printf("%s\n", b)
 	if err != nil {

@@ -398,7 +398,11 @@ func registerRestore(r *testRegistry) {
 func verifyMetrics(ctx context.Context, c *cluster, m map[string]float64) error {
 	const sample = 10 * time.Second
 	// Query needed information over the timespan of the query.
-	url := "http://" + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + "/ts/query"
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.Node(1))
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	url := "http://" + adminUIAddrs[0] + "/ts/query"
 
 	request := tspb.TimeSeriesQueryRequest{
 		// Ask for one minute intervals. We can't just ask for the whole hour

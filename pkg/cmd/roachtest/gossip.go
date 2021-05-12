@@ -134,7 +134,11 @@ type gossipUtil struct {
 
 func newGossipUtil(ctx context.Context, c *cluster) *gossipUtil {
 	urlMap := make(map[int]string)
-	for i, addr := range c.ExternalAdminUIAddr(ctx, c.All()) {
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, c.All())
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	for i, addr := range adminUIAddrs {
 		urlMap[i+1] = `http://` + addr
 	}
 	return &gossipUtil{
@@ -422,7 +426,11 @@ SELECT count(replicas)
 		if i != 1 {
 			return c.Conn(ctx, i)
 		}
-		url, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
+		urls, err := c.ExternalPGUrl(ctx, c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		url, err := url.Parse(urls[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -453,7 +461,10 @@ SELECT count(replicas)
 func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	externalIP := c.ExternalIP(ctx, c.Range(1, c.spec.NodeCount))
+	externalIP, err := c.ExternalIP(ctx, c.Range(1, c.spec.NodeCount))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for i := 1; i <= c.spec.NodeCount; i++ {
 		if local {
@@ -490,8 +501,14 @@ func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
 				if !strings.Contains(advertiseAddress, "localhost") {
 					t.Fatal("Expected connect address to contain localhost")
 				}
-			} else if exp := c.ExternalAddr(ctx, c.Node(nodeID))[0]; exp != advertiseAddress {
-				t.Fatalf("Connection address is %s but expected %s", advertiseAddress, exp)
+			} else {
+				exps, err := c.ExternalAddr(ctx, c.Node(nodeID))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if exps[0] != advertiseAddress {
+					t.Fatalf("Connection address is %s but expected %s", advertiseAddress, exps[0])
+				}
 			}
 		}
 	}

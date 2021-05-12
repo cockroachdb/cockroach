@@ -67,7 +67,10 @@ func registerTPCE(r *testRegistry) {
 		m.Go(func(ctx context.Context) error {
 			const dockerRun = `sudo docker run cockroachdb/tpc-e:latest`
 
-			roachNodeIPs := c.InternalIP(ctx, roachNodes)
+			roachNodeIPs, err := c.InternalIP(ctx, roachNodes)
+			if err != nil {
+				return err
+			}
 			roachNodeIPFlags := make([]string, len(roachNodeIPs))
 			for i, ip := range roachNodeIPs {
 				roachNodeIPFlags[i] = fmt.Sprintf("--hosts=%s", ip)

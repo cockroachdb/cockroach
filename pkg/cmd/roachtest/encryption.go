@@ -27,7 +27,11 @@ func registerEncryption(r *testRegistry) {
 		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
 
 		// Check that /_status/stores/local endpoint has encryption status.
-		for _, addr := range c.InternalAdminUIAddr(ctx, c.Range(1, nodes)) {
+		adminAddrs, err := c.InternalAdminUIAddr(ctx, c.Range(1, nodes))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, addr := range adminAddrs {
 			if err := c.RunE(ctx, c.Node(nodes), fmt.Sprintf(`curl http://%s/_status/stores/local | (! grep '"encryptionStatus": null')`, addr)); err != nil {
 				t.Fatalf("encryption status from /_status/stores/local endpoint is null")
 			}
