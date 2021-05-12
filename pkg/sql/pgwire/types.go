@@ -529,10 +529,10 @@ func (b *writeBuffer) writeBinaryDatum(
 
 const (
 	pgTimeFormat              = "15:04:05.999999"
-	pgTimeTZFormat            = pgTimeFormat + "-07:00"
+	pgTimeTZFormat            = pgTimeFormat + "-07"
 	pgDateFormat              = "2006-01-02"
 	pgTimeStampFormatNoOffset = pgDateFormat + " " + pgTimeFormat
-	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07:00"
+	pgTimeStampFormat         = pgTimeStampFormatNoOffset + "-07"
 	pgTime2400Format          = "24:00:00"
 )
 
@@ -550,11 +550,11 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 // formatTimeTZ formats t into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
 // the resulting buffer.
-// Note it does not understand the "second" component of the offset as lib/pq
-// cannot parse it.
 func formatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
 	format := pgTimeTZFormat
 	if t.OffsetSecs%60 != 0 {
+		format += ":00:00"
+	} else if t.OffsetSecs%3600 != 0 {
 		format += ":00"
 	}
 	ret := t.ToTime().AppendFormat(tmp, format)
@@ -573,7 +573,9 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	var format string
 	if offset != nil {
 		format = pgTimeStampFormat
-		if _, offset := t.In(offset).Zone(); offset%60 != 0 {
+		if _, offsetSeconds := t.In(offset).Zone(); offsetSeconds%60 != 0 {
+			format += ":00:00"
+		} else if offsetSeconds%3600 != 0 {
 			format += ":00"
 		}
 	} else {
