@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"reflect"
 	"sort"
@@ -237,7 +238,112 @@ func expectResolvedTimestampAvro(
 
 type cdcTestFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)
 
-func sinklessTestWithServerArgs(
+type feedTestOptions struct {
+	noTenants bool
+}
+
+type feedTestOption func(opts *feedTestOptions)
+
+// feedTestNoTenants is a feedTestOption that will prohibit this tests
+// from randomly running on a tenant.
+var feedTestNoTenants = func(opts *feedTestOptions) { opts.noTenants = true }
+
+// testServerShim is a kludge to get a few more tests working in
+// tenant-mode.
+//
+// Currently, our TestFeedFactory has a Server() method that returns a
+// TestServerInterface. The TestTenantInterface returned by
+// StartTenant isn't a TestServerInterface.
+//
+// TODO(ssd): Clean this up. Perhaps we can add a SQLServer() method
+// to TestFeedFactory that returns just the bits that are shared.
+type testServerShim struct {
+	serverutils.TestServerInterface
+	sqlServer serverutils.TestTenantInterface
+}
+
+func (t *testServerShim) ServingSQLAddr() string {
+	return t.sqlServer.SQLAddr()
+}
+
+func sinklessApplyDefaultSettings(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	// TODO(dan): We currently have to set this to an extremely conservative
+	// value because otherwise schema changes become flaky (they don't commit
+	// their txn in time, get pushed by closed timestamps, and retry forever).
+	// This is more likely when the tests run slower (race builds or inside
+	// docker). The conservative value makes our tests take a lot longer,
+	// though. Figure out some way to speed this up.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+	// TODO(dan): This is still needed to speed up table_history, that should be
+	// moved to RangeFeed as well.
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
+	// Change a couple of settings related to the vectorized engine in
+	// order to ensure that changefeeds work as expected with them (note
+	// that we'll still use the row-by-row engine, see #55605).
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.vectorize=on`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+}
+
+func sinklessTenantTestWithServerArgs(
+	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
+) func(*testing.T) {
+	return func(t *testing.T) {
+		// We need to open a new log scope because StartTenant
+		// calls log.SetNodeIDs which can only be called once
+		// per log scope.  If we don't open a log scope here,
+		// then any test function that wants to use this twice
+		// would fail.
+		defer log.Scope(t).Close(t)
+		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
+		ctx := context.Background()
+		knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}}}
+		args := base.TestServerArgs{
+			ExternalIODirConfig: base.ExternalIODirConfig{
+				DisableOutbound: true,
+			},
+			Knobs:       knobs,
+			UseDatabase: `d`,
+		}
+		if argsFn != nil {
+			argsFn(&args)
+		}
+		kvServer, _, _ := serverutils.StartServer(t, args)
+		defer kvServer.Stopper().Stop(ctx)
+		tenantID := serverutils.TestTenantID()
+		tenantArgs := base.TestTenantArgs{
+			// crdb_internal.create_tenant called by StartTenant
+			TenantID: tenantID,
+			// Non-enterprise changefeeds are currently only
+			// disabled by setting DisableOutbound true
+			// everywhere.
+			ExternalIODirConfig: base.ExternalIODirConfig{
+				DisableOutbound: true,
+			},
+		}
+
+		tenantServer, tenantDB := serverutils.StartTenant(t, kvServer, tenantArgs)
+
+		sinklessApplyDefaultSettings(t, sqlutils.MakeSQLRunner(tenantDB))
+
+		// Database `d` is hardcoded in a number of
+		// places. Create a new connection to that database.
+		tenantDB = serverutils.OpenDBConn(t, tenantServer.SQLAddr(), `d`, false /* insecure */, kvServer.Stopper())
+
+		sink, cleanup := sqlutils.PGUrl(t, tenantServer.SQLAddr(), t.Name(), url.User(security.RootUser))
+		defer cleanup()
+
+		server := &testServerShim{kvServer, tenantServer}
+		f := cdctest.MakeSinklessFeedFactory(server, sink)
+
+		// Log so that it is clear if a failed test happened
+		// to run on a tenant.
+		t.Logf("Running sinkless test using tenant %s", tenantID)
+		testFn(t, tenantDB, f)
+	}
+}
+
+func sinklessNoTenantTestWithServerArgs(
 	argsFn func(args *base.TestServerArgs), testFn cdcTestFn,
 ) func(*testing.T) {
 	return func(t *testing.T) {
@@ -254,22 +360,7 @@ func sinklessTestWithServerArgs(
 		s, db, _ := serverutils.StartServer(t, args)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		// TODO(dan): We currently have to set this to an extremely conservative
-		// value because otherwise schema changes become flaky (they don't commit
-		// their txn in time, get pushed by closed timestamps, and retry forever).
-		// This is more likely when the tests run slower (race builds or inside
-		// docker). The conservative value makes our tests take a lot longer,
-		// though. Figure out some way to speed this up.
-		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-		// TODO(dan): This is still needed to speed up table_history, that should be
-		// moved to RangeFeed as well.
-		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
-		// Change a couple of settings related to the vectorized engine in
-		// order to ensure that changefeeds work as expected with them (note
-		// that we'll still use the row-by-row engine, see #55605).
-		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.vectorize=on`)
-		sqlDB.Exec(t, `CREATE DATABASE d`)
+		sinklessApplyDefaultSettings(t, sqlDB)
 		if region := serverArgsRegion(args); region != "" {
 			sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE d PRIMARY REGION "%s"`, region))
 		}
@@ -280,8 +371,25 @@ func sinklessTestWithServerArgs(
 	}
 }
 
-func sinklessTest(testFn cdcTestFn) func(*testing.T) {
-	return sinklessTestWithServerArgs(nil, testFn)
+func sinklessTestWithServerArgs(
+	argsFn func(args *base.TestServerArgs), testFn cdcTestFn, testOpts ...feedTestOption,
+) func(*testing.T) {
+	// percentTenant is the percentange of tests that will be run against
+	// a SQL-node in a multi-tenant server. 1 for all tests to be run on a
+	// tenant.
+	const percentTenant = 0.25
+	options := &feedTestOptions{}
+	for _, o := range testOpts {
+		o(options)
+	}
+	if !options.noTenants && rand.Float32() < percentTenant {
+		return sinklessTenantTestWithServerArgs(argsFn, testFn)
+	}
+	return sinklessNoTenantTestWithServerArgs(argsFn, testFn)
+}
+
+func sinklessTest(testFn cdcTestFn, testOpts ...feedTestOption) func(*testing.T) {
+	return sinklessTestWithServerArgs(nil, testFn, testOpts...)
 }
 
 func enterpriseTest(testFn cdcTestFn) func(*testing.T) {

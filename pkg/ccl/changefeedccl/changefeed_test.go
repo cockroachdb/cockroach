@@ -1035,7 +1035,9 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 		})
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
+	// TODO(ssd): tenant tests skipped because of f.Server() use
+	// in fetchDescVersionModificationTime
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	log.Flush()
@@ -1088,7 +1090,9 @@ func TestChangefeedSchemaChangeBackfillScope(t *testing.T) {
 
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
+	// TODO(ssd): tenant tests skipped because of f.Server() use
+	// in fetchDescVerionModifationTime
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
 	log.Flush()
@@ -1209,7 +1213,7 @@ func TestChangefeedInterleaved(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
-
+		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`)
 		sqlDB.Exec(t, `CREATE TABLE grandparent (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO grandparent VALUES (0, 'grandparent-0')`)
 		grandparent := feed(t, f, `CREATE CHANGEFEED FOR grandparent`)
@@ -1410,7 +1414,10 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 				regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
 		})
 	}
-	t.Run(`sinkless`, sinklessTest(testFn))
+	// TODO(ssd): tenant tests skipped because of:
+	// changefeed_test.go:1409: error executing 'IMPORT INTO
+	// for_import CSV DATA ($1)': pq: fake protectedts.Provide
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run("enterprise", enterpriseTest(testFn))
 }
 
@@ -1443,7 +1450,12 @@ func TestChangefeedFailOnRBRChange(t *testing.T) {
 			Value: testServerRegion,
 		})
 	}
-	t.Run(`sinkless`, sinklessTestWithServerArgs(withTestServerRegion, testFn))
+	// Tenants skiped because of:
+	//
+	// error executing 'ALTER DATABASE d PRIMARY REGION
+	// "us-east-1"': pq: get_live_cluster_regions: unimplemented:
+	// operation is unsupported in multi-tenancy mode
+	t.Run(`sinkless`, sinklessTestWithServerArgs(withTestServerRegion, testFn, feedTestNoTenants))
 	t.Run("enterprise", enterpriseTestWithServerArgs(withTestServerRegion, testFn))
 	//TODO(yevgeniy): t.Run("kafka", kafkaTestWithServerArgs(withTestServerRegion, testFn))
 }
@@ -1984,8 +1996,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 			return nil
 		})
 	}
-
-	t.Run(`sinkless`, sinklessTest(testFn))
+	// TODO(ssd): tenant tests skipped because of f.Server() use
+	t.Run(`sinkless`, sinklessTest(testFn, feedTestNoTenants))
 	t.Run(`enterprise`, func(t *testing.T) {
 		skip.WithIssue(t, 38443)
 		enterpriseTest(testFn)
@@ -2235,8 +2247,9 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 			t.Errorf(`expected "GC threshold" error got: %+v`, err)
 		}
 	}
-
-	t.Run("sinkless", sinklessTest(testFn))
+	// TODO(ssd): tenant tests skipped because of f.Server() use
+	// in forceTableGC
+	t.Run("sinkless", sinklessTest(testFn, feedTestNoTenants))
 	t.Run("enterprise", enterpriseTest(testFn))
 	// TODO(yevgeniy): t.Run("kafka", kafkaTest(testFn))
 }
