@@ -515,7 +515,7 @@ vectorized: true
     ├── • filter
     │   │ columns: (pid1, pa1)
     │   │ ordering: +pid1
-    │   │ estimated row count: 333 (missing stats)
+    │   │ estimated row count: 342 (missing stats)
     │   │ filter: ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
     │   │
     │   └── • scan
@@ -594,7 +594,7 @@ vectorized: true
     └── • filter
         │ columns: (pid1, pa1)
         │ ordering: +pid1
-        │ estimated row count: 333 (missing stats)
+        │ estimated row count: 342 (missing stats)
         │ filter: ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
         │
         └── • scan
@@ -666,7 +666,7 @@ vectorized: true
 # creates a giant parent span which requires reading from all rows.
 query T
 EXPLAIN (DISTSQL)
-  SELECT * FROM child2 JOIN grandchild2 ON
+  SELECT * FROM child2 INNER MERGE JOIN grandchild2 ON
     child2.pid1=grandchild2.pid1
     AND child2.cid2=grandchild2.cid2
     AND child2.cid3=grandchild2.cid3
@@ -695,11 +695,11 @@ vectorized: true
           table: grandchild2@primary
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl12P4jYUhu_7K6zTG9IxTex8ECKNlFWXVVnNwpYZqZVaLrLEhUgsoUmQuhrNf69CYMgH-MSTHdGLuUtsP_E5x-_rozxC-s8aPBj98fnu3XhCeu_H9w_3v91p5H50N_rlgfxEPsymn8hiFa1DTj5OxxOyTIJNeBiYTkivVzz_vI1CRm7L0_shjbybvCfHRYso5LVF-ZDWWGU2V5ka-f3X0WxEetU9_9oZhiluiV39yGlucUsGmkams1Ow-ziOIONngjySzNKO7LJCWcMDtayst5mmAYVNHIpJ8FWk4P0JDChwoGACBQso2DCnsE3ihUjTOMmXPO6BcfgveAaFaLPdZfnwnMIiTgR4j5BF2VqABw_Bl7WYiSAUiW4AhVBkQbTeb1OE72-T6GuQfAMK99tgk3qkr3P9R912dKZbvHh2daZzEmxCYpI4W4kkhfkThXiXHXY-bfjlG1kF6aq6lc-oz6lvwvxpTiHNgqUAjz3Rl-VhVz9eOvfvk8wpRK4S4odonYlEJDqrFbqY8HIh-iX9eZ43njy4B1n4JfUdZw5C8svaq1Fl5T1jR84qqa_GWSUFPnPf4VDNixU7fS1OQpGIsP61G-rzG-qbN3kYSqvPHMYnkSzFxzja5OdRE8xa_J31Sl_QbpNouaoOAYXpLvPIMUnqW9S3qe9Qf0B9l_rDi6KxWpRgtzmX1tlMJnE_3urcqK08v7dd2Zu19xRrdzdccFNft_JnOx-3XveeUMjJUbgnuiZ26c5Awj3dGeztzmhW7Ip3hnPFO4O31zhv6duSjPu686x1p3jOte68rm8Vchqo-LZjYpd8i4R78i1_822zYlf07eCKvjXba9xs6dvziu7r7uu6VSETV8WtL0rnkkeRIE8eNd882qzYFT3qXtGjVntlWy096vZ1ZhyFbRuHl1zZzHhdmyokM1Sx6UszuuRUJM6TU603pzYrdkWnDv8nf85n4pyJdBtvUtHqv9jIMxXhUhT1TONdshCfk3ix36Z4ne65_Q9IKNKsmDWLl_GmmMoDbA-7XWDGO9FOF5obcprVaaNCV2CjDnOFgnM12O0C1wquSjtd6FrBG7QpLbglPy1LflpMflx2F3_IYcQfchjzB0Ij_pDTmD8cacUH8oIPuvhDDiP-kMOYPxAa8YecxvzhdvHHsIvC5TCicDmMKRyhEYXLabQDNBpIpeIMuVRYo4OoiByhEZUjNCZzDEd0juCY0Fmjj6gonTX6iIrUERrROkJjYsdwRO0Ijspd3kOZjchdpYk2z1yli6rSqNyV-qgqjspd3kkxuau0UlUak7tSM1XGMbkrtdMmLu-nbIjIXaWjNs9cpaWq0qjclZqqKo7Jncu7al3u86cf_gsAAP__Ue8MMQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsl12PozYUhu_7Kyz3JnScgs1HCNJIrLrZNqsZss2M1EptLtjgJkhZSIFIXY3mv1eEZPhKfPCwo-xF7gD7sc85fl8f8YTTfzfYwZM_P929m3po8H768Pjw-52CHiZ3k18e0U_ow3x2j5brcBMwNPW8yRzdT-a_TtDH2dRDq8SPgsPgzEODQfH88zYMKLqtDu8_Keid9x4dJy3DgDUm5Z-U1iy9PUtX0B-_TeYTNKjv-fdO03R-i8z6IuXY8haNFAXN5mWw-ziOIGUngjyS1FCO7KpGGeMDtarNN6miYIKjOOCe_4Wn2PkLU0wwwwTrmGADE2ziBcHbJF7yNI2TfMrTHpgG_2FHIziMtrss_7wgeBknHDtPOAuzDccOfvQ_b_ic-wFPVA0THPDMDzf7bYrw3W0SfvGTr5jgh60fpQ4aqkz9UTUtlaoGK55tlaoM-VGAdBRna56kePFMcLzLDjuXG37-itZ-uq5v5VLiMuLqePG8IDjN_BXHDn0mr8vDrC9eOfdvk0wZIpMJ8UO4yXjCE5U2Cl0MOLkQ3Yr-HMeZeo_2QRZuRX3HkYOQ3Kr2GlRVeS_YkTMq6mtwRkWBL9w3OFT9bMXK1eIk4AkPmqvdEJfdEFe_ycOQmn3iMO55suIf4zDKz6MhmA3_JxtUVlBuk3C1rn_CBM92mYOOSRLXIK5JXIu4I-LaxB2fFY3RoQS76FRaJzPx4mG8VZnWmHl6b7O2N-3uKdrtbjjjpqFq5M9m_t1423tCIidL4p7om9i5OwMIt7wz6PXOaFfsgneGdcE7g3XXOOvo24qMh6r1onWreM61br2tbyVyGsn4tmdi53wLhFv6ll19267YBX07uqBv9e4a1zv69rSih6r9tm6VyMSWceur0jnnUSDI0qP61aPtil3Qo_YFPWp0V7bR0aP2UKXaUdimdnjJlU21t7WpRDJjGZu-NqNzTgXiLJ1qXJ3artgFnTr-Tv6cT8Q55-k2jlLe6b9YyzPlwYoX9UzjXbLkn5J4ud-meJ3tuf0PSMDTrBjVi5dpVAzlAXaH7T4wZb1oqw_NNDFNm7RWo2uw1oSZRMGZHGz3gRsFl6WtPnSj4C1aFxbcEJ-WIT4tKj4us48_xDDgDzEM-QOgAX-IacgflrDiI3HBR338IYYBf4hhyB8ADfhDTEP-sPv4Y9xH4WIYULgYhhQO0IDCxTTYAVoNpFZxClwqtNVBZEQO0IDKARqSOYQDOgdwSOi01UdklE5bfURG6gANaB2gIbFDOKB2AAflLu6h1ATkLtNE22cu00VlaVDuUn1UFgflLu6kkNxlWqksDcldqplK45DcpdppGxf3UzoG5C7TUdtnLtNSZWlQ7lJNVRaH5M7EXbUp98XzD_8HAAD__0ujD10=
 
 query T
 EXPLAIN
-  SELECT * FROM child2 JOIN grandchild2 ON
+  SELECT * FROM child2 INNER MERGE JOIN grandchild2 ON
     child2.pid1=grandchild2.pid1
     AND child2.cid2=grandchild2.cid2
     AND child2.cid3=grandchild2.cid3
