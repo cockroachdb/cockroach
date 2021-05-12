@@ -29,6 +29,14 @@ import (
 // This file is for interfaces only and should not contain any implementation
 // code. All concrete implementations should be added to pkg/storage/cloudimpl.
 
+// WriteCloserWithError extends WriteCloser with an extra CloseWithError func.
+type WriteCloserWithError interface {
+	io.WriteCloser
+	// CloseWithError closes the writer with an error, which may choose to abort
+	// rather than complete any write operations.
+	CloseWithError(error) error
+}
+
 // ExternalStorage provides an API to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
 // Generally an implementation is instantiated pointing to some base path or
@@ -65,8 +73,10 @@ type ExternalStorage interface {
 	// This can be leveraged for an existence check.
 	ReadFileAt(ctx context.Context, basename string, offset int64) (io.ReadCloser, int64, error)
 
-	// WriteFile should write the content to requested name.
-	WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error
+	// Writer returns a writer for the requested name. The returned writer must
+	// be closed by the caller to complete the write, or can be closed with an
+	// error which may, depending on the implementation, abort the write.
+	Writer(ctx context.Context, basename string) (WriteCloserWithError, error)
 
 	// ListFiles returns files that match a globs-style pattern. The returned
 	// results are usually relative to the base path, meaning an ExternalStorage
