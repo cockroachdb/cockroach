@@ -46,21 +46,21 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker [tags...] counter cont
 
-| Field           | Description                                                                                                               |
-|-----------------|---------------------------------------------------------------------------------------------------------------------------|
-| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., ` + "`I`" + ` for ` + "`INFO`" + `). |
-| yy              | The year (zero padded; i.e., 2016 is ` + "`16`" + `).                                                                     |
-| mm              | The month (zero padded; i.e., May is ` + "`05`" + `).                                                                     |
-| dd              | The day (zero padded).                                                                                                    |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
-| goid            | The goroutine id (zero when cannot be determined).                                                                        |
-| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
-| file            | The file name where the entry originated. Also see below.                                                                 |
-| line            | The line number where the entry originated.                                                                               |
-| marker          | Redactability marker "` + redactableIndicator + `" (see below for details).                                               |
-| tags            | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. See below.                                            |
-| counter         | The optional entry counter (see below for details).                                                                       |
-| cont            | Continuation mark for structured and multi-line entries. See below.                                                       |
+| Field           | Description                                                                                                                          |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels-severities) (e.g., ` + "`I`" + ` for ` + "`INFO`" + `). |
+| yy              | The year (zero padded; i.e., 2016 is ` + "`16`" + `).                                                                                |
+| mm              | The month (zero padded; i.e., May is ` + "`05`" + `).                                                                                |
+| dd              | The day (zero padded).                                                                                                               |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                                      |
+| goid            | The goroutine id (zero when cannot be determined).                                                                                   |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                                     |
+| file            | The file name where the entry originated. Also see below.                                                                            |
+| line            | The line number where the entry originated.                                                                                          |
+| marker          | Redactability marker "` + redactableIndicator + `" (see below for details).                                                          |
+| tags            | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. See below.                                                       |
+| counter         | The optional entry counter (see below for details).                                                                                  |
+| cont            | Continuation mark for structured and multi-line entries. See below.                                                                  |
 
 The ` + "`chan@`" + ` prefix before the file name indicates the logging channel,
 and is omitted if the channel is ` + "`DEV`" + `.
