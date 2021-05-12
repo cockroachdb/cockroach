@@ -194,9 +194,11 @@ func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	txn := srv.DB().NewTxn(ctx, "test")
+	batch := txn.NewBatch()
 	for i := 0; i < 100000; i++ {
-		require.NoError(t, txn.Put(ctx, []byte(fmt.Sprintf("key%v", i)), []byte("value")))
+		batch.Put([]byte(fmt.Sprintf("key%v", i)), []byte("value"))
 	}
+	require.NoError(t, txn.Run(ctx, batch))
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	require.NoError(t, txn.Rollback(ctx))
