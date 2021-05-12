@@ -386,7 +386,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx,
 				mockRestoreDataSpec)
 			require.NoError(t, err)
-			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(restoreSpanEntry, reqStartKey)
+			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(restoreSpanEntry)
 			require.NoError(t, err)
 
 			clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
@@ -403,8 +403,8 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 					if i < len(kvs) {
 						t.Logf("got      %d\t%v\t%v", i, kvs[i].Key, kvs[i].Value)
 					}
-					t.Fatalf("got %+v expected %+v", kvs, expectedKVs)
 				}
+				t.Fatalf("got %+v expected %+v", kvs, expectedKVs)
 			}
 
 			if r := atomic.LoadInt64(&remainingAmbiguousSubReqs); r > 0 {
@@ -412,4 +412,27 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			}
 		})
 	}
+}
+
+func newTestingRestoreDataProcessor(
+	ctx context.Context,
+	evalCtx *tree.EvalContext,
+	flowCtx *execinfra.FlowCtx,
+	spec execinfrapb.RestoreDataSpec,
+) (*restoreDataProcessor, error) {
+	rd := &restoreDataProcessor{
+		ProcessorBase: execinfra.ProcessorBase{
+			Ctx:     ctx,
+			EvalCtx: evalCtx,
+		},
+		flowCtx: flowCtx,
+		spec:    spec,
+	}
+	var err error
+	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
+	if err != nil {
+		return nil, err
+	}
+
+	return rd, nil
 }
