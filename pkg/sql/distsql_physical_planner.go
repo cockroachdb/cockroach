@@ -92,6 +92,11 @@ type DistSQLPlanner struct {
 	// pool of workers.
 	runnerChan chan runnerRequest
 
+	// cancelFlowsCoordinator is responsible for batching up the requests to
+	// cancel remote flows initiated on the behalf of the current node when the
+	// local flows errored out.
+	cancelFlowsCoordinator cancelFlowsCoordinator
+
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
 
@@ -160,6 +165,7 @@ func NewDistSQLPlanner(
 	}
 
 	dsp.initRunners(ctx)
+	dsp.initCancelingWorkers(ctx)
 	return dsp
 }
 

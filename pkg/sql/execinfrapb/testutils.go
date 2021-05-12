@@ -116,6 +116,13 @@ func (ds *MockDistSQLServer) SetupFlow(
 	return nil, nil
 }
 
+// CancelDeadFlows is part of the DistSQLServer interface.
+func (ds *MockDistSQLServer) CancelDeadFlows(
+	_ context.Context, req *CancelDeadFlowsRequest,
+) (*SimpleResponse, error) {
+	return nil, nil
+}
+
 // FlowStream is part of the DistSQLServer interface.
 func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
 	donec := make(chan error)
