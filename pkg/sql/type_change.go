@@ -978,8 +978,11 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			if err != nil {
 				return err
 			}
-			fqName := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(parentSchema.Name), tree.Name(desc.GetName()))
-
+			fqName := tree.MakeTableNameWithSchema(
+				tree.Name(dbDesc.GetName()),
+				tree.Name(parentSchema.GetName()),
+				tree.Name(desc.GetName()),
+			)
 			return pgerror.Newf(pgcode.DependentObjectsStillExist, "could not remove enum value %q as it is being used by table %q",
 				member.LogicalRepresentation, fqName.FQString(),
 			)

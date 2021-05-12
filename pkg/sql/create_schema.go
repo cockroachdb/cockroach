@@ -78,10 +78,10 @@ func CreateUserDefinedSchemaDescriptor(
 					IncludeOffline: true,
 					IncludeDropped: true,
 				})
-				if err != nil || sc.Kind != catalog.SchemaUserDefined {
+				if err != nil || sc.SchemaKind() != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}
-				if sc.Desc.Dropped() {
+				if sc.Dropped() {
 					return nil, nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 						"schema %q is being dropped, try again later",
 						schemaName)

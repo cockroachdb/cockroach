@@ -40,11 +40,11 @@ type Accessor interface {
 		ctx context.Context, txn *kv.Txn, dbName string, flags tree.DatabaseLookupFlags,
 	) (DatabaseDescriptor, error)
 
-	// GetSchema returns true and a ResolvedSchema object if the target schema
+	// GetSchema returns true and a SchemaDescriptor object if the target schema
 	// exists under the target database.
 	GetSchemaByName(
 		ctx context.Context, txn *kv.Txn, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags,
-	) (bool, ResolvedSchema, error)
+	) (bool, SchemaDescriptor, error)
 
 	// GetObjectNamesAndIDs returns the list of all objects in the given
 	// database and schema.

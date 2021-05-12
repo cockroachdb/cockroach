@@ -301,12 +301,12 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, ok)
 
-			require.Same(t, schema.Desc, resolved.Desc)
+			require.Same(t, schema, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.ID, txn)
+			byID, err := descriptors.GetMutableDescriptorByID(ctx, schema.GetID(), txn)
 			require.NoError(t, err)
 
-			require.Same(t, schema.Desc, byID)
+			require.Same(t, schema, byID)
 			return nil
 		}))
 	})

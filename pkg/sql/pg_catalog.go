@@ -416,7 +416,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// TODO(someone): to populate this, we should split up the big PerformCast
-		// method in tree/eval.go into entries in a list. Then, this virtual table
+		// method in tree/eval.go into schemasByName in a list. Then, this virtual table
 		// can simply range over the list. This would probably be better for
 		// maintainability anyway.
 		return nil
@@ -1008,7 +1008,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, sc.Name, table, scResolver,
+					if err := populateFromTable(ctx, p, h, db, sc.GetName(), table, scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -1713,19 +1713,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, func(sc catalog.ResolvedSchema) error {
+				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
 					ownerOID := tree.DNull
-					if sc.Kind == catalog.SchemaUserDefined {
-						ownerOID = getOwnerOID(sc.Desc)
-					} else if sc.Kind == catalog.SchemaPublic {
+					if sc.SchemaKind() == catalog.SchemaUserDefined {
+						ownerOID = getOwnerOID(sc)
+					} else if sc.SchemaKind() == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
+						//
+						// TODO(ajwerner): The public schema effectively carries the privileges
+						// of the database so consider using the database's owner for public.
 						ownerOID = h.UserOid(security.MakeSQLUsernameFromPreNormalizedString("admin"))
 					}
 					return addRow(
-						h.NamespaceOid(db.GetID(), sc.Name), // oid
-						tree.NewDString(sc.Name),            // nspname
-						ownerOID,                            // nspowner
-						tree.DNull,                          // nspacl
+						h.NamespaceOid(db.GetID(), sc.GetName()), // oid
+						tree.NewDString(sc.GetName()),            // nspname
+						ownerOID,                                 // nspowner
+						tree.DNull,                               // nspacl
 					)
 				})
 			})
@@ -2463,7 +2466,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if err != nil {
 					return false, err
 				}
-				nspOid = h.NamespaceOid(db.GetID(), sc.Name)
+				nspOid = h.NamespaceOid(db.GetID(), sc.GetName())
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 				if err != nil {
 					return false, err

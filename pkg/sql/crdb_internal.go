@@ -69,7 +69,7 @@ import (
 )
 
 // CrdbInternalName is the name of the crdb_internal schema.
-const CrdbInternalName = sessiondata.CRDBInternalSchemaName
+const CrdbInternalName = catconstants.CRDBInternalSchemaName
 
 // Naming convention:
 // - if the response is served from memory, prefix with node_
@@ -312,7 +312,7 @@ CREATE TABLE crdb_internal.tables (
 			}
 			dbNames := make(map[descpb.ID]string)
 			scNames := make(map[descpb.ID]string)
-			scNames[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+			scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
 				if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
@@ -401,9 +401,9 @@ CREATE TABLE crdb_internal.tables (
 
 			// Also add all the virtual descriptors.
 			vt := p.getVirtualTabler()
-			vEntries := vt.getEntries()
+			vSchemas := vt.getSchemas()
 			for _, virtSchemaName := range vt.getSchemaNames() {
-				e := vEntries[virtSchemaName]
+				e := vSchemas[virtSchemaName]
 				for _, tName := range e.orderedDefNames {
 					vTableEntry := e.defs[tName]
 					if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
@@ -4020,7 +4020,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 	) error {
 		tableCommentKey := tree.NewDInt(keys.TableCommentType)
 		vt := p.getVirtualTabler()
-		vEntries := vt.getEntries()
+		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()
 
 		for _, virtSchemaName := range vSchemaNames {

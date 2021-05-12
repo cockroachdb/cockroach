@@ -51,7 +51,7 @@ func (p *planner) prepareSetSchema(
 		return 0, err
 	}
 
-	switch res.Kind {
+	switch res.SchemaKind() {
 	case catalog.SchemaTemporary:
 		return 0, pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of temporary schemas")
@@ -63,13 +63,13 @@ func (p *planner) prepareSetSchema(
 	default:
 		// The user needs CREATE privilege on the target schema to move an object
 		// to the schema.
-		err = p.CheckPrivilege(ctx, res.Desc, privilege.CREATE)
+		err = p.CheckPrivilege(ctx, res, privilege.CREATE)
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	desiredSchemaID := res.ID
+	desiredSchemaID := res.GetID()
 
 	// If the schema being changed to is the same as the current schema a no-op
 	// will happen so we don't have to check if there is an object in the schema

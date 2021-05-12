@@ -121,6 +121,15 @@ func NewCustomSuperuserPrivilegeDescriptor(
 	}
 }
 
+// NewPublicSelectPrivilegeDescriptor is used to construct a privilege descriptor
+// owned by the node user which has SELECT privilege for the public role. It is
+// used for virtual tables.
+func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
+	return NewPrivilegeDescriptor(
+		security.PublicRoleName(), privilege.List{privilege.SELECT}, security.NodeUserName(),
+	)
+}
+
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(

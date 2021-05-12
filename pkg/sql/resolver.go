@@ -52,7 +52,7 @@ func (p *planner) ResolveUncachedDatabaseByName(
 // ResolveUncachedSchemaDescriptor looks up a schema from the store.
 func (p *planner) ResolveUncachedSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (found bool, schema catalog.ResolvedSchema, err error) {
+) (found bool, schema catalog.SchemaDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		found, schema, err = p.Accessor().GetSchemaByName(
 			ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
@@ -67,7 +67,7 @@ func (p *planner) ResolveUncachedSchemaDescriptor(
 // from the store.
 func (p *planner) ResolveMutableSchemaDescriptor(
 	ctx context.Context, dbID descpb.ID, name string, required bool,
-) (found bool, schema catalog.ResolvedSchema, err error) {
+) (found bool, schema catalog.SchemaDescriptor, err error) {
 	return p.Accessor().GetSchemaByName(
 		ctx, p.txn, dbID, name, tree.SchemaLookupFlags{
 			Required:       required,
@@ -152,7 +152,7 @@ func (p *planner) ResolveTargetObject(
 	ctx context.Context, un *tree.UnresolvedObjectName,
 ) (
 	db catalog.DatabaseDescriptor,
-	schema catalog.ResolvedSchema,
+	schema catalog.SchemaDescriptor,
 	namePrefix tree.ObjectNamePrefix,
 	err error,
 ) {
@@ -161,7 +161,7 @@ func (p *planner) ResolveTargetObject(
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
 	if err != nil {
-		return nil, catalog.ResolvedSchema{}, namePrefix, err
+		return nil, nil, namePrefix, err
 	}
 	return prefix.Database, prefix.Schema, namePrefix, err
 }
@@ -176,7 +176,7 @@ func (p *planner) LookupSchema(
 		return false, nil, err
 	}
 	sc := p.Accessor()
-	var resolvedSchema catalog.ResolvedSchema
+	var resolvedSchema catalog.SchemaDescriptor
 	found, resolvedSchema, err = sc.GetSchemaByName(
 		ctx, p.txn, dbDesc.GetID(), scName, p.CommonLookupFlags(false /* required */),
 	)
@@ -244,7 +244,7 @@ func (p *planner) IsTableVisible(
 	if err != nil {
 		return false, false, err
 	}
-	if schemaDesc.Kind != catalog.SchemaVirtual {
+	if schemaDesc.SchemaKind() != catalog.SchemaVirtual {
 		dbID := tableDesc.GetParentID()
 		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
 			tree.DatabaseLookupFlags{
@@ -261,7 +261,7 @@ func (p *planner) IsTableVisible(
 	}
 	iter := searchPath.Iter()
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-		if schemaDesc.Name == scName {
+		if schemaDesc.GetName() == scName {
 			return true, true, nil
 		}
 	}
@@ -319,7 +319,7 @@ func (p *planner) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.GetName())
+	name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.GetName(), desc.GetName())
 	return name, desc, nil
 }
 
@@ -449,12 +449,12 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 			if err != nil {
 				return nil, err
 			}
-			switch resSchema.Kind {
+			switch resSchema.SchemaKind() {
 			case catalog.SchemaUserDefined:
-				descs = append(descs, resSchema.Desc)
+				descs = append(descs, resSchema)
 			default:
 				return nil, pgerror.Newf(pgcode.InvalidSchemaName,
-					"cannot change privileges on schema %q", resSchema.Name)
+					"cannot change privileges on schema %q", resSchema.GetName())
 			}
 		}
 		return descs, nil
@@ -541,7 +541,7 @@ func (p *planner) getQualifiedTableName(
 		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID,
 		tree.SchemaLookupFlags{
 			IncludeOffline: true,
 			IncludeDropped: true,
@@ -551,7 +551,7 @@ func (p *planner) getQualifiedTableName(
 	}
 	tbName := tree.MakeTableNameWithSchema(
 		tree.Name(dbDesc.GetName()),
-		tree.Name(resolvedSchema.Name),
+		tree.Name(scDesc.GetName()),
 		tree.Name(desc.GetName()),
 	)
 	return &tbName, nil
@@ -610,14 +610,16 @@ func (p *planner) getQualifiedTypeName(
 	}
 
 	schemaID := desc.GetParentSchemaID()
-	resolvedSchema, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, schemaID, tree.SchemaLookupFlags{})
+	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
+		ctx, p.txn, schemaID, tree.SchemaLookupFlags{},
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	typeName := tree.MakeNewQualifiedTypeName(
 		dbDesc.GetName(),
-		resolvedSchema.Name,
+		scDesc.GetName(),
 		desc.GetName(),
 	)
 
