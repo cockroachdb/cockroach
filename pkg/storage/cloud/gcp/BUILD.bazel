@@ -12,7 +12,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage/cloud",
         "//pkg/util/contextutil",
-        "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_google_cloud_go_storage//:storage",
         "@org_golang_google_api//iterator",

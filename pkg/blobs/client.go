@@ -34,7 +34,7 @@ type BlobClient interface {
 	// WriteFile sends the named payload to the requested node.
 	// This method will read entire content of file and send
 	// it over to another node, based on the nodeID.
-	WriteFile(ctx context.Context, file string, content io.ReadSeeker) error
+	WriteFile(ctx context.Context, file string, content io.Reader) error
 
 	// List lists the corresponding filenames from the requested node.
 	// The requested node can be the current node.
@@ -75,9 +75,7 @@ func (c *remoteClient) ReadFile(
 	return newGetStreamReader(stream), st.Filesize, errors.Wrap(err, "fetching file")
 }
 
-func (c *remoteClient) WriteFile(
-	ctx context.Context, file string, content io.ReadSeeker,
-) (err error) {
+func (c *remoteClient) WriteFile(ctx context.Context, file string, content io.Reader) (err error) {
 	ctx = metadata.AppendToOutgoingContext(ctx, "filename", file)
 	stream, err := c.blobClient.PutStream(ctx)
 	if err != nil {
@@ -143,7 +141,7 @@ func (c *localClient) ReadFile(
 	return c.localStorage.ReadFile(file, offset)
 }
 
-func (c *localClient) WriteFile(ctx context.Context, file string, content io.ReadSeeker) error {
+func (c *localClient) WriteFile(ctx context.Context, file string, content io.Reader) error {
 	return c.localStorage.WriteFile(file, content)
 }
 

@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,6 +34,8 @@ func MakeNullSinkStorageURI(path string) string {
 
 type nullSinkStorage struct {
 }
+
+var _ cloud.ExternalStorage = &nullSinkStorage{}
 
 func makeNullSinkStorage(
 	_ context.Context, _ cloud.ExternalStorageContext, _ roachpb.ExternalStorage,
@@ -70,9 +71,14 @@ func (n *nullSinkStorage) ReadFileAt(
 	return nil, 0, io.EOF
 }
 
-func (n *nullSinkStorage) WriteFile(_ context.Context, _ string, content io.ReadSeeker) error {
-	_, err := io.Copy(ioutil.Discard, content)
-	return err
+type nullWriter struct{}
+
+func (nullWriter) Write(p []byte) (int, error)  { return len(p), nil }
+func (nullWriter) Close() error                 { return nil }
+func (nullWriter) CloseWithError(_ error) error { return nil }
+
+func (n *nullSinkStorage) Writer(_ context.Context, _ string) (cloud.WriteCloserWithError, error) {
+	return nullWriter{}, nil
 }
 
 func (n *nullSinkStorage) ListFiles(_ context.Context, _ string) ([]string, error) {
