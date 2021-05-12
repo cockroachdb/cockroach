@@ -29,7 +29,8 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 		require.NoError(t, err)
 	}
 
-	kvAddrs := c.ExternalAddr(ctx, c.All())
+	kvAddrs, err := c.ExternalAddr(ctx, c.All())
+	require.NoError(t, err)
 
 	tenantCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

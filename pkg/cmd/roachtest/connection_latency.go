@@ -39,7 +39,8 @@ func runConnectionLatencyTest(
 	certsDir := "certs"
 	urlTemplate := "postgres://%s@%s:%s?sslcert=%s/client.%s.crt&sslkey=%s/client.%s.key&sslrootcert=%s/ca.crt&sslmode=require"
 	var urls []string
-	externalIps := c.ExternalIP(ctx, c.All())
+	externalIps, err := c.ExternalIP(ctx, c.All())
+	require.NoError(t, err)
 	for _, u := range externalIps {
 		url := fmt.Sprintf(urlTemplate, "testuser", u, "26257", certsDir, "testuser", certsDir, "testuser", certsDir)
 		urls = append(urls, fmt.Sprintf("'%s'", url))

@@ -79,7 +79,11 @@ func registerTPCDSVec(r *testRegistry) {
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		firstNodeURL := c.ExternalPGUrl(ctx, firstNode)[0]
+		urls, err := c.ExternalPGUrl(ctx, firstNode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		firstNodeURL := urls[0]
 		openNewConnections := func() (map[string]cmpconn.Conn, func()) {
 			conns := map[string]cmpconn.Conn{}
 			vecOffConn, err := cmpconn.NewConn(

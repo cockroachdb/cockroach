@@ -98,7 +98,11 @@ func verifyTxnPerSecond(
 	txnTarget, maxPercentTimeUnderTarget float64,
 ) {
 	// Query needed information over the timespan of the query.
-	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, adminNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminURL := adminUIAddrs[0]
 	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
 		{name: "cr.node.txn.commits", queryType: rate},
 		{name: "cr.node.txn.commits", queryType: total},
@@ -145,7 +149,11 @@ func verifyLookupsPerSec(
 	rangeLookupsTarget float64,
 ) {
 	// Query needed information over the timespan of the query.
-	adminURL := c.ExternalAdminUIAddr(ctx, adminNode)[0]
+	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, adminNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminURL := adminUIAddrs[0]
 	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
 		{name: "cr.node.distsender.rangelookups", queryType: rate},
 	})
