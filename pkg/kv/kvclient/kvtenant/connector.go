@@ -60,7 +60,7 @@ type Connector interface {
 	// gossip network.
 	config.SystemConfigProvider
 
-	// Connector is capable of find the status of every ndoe in the cluster.
+	// Connector is capable of find the status of every node in the cluster.
 	// This is necessary for region validation for zone configurations and
 	// multi-region primitives.
 	serverpb.NodesStatusServer

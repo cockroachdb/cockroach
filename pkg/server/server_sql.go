@@ -138,7 +138,7 @@ type SQLServer struct {
 // UnsupportedWithMultiTenancy.
 type sqlServerOptionalKVArgs struct {
 	// nodesStatusServer gives access to the NodesStatus service.
-	nodesStatusServer serverpb.OptionalNodesStatusServer
+	nodesStatusServer serverpb.NodesStatusServer
 	// Narrowed down version of *NodeLiveness. Used by jobs, DistSQLPlanner, and
 	// migration manager.
 	nodeLiveness optionalnodeliveness.Container

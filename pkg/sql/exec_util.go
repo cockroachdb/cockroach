@@ -795,7 +795,7 @@ type ExecutorConfig struct {
 	DistSQLSrv        *distsql.ServerImpl
 	// NodesStatusServer gives access to the NodesStatus service and is only
 	// available when running as a system tenant.
-	NodesStatusServer serverpb.OptionalNodesStatusServer
+	NodesStatusServer serverpb.NodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
 	SQLStatusServer   serverpb.SQLStatusServer

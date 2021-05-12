@@ -61,9 +61,8 @@ type extendedEvalContext struct {
 	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
 
-	// NodesStatusServer gives access to the NodesStatus service. Unavailable to
-	// tenants.
-	NodesStatusServer serverpb.OptionalNodesStatusServer
+	// NodesStatusServer gives access to the NodesStatus service.
+	NodesStatusServer serverpb.NodesStatusServer
 
 	// SQLStatusServer gives access to a subset of the serverpb.Status service
 	// that is available to both system and non-system tenants.

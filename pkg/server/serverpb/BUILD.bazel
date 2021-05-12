@@ -87,7 +87,6 @@ go_library(
     embed = [":serverpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/serverpb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/errorutil"],
 )
 
 go_test(

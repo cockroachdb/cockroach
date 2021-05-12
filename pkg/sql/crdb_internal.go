@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -3794,12 +3793,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_node_status"); err != nil {
 			return err
 		}
-		ss, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
-		if err != nil {
-			return err
-		}
-		response, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
+		response, err := p.ExecCfg().NodesStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}
@@ -3909,12 +3903,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.kv_store_status"); err != nil {
 			return err
 		}
-		ss, err := p.ExecCfg().NodesStatusServer.OptionalNodesStatusServer(
-			errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
-		if err != nil {
-			return err
-		}
-		response, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
+		response, err := p.ExecCfg().NodesStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
 			return err
 		}

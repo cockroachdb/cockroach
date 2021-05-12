@@ -1655,7 +1655,7 @@ func findNodeOfRegion(nodes []statuspb.NodeStatus, region descpb.RegionName) boo
 func checkClusterRegions(
 	ctx context.Context,
 	typesByID map[descpb.ID]*typedesc.Mutable,
-	ss serverpb.OptionalNodesStatusServer,
+	ss serverpb.NodesStatusServer,
 	codec keys.SQLCodec,
 ) error {
 
@@ -1679,18 +1679,7 @@ func checkClusterRegions(
 		return nil
 	}
 
-	var nodeStatusServer serverpb.NodesStatusServer
-	var err error
-	if nodeStatusServer, err = ss.OptionalNodesStatusServer(sql.MultitenancyZoneCfgIssueNo); err != nil {
-		if !codec.ForSystemTenant() {
-			hintMsg := fmt.Sprintf("only the system tenant supports localities check for restore, otherwise option %q is required", restoreOptSkipLocalitiesCheck)
-			return errors.WithHint(err, hintMsg)
-		}
-		return err
-	}
-
-	var nodesResponse *serverpb.NodesResponse
-	nodesResponse, err = nodeStatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	nodesResponse, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return err
 	}

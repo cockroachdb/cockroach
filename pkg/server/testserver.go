@@ -596,7 +596,7 @@ func makeSQLServerArgs(
 	contentionRegistry := contention.NewRegistry()
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
-			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
+			nodesStatusServer: tenantConnect,
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
 			grpcServer:        dummyRPCServer,

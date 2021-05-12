@@ -357,13 +357,19 @@ SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, a
 statement error unsupported in multi-tenancy mode
 SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning, membership FROM crdb_internal.gossip_liveness WHERE node_id = 1
 
-statement error unsupported in multi-tenancy mode
+query ITTTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
 FROM crdb_internal.kv_node_status WHERE node_id = 1
+----
+node_id  network  address           attrs  locality            server_version    go_version
+1        tcp      127.0.0.1:<port>  []     region=test,dc=dc1  <server_version>  <go_version>
 
-statement error unsupported in multi-tenancy mode
+query IITI colnames
 SELECT node_id, store_id, attrs, used
 FROM crdb_internal.kv_store_status WHERE node_id = 1
+----
+node_id  store_id  attrs  used
+1        1         []     0
 
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)

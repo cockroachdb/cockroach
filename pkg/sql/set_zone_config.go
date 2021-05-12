@@ -674,15 +674,10 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return err
 			}
 
-			ss, err := params.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(MultitenancyZoneCfgIssueNo)
-			if err != nil {
-				return err
-			}
-
 			// Validate that the result makes sense.
 			if err := validateZoneAttrsAndLocalities(
 				params.ctx,
-				ss.Nodes,
+				params.extendedEvalCtx.NodesStatusServer.Nodes,
 				&newZone,
 			); err != nil {
 				return err
