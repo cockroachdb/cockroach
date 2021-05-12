@@ -80,13 +80,43 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn  *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
-	key  roachpb.Key       // the key of the conflict
-	held bool              // is the conflict a held lock?
+	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
+	key           roachpb.Key       // the key of the conflict
+	held          bool              // is the conflict a held lock?
+	queuedWriters int               // how many writers are waiting?
+	queuedReaders int               // how many readers are waiting?
 
 	// Represents the action that the request was trying to perform when
 	// it hit the conflict. E.g. was it trying to read or write?
 	guardAccess spanset.SpanAccess
+}
+
+// String implements the fmt.Stringer interface.
+func (s waitingState) String() string {
+	switch s.kind {
+	case waitFor, waitForDistinguished:
+		distinguished := ""
+		if s.kind == waitForDistinguished {
+			distinguished = " (distinguished)"
+		}
+		target := "holding lock"
+		if !s.held {
+			target = "running request"
+		}
+		return fmt.Sprintf("wait for%s txn %s %s @ key %s (queuedWriters: %d, queuedReaders: %d)",
+			distinguished, s.txn.ID.Short(), target, s.key, s.queuedWriters, s.queuedReaders)
+	case waitSelf:
+		return fmt.Sprintf("wait self @ key %s", s.key)
+	case waitElsewhere:
+		if !s.held {
+			return "wait elsewhere by proceeding to evaluation"
+		}
+		return fmt.Sprintf("wait elsewhere for txn %s @ key %s", s.txn.ID.Short(), s.key)
+	case doneWaiting:
+		return "done waiting"
+	default:
+		panic("unhandled waitingState.kind")
+	}
 }
 
 // Implementation
@@ -982,7 +1012,12 @@ func (l *lockState) tryBreakReservation(seqNum uint64) bool {
 // waitForDistinguished states.
 // REQUIRES: l.mu is locked.
 func (l *lockState) informActiveWaiters() {
-	waitForState := waitingState{kind: waitFor, key: l.key}
+	waitForState := waitingState{
+		kind:          waitFor,
+		key:           l.key,
+		queuedWriters: l.queuedWriters.Len(),
+		queuedReaders: l.waitingReaders.Len(),
+	}
 	findDistinguished := l.distinguishedWaiter == nil
 	if lockHolderTxn, _ := l.getLockHolder(); lockHolderTxn != nil {
 		waitForState.txn = lockHolderTxn
@@ -1020,16 +1055,10 @@ func (l *lockState) informActiveWaiters() {
 			continue
 		}
 		g := qg.guard
-		var state waitingState
-		if g.isSameTxnAsReservation(waitForState) {
-			state = waitingState{
-				kind: waitSelf,
-				key:  waitForState.key,
-				txn:  waitForState.txn,
-				held: waitForState.held, // false
-			}
+		state := waitForState
+		if g.isSameTxnAsReservation(state) {
+			state.kind = waitSelf
 		} else {
-			state = waitForState
 			state.guardAccess = spanset.SpanReadWrite
 			if findDistinguished {
 				l.distinguishedWaiter = g
@@ -1397,13 +1426,12 @@ func (l *lockState) tryActiveWait(
 	// Make it an active waiter.
 	g.key = l.key
 	g.mu.startWait = true
+	waitForState.queuedWriters = l.queuedWriters.Len()
+	waitForState.queuedReaders = l.waitingReaders.Len()
 	if g.isSameTxnAsReservation(waitForState) {
-		g.mu.state = waitingState{
-			kind: waitSelf,
-			key:  waitForState.key,
-			txn:  waitForState.txn,
-			held: waitForState.held, // false
-		}
+		state := waitForState
+		state.kind = waitSelf
+		g.mu.state = state
 	} else {
 		state := waitForState
 		state.guardAccess = sa
