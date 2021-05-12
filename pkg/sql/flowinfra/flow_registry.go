@@ -560,7 +560,7 @@ func (fr *FlowRegistry) finishInboundStreamLocked(
 	streamEntry := flowEntry.inboundStreams[sid]
 
 	if !streamEntry.connected && !streamEntry.canceled {
-		panic("finising inbound stream that didn't connect or time out")
+		panic("finishing inbound stream that didn't connect or time out")
 	}
 	if streamEntry.finished {
 		panic("double finish")

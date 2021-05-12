@@ -16,6 +16,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -38,12 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -96,7 +99,7 @@ func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 	// requests if a worker is actually there to receive them.
 	dsp.runnerChan = make(chan runnerRequest)
 	for i := 0; i < numRunners; i++ {
-		_ = dsp.stopper.RunAsyncTask(ctx, "distslq-runner", func(context.Context) {
+		_ = dsp.stopper.RunAsyncTask(ctx, "distsql-runner", func(context.Context) {
 			runnerChan := dsp.runnerChan
 			stopChan := dsp.stopper.ShouldQuiesce()
 			for {
@@ -109,6 +112,121 @@ func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 				}
 			}
 		})
+	}
+}
+
+// To allow for canceling flows via CancelDeadFlows RPC on different nodes
+// simultaneously, we use a pool of workers. It is likely that these workers
+// will be less busy than SetupFlow runners, so we instantiate smaller number of
+// the canceling workers.
+const numCancelingWorkers = numRunners / 4
+
+func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
+	const idleWorkerSleepTime = time.Second
+	const cancelRequestTimeout = 10 * time.Second
+	for i := 0; i < numCancelingWorkers; i++ {
+		workerID := i + 1
+		_ = dsp.stopper.RunAsyncTask(initCtx, "distsql-canceling-worker", func(parentCtx context.Context) {
+			stopChan := dsp.stopper.ShouldQuiesce()
+			for {
+				select {
+				case <-stopChan:
+					return
+
+				default:
+					req, nodeID := dsp.cancelFlowsCoordinator.getFlowsToCancel()
+					if req == nil {
+						// There are no flows to cancel at the moment.
+						select {
+						case <-stopChan:
+							return
+						case <-time.After(idleWorkerSleepTime):
+							continue
+						}
+					}
+					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), nodeID)
+					conn, err := dsp.nodeDialer.Dial(parentCtx, nodeID, rpc.DefaultClass)
+					if err != nil {
+						// We failed to dial the node, so we give up given that
+						// our cancellation is best effort. It is possible that
+						// the node is dead anyway.
+						continue
+					}
+					client := execinfrapb.NewDistSQLClient(conn)
+					_ = contextutil.RunWithTimeout(
+						parentCtx,
+						"cancel dead flows",
+						cancelRequestTimeout,
+						func(ctx context.Context) error {
+							_, _ = client.CancelDeadFlows(ctx, req)
+							return nil
+						})
+				}
+			}
+		})
+	}
+}
+
+type deadFlowsOnNode struct {
+	ids    []execinfrapb.FlowID
+	nodeID roachpb.NodeID
+}
+
+// cancelFlowsCoordinator is responsible for batching up the requests to cancel
+// remote flows initiated on the behalf of the current node when the local flows
+// errored out.
+type cancelFlowsCoordinator struct {
+	mu struct {
+		syncutil.Mutex
+		deadFlows []deadFlowsOnNode
+	}
+}
+
+// getFlowsToCancel returns a request to cancel some dead flows on a particular
+// node. If there are no dead flows to cancel, it returns nil, 0. Safe for
+// concurrent usage.
+func (c *cancelFlowsCoordinator) getFlowsToCancel() (
+	*execinfrapb.CancelDeadFlowsRequest,
+	roachpb.NodeID,
+) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.mu.deadFlows) == 0 {
+		return nil, roachpb.NodeID(0)
+	}
+	req := &execinfrapb.CancelDeadFlowsRequest{
+		FlowIDs: c.mu.deadFlows[0].ids,
+	}
+	nodeID := c.mu.deadFlows[0].nodeID
+	c.mu.deadFlows = c.mu.deadFlows[1:]
+	return req, nodeID
+}
+
+// addFlowsToCancel adds all remote flows from flows map to be canceled via
+// CancelDeadFlows RPC. Safe for concurrent usage.
+func (c *cancelFlowsCoordinator) addFlowsToCancel(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for nodeID, f := range flows {
+		if nodeID != f.Gateway {
+			// len(c.mu.deadFlows) is at most the number of nodes in the
+			// cluster, so a linear search for the node ID should be
+			// sufficiently fast.
+			found := false
+			for j := range c.mu.deadFlows {
+				if nodeID == c.mu.deadFlows[j].nodeID {
+					c.mu.deadFlows[j].ids = append(c.mu.deadFlows[j].ids, f.FlowID)
+					found = true
+					break
+				}
+			}
+			if !found {
+				c.mu.deadFlows = append(c.mu.deadFlows, deadFlowsOnNode{
+					ids:    []execinfrapb.FlowID{f.FlowID},
+					nodeID: nodeID,
+				})
+			}
+		}
 	}
 }
 
@@ -318,6 +436,25 @@ func (dsp *DistSQLPlanner) Run(
 		// We ended up planning everything locally, regardless of whether we
 		// intended to distribute or not.
 		localState.IsLocal = true
+	} else {
+		defer func() {
+			if recv.resultWriter.Err() != nil {
+				// The execution of this query encountered some error, so we
+				// will eagerly cancel all scheduled flows on the remote nodes
+				// (if they haven't been started yet) because they are now dead.
+				// TODO(yuzefovich): consider whether augmenting
+				// ConnectInboundStream to keep track of the streams that
+				// initiated FlowStream RPC is worth it - the flows containing
+				// such streams must have been started, so there is no point in
+				// trying to cancel them this way. This will allow us to reduce
+				// the size of the CancelDeadFlows request and speed up the
+				// lookup on the remote node whether a particular dead flow
+				// should be canceled. However, this improves the unhappy case,
+				// but it'll slowdown the happy case - by introducing additional
+				// tracking.
+				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
+			}
+		}()
 	}
 
 	ctx, flow, opChains, err := dsp.setupFlows(

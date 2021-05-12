@@ -122,6 +122,12 @@ func (ds *ServerImpl) Start() {
 	ds.flowScheduler.Start()
 }
 
+// NumRemoteFlowsInQueue returns the number of remote flows scheduled to run on
+// this server which are currently in the queue of the flow scheduler.
+func (ds *ServerImpl) NumRemoteFlowsInQueue() int {
+	return ds.flowScheduler.NumFlowsInQueue()
+}
+
 // Drain changes the node's draining state through gossip and drains the
 // server's flowRegistry. See flowRegistry.Drain for more details.
 func (ds *ServerImpl) Drain(
@@ -512,6 +518,14 @@ func (ds *ServerImpl) SetupFlow(
 		// function, they become part of an rpc error.
 		return &execinfrapb.SimpleResponse{Error: execinfrapb.NewError(ctx, err)}, nil
 	}
+	return &execinfrapb.SimpleResponse{}, nil
+}
+
+// CancelDeadFlows is part of the execinfrapb.DistSQLServer interface.
+func (ds *ServerImpl) CancelDeadFlows(
+	_ context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+) (*execinfrapb.SimpleResponse, error) {
+	ds.flowScheduler.CancelDeadFlows(req)
 	return &execinfrapb.SimpleResponse{}, nil
 }
 

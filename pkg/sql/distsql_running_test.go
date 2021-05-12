@@ -13,7 +13,9 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,7 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -447,4 +451,92 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 		}
 	}
 	require.Equal(t, numNodes, numLeafTxnFinalMeta)
+}
+
+// TestCancelFlowsCoordinator performs sanity-checking of cancelFlowsCoordinator
+// and that it can be safely used concurrently.
+func TestCancelFlowsCoordinator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var c cancelFlowsCoordinator
+
+	globalRng, _ := randutil.NewPseudoRand()
+	numNodes := globalRng.Intn(16) + 2
+	gatewayNodeID := roachpb.NodeID(1)
+
+	assertInvariants := func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		// Check that the coordinator hasn't created duplicate entries for some
+		// nodes.
+		require.GreaterOrEqual(t, numNodes-1, len(c.mu.deadFlows))
+		seen := make(map[roachpb.NodeID]struct{})
+		for _, info := range c.mu.deadFlows {
+			require.NotEqual(t, gatewayNodeID, info.nodeID)
+			_, ok := seen[info.nodeID]
+			require.False(t, ok)
+			seen[info.nodeID] = struct{}{}
+		}
+	}
+
+	// makeFlowsToCancel returns a fake flows map where each node in the cluster
+	// has 67% probability of participating in the plan.
+	makeFlowsToCancel := func(rng *rand.Rand) map[roachpb.NodeID]*execinfrapb.FlowSpec {
+		res := make(map[roachpb.NodeID]*execinfrapb.FlowSpec)
+		flowID := execinfrapb.FlowID{UUID: uuid.FastMakeV4()}
+		for id := 1; id <= numNodes; id++ {
+			if rng.Float64() < 0.33 {
+				// This node wasn't a part of the current plan.
+				continue
+			}
+			res[roachpb.NodeID(id)] = &execinfrapb.FlowSpec{
+				FlowID:  flowID,
+				Gateway: gatewayNodeID,
+			}
+		}
+		return res
+	}
+
+	var wg sync.WaitGroup
+	maxSleepTime := 100 * time.Millisecond
+
+	// Spin up some goroutines that simulate query runners, with each hitting an
+	// error and deciding to cancel all scheduled dead flows.
+	numQueryRunners := globalRng.Intn(8) + 1
+	numRunsPerRunner := globalRng.Intn(10) + 1
+	wg.Add(numQueryRunners)
+	for i := 0; i < numQueryRunners; i++ {
+		go func() {
+			defer wg.Done()
+			rng, _ := randutil.NewPseudoRand()
+			for i := 0; i < numRunsPerRunner; i++ {
+				c.addFlowsToCancel(makeFlowsToCancel(rng))
+				time.Sleep(time.Duration(rng.Int63n(int64(maxSleepTime))))
+			}
+		}()
+	}
+
+	// Have a single goroutine that checks the internal state of the coordinator
+	// and retrieves the next request to cancel some flows (in order to simulate
+	// the canceling worker).
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rng, _ := randutil.NewPseudoRand()
+		done := time.After(2 * time.Second)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				assertInvariants()
+				time.Sleep(time.Duration(rng.Int63n(int64(maxSleepTime))))
+				// We're not interested in the result of this call.
+				_, _ = c.getFlowsToCancel()
+			}
+		}
+	}()
+
+	wg.Wait()
 }

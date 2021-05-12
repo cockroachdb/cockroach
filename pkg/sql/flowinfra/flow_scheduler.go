@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const flowDoneChanSize = 8
@@ -141,6 +143,55 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 			return nil
 
 		})
+}
+
+// NumFlowsInQueue returns the number of flows currently in the queue to be
+// scheduled.
+func (fs *FlowScheduler) NumFlowsInQueue() int {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	return fs.mu.queue.Len()
+}
+
+// CancelDeadFlows cancels all flows mentioned in the request that haven't been
+// started yet (meaning they have been queued up).
+func (fs *FlowScheduler) CancelDeadFlows(req *execinfrapb.CancelDeadFlowsRequest) {
+	ctx := fs.AnnotateCtx(context.Background())
+	log.VEventf(ctx, 1, "flow scheduler will attempt to cancel %d dead flows", len(req.FlowIDs))
+	// We'll be holding the lock over the queue, so we'll speed up the process
+	// of looking up whether a particular queued flow needs to be canceled by
+	// building a map of those that do. This map shouldn't grow larger than
+	// thousands of UUIDs in size, so it is ok to not account for the memory
+	// under it.
+	toCancel := make(map[uuid.UUID]struct{}, len(req.FlowIDs))
+	for _, f := range req.FlowIDs {
+		toCancel[f.UUID] = struct{}{}
+	}
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	// Iterate over the whole queue by removing all scheduled flows from the
+	// front and pushing to the back of the queue those that don't need to be
+	// canceled.
+	var firstNotCanceled *flowWithCtx
+	numCanceled := 0
+	for fs.mu.queue.Len() > 0 {
+		e := fs.mu.queue.Front()
+		f := e.Value.(*flowWithCtx)
+		if f == firstNotCanceled {
+			break
+		}
+		fs.mu.queue.Remove(e)
+		if _, shouldCancel := toCancel[f.flow.GetID().UUID]; !shouldCancel {
+			fs.mu.queue.PushBack(f)
+			if firstNotCanceled == nil {
+				firstNotCanceled = f
+			}
+		} else {
+			fs.metrics.FlowsQueued.Dec(1)
+			numCanceled++
+		}
+	}
+	log.VEventf(ctx, 1, "flow scheduler canceled %d dead flows", numCanceled)
 }
 
 // Start launches the main loop of the scheduler.
