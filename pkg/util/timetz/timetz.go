@@ -157,11 +157,18 @@ func (t *TimeTZ) String() string {
 	if t.TimeOfDay == timeofday.Time2400 {
 		timeComponent = "24:00:00"
 	}
-	timeZoneComponent := tTime.Format("Z07:00:00")
+	var timeZoneComponent string
+	if t.OffsetSecs%60 != 0 {
+		timeZoneComponent = tTime.Format("Z07:00:00")
+	} else if t.OffsetSecs%3600 != 0 {
+		timeZoneComponent = tTime.Format("Z07:00")
+	} else {
+		timeZoneComponent = tTime.Format("Z07")
+	}
 	// If it is UTC, .Format converts it to "Z".
 	// Fully expand this component.
 	if t.OffsetSecs == 0 {
-		timeZoneComponent = "+00:00:00"
+		timeZoneComponent = "+00"
 	}
 	// Go's time.Format functionality does not work for offsets which
 	// in the range -0s < offsetSecs < -60s, e.g. -22s offset prints as 00:00:-22.

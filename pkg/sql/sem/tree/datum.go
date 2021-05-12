@@ -2176,9 +2176,9 @@ var dZeroTimestamp = &DTimestamp{}
 // time.Time formats.
 const (
 	// timestampTZOutputFormat is used to output all TimestampTZs.
-	// Note the second offset is missing here -- this is to maintain
-	// backward compatibility with casting timestamptz to strings.
-	timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07:00"
+	// Note the minutes and second offsets are missing here -- they are only
+	// added if they are non-zero, which matches the Postgres behavior.
+	timestampTZOutputFormat = "2006-01-02 15:04:05.999999-07"
 	// timestampOutputFormat is used to output all Timestamps.
 	timestampOutputFormat = "2006-01-02 15:04:05.999999"
 )
@@ -2566,18 +2566,25 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.Time.Format(timestampTZOutputFormat))
-	_, offsetSecs := d.Time.Zone()
-	// Only output remaining seconds offsets if it is available.
-	// This is to maintain backward compatibility with older CRDB versions,
-	// where we only output HH:MM.
-	if secondOffset := offsetSecs % 60; secondOffset != 0 {
-		if secondOffset < 0 {
-			secondOffset = 60 + secondOffset
-		}
-		ctx.WriteByte(':')
-		ctx.WriteString(fmt.Sprintf("%02d", secondOffset))
+	format := timestampTZOutputFormat
+	if _, offsetSeconds := d.Time.Zone(); offsetSeconds%60 != 0 {
+		format += ":00:00"
+	} else if offsetSeconds%3600 != 0 {
+		format += ":00"
 	}
+	ctx.WriteString(d.Time.Format(format))
+	//ctx.WriteString(d.Time.Format(timestampTZOutputFormat))
+	//_, offsetSecs := d.Time.Zone()
+	//// Only output remaining seconds offsets if it is available.
+	//// This is to maintain backward compatibility with older CRDB versions,
+	//// where we only output HH:MM.
+	//if secondOffset := offsetSecs % 60; secondOffset != 0 {
+	//	if secondOffset < 0 {
+	//		secondOffset = 60 + secondOffset
+	//	}
+	//	ctx.WriteByte(':')
+	//	ctx.WriteString(fmt.Sprintf("%02d", secondOffset))
+	//}
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
