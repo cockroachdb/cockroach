@@ -191,7 +191,8 @@ EXPLAIN INSERT
 INTO
   history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
 VALUES
-  (2057, 4, 3, 4, 3, 2100.9, '2021-04-15 15:22:14', '9    zmssaF9m')
+  (2057, 4, 3, 4, 3, 2100.9, '2021-04-15 15:22:14', '9    zmssaF9m'),
+  (2058, 4, 3, 4, 3, 2100.9, '2021-04-15 15:22:14', '9    zmssaF9m')
 ----
 distribution: local
 vectorized: true
@@ -204,8 +205,14 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • values
-│             size: 11 columns, 1 row
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • render
+│               │ estimated row count: 2
+│               │
+│               └── • values
+│                     size: 8 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -218,7 +225,7 @@ vectorized: true
 │           │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
 │           │
 │           └── • lookup join (anti)
-│               │ estimated row count: 1
+│               │ estimated row count: 2
 │               │ table: customer@primary
 │               │ equality cols are key
 │               │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region = 'ap-southeast-2')
@@ -237,7 +244,7 @@ vectorized: true
             │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
             │
             └── • lookup join (anti)
-                │ estimated row count: 1
+                │ estimated row count: 2
                 │ table: district@primary
                 │ equality cols are key
                 │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region = 'ap-southeast-2')

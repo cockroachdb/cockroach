@@ -999,17 +999,36 @@ CREATE TABLE nonunique_idx_child (
   CONSTRAINT "fk" FOREIGN KEY (ref1, ref2) REFERENCES nonunique_idx_parent (k1, k2)
 )
 
+# TODO(mgartner/radu): This query should use the insert fast path. Inlining the
+# values removes the lookup join in the FK check  that the insert fast path
+# relies on.
 query T
 EXPLAIN INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
 ----
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  into: nonunique_idx_child(k, ref1, ref2)
-  auto commit
-  FK check: nonunique_idx_parent@nonunique_idx_parent_k2_idx
-  size: 3 columns, 1 row
+• root
+│
+├── • insert
+│   │ into: nonunique_idx_child(k, ref1, ref2)
+│   │
+│   └── • values
+│         size: 3 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • cross join (anti)
+            │
+            ├── • values
+            │     size: 2 columns, 1 row
+            │
+            └── • scan
+                  missing stats
+                  table: nonunique_idx_parent@nonunique_idx_parent_k2_idx
+                  spans: [/10/1 - /10/1]
 
 # Regression test for #46397: upserter was looking at the incorrect ordinal for
 # the check because of an extra input column used by the FK check.
