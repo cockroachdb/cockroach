@@ -268,6 +268,10 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.buildInputForInsert(inScope, nil /* rows */)
 	}
 
+	// Set insertExpr. This expression is used when building FK and uniqueness
+	// checks. See mutationBuilder.buildCheckInputScan.
+	mb.insertExpr = mb.outScope.expr
+
 	// Add default columns that were not explicitly specified by name or
 	// implicitly targeted by input columns. Also add any computed columns. In
 	// both cases, include columns undergoing mutations in the write-only state.

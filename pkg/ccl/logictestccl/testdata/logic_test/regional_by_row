@@ -930,18 +930,23 @@ SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
     │
     └── • error if rows
         │
-        └── • lookup join (anti)
-            │ table: parent@primary
-            │ equality cols are key
-            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+        └── • cross join (anti)
             │
-            └── • lookup join (anti)
-                │ table: parent@primary
-                │ equality cols are key
-                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • union all
+                │ limit: 1
                 │
-                └── • scan buffer
-                      label: buffer 1
+                ├── • scan
+                │     missing stats
+                │     table: parent@primary
+                │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+                │
+                └── • scan
+                      missing stats
+                      table: parent@primary
+                      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
 query T
 SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
@@ -980,18 +985,23 @@ SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
     │
     └── • error if rows
         │
-        └── • lookup join (anti)
-            │ table: parent@primary
-            │ equality cols are key
-            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+        └── • cross join (anti)
             │
-            └── • lookup join (anti)
-                │ table: parent@primary
-                │ equality cols are key
-                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • union all
+                │ limit: 1
                 │
-                └── • scan buffer
-                      label: buffer 1
+                ├── • scan
+                │     missing stats
+                │     table: parent@primary
+                │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+                │
+                └── • scan
+                      missing stats
+                      table: parent@primary
+                      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
 # We don't yet support locality optimized search for semi join.
 query T
@@ -1034,6 +1044,56 @@ SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
                 │
                 └── • scan buffer
                       label: buffer 1
+
+# An insert FK check only needs to search a single region when the region is a
+# computed column dependent on the FK column and a constant value is inserted.
+statement ok
+CREATE TABLE parent_comp (
+  pk INT PRIMARY KEY,
+  crdb_region crdb_internal_region AS (
+    CASE WHEN pk <= 10 THEN 'us-east-1' ELSE 'ap-southeast-2' END
+  ) STORED,
+  FAMILY (pk, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child_comp (
+  pk INT PRIMARY KEY,
+  p_pk INT REFERENCES parent_comp (pk),
+  crdb_region crdb_internal_region AS (
+    CASE WHEN pk <= 10 THEN 'us-east-1' ELSE 'ap-southeast-2' END
+  ) STORED,
+  FAMILY (pk, p_pk, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+query T
+SELECT * FROM [EXPLAIN INSERT INTO child_comp VALUES (1, 1)] OFFSET 2
+----
+·
+• root
+│
+├── • insert
+│   │ into: child_comp(pk, p_pk, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 4 columns, 1 row
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • cross join (anti)
+            │
+            ├── • values
+            │     size: 1 column, 1 row
+            │
+            └── • scan
+                  missing stats
+                  table: parent_comp@primary
+                  spans: [/'us-east-1'/1 - /'us-east-1'/1]
 
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
