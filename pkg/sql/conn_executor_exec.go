@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -521,8 +522,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			},
 			ex.generateID(),
 		)
+		var rawTypeHints []oid.Oid
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
@@ -1106,7 +1108,17 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	}
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
-	ex.resetPlanner(ctx, p, nil /* txn */, now)
+
+	// NB: this use of p.txn is totally bogus. The planner's txn should
+	// definitely be finalized at this point. We preserve it here because we
+	// need to make sure that the planner's txn is not made to be nil in the
+	// case of an error below. The planner's txn is never written to nil at
+	// any other point after the first prepare or exec has been run. We abuse
+	// this transaction in bind and some other contexts for resolving types and
+	// oids. Avoiding set this to nil side-steps a nil pointer panic but is still
+	// awful. Instead we ought to clear the planner state when we clear the reset
+	// the connExecutor in finishTxn.
+	ex.resetPlanner(ctx, p, p.txn, now)
 	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
 	if err != nil {
 		return 0, time.Time{}, nil, err
