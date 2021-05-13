@@ -211,6 +211,10 @@ func (tr *tableReader) Start(ctx context.Context) {
 func (tr *tableReader) Release() {
 	tr.ProcessorBase.Reset()
 	tr.fetcher.Reset()
+	// Deeply reset the spans so that we don't hold onto the keys of the spans.
+	for i := range tr.spans {
+		tr.spans[i] = roachpb.Span{}
+	}
 	*tr = tableReader{
 		ProcessorBase: tr.ProcessorBase,
 		fetcher:       tr.fetcher,
