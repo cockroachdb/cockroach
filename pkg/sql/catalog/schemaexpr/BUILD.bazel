@@ -10,7 +10,6 @@ go_library(
         "default_exprs.go",
         "doc.go",
         "expr.go",
-        "expr_filter.go",
         "partial_index.go",
         "select_name_resolution.go",
         "unique_contraint.go",

@@ -14,7 +14,6 @@
 package physicalplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -88,7 +87,7 @@ func MakeExpression(
 
 	if indexVarMap != nil {
 		// Remap our indexed vars.
-		expr = schemaexpr.RemapIVarsInTypedExpr(expr, indexVarMap)
+		expr = remapIVarsInTypedExpr(expr, indexVarMap)
 	}
 	expression := execinfrapb.Expression{LocalExpr: expr}
 	if ctx.IsLocal() {
@@ -132,3 +131,28 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 }
 
 func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+// remapIVarsInTypedExpr remaps tree.IndexedVars in expr using indexVarMap.
+// Note that a new expression is returned.
+func remapIVarsInTypedExpr(expr tree.TypedExpr, indexVarMap []int) tree.TypedExpr {
+	v := &ivarRemapper{indexVarMap: indexVarMap}
+	newExpr, _ := tree.WalkExpr(v, expr)
+	return newExpr.(tree.TypedExpr)
+}
+
+type ivarRemapper struct {
+	indexVarMap []int
+}
+
+var _ tree.Visitor = &ivarRemapper{}
+
+func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if ivar, ok := expr.(*tree.IndexedVar); ok {
+		newIvar := *ivar
+		newIvar.Idx = v.indexVarMap[ivar.Idx]
+		return false, &newIvar
+	}
+	return true, expr
+}
+
+func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }

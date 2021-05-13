@@ -13,7 +13,6 @@ package execinfrapb
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -189,9 +188,23 @@ func (eh *ExprHelper) Init(
 func (eh *ExprHelper) EvalFilter(row rowenc.EncDatumRow) (bool, error) {
 	eh.Row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	pass, err := schemaexpr.RunFilter(eh.Expr, eh.evalCtx)
+	pass, err := RunFilter(eh.Expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
+}
+
+// RunFilter runs a filter expression and returns whether the filter passes.
+func RunFilter(filter tree.TypedExpr, evalCtx *tree.EvalContext) (bool, error) {
+	if filter == nil {
+		return true, nil
+	}
+
+	d, err := filter.Eval(evalCtx)
+	if err != nil {
+		return false, err
+	}
+
+	return d == tree.DBoolTrue, nil
 }
 
 // Eval - given a row - evaluates the wrapped expression and returns the
