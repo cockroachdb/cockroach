@@ -4,6 +4,7 @@
 package eventpb
 
 import (
+	encoding_binary "encoding/binary"
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -23,36 +24,45 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// RuntimeStats is recorded every 10 seconds as server health metrics.
 type RuntimeStats struct {
 	CommonEventDetails `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`
-	// The process RSS. Expressed as mebibytes.
-	RSS string `protobuf:"bytes,2,opt,name=rss,proto3" json:",omitempty"`
+	// The process RSS. Expressed as bytes.
+	RSS int64 `protobuf:"varint,2,opt,name=rss,proto3" json:",omitempty"`
 	// The number of goroutines.
-	NumGoroutines string `protobuf:"bytes,3,opt,name=num_goroutines,json=numGoroutines,proto3" json:",omitempty"`
-	// The stack system memory used. Expressed as mebibytes.
-	StackSysMemory string `protobuf:"bytes,4,opt,name=stack_sys_memory,json=stackSysMemory,proto3" json:",omitempty"`
-	// The ratio of the mebibytes of memory allocated by Go to the total mebibytes of memory allocated by Go but not released.
-	GoMemoryRatio string `protobuf:"bytes,5,opt,name=go_memory_ratio,json=goMemoryRatio,proto3" json:",omitempty"`
-	// If the Go memory statistics are stale, the stale message.
-	StaleMessage string `protobuf:"bytes,6,opt,name=stale_message,json=staleMessage,proto3" json:",omitempty"`
-	// The amount of heap fragmentation. Expressed as mebibytes.
-	HeapFragmentation string `protobuf:"bytes,7,opt,name=heap_fragmentation,json=heapFragmentation,proto3" json:",omitempty"`
-	// The amount of heap reserved. Expressed as mebibytes.
-	HeapReserved string `protobuf:"bytes,8,opt,name=heap_reserved,json=heapReserved,proto3" json:",omitempty"`
-	// The amount of heap released. Expressed as mebibytes.
-	HeapReleased string `protobuf:"bytes,9,opt,name=heap_released,json=heapReleased,proto3" json:",omitempty"`
-	// The ratio of the mebibytes of memory allocated outside of Go to the total mebibytes of memory allocated outside of Go but not released.
-	CGoMemoryRatio string `protobuf:"bytes,10,opt,name=cgo_memory_ratio,json=cgoMemoryRatio,proto3" json:",omitempty"`
+	NumGoroutines int64 `protobuf:"varint,3,opt,name=num_goroutines,json=numGoroutines,proto3" json:",omitempty"`
+	// The stack system memory used. Expressed as bytes.
+	StackSys int64 `protobuf:"varint,4,opt,name=stack_sys,json=stackSys,proto3" json:",omitempty"`
+	// The memory allocated by Go. Expressed as bytes.
+	GoAlloc int64 `protobuf:"varint,5,opt,name=go_alloc,json=goAlloc,proto3" json:",omitempty"`
+	// The total memory allocated by Go but not released. Expressed as bytes.
+	GoTotal int64 `protobuf:"varint,6,opt,name=go_total,json=goTotal,proto3" json:",omitempty"`
+	// Whether the Go memory statistics are stale.
+	GoStatsStale bool `protobuf:"varint,7,opt,name=go_stats_stale,json=goStatsStale,proto3" json:",omitempty"`
+	// The amount of heap fragmentation. Expressed as bytes.
+	HeapFragmentation int64 `protobuf:"varint,8,opt,name=heap_fragmentation,json=heapFragmentation,proto3" json:",omitempty"`
+	// The amount of heap reserved. Expressed as bytes.
+	HeapReserved int64 `protobuf:"varint,9,opt,name=heap_reserved,json=heapReserved,proto3" json:",omitempty"`
+	// The amount of heap released. Expressed as bytes.
+	HeapReleased int64 `protobuf:"varint,10,opt,name=heap_released,json=heapReleased,proto3" json:",omitempty"`
+	// The memory allocated outside of Go. Expressed as bytes.
+	CGoAlloc int64 `protobuf:"varint,11,opt,name=cgo_alloc,json=cgoAlloc,proto3" json:",omitempty"`
+	// The total memory allocated outside of Go but not released. Expressed as bytes.
+	CGoTotal int64 `protobuf:"varint,12,opt,name=cgo_total,json=cgoTotal,proto3" json:",omitempty"`
 	// The total number of calls outside of Go over time. Expressed as operations per second.
-	CGoRate string `protobuf:"bytes,11,opt,name=cgo_rate,json=cgoRate,proto3" json:",omitempty"`
-	// The ratio of user CPU percentage to system CPU percentage.
-	CPURatio string `protobuf:"bytes,12,opt,name=cpu_rate,json=cpuRate,proto3" json:",omitempty"`
+	CGoRate float32 `protobuf:"fixed32,13,opt,name=cgo_rate,json=cgoRate,proto3" json:",omitempty"`
+	// The user CPU percentage.
+	CPUUserPercent float32 `protobuf:"fixed32,14,opt,name=cpu_user_percent,json=cpuUserPercent,proto3" json:",omitempty"`
+	// The system CPU percentage.
+	CPUSysPercent float32 `protobuf:"fixed32,15,opt,name=cpu_sys_percent,json=cpuSysPercent,proto3" json:",omitempty"`
 	// The GC pause percentage.
-	GCPauseRatio string `protobuf:"bytes,13,opt,name=gc_pause_ratio,json=gcPauseRatio,proto3" json:",omitempty"`
+	GCPauseRatio float32 `protobuf:"fixed32,16,opt,name=gc_pause_ratio,json=gcPauseRatio,proto3" json:",omitempty"`
 	// The total number of GC runs.
-	GCCount string `protobuf:"bytes,14,opt,name=gc_count,json=gcCount,proto3" json:",omitempty"`
-	// The ratio of kilobytes received to kilobytes sent, on all network interfaces since this process started.
-	HostNetBytesRatio string `protobuf:"bytes,15,opt,name=host_net_bytes_ratio,json=hostNetBytesRatio,proto3" json:",omitempty"`
+	GCCount int64 `protobuf:"varint,17,opt,name=gc_count,json=gcCount,proto3" json:",omitempty"`
+	// The bytes received on all network interfaces since this process started.
+	HostNetRecvBytes int64 `protobuf:"varint,18,opt,name=host_net_recv_bytes,json=hostNetRecvBytes,proto3" json:",omitempty"`
+	// The bytes sent on all network interfaces since this process started.
+	HostNetSendBytes int64 `protobuf:"varint,19,opt,name=host_net_send_bytes,json=hostNetSendBytes,proto3" json:",omitempty"`
 }
 
 func (m *RuntimeStats) Reset()         { *m = RuntimeStats{} }
@@ -93,43 +103,48 @@ func init() {
 }
 
 var fileDescriptor_eb2537843d9e7598 = []byte{
-	// 562 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x93, 0x41, 0x6b, 0xd4, 0x4c,
-	0x18, 0xc7, 0x93, 0xb7, 0xaf, 0xcd, 0x76, 0x9a, 0xa6, 0x75, 0xa8, 0x10, 0x17, 0x4c, 0x8a, 0x08,
-	0x56, 0x90, 0x2c, 0x58, 0x2b, 0x5e, 0x44, 0xd8, 0x54, 0x17, 0x84, 0x4a, 0xc9, 0xea, 0xc5, 0x4b,
-	0x98, 0x4e, 0x1f, 0x67, 0x43, 0x93, 0x4c, 0xc8, 0x4c, 0x0a, 0xfb, 0x15, 0x3c, 0xf9, 0xb1, 0xf6,
-	0xb8, 0xc7, 0x9e, 0x82, 0x66, 0x6f, 0xfd, 0x14, 0x32, 0xb3, 0xc1, 0xae, 0x6b, 0xea, 0x6d, 0x33,
-	0xf3, 0xfb, 0xfd, 0xff, 0x0f, 0xcf, 0x32, 0xe8, 0x49, 0x25, 0x93, 0x74, 0x90, 0x72, 0x36, 0x80,
-	0x2b, 0xc8, 0x65, 0x71, 0x3e, 0x98, 0x00, 0x49, 0xe5, 0x24, 0xd6, 0x9f, 0x22, 0x28, 0x4a, 0x2e,
-	0x39, 0xee, 0x53, 0x4e, 0x2f, 0x4b, 0x4e, 0xe8, 0x24, 0x50, 0x7c, 0x90, 0x72, 0x16, 0xb4, 0x7c,
-	0x7f, 0x9f, 0x71, 0xc6, 0x35, 0x36, 0x50, 0xbf, 0x96, 0x46, 0xff, 0xd1, 0x5f, 0xb9, 0xab, 0x81,
-	0x8f, 0xbf, 0x59, 0xc8, 0x8e, 0xaa, 0x5c, 0x26, 0x19, 0x8c, 0x25, 0x91, 0x02, 0x7f, 0x42, 0x9b,
-	0x94, 0x67, 0x19, 0xcf, 0x5d, 0xf3, 0xc0, 0x3c, 0xdc, 0x7e, 0x11, 0x04, 0x77, 0x57, 0x06, 0xa1,
-	0x26, 0xdf, 0xa9, 0xaf, 0x13, 0x90, 0x24, 0x49, 0xc5, 0xd0, 0x9e, 0xd5, 0xbe, 0x31, 0xaf, 0x7d,
-	0xf3, 0xa6, 0xf6, 0x8d, 0xa8, 0xcd, 0xc2, 0x4f, 0xd1, 0x46, 0x29, 0x84, 0xfb, 0xdf, 0x81, 0x79,
-	0xb8, 0x35, 0x7c, 0xd0, 0xd4, 0xfe, 0x46, 0x34, 0x1e, 0xdf, 0xd4, 0x3e, 0x7a, 0xce, 0xb3, 0x44,
-	0x42, 0x56, 0xc8, 0x69, 0xa4, 0x08, 0x7c, 0x8c, 0x9c, 0xbc, 0xca, 0x62, 0xc6, 0x4b, 0x5e, 0xc9,
-	0x24, 0x07, 0xe1, 0x6e, 0x68, 0xc7, 0x59, 0x83, 0x77, 0xf2, 0x2a, 0x1b, 0xfd, 0x86, 0xf0, 0x6b,
-	0xb4, 0x27, 0x24, 0xa1, 0x97, 0xb1, 0x98, 0x8a, 0x38, 0x83, 0x8c, 0x97, 0x53, 0xf7, 0xff, 0x4e,
-	0xd1, 0xd1, 0xdc, 0x78, 0x2a, 0x4e, 0x35, 0x85, 0x5f, 0xa1, 0x5d, 0xc6, 0x5b, 0x25, 0x2e, 0x89,
-	0x4c, 0xb8, 0x7b, 0xaf, 0xbb, 0x91, 0xf1, 0xa5, 0x12, 0x29, 0x08, 0x1f, 0xa1, 0x1d, 0x21, 0x49,
-	0x0a, 0x71, 0x06, 0x42, 0x10, 0x06, 0xee, 0x66, 0xa7, 0x65, 0x6b, 0xe8, 0x74, 0xc9, 0xe0, 0x37,
-	0x08, 0x4f, 0x80, 0x14, 0xf1, 0xd7, 0x92, 0xb0, 0x0c, 0x72, 0xa9, 0x92, 0x72, 0xd7, 0xea, 0x34,
-	0xef, 0x2b, 0xf2, 0xfd, 0x2a, 0xa8, 0x3a, 0xb5, 0x5e, 0x82, 0x80, 0xf2, 0x0a, 0x2e, 0xdc, 0x5e,
-	0x77, 0xa7, 0x82, 0xa2, 0x96, 0x59, 0x91, 0x52, 0x20, 0x02, 0x2e, 0xdc, 0xad, 0x7f, 0x49, 0x4b,
-	0x06, 0x7f, 0x40, 0x7b, 0x74, 0x7d, 0x2d, 0x48, 0x7b, 0x07, 0x4d, 0xed, 0x3b, 0xe1, 0x68, 0x75,
-	0x17, 0xeb, 0x1b, 0xa6, 0x7f, 0x6e, 0xea, 0x25, 0xea, 0xa9, 0xac, 0x92, 0x48, 0x70, 0xb7, 0x75,
-	0xc6, 0xc3, 0xa6, 0xf6, 0xad, 0x70, 0xc4, 0x23, 0x22, 0x61, 0x4d, 0xb6, 0x28, 0xd3, 0xc7, 0xf8,
-	0x18, 0xf5, 0x68, 0x51, 0x2d, 0x2d, 0x5b, 0x5b, 0xfd, 0xa6, 0xf6, 0x7b, 0xe1, 0xd9, 0xe7, 0xae,
-	0x4e, 0x8b, 0x16, 0x95, 0xd6, 0x4e, 0x90, 0xc3, 0x68, 0x5c, 0x90, 0x4a, 0x40, 0x3b, 0xf6, 0x8e,
-	0x96, 0xbd, 0xa6, 0xf6, 0xed, 0x51, 0x78, 0xa6, 0x2e, 0xba, 0x02, 0x6c, 0x46, 0x6f, 0xef, 0xd4,
-	0xc8, 0x8c, 0xc6, 0x94, 0x57, 0xb9, 0x74, 0x9d, 0xdb, 0x91, 0x47, 0x61, 0xa8, 0x8e, 0xd6, 0xbb,
-	0x19, 0xd5, 0xc7, 0xf8, 0x2d, 0xda, 0x9f, 0x70, 0x21, 0xe3, 0x1c, 0x64, 0x7c, 0x3e, 0x95, 0x20,
-	0xda, 0x09, 0x76, 0xef, 0xf8, 0x7f, 0xb9, 0x90, 0x1f, 0x41, 0x0e, 0x15, 0xa9, 0x6b, 0x87, 0xcf,
-	0x66, 0x3f, 0x3d, 0x63, 0xd6, 0x78, 0xe6, 0xbc, 0xf1, 0xcc, 0xeb, 0xc6, 0x33, 0x7f, 0x34, 0x9e,
-	0xf9, 0x7d, 0xe1, 0x19, 0xf3, 0x85, 0x67, 0x5c, 0x2f, 0x3c, 0xe3, 0x8b, 0xd5, 0xbe, 0xbc, 0xf3,
-	0x4d, 0xfd, 0x7c, 0x8f, 0x7e, 0x05, 0x00, 0x00, 0xff, 0xff, 0x0a, 0xd8, 0x65, 0x44, 0x37, 0x04,
-	0x00, 0x00,
+	// 650 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x94, 0x41, 0x6f, 0xda, 0x3c,
+	0x18, 0xc7, 0x49, 0x79, 0xdf, 0x42, 0x5d, 0xa0, 0xad, 0xbb, 0x49, 0x1e, 0xd2, 0x12, 0x34, 0x4d,
+	0x1a, 0xd5, 0x26, 0x90, 0xd6, 0x4d, 0x3b, 0xf5, 0x30, 0xd2, 0x0d, 0x69, 0x87, 0x09, 0x85, 0xf6,
+	0xb2, 0x8b, 0xe5, 0x9a, 0x67, 0x01, 0x35, 0x89, 0xa3, 0xd8, 0x41, 0xe2, 0x5b, 0xec, 0x63, 0xf5,
+	0xd8, 0x63, 0x2f, 0x8b, 0xb6, 0xf4, 0xd6, 0x4f, 0x31, 0xd9, 0xd0, 0x96, 0x42, 0xda, 0x0b, 0x4a,
+	0x9e, 0xe7, 0xf7, 0xfb, 0x47, 0xfc, 0x13, 0x19, 0xbd, 0x4e, 0xd5, 0x24, 0xe8, 0x06, 0xc2, 0xef,
+	0xc2, 0x14, 0x22, 0x15, 0x9f, 0x75, 0xc7, 0xc0, 0x02, 0x35, 0xa6, 0xe6, 0x56, 0x76, 0xe2, 0x44,
+	0x28, 0x81, 0x9b, 0x5c, 0xf0, 0xf3, 0x44, 0x30, 0x3e, 0xee, 0x68, 0xbe, 0x13, 0x08, 0xbf, 0xb3,
+	0xe0, 0x9b, 0xcf, 0x7c, 0xe1, 0x0b, 0x83, 0x75, 0xf5, 0xd5, 0xdc, 0x68, 0xbe, 0x5c, 0xcb, 0x5d,
+	0x0e, 0x7c, 0xf5, 0xbb, 0x8a, 0x6a, 0x5e, 0x1a, 0xa9, 0x49, 0x08, 0x43, 0xc5, 0x94, 0xc4, 0x27,
+	0x68, 0x93, 0x8b, 0x30, 0x14, 0x11, 0xb1, 0x5a, 0x56, 0x7b, 0xfb, 0x7d, 0xa7, 0xf3, 0xf8, 0x23,
+	0x3b, 0xae, 0x21, 0xbf, 0xe8, 0xbb, 0x63, 0x50, 0x6c, 0x12, 0xc8, 0x5e, 0xed, 0x22, 0x73, 0x4a,
+	0x97, 0x99, 0x63, 0xdd, 0x64, 0x4e, 0xc9, 0x5b, 0x64, 0xe1, 0x37, 0xa8, 0x9c, 0x48, 0x49, 0x36,
+	0x5a, 0x56, 0xbb, 0xdc, 0x7b, 0x9e, 0x67, 0x4e, 0xd9, 0x1b, 0x0e, 0x6f, 0x32, 0x07, 0xbd, 0x13,
+	0xe1, 0x44, 0x41, 0x18, 0xab, 0x99, 0xa7, 0x09, 0xfc, 0x11, 0x35, 0xa2, 0x34, 0xa4, 0xbe, 0x48,
+	0x44, 0xaa, 0x26, 0x11, 0x48, 0x52, 0x36, 0x4e, 0x63, 0x05, 0xae, 0x47, 0x69, 0xd8, 0xbf, 0x83,
+	0xf0, 0x5b, 0xb4, 0x25, 0x15, 0xe3, 0xe7, 0x54, 0xce, 0x24, 0xf9, 0xaf, 0xd0, 0xa8, 0x1a, 0x60,
+	0x38, 0x93, 0xf8, 0x00, 0x55, 0x7d, 0x41, 0x59, 0x10, 0x08, 0x4e, 0xfe, 0x2f, 0x64, 0x2b, 0xbe,
+	0xf8, 0xac, 0xd7, 0x0b, 0x54, 0x09, 0xc5, 0x02, 0xb2, 0xf9, 0x18, 0x7a, 0xa2, 0xd7, 0xf8, 0x03,
+	0x6a, 0xf8, 0x82, 0x4a, 0x5d, 0xa2, 0xfe, 0x0d, 0x80, 0x54, 0x5a, 0x56, 0xbb, 0xba, 0x26, 0xd4,
+	0x7c, 0x61, 0x9a, 0x1e, 0x6a, 0x06, 0x1f, 0x21, 0x3c, 0x06, 0x16, 0xd3, 0x9f, 0x09, 0xf3, 0x43,
+	0x88, 0x14, 0x53, 0x13, 0x11, 0x91, 0x6a, 0xe1, 0xa3, 0xf6, 0x34, 0xf9, 0x75, 0x19, 0xc4, 0x87,
+	0xa8, 0x6e, 0xf4, 0x04, 0x24, 0x24, 0x53, 0x18, 0x91, 0xad, 0x42, 0xb3, 0xa6, 0x21, 0x6f, 0xc1,
+	0x2c, 0x49, 0x01, 0x30, 0x09, 0x23, 0x82, 0x9e, 0x92, 0xe6, 0x0c, 0xfe, 0x84, 0xb6, 0xf8, 0x5d,
+	0x6b, 0xdb, 0x46, 0x68, 0xe6, 0x99, 0x53, 0x75, 0xfb, 0xf3, 0xaa, 0x56, 0xdb, 0xe6, 0xb7, 0x15,
+	0x2e, 0xc4, 0x79, 0x87, 0xb5, 0x07, 0xa2, 0x29, 0xae, 0x40, 0xbc, 0x2d, 0x54, 0x5f, 0xd3, 0x84,
+	0x29, 0x20, 0xf5, 0x96, 0xd5, 0xde, 0xe8, 0xbd, 0xc8, 0x33, 0xa7, 0xe2, 0xf6, 0x85, 0xc7, 0x14,
+	0xac, 0xbe, 0x06, 0xee, 0x9b, 0x31, 0xfe, 0x86, 0x76, 0x79, 0x9c, 0xd2, 0x54, 0x42, 0x42, 0x63,
+	0x48, 0x38, 0x44, 0x8a, 0x34, 0x8c, 0xdd, 0xca, 0x33, 0xa7, 0xe1, 0x0e, 0x4e, 0x4f, 0x25, 0x24,
+	0x83, 0xf9, 0x66, 0x25, 0xa4, 0xc1, 0xe3, 0x74, 0x69, 0x8b, 0xfb, 0x68, 0x47, 0x67, 0xc9, 0x99,
+	0xbc, 0x8b, 0xda, 0x31, 0x51, 0x4e, 0x9e, 0x39, 0x75, 0x77, 0x70, 0x3a, 0x9c, 0xc9, 0xe2, 0xa4,
+	0x3a, 0x8f, 0xd3, 0xfb, 0x25, 0x3e, 0x46, 0x0d, 0x9f, 0xd3, 0x98, 0xa5, 0x12, 0xf4, 0xff, 0x99,
+	0x08, 0xb2, 0x6b, 0x72, 0xec, 0x3c, 0x73, 0x6a, 0x7d, 0x77, 0xa0, 0x17, 0x9e, 0x9e, 0xaf, 0x7d,
+	0x2b, 0xfc, 0x7e, 0xa7, 0x0b, 0xf1, 0x39, 0xe5, 0x22, 0x8d, 0x14, 0xd9, 0x33, 0x45, 0x9a, 0x42,
+	0xfa, 0xae, 0xab, 0x47, 0x6b, 0xdf, 0x25, 0x37, 0x63, 0x7c, 0x84, 0xf6, 0xc7, 0x42, 0x2a, 0x1a,
+	0x81, 0xa2, 0x09, 0xf0, 0x29, 0x3d, 0x9b, 0x29, 0x90, 0x04, 0x17, 0xbe, 0xf3, 0x5d, 0x8d, 0x7e,
+	0x07, 0xe5, 0x01, 0x9f, 0xf6, 0x34, 0xf7, 0x40, 0x97, 0x10, 0x8d, 0x16, 0xfa, 0xfe, 0x93, 0xfa,
+	0x10, 0xa2, 0x91, 0xd1, 0x7b, 0x07, 0x17, 0x7f, 0xed, 0xd2, 0x45, 0x6e, 0x5b, 0x97, 0xb9, 0x6d,
+	0x5d, 0xe5, 0xb6, 0xf5, 0x27, 0xb7, 0xad, 0x5f, 0xd7, 0x76, 0xe9, 0xf2, 0xda, 0x2e, 0x5d, 0x5d,
+	0xdb, 0xa5, 0x1f, 0x95, 0xc5, 0x61, 0x72, 0xb6, 0x69, 0x4e, 0xa4, 0xc3, 0x7f, 0x01, 0x00, 0x00,
+	0xff, 0xff, 0x2c, 0x67, 0xa7, 0xd2, 0x0a, 0x05, 0x00, 0x00,
 }
 
 func (m *RuntimeStats) Marshal() (dAtA []byte, err error) {
@@ -152,103 +167,112 @@ func (m *RuntimeStats) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.HostNetBytesRatio) > 0 {
-		i -= len(m.HostNetBytesRatio)
-		copy(dAtA[i:], m.HostNetBytesRatio)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.HostNetBytesRatio)))
+	if m.HostNetSendBytes != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.HostNetSendBytes))
 		i--
-		dAtA[i] = 0x7a
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x98
 	}
-	if len(m.GCCount) > 0 {
-		i -= len(m.GCCount)
-		copy(dAtA[i:], m.GCCount)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.GCCount)))
+	if m.HostNetRecvBytes != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.HostNetRecvBytes))
 		i--
-		dAtA[i] = 0x72
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x90
 	}
-	if len(m.GCPauseRatio) > 0 {
-		i -= len(m.GCPauseRatio)
-		copy(dAtA[i:], m.GCPauseRatio)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.GCPauseRatio)))
+	if m.GCCount != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.GCCount))
 		i--
-		dAtA[i] = 0x6a
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x88
 	}
-	if len(m.CPURatio) > 0 {
-		i -= len(m.CPURatio)
-		copy(dAtA[i:], m.CPURatio)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.CPURatio)))
+	if m.GCPauseRatio != 0 {
+		i -= 4
+		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.GCPauseRatio))))
 		i--
-		dAtA[i] = 0x62
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x85
 	}
-	if len(m.CGoRate) > 0 {
-		i -= len(m.CGoRate)
-		copy(dAtA[i:], m.CGoRate)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.CGoRate)))
+	if m.CPUSysPercent != 0 {
+		i -= 4
+		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.CPUSysPercent))))
 		i--
-		dAtA[i] = 0x5a
+		dAtA[i] = 0x7d
 	}
-	if len(m.CGoMemoryRatio) > 0 {
-		i -= len(m.CGoMemoryRatio)
-		copy(dAtA[i:], m.CGoMemoryRatio)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.CGoMemoryRatio)))
+	if m.CPUUserPercent != 0 {
+		i -= 4
+		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.CPUUserPercent))))
 		i--
-		dAtA[i] = 0x52
+		dAtA[i] = 0x75
 	}
-	if len(m.HeapReleased) > 0 {
-		i -= len(m.HeapReleased)
-		copy(dAtA[i:], m.HeapReleased)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.HeapReleased)))
+	if m.CGoRate != 0 {
+		i -= 4
+		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.CGoRate))))
 		i--
-		dAtA[i] = 0x4a
+		dAtA[i] = 0x6d
 	}
-	if len(m.HeapReserved) > 0 {
-		i -= len(m.HeapReserved)
-		copy(dAtA[i:], m.HeapReserved)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.HeapReserved)))
+	if m.CGoTotal != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.CGoTotal))
 		i--
-		dAtA[i] = 0x42
+		dAtA[i] = 0x60
 	}
-	if len(m.HeapFragmentation) > 0 {
-		i -= len(m.HeapFragmentation)
-		copy(dAtA[i:], m.HeapFragmentation)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.HeapFragmentation)))
+	if m.CGoAlloc != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.CGoAlloc))
 		i--
-		dAtA[i] = 0x3a
+		dAtA[i] = 0x58
 	}
-	if len(m.StaleMessage) > 0 {
-		i -= len(m.StaleMessage)
-		copy(dAtA[i:], m.StaleMessage)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.StaleMessage)))
+	if m.HeapReleased != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.HeapReleased))
 		i--
-		dAtA[i] = 0x32
+		dAtA[i] = 0x50
 	}
-	if len(m.GoMemoryRatio) > 0 {
-		i -= len(m.GoMemoryRatio)
-		copy(dAtA[i:], m.GoMemoryRatio)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.GoMemoryRatio)))
+	if m.HeapReserved != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.HeapReserved))
 		i--
-		dAtA[i] = 0x2a
+		dAtA[i] = 0x48
 	}
-	if len(m.StackSysMemory) > 0 {
-		i -= len(m.StackSysMemory)
-		copy(dAtA[i:], m.StackSysMemory)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.StackSysMemory)))
+	if m.HeapFragmentation != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.HeapFragmentation))
 		i--
-		dAtA[i] = 0x22
+		dAtA[i] = 0x40
 	}
-	if len(m.NumGoroutines) > 0 {
-		i -= len(m.NumGoroutines)
-		copy(dAtA[i:], m.NumGoroutines)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.NumGoroutines)))
+	if m.GoStatsStale {
 		i--
-		dAtA[i] = 0x1a
+		if m.GoStatsStale {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x38
 	}
-	if len(m.RSS) > 0 {
-		i -= len(m.RSS)
-		copy(dAtA[i:], m.RSS)
-		i = encodeVarintHealthEvents(dAtA, i, uint64(len(m.RSS)))
+	if m.GoTotal != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.GoTotal))
 		i--
-		dAtA[i] = 0x12
+		dAtA[i] = 0x30
+	}
+	if m.GoAlloc != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.GoAlloc))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.StackSys != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.StackSys))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.NumGoroutines != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.NumGoroutines))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.RSS != 0 {
+		i = encodeVarintHealthEvents(dAtA, i, uint64(m.RSS))
+		i--
+		dAtA[i] = 0x10
 	}
 	{
 		size, err := m.CommonEventDetails.MarshalToSizedBuffer(dAtA[:i])
@@ -282,61 +306,59 @@ func (m *RuntimeStats) Size() (n int) {
 	_ = l
 	l = m.CommonEventDetails.Size()
 	n += 1 + l + sovHealthEvents(uint64(l))
-	l = len(m.RSS)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.RSS != 0 {
+		n += 1 + sovHealthEvents(uint64(m.RSS))
 	}
-	l = len(m.NumGoroutines)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.NumGoroutines != 0 {
+		n += 1 + sovHealthEvents(uint64(m.NumGoroutines))
 	}
-	l = len(m.StackSysMemory)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.StackSys != 0 {
+		n += 1 + sovHealthEvents(uint64(m.StackSys))
 	}
-	l = len(m.GoMemoryRatio)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.GoAlloc != 0 {
+		n += 1 + sovHealthEvents(uint64(m.GoAlloc))
 	}
-	l = len(m.StaleMessage)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.GoTotal != 0 {
+		n += 1 + sovHealthEvents(uint64(m.GoTotal))
 	}
-	l = len(m.HeapFragmentation)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.GoStatsStale {
+		n += 2
 	}
-	l = len(m.HeapReserved)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.HeapFragmentation != 0 {
+		n += 1 + sovHealthEvents(uint64(m.HeapFragmentation))
 	}
-	l = len(m.HeapReleased)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.HeapReserved != 0 {
+		n += 1 + sovHealthEvents(uint64(m.HeapReserved))
 	}
-	l = len(m.CGoMemoryRatio)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.HeapReleased != 0 {
+		n += 1 + sovHealthEvents(uint64(m.HeapReleased))
 	}
-	l = len(m.CGoRate)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.CGoAlloc != 0 {
+		n += 1 + sovHealthEvents(uint64(m.CGoAlloc))
 	}
-	l = len(m.CPURatio)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.CGoTotal != 0 {
+		n += 1 + sovHealthEvents(uint64(m.CGoTotal))
 	}
-	l = len(m.GCPauseRatio)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.CGoRate != 0 {
+		n += 5
 	}
-	l = len(m.GCCount)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.CPUUserPercent != 0 {
+		n += 5
 	}
-	l = len(m.HostNetBytesRatio)
-	if l > 0 {
-		n += 1 + l + sovHealthEvents(uint64(l))
+	if m.CPUSysPercent != 0 {
+		n += 5
+	}
+	if m.GCPauseRatio != 0 {
+		n += 6
+	}
+	if m.GCCount != 0 {
+		n += 2 + sovHealthEvents(uint64(m.GCCount))
+	}
+	if m.HostNetRecvBytes != 0 {
+		n += 2 + sovHealthEvents(uint64(m.HostNetRecvBytes))
+	}
+	if m.HostNetSendBytes != 0 {
+		n += 2 + sovHealthEvents(uint64(m.HostNetSendBytes))
 	}
 	return n
 }
@@ -410,10 +432,10 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RSS", wireType)
 			}
-			var stringLen uint64
+			m.RSS = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -423,29 +445,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.RSS |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.RSS = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 3:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field NumGoroutines", wireType)
 			}
-			var stringLen uint64
+			m.NumGoroutines = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -455,29 +464,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.NumGoroutines |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NumGoroutines = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StackSysMemory", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StackSys", wireType)
 			}
-			var stringLen uint64
+			m.StackSys = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -487,29 +483,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.StackSys |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.StackSysMemory = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field GoMemoryRatio", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GoAlloc", wireType)
 			}
-			var stringLen uint64
+			m.GoAlloc = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -519,29 +502,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.GoAlloc |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.GoMemoryRatio = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StaleMessage", wireType)
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GoTotal", wireType)
 			}
-			var stringLen uint64
+			m.GoTotal = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -551,29 +521,36 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.GoTotal |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.StaleMessage = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 7:
-			if wireType != 2 {
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GoStatsStale", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHealthEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.GoStatsStale = bool(v != 0)
+		case 8:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HeapFragmentation", wireType)
 			}
-			var stringLen uint64
+			m.HeapFragmentation = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -583,29 +560,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.HeapFragmentation |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HeapFragmentation = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 8:
-			if wireType != 2 {
+		case 9:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HeapReserved", wireType)
 			}
-			var stringLen uint64
+			m.HeapReserved = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -615,29 +579,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.HeapReserved |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HeapReserved = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 9:
-			if wireType != 2 {
+		case 10:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field HeapReleased", wireType)
 			}
-			var stringLen uint64
+			m.HeapReleased = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -647,157 +598,98 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.HeapReleased |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HeapReleased = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 10:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CGoMemoryRatio", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowHealthEvents
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.CGoMemoryRatio = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 11:
-			if wireType != 2 {
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CGoAlloc", wireType)
+			}
+			m.CGoAlloc = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHealthEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CGoAlloc |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CGoTotal", wireType)
+			}
+			m.CGoTotal = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHealthEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CGoTotal |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 13:
+			if wireType != 5 {
 				return fmt.Errorf("proto: wrong wireType = %d for field CGoRate", wireType)
 			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowHealthEvents
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
+			var v uint32
+			if (iNdEx + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CGoRate = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 12:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CPURatio", wireType)
+			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			iNdEx += 4
+			m.CGoRate = float32(math.Float32frombits(v))
+		case 14:
+			if wireType != 5 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CPUUserPercent", wireType)
 			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowHealthEvents
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
+			var v uint32
+			if (iNdEx + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CPURatio = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 13:
-			if wireType != 2 {
+			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			iNdEx += 4
+			m.CPUUserPercent = float32(math.Float32frombits(v))
+		case 15:
+			if wireType != 5 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CPUSysPercent", wireType)
+			}
+			var v uint32
+			if (iNdEx + 4) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			iNdEx += 4
+			m.CPUSysPercent = float32(math.Float32frombits(v))
+		case 16:
+			if wireType != 5 {
 				return fmt.Errorf("proto: wrong wireType = %d for field GCPauseRatio", wireType)
 			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowHealthEvents
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
+			var v uint32
+			if (iNdEx + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GCPauseRatio = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 14:
-			if wireType != 2 {
+			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			iNdEx += 4
+			m.GCPauseRatio = float32(math.Float32frombits(v))
+		case 17:
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field GCCount", wireType)
 			}
-			var stringLen uint64
+			m.GCCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -807,29 +699,16 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.GCCount |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
+		case 18:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HostNetRecvBytes", wireType)
 			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.GCCount = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 15:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HostNetBytesRatio", wireType)
-			}
-			var stringLen uint64
+			m.HostNetRecvBytes = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowHealthEvents
@@ -839,24 +718,30 @@ func (m *RuntimeStats) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				m.HostNetRecvBytes |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthHealthEvents
+		case 19:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HostNetSendBytes", wireType)
 			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthHealthEvents
+			m.HostNetSendBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowHealthEvents
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HostNetSendBytes |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
 			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.HostNetBytesRatio = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipHealthEvents(dAtA[iNdEx:])

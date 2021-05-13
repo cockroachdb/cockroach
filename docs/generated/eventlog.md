@@ -152,24 +152,29 @@ Events in this category are logged to the `HEALTH` channel.
 
 ### `runtime_stats`
 
+An event of type `runtime_stats` is recorded every 10 seconds as server health metrics.
 
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `RSS` | The process RSS. Expressed as mebibytes. | yes |
-| `NumGoroutines` | The number of goroutines. | yes |
-| `StackSysMemory` | The stack system memory used. Expressed as mebibytes. | yes |
-| `GoMemoryRatio` | The ratio of the mebibytes of memory allocated by Go to the total mebibytes of memory allocated by Go but not released. | yes |
-| `StaleMessage` | If the Go memory statistics are stale, the stale message. | yes |
-| `HeapFragmentation` | The amount of heap fragmentation. Expressed as mebibytes. | yes |
-| `HeapReserved` | The amount of heap reserved. Expressed as mebibytes. | yes |
-| `HeapReleased` | The amount of heap released. Expressed as mebibytes. | yes |
-| `CGoMemoryRatio` | The ratio of the mebibytes of memory allocated outside of Go to the total mebibytes of memory allocated outside of Go but not released. | yes |
-| `CGoRate` | The total number of calls outside of Go over time. Expressed as operations per second. | yes |
-| `CPURatio` | The ratio of user CPU percentage to system CPU percentage. | yes |
-| `GCPauseRatio` | The GC pause percentage. | yes |
-| `GCCount` | The total number of GC runs. | yes |
-| `HostNetBytesRatio` | The ratio of kilobytes received to kilobytes sent, on all network interfaces since this process started. | yes |
+| `RSS` | The process RSS. Expressed as bytes. | no |
+| `NumGoroutines` | The number of goroutines. | no |
+| `StackSys` | The stack system memory used. Expressed as bytes. | no |
+| `GoAlloc` | The memory allocated by Go. Expressed as bytes. | no |
+| `GoTotal` | The total memory allocated by Go but not released. Expressed as bytes. | no |
+| `GoStatsStale` | Whether the Go memory statistics are stale. | no |
+| `HeapFragmentation` | The amount of heap fragmentation. Expressed as bytes. | no |
+| `HeapReserved` | The amount of heap reserved. Expressed as bytes. | no |
+| `HeapReleased` | The amount of heap released. Expressed as bytes. | no |
+| `CGoAlloc` | The memory allocated outside of Go. Expressed as bytes. | no |
+| `CGoTotal` | The total memory allocated outside of Go but not released. Expressed as bytes. | no |
+| `CGoRate` | The total number of calls outside of Go over time. Expressed as operations per second. | no |
+| `CPUUserPercent` | The user CPU percentage. | no |
+| `CPUSysPercent` | The system CPU percentage. | no |
+| `GCPauseRatio` | The GC pause percentage. | no |
+| `GCCount` | The total number of GC runs. | no |
+| `HostNetRecvBytes` | The bytes received on all network interfaces since this process started. | no |
+| `HostNetSendBytes` | The bytes sent on all network interfaces since this process started. | no |
 
 
 #### Common fields

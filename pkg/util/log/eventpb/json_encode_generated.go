@@ -2363,172 +2363,165 @@ func (m *RuntimeStats) AppendJSONFields(printComma bool, b redact.RedactableByte
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
 
-	if m.RSS != "" {
+	if m.RSS != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"RSS\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.RSS)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"RSS\":"...)
+		b = strconv.AppendInt(b, int64(m.RSS), 10)
 	}
 
-	if m.NumGoroutines != "" {
+	if m.NumGoroutines != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"NumGoroutines\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.NumGoroutines)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"NumGoroutines\":"...)
+		b = strconv.AppendInt(b, int64(m.NumGoroutines), 10)
 	}
 
-	if m.StackSysMemory != "" {
+	if m.StackSys != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"StackSysMemory\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.StackSysMemory)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"StackSys\":"...)
+		b = strconv.AppendInt(b, int64(m.StackSys), 10)
 	}
 
-	if m.GoMemoryRatio != "" {
+	if m.GoAlloc != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"GoMemoryRatio\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.GoMemoryRatio)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"GoAlloc\":"...)
+		b = strconv.AppendInt(b, int64(m.GoAlloc), 10)
 	}
 
-	if m.StaleMessage != "" {
+	if m.GoTotal != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"StaleMessage\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.StaleMessage)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"GoTotal\":"...)
+		b = strconv.AppendInt(b, int64(m.GoTotal), 10)
 	}
 
-	if m.HeapFragmentation != "" {
+	if m.GoStatsStale {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"HeapFragmentation\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HeapFragmentation)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"GoStatsStale\":true"...)
 	}
 
-	if m.HeapReserved != "" {
+	if m.HeapFragmentation != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"HeapReserved\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HeapReserved)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"HeapFragmentation\":"...)
+		b = strconv.AppendInt(b, int64(m.HeapFragmentation), 10)
 	}
 
-	if m.HeapReleased != "" {
+	if m.HeapReserved != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"HeapReleased\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HeapReleased)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"HeapReserved\":"...)
+		b = strconv.AppendInt(b, int64(m.HeapReserved), 10)
 	}
 
-	if m.CGoMemoryRatio != "" {
+	if m.HeapReleased != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"CGoMemoryRatio\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CGoMemoryRatio)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"HeapReleased\":"...)
+		b = strconv.AppendInt(b, int64(m.HeapReleased), 10)
 	}
 
-	if m.CGoRate != "" {
+	if m.CGoAlloc != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"CGoRate\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CGoRate)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"CGoAlloc\":"...)
+		b = strconv.AppendInt(b, int64(m.CGoAlloc), 10)
 	}
 
-	if m.CPURatio != "" {
+	if m.CGoTotal != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"CPURatio\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.CPURatio)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"CGoTotal\":"...)
+		b = strconv.AppendInt(b, int64(m.CGoTotal), 10)
 	}
 
-	if m.GCPauseRatio != "" {
+	if m.CGoRate != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"GCPauseRatio\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.GCPauseRatio)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"CGoRate\":"...)
+		b = strconv.AppendFloat(b, float64(m.CGoRate), 'f', -1, 32)
 	}
 
-	if m.GCCount != "" {
+	if m.CPUUserPercent != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"GCCount\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.GCCount)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"CPUUserPercent\":"...)
+		b = strconv.AppendFloat(b, float64(m.CPUUserPercent), 'f', -1, 32)
 	}
 
-	if m.HostNetBytesRatio != "" {
+	if m.CPUSysPercent != 0 {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"HostNetBytesRatio\":\""...)
-		b = append(b, redact.StartMarker()...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.HostNetBytesRatio)))))
-		b = append(b, redact.EndMarker()...)
-		b = append(b, '"')
+		b = append(b, "\"CPUSysPercent\":"...)
+		b = strconv.AppendFloat(b, float64(m.CPUSysPercent), 'f', -1, 32)
+	}
+
+	if m.GCPauseRatio != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GCPauseRatio\":"...)
+		b = strconv.AppendFloat(b, float64(m.GCPauseRatio), 'f', -1, 32)
+	}
+
+	if m.GCCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"GCCount\":"...)
+		b = strconv.AppendInt(b, int64(m.GCCount), 10)
+	}
+
+	if m.HostNetRecvBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HostNetRecvBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.HostNetRecvBytes), 10)
+	}
+
+	if m.HostNetSendBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"HostNetSendBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.HostNetSendBytes), 10)
 	}
 
 	return printComma, b

@@ -29,34 +29,43 @@ import "util/log/eventpb/events.proto";
 // here, not protobuf.
 // *Really look at doc.go before modifying this file.*
 
+// RuntimeStats is recorded every 10 seconds as server health metrics.
 message RuntimeStats {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  // The process RSS. Expressed as mebibytes.
-  string rss = 2 [(gogoproto.customname) = "RSS", (gogoproto.jsontag) = ",omitempty"];
+  // The process RSS. Expressed as bytes.
+  int64 rss = 2 [(gogoproto.customname) = "RSS", (gogoproto.jsontag) = ",omitempty"];
   // The number of goroutines.
-  string num_goroutines = 3 [(gogoproto.jsontag) = ",omitempty"];
-  // The stack system memory used. Expressed as mebibytes.
-  string stack_sys_memory = 4 [(gogoproto.jsontag) = ",omitempty"];
-  // The ratio of the mebibytes of memory allocated by Go to the total mebibytes of memory allocated by Go but not released.
-  string go_memory_ratio = 5 [(gogoproto.jsontag) = ",omitempty"];
-  // If the Go memory statistics are stale, the stale message.
-  string stale_message = 6 [(gogoproto.jsontag) = ",omitempty"];
-  // The amount of heap fragmentation. Expressed as mebibytes.
-  string heap_fragmentation = 7 [(gogoproto.jsontag) = ",omitempty"];
-  // The amount of heap reserved. Expressed as mebibytes.
-  string heap_reserved = 8 [(gogoproto.jsontag) = ",omitempty"];
-  // The amount of heap released. Expressed as mebibytes.
-  string heap_released = 9 [(gogoproto.jsontag) = ",omitempty"];
-  // The ratio of the mebibytes of memory allocated outside of Go to the total mebibytes of memory allocated outside of Go but not released.
-  string cgo_memory_ratio = 10 [(gogoproto.customname) = "CGoMemoryRatio", (gogoproto.jsontag) = ",omitempty"];
+  int64 num_goroutines = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The stack system memory used. Expressed as bytes.
+  int64 stack_sys = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // The memory allocated by Go. Expressed as bytes.
+  int64 go_alloc = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // The total memory allocated by Go but not released. Expressed as bytes.
+  int64 go_total = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // Whether the Go memory statistics are stale.
+  bool go_stats_stale = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // The amount of heap fragmentation. Expressed as bytes.
+  int64 heap_fragmentation = 8 [(gogoproto.jsontag) = ",omitempty"];
+  // The amount of heap reserved. Expressed as bytes.
+  int64 heap_reserved = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // The amount of heap released. Expressed as bytes.
+  int64 heap_released = 10 [(gogoproto.jsontag) = ",omitempty"];
+  // The memory allocated outside of Go. Expressed as bytes.
+  int64 cgo_alloc = 11 [(gogoproto.customname) = "CGoAlloc", (gogoproto.jsontag) = ",omitempty"];
+  // The total memory allocated outside of Go but not released. Expressed as bytes.
+  int64 cgo_total = 12 [(gogoproto.customname) = "CGoTotal", (gogoproto.jsontag) = ",omitempty"];
   // The total number of calls outside of Go over time. Expressed as operations per second.
-  string cgo_rate = 11 [(gogoproto.customname) = "CGoRate", (gogoproto.jsontag) = ",omitempty"];
-  // The ratio of user CPU percentage to system CPU percentage.
-  string cpu_rate = 12 [(gogoproto.customname) = "CPURatio", (gogoproto.jsontag) = ",omitempty"];
+  float cgo_rate = 13 [(gogoproto.customname) = "CGoRate", (gogoproto.jsontag) = ",omitempty"];
+  // The user CPU percentage.
+  float cpu_user_percent = 14 [(gogoproto.customname) = "CPUUserPercent", (gogoproto.jsontag) = ",omitempty"];
+  // The system CPU percentage.
+  float cpu_sys_percent = 15 [(gogoproto.customname) = "CPUSysPercent", (gogoproto.jsontag) = ",omitempty"];
   // The GC pause percentage.
-  string gc_pause_ratio = 13 [(gogoproto.customname) = "GCPauseRatio", (gogoproto.jsontag) = ",omitempty"];
+  float gc_pause_ratio = 16 [(gogoproto.customname) = "GCPauseRatio", (gogoproto.jsontag) = ",omitempty"];
   // The total number of GC runs.
-  string gc_count = 14 [(gogoproto.customname) = "GCCount", (gogoproto.jsontag) = ",omitempty"];
-  // The ratio of kilobytes received to kilobytes sent, on all network interfaces since this process started.
-  string host_net_bytes_ratio = 15 [(gogoproto.jsontag) = ",omitempty"];
+  int64 gc_count = 17 [(gogoproto.customname) = "GCCount", (gogoproto.jsontag) = ",omitempty"];
+  // The bytes received on all network interfaces since this process started.
+  int64 host_net_recv_bytes = 18 [(gogoproto.jsontag) = ",omitempty"];
+  // The bytes sent on all network interfaces since this process started.
+  int64 host_net_send_bytes = 19 [(gogoproto.jsontag) = ",omitempty"];
 }
