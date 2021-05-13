@@ -6,18 +6,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "service",
     srcs = ["service.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/admitter",
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler",
     visibility = ["//visibility:private"],
 )
 
 go_library(
-    name = "admitter",
+    name = "throttler",
     srcs = [
         "local.go",
-        ":mocks_admitter",  # keep
+        ":mocks_throttler",  # keep
     ],
     embed = [":service"],  # keep
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/admitter",
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/log",
@@ -28,16 +28,16 @@ go_library(
 )
 
 go_test(
-    name = "admitter_test",
+    name = "throttler_test",
     srcs = ["local_test.go"],
-    embed = [":admitter"],
+    embed = [":throttler"],
     deps = ["@com_github_stretchr_testify//require"],
 )
 
 gomock(
-    name = "mocks_admitter",
+    name = "mocks_throttler",
     out = "mocks_generated.go",
     interfaces = ["Service"],
     library = ":service",
-    package = "admitter",
+    package = "throttler",
 )

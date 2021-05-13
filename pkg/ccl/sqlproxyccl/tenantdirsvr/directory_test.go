@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package tenant
+package tenantdirsvr
 
 import (
 	"context"
@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -26,6 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
+
+// To ensure tenant startup code is included.
+var _ = kvtenantccl.Connector{}
 
 func TestDirectoryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -89,7 +94,7 @@ func TestEndpointWatcher(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Resume tenant again by a direct call to the directory server
-	_, err = tds.EnsureEndpoint(ctx, &EnsureEndpointRequest{tenantID.ToUint64()})
+	_, err = tds.EnsureEndpoint(ctx, &tenant.EnsureEndpointRequest{tenantID.ToUint64()})
 	require.NoError(t, err)
 
 	// Wait for background watcher to populate the initial endpoint.
@@ -188,7 +193,7 @@ func TestResume(t *testing.T) {
 		}(i)
 	}
 
-	var processes map[net.Addr]*Process
+	var processes map[net.Addr]*tenant.Process
 	// Eventually the tenant process will be resumed.
 	require.Eventually(t, func() bool {
 		processes = tds.Get(tenantID)
@@ -212,7 +217,7 @@ func TestDeleteTenant(t *testing.T) {
 	// Create the directory.
 	ctx := context.Background()
 	// Disable throttling for this test
-	tc, dir, tds := newTestDirectory(t, RefreshDelay(-1))
+	tc, dir, tds := newTestDirectory(t, tenant.RefreshDelay(-1))
 	defer tc.Stopper().Stop(ctx)
 
 	tenantID := roachpb.MakeTenantID(50)
@@ -266,7 +271,7 @@ func TestRefreshThrottling(t *testing.T) {
 	// Create the directory, but with extreme rate limiting so that directory
 	// will never refresh.
 	ctx := context.Background()
-	tc, dir, _ := newTestDirectory(t, RefreshDelay(60*time.Minute))
+	tc, dir, _ := newTestDirectory(t, tenant.RefreshDelay(60*time.Minute))
 	defer tc.Stopper().Stop(ctx)
 
 	// Create test tenant.
@@ -325,10 +330,10 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 
 func startTenant(
 	ctx context.Context, srv serverutils.TestServerInterface, id uint64,
-) (*Process, error) {
+) (*tenant.Process, error) {
 	log.TestingClearServerIdentifiers()
-	tenantStopper := NewSubStopper(srv.Stopper())
-	tenant, err := srv.StartTenant(
+	tenantStopper := tenant.NewSubStopper(srv.Stopper())
+	t, err := srv.StartTenant(
 		ctx,
 		base.TestTenantArgs{
 			Existing:      true,
@@ -339,18 +344,22 @@ func startTenant(
 	if err != nil {
 		return nil, err
 	}
-	sqlAddr, err := net.ResolveTCPAddr("tcp", tenant.SQLAddr())
+	sqlAddr, err := net.ResolveTCPAddr("tcp", t.SQLAddr())
 	if err != nil {
 		return nil, err
 	}
-	return &Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
+	return &tenant.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
 }
 
 // Setup directory that uses a client connected to a test directory server
 // that manages tenants connected to a backing KV server.
 func newTestDirectory(
-	t *testing.T, opts ...DirOption,
-) (tc serverutils.TestClusterInterface, directory *Directory, tds *TestDirectoryServer) {
+	t *testing.T, opts ...tenant.DirOption,
+) (
+	tc serverutils.TestClusterInterface,
+	directory *tenant.Directory,
+	tds *tenant.TestDirectoryServer,
+) {
 	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
 		// We need to start the cluster insecure in order to not
 		// care about TLS settings for the RPC client connection.
@@ -359,8 +368,8 @@ func newTestDirectory(
 		},
 	})
 	clusterStopper := tc.Stopper()
-	tds = NewTestDirectoryServer(clusterStopper)
-	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*Process, error) {
+	tds = tenant.NewTestDirectoryServer(clusterStopper)
+	tds.TenantStarterFunc = func(ctx context.Context, tenantID uint64) (*tenant.Process, error) {
 		t.Logf("starting tenant %d", tenantID)
 		process, err := startTenant(ctx, tc.Server(0), tenantID)
 		if err != nil {
@@ -372,7 +381,6 @@ func newTestDirectory(
 
 	listenPort, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
-	clusterStopper.AddCloser(stop.CloserFn(func() { require.NoError(t, listenPort.Close()) }))
 	go func() { _ = tds.Serve(listenPort) }()
 
 	// Setup directory
@@ -381,8 +389,8 @@ func newTestDirectory(
 	require.NoError(t, err)
 	// nolint:grpcconnclose
 	clusterStopper.AddCloser(stop.CloserFn(func() { require.NoError(t, conn.Close() /* nolint:grpcconnclose */) }))
-	client := NewDirectoryClient(conn)
-	directory, err = NewDirectory(context.Background(), clusterStopper, client, opts...)
+	client := tenant.NewDirectoryClient(conn)
+	directory, err = tenant.NewDirectory(context.Background(), clusterStopper, client, opts...)
 	require.NoError(t, err)
 
 	return
