@@ -18,18 +18,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
+
+// ProxyConnHandler defines the signature of the function that handles each
+// individual new incoming connection.
+type ProxyConnHandler func(ctx context.Context, proxyConn *Conn) error
 
 // Server is a TCP server that proxies SQL connections to a
 // configurable backend. It may also run an HTTP server to expose a
 // health check and prometheus metrics.
 type Server struct {
-	opts            *Options
+	Stopper         *stop.Stopper
+	connHandler     ProxyConnHandler
 	mux             *http.ServeMux
-	metrics         *Metrics
+	Metrics         *Metrics
 	metricsRegistry *metric.Registry
 
 	promMu             syncutil.Mutex
@@ -38,19 +44,18 @@ type Server struct {
 
 // NewServer constructs a new proxy server and provisions metrics and health
 // checks as well.
-func NewServer(opts Options) *Server {
+func NewServer(stopper *stop.Stopper, proxyMetrics *Metrics, connHandler ProxyConnHandler) *Server {
 	mux := http.NewServeMux()
 
 	registry := metric.NewRegistry()
 
-	proxyMetrics := MakeProxyMetrics()
-
 	registry.AddMetricStruct(proxyMetrics)
 
 	s := &Server{
-		opts:               &opts,
+		Stopper:            stopper,
+		connHandler:        connHandler,
 		mux:                mux,
-		metrics:            &proxyMetrics,
+		Metrics:            proxyMetrics,
 		metricsRegistry:    registry,
 		prometheusExporter: metric.MakePrometheusExporter(),
 	}
@@ -134,7 +139,7 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // Serve serves a listener according to the Options given in NewServer().
 // Incoming client connections are taken through the Postgres handshake and
 // relayed to the configured backend server.
-func (s *Server) Serve(ln net.Listener) error {
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	for {
 		origConn, err := ln.Accept()
 		if err != nil {
@@ -144,17 +149,19 @@ func (s *Server) Serve(ln net.Listener) error {
 			Conn: origConn,
 		}
 
-		go func() {
+		err = s.Stopper.RunAsyncTask(ctx, "proxy-con-handler", func(ctx context.Context) {
 			defer func() { _ = conn.Close() }()
-			s.metrics.CurConnCount.Inc(1)
-			defer s.metrics.CurConnCount.Dec(1)
-			tBegin := timeutil.Now()
+			s.Metrics.CurConnCount.Inc(1)
+			defer s.Metrics.CurConnCount.Dec(1)
 			remoteAddr := conn.RemoteAddr()
-			log.Infof(context.Background(), "handling client %s", remoteAddr)
-			err := s.Proxy(conn)
-			log.Infof(context.Background(), "client %s disconnected after %.2fs: %v",
-				remoteAddr, timeutil.Since(tBegin).Seconds(), err)
-		}()
+			ctxWithTag := logtags.AddTag(ctx, "client", remoteAddr)
+			if err := s.connHandler(ctxWithTag, conn); err != nil {
+				log.Infof(ctxWithTag, "connection error: %v", err)
+			}
+		})
+		if err != nil {
+			return err
+		}
 	}
 }
 

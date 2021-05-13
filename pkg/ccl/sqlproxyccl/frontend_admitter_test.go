@@ -112,7 +112,7 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 		"CodeUnexpectedStartupMessage: "+
 			"unsupported post-TLS startup message: *pgproto3.CancelRequest",
 	)
-	require.Nil(t, frontendCon)
+	require.NotNil(t, frontendCon)
 	require.Nil(t, msg)
 }
 
@@ -144,6 +144,6 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 		"CodeUnexpectedStartupMessage: "+
 			"unsupported post-TLS startup message: *pgproto3.CancelRequest",
 	)
-	require.Nil(t, frontendCon)
+	require.NotNil(t, frontendCon)
 	require.Nil(t, msg)
 }
