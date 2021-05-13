@@ -357,6 +357,13 @@ endif
 
 .SECONDARY: pkg/ui/yarn.installed
 pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn install
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn build
+	# TODO (koorosh): run yarn installation twice as a workaround for an issue when Yarn doesn't hoist dependencies
+  # https://github.com/yarnpkg/yarn/issues/4563
+  # running this command several times should not increase running time drastically since yarn validates already installed
+  # dependencies and won't reinstall them
+	$(NODE_RUN) -C pkg/ui yarn install --offline || true # don't break on first failed attempt to install dependencies
 	$(NODE_RUN) -C pkg/ui yarn install --offline
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
@@ -1365,6 +1372,7 @@ ui-lint: pkg/ui/yarn.installed $(UI_PROTOS_OSS) $(UI_PROTOS_CCL)
 	$(NODE_RUN) -C pkg/ui $(TSC)
 	$(NODE_RUN) -C pkg/ui yarn lint
 	@if $(NODE_RUN) -C pkg/ui yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn --cwd pkg/ui/cluster-ui lint
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
@@ -1398,10 +1406,12 @@ pkg/ui/dist/%.ccl.dll.js pkg/ui/%.ccl.manifest.json: pkg/ui/webpack.%.js pkg/ui/
 .PHONY: ui-test
 ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn ci
 
 .PHONY: ui-test-watch
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
-	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch
+	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch & \
+	$(NODE_RUN) -C pkg/ui/cluster-ui yarn test
 
 .PHONY: ui-test-debug
 ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
@@ -1432,7 +1442,13 @@ ui-watch-secure: export TARGET ?= https://localhost:8080/
 ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
 ui-watch ui-watch-secure: $(UI_CCL_DLLS) pkg/ui/yarn.opt.installed
-	cd pkg/ui && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
+  # TODO (koorosh): running two webpack dev servers doesn't provide best performance and polling changes.
+  # it has to be considered to use something like `parallel-webpack` lib.
+  #
+  # `node-run.sh` wrapper is removed because this command is supposed to be run in dev environment (not in docker of CI)
+  # so it is safe to run yarn commands directly to preserve formatting and colors for outputs
+	yarn --cwd pkg/ui/cluster-ui build:watch & \
+	yarn --cwd pkg/ui webpack-dev-server --config webpack.app.js --env.dist=ccl --port $(PORT) --mode "development" $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
@@ -1443,7 +1459,7 @@ ui-clean: ## Remove build artifacts.
 .PHONY: ui-maintainer-clean
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
-	rm -rf pkg/ui/node_modules pkg/ui/yarn.installed
+	rm -rf pkg/ui/node_modules pkg/ui/yarn.installed pkg/ui/cluster-ui/node_modules
 
 .SECONDARY: pkg/sql/parser/gen/sql.go.tmp
 pkg/sql/parser/gen/sql.go.tmp: pkg/sql/parser/gen/sql-gen.y bin/.bootstrap
