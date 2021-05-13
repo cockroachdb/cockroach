@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
@@ -157,24 +156,11 @@ func makeGCSStorage(
 	}, nil
 }
 
-func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	const maxAttempts = 3
-	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		if _, err := content.Seek(0, io.SeekStart); err != nil {
-			return err
-		}
-		// Set the timeout within the retry loop.
-		return contextutil.RunWithTimeout(ctx, "put gcs file", cloud.Timeout.Get(&g.settings.SV),
-			func(ctx context.Context) error {
-				w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
-				if _, err := io.Copy(w, content); err != nil {
-					_ = w.Close()
-					return err
-				}
-				return w.Close()
-			})
-	})
-	return errors.Wrap(err, "write to google cloud")
+func (g *gcsStorage) Writer(
+	ctx context.Context, basename string,
+) (cloud.WriteCloserWithError, error) {
+	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+	return w, nil
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.

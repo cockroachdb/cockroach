@@ -456,7 +456,7 @@ func writeFile(
 		exportStore = localitySpecificStore
 	}
 
-	if err := exportStore.WriteFile(ctx, file.Path, bytes.NewReader(data)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, file.Path, bytes.NewReader(data)); err != nil {
 		log.VEventf(ctx, 1, "failed to put file: %+v", err)
 		return errors.Wrap(err, "writing SST")
 	}
