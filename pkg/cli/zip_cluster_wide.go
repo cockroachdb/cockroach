@@ -104,7 +104,7 @@ func (zc *debugZipContext) collectClusterData(
 	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
 
 	for _, r := range clusterWideZipRequests {
-		if err := zc.runZipRequest(ctx, r); err != nil {
+		if err := zc.runZipRequest(ctx, zc.clusterPrinter, r); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -114,18 +114,19 @@ func (zc *debugZipContext) collectClusterData(
 		if override, ok := customQuery[table]; ok {
 			query = override
 		}
-		if err := zc.dumpTableDataForZip(zc.firstNodeSQLConn, debugBase, table, query); err != nil {
+		if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
 			return nil, nil, errors.Wrapf(err, "fetching %s", table)
 		}
 	}
 
 	{
 		var nodes *serverpb.NodesResponse
-		err := zc.runZipFn(ctx, "requesting nodes", func(ctx context.Context) error {
+		s := zc.clusterPrinter.start("requesting nodes")
+		err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			nodes, err = zc.status.Nodes(ctx, &serverpb.NodesRequest{})
 			return err
 		})
-		if cErr := zc.z.createJSONOrError(debugBase+"/nodes.json", nodes, err); cErr != nil {
+		if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodes, err); cErr != nil {
 			return nil, nil, cErr
 		}
 
@@ -145,11 +146,12 @@ func (zc *debugZipContext) collectClusterData(
 
 		// We'll want livenesses to decide whether a node is decommissioned.
 		var lresponse *serverpb.LivenessResponse
-		err = zc.runZipFn(ctx, "requesting liveness", func(ctx context.Context) error {
+		s = zc.clusterPrinter.start("requesting liveness")
+		err = zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			lresponse, err = zc.admin.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		})
-		if cErr := zc.z.createJSONOrError(livenessName+".json", nodes, err); cErr != nil {
+		if cErr := zc.z.createJSONOrError(s, livenessName+".json", nodes, err); cErr != nil {
 			return nil, nil, cErr
 		}
 		livenessByNodeID = map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
@@ -168,12 +170,12 @@ func (zc *debugZipContext) collectSchemaData(ctx context.Context) error {
 	// Run the debug doctor code over the schema.
 	{
 		var doctorData bytes.Buffer
-		fmt.Printf("doctor examining cluster...")
+		s := zc.clusterPrinter.start("doctor examining cluster...")
 		descs, ns, jobs, doctorErr := fromCluster(zc.firstNodeSQLConn, zc.timeout)
 		if doctorErr == nil {
 			doctorErr = runDoctor("examine", descs, ns, jobs, &doctorData)
 		}
-		if err := zc.z.createRawOrError(reportsPrefix+"/doctor.txt", doctorData.Bytes(), doctorErr); err != nil {
+		if err := zc.z.createRawOrError(s, reportsPrefix+"/doctor.txt", doctorData.Bytes(), doctorErr); err != nil {
 			return err
 		}
 	}
@@ -181,45 +183,52 @@ func (zc *debugZipContext) collectSchemaData(ctx context.Context) error {
 	// Collect the SQL schema.
 	{
 		var databases *serverpb.DatabasesResponse
-		if err := zc.runZipFn(ctx, "requesting list of SQL databases", func(ctx context.Context) error {
+		s := zc.clusterPrinter.start("requesting list of SQL databases")
+		if err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			var err error
 			databases, err = zc.admin.Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
 		}); err != nil {
-			if err := zc.z.createError(schemaPrefix, err); err != nil {
+			if err := zc.z.createError(s, schemaPrefix, err); err != nil {
 				return err
 			}
 		} else {
-			fmt.Printf("%d found\n", len(databases.Databases))
+			s.done()
+			zc.clusterPrinter.info("%d databases found", len(databases.Databases))
 			var dbEscaper fileNameEscaper
 			for _, dbName := range databases.Databases {
+				dbPrinter := zc.clusterPrinter.withPrefix("database: %s", dbName)
+
 				prefix := schemaPrefix + "/" + dbEscaper.escape(dbName)
 				var database *serverpb.DatabaseDetailsResponse
-				requestErr := zc.runZipFn(ctx, fmt.Sprintf("requesting database details for %s", dbName),
+				s := dbPrinter.start("requesting database details")
+				requestErr := zc.runZipFn(ctx, s,
 					func(ctx context.Context) error {
 						var err error
 						database, err = zc.admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
 						return err
 					})
-				if err := zc.z.createJSONOrError(prefix+"@details.json", database, requestErr); err != nil {
+				if err := zc.z.createJSONOrError(s, prefix+"@details.json", database, requestErr); err != nil {
 					return err
 				}
 				if requestErr != nil {
 					continue
 				}
 
-				fmt.Printf("%d tables found\n", len(database.TableNames))
+				dbPrinter.info("%d tables found", len(database.TableNames))
 				var tbEscaper fileNameEscaper
 				for _, tableName := range database.TableNames {
+					tbPrinter := dbPrinter.withPrefix("table: %s", tableName)
 					name := prefix + "/" + tbEscaper.escape(tableName)
 					var table *serverpb.TableDetailsResponse
-					requestErr := zc.runZipFn(ctx, fmt.Sprintf("requesting table details for %s.%s", dbName, tableName),
+					s := tbPrinter.start("requesting table details")
+					requestErr := zc.runZipFn(ctx, s,
 						func(ctx context.Context) error {
 							var err error
 							table, err = zc.admin.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
 							return err
 						})
-					if err := zc.z.createJSONOrError(name+".json", table, requestErr); err != nil {
+					if err := zc.z.createJSONOrError(s, name+".json", table, requestErr); err != nil {
 						return err
 					}
 				}

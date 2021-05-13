@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -317,7 +318,9 @@ func setSQLContextDefaults() {
 
 // zipCtx captures the command-line parameters of the `zip` command.
 // See below for defaults.
-var zipCtx struct {
+var zipCtx zipContext
+
+type zipContext struct {
 	nodes nodeSelection
 
 	// redactLogs indicates whether log files should be redacted
@@ -326,6 +329,13 @@ var zipCtx struct {
 
 	// Duration (in seconds) to run CPU profile for.
 	cpuProfDuration time.Duration
+
+	// How much concurrency to use during the collection. The code
+	// attempts to access multiple nodes concurrently by default.
+	concurrency int
+
+	// The log/heap/etc files to include.
+	files fileSelection
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -333,8 +343,18 @@ var zipCtx struct {
 // test that exercises command-line parsing.
 func setZipContextDefaults() {
 	zipCtx.nodes = nodeSelection{}
+	zipCtx.files = fileSelection{}
 	zipCtx.redactLogs = false
 	zipCtx.cpuProfDuration = 5 * time.Second
+	zipCtx.concurrency = 15
+
+	// File selection covers the last 48 hours by default.
+	// We add 24 hours to now for the end timestamp to ensure
+	// that files created during the zip operation are
+	// also included.
+	now := timeutil.Now()
+	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
+	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

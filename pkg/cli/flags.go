@@ -548,6 +548,7 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
+		debugListFilesCmd,
 		doctorExamineClusterCmd,
 		doctorExamineFallbackClusterCmd,
 		doctorRecreateClusterCmd,
@@ -642,10 +643,19 @@ func init() {
 	// Zip command.
 	{
 		f := debugZipCmd.Flags()
-		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
-		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
 		boolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		durationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
+		intFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
+	}
+	// List-files + Zip commands.
+	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
+		f := cmd.Flags()
+		varFlag(f, &zipCtx.nodes.inclusive, cliflags.ZipNodes)
+		varFlag(f, &zipCtx.nodes.exclusive, cliflags.ZipExcludeNodes)
+		stringSliceFlag(f, &zipCtx.files.includePatterns, cliflags.ZipIncludedFiles)
+		stringSliceFlag(f, &zipCtx.files.excludePatterns, cliflags.ZipExcludedFiles)
+		varFlag(f, &zipCtx.files.startTimestamp, cliflags.ZipFilesFrom)
+		varFlag(f, &zipCtx.files.endTimestamp, cliflags.ZipFilesUntil)
 	}
 
 	// Decommission command.
@@ -742,7 +752,13 @@ func init() {
 
 	// Commands that print tables.
 	tableOutputCommands := append(
-		[]*cobra.Command{sqlShellCmd, genSettingsListCmd, demoCmd, debugTimeSeriesDumpCmd},
+		[]*cobra.Command{
+			sqlShellCmd,
+			genSettingsListCmd,
+			demoCmd,
+			debugListFilesCmd,
+			debugTimeSeriesDumpCmd,
+		},
 		demoCmd.Commands()...)
 	tableOutputCommands = append(tableOutputCommands, nodeCmds...)
 	tableOutputCommands = append(tableOutputCommands, authCmds...)
