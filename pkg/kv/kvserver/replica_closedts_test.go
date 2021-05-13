@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -449,6 +450,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 // 6, the lease proposal doesn't bump the assignedClosedTimestamp.
 func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 65109, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
