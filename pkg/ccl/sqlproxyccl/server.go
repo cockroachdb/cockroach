@@ -19,17 +19,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // Server is a TCP server that proxies SQL connections to a
 // configurable backend. It may also run an HTTP server to expose a
 // health check and prometheus metrics.
 type Server struct {
-	opts            *Options
+	connHandler     func(ctx context.Context, metrics *Metrics, proxyConn *Conn) error
 	mux             *http.ServeMux
-	metrics         *Metrics
+	Metrics         *Metrics
 	metricsRegistry *metric.Registry
 
 	promMu             syncutil.Mutex
@@ -38,7 +38,9 @@ type Server struct {
 
 // NewServer constructs a new proxy server and provisions metrics and health
 // checks as well.
-func NewServer(opts Options) *Server {
+func NewServer(
+	connHandler func(ctx context.Context, metrics *Metrics, proxyConn *Conn) error,
+) *Server {
 	mux := http.NewServeMux()
 
 	registry := metric.NewRegistry()
@@ -48,9 +50,9 @@ func NewServer(opts Options) *Server {
 	registry.AddMetricStruct(proxyMetrics)
 
 	s := &Server{
-		opts:               &opts,
+		connHandler:        connHandler,
 		mux:                mux,
-		metrics:            &proxyMetrics,
+		Metrics:            &proxyMetrics,
 		metricsRegistry:    registry,
 		prometheusExporter: metric.MakePrometheusExporter(),
 	}
@@ -134,7 +136,12 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // Serve serves a listener according to the Options given in NewServer().
 // Incoming client connections are taken through the Postgres handshake and
 // relayed to the configured backend server.
-func (s *Server) Serve(ln net.Listener) error {
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	go func() {
+		<-ctx.Done()
+		_ = ln.Close()
+	}()
+
 	for {
 		origConn, err := ln.Accept()
 		if err != nil {
@@ -146,14 +153,13 @@ func (s *Server) Serve(ln net.Listener) error {
 
 		go func() {
 			defer func() { _ = conn.Close() }()
-			s.metrics.CurConnCount.Inc(1)
-			defer s.metrics.CurConnCount.Dec(1)
-			tBegin := timeutil.Now()
+			s.Metrics.CurConnCount.Inc(1)
+			defer s.Metrics.CurConnCount.Dec(1)
 			remoteAddr := conn.RemoteAddr()
-			log.Infof(context.Background(), "handling client %s", remoteAddr)
-			err := s.Proxy(conn)
-			log.Infof(context.Background(), "client %s disconnected after %.2fs: %v",
-				remoteAddr, timeutil.Since(tBegin).Seconds(), err)
+			ctx = logtags.AddTag(ctx, "client", remoteAddr)
+			if err := s.connHandler(ctx, s.Metrics, conn); err != nil {
+				log.Infof(ctx, "connection error: %v", err)
+			}
 		}()
 	}
 }

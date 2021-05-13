@@ -27,6 +27,7 @@ ALL_TESTS = [
     "//pkg/ccl/sqlproxyccl/cache:cache_test",
     "//pkg/ccl/sqlproxyccl/denylist:denylist_test",
     "//pkg/ccl/sqlproxyccl/tenant:tenant_test",
+    "//pkg/ccl/sqlproxyccl/tenantdirsvr:tenantdirsvr_test",
     "//pkg/ccl/sqlproxyccl:sqlproxyccl_test",
     "//pkg/ccl/storageccl/engineccl:engineccl_test",
     "//pkg/ccl/storageccl:storageccl_test",

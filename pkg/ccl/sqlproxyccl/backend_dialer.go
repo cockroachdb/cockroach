@@ -19,7 +19,7 @@ import (
 
 // BackendDial is an example backend dialer that does a TCP/IP connection
 // to a backend, SSL and forwards the start message.
-func BackendDial(
+var BackendDial = func(
 	msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
 ) (net.Conn, error) {
 	conn, err := net.Dial("tcp", outgoingAddress)
