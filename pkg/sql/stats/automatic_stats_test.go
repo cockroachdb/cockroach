@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -61,6 +62,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
@@ -68,6 +70,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -140,6 +143,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tableID := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").GetID()
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
@@ -147,6 +151,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -388,6 +393,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
@@ -395,6 +401,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -435,6 +442,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
@@ -442,6 +450,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	r := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 

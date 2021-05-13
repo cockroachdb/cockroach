@@ -523,6 +523,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
+			ctx,
 			cfg.TableStatCacheSize,
 			cfg.gossip,
 			cfg.db,
@@ -530,6 +531,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			codec,
 			leaseMgr,
 			cfg.Settings,
+			cfg.rangeFeedFactory,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
