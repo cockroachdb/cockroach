@@ -8,13 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package cloudtestutils
 
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -34,24 +32,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/gcp"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2/google"
 )
 
-var econnrefused = &net.OpError{Err: &os.SyscallError{
+// EConnRefused is the conn refused err used by the antagonisticDialer.
+var EConnRefused = &net.OpError{Err: &os.SyscallError{
 	Syscall: "test",
 	Err:     sysutil.ECONNREFUSED,
 }}
@@ -80,7 +70,7 @@ func (d *antagonisticDialer) DialContext(
 		// The maximum number of injected errors should always be less than the maximum retry attempts in delayedRetry.
 		if *d.numRepeatFailures < cloud.MaxDelayedRetryAttempts-1 && d.rnd.Int()%2 == 0 {
 			*(d.numRepeatFailures)++
-			return nil, econnrefused
+			return nil, EConnRefused
 		}
 		c, err := d.Dialer.DialContext(ctx, network, addr)
 		if err != nil {
@@ -111,8 +101,6 @@ func appendPath(t *testing.T, s, add string) string {
 	return u.String()
 }
 
-var testSettings *cluster.Settings = cluster.MakeTestingClusterSettings()
-
 func storeFromURI(
 	ctx context.Context,
 	t *testing.T,
@@ -121,6 +109,7 @@ func storeFromURI(
 	user security.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	testSettings *cluster.Settings,
 ) cloud.ExternalStorage {
 	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
@@ -135,27 +124,17 @@ func storeFromURI(
 	return s
 }
 
-func testExportStore(
+// CheckExportStore runs an array of tests against a storeURI.
+func CheckExportStore(
 	t *testing.T,
 	storeURI string,
 	skipSingleFile bool,
 	user security.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	testSettings *cluster.Settings,
 ) {
-	testExportStoreWithExternalIOConfig(t, base.ExternalIODirConfig{}, storeURI, user,
-		skipSingleFile, ie, kvDB)
-}
-
-func testExportStoreWithExternalIOConfig(
-	t *testing.T,
-	ioConf base.ExternalIODirConfig,
-	storeURI string,
-	user security.SQLUsername,
-	skipSingleFile bool,
-	ie sqlutil.InternalExecutor,
-	kvDB *kv.DB,
-) {
+	ioConf := base.ExternalIODirConfig{}
 	ctx := context.Background()
 
 	conf, err := cloud.ExternalStorageConfFromURI(storeURI, user)
@@ -273,7 +252,7 @@ func testExportStoreWithExternalIOConfig(
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
-			user, ie, kvDB)
+			user, ie, kvDB, testSettings)
 		defer singleFile.Close()
 
 		res, err := singleFile.ReadFile(ctx, "")
@@ -294,7 +273,7 @@ func testExportStoreWithExternalIOConfig(
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "B"
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
-			user, ie, kvDB)
+			user, ie, kvDB, testSettings)
 		defer singleFile.Close()
 
 		if err := singleFile.WriteFile(ctx, "", bytes.NewReader([]byte("bbb"))); err != nil {
@@ -325,7 +304,7 @@ func testExportStoreWithExternalIOConfig(
 		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
+		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
 		defer singleFile.Close()
 
 		// Read a valid file.
@@ -347,18 +326,43 @@ func testExportStoreWithExternalIOConfig(
 		_, err = singleFile.ReadFile(ctx, "file_does_not_exist")
 		require.Error(t, err)
 		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
+
+		_, _, err = singleFile.ReadFileAt(ctx, "file_does_not_exist", 0)
+		require.Error(t, err)
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
+
+		_, _, err = singleFile.ReadFileAt(ctx, "file_does_not_exist", 24)
+		require.Error(t, err)
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "Expected a file does not exist error but returned %s")
+
 		require.NoError(t, s.Delete(ctx, testingFilename))
 	})
 }
 
-// RunListFilesTest tests the ListFiles() interface method for the ExternalStorage
+// CheckListFiles tests the ListFiles() interface method for the ExternalStorage
 // specified by storeURI.
-func testListFiles(
+func CheckListFiles(
 	t *testing.T,
 	storeURI string,
 	user security.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	testSettings *cluster.Settings,
+) {
+	CheckListFilesCanonical(t, storeURI, "", user, ie, kvDB, testSettings)
+}
+
+// CheckListFilesCanonical is like CheckListFiles but takes a canonical prefix
+// that it should expect to see on returned listings, instead of storeURI (e.g.
+// if storeURI automatically expands).
+func CheckListFilesCanonical(
+	t *testing.T,
+	storeURI string,
+	canonical string,
+	user security.SQLUsername,
+	ie sqlutil.InternalExecutor,
+	kvDB *kv.DB,
+	testSettings *cluster.Settings,
 ) {
 	ctx := context.Background()
 	dataLetterFiles := []string{"file/letters/dataA.csv", "file/letters/dataB.csv", "file/letters/dataC.csv"}
@@ -370,7 +374,7 @@ func testListFiles(
 
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
+		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
 		if err := file.WriteFile(ctx, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
@@ -378,17 +382,14 @@ func testListFiles(
 	}
 
 	uri, _ := url.Parse(storeURI)
+	if canonical != "" {
+		uri, _ = url.Parse(canonical)
+	}
 
 	abs := func(in []string) []string {
 		out := make([]string, len(in))
 		for i := range in {
 			u := *uri
-			if u.Scheme == "userfile" && u.Host == "" {
-				composedTableName := tree.Name(userfile.DefaultQualifiedNamePrefix + user.Normalized())
-				u.Host = userfile.DefaultQualifiedNamespace +
-					// Escape special identifiers as needed.
-					composedTableName.String()
-			}
 			u.Path = u.Path + "/" + in[i]
 			out[i] = u.String()
 		}
@@ -504,7 +505,7 @@ func testListFiles(
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				s := storeFromURI(ctx, t, tc.URI, clientFactory, user, ie, kvDB)
+				s := storeFromURI(ctx, t, tc.URI, clientFactory, user, ie, kvDB, testSettings)
 				filesList, err := s.ListFiles(ctx, tc.suffix)
 				require.NoError(t, err)
 				require.Equal(t, filesList, tc.resultList)
@@ -513,7 +514,7 @@ func testListFiles(
 	})
 
 	for _, fileName := range fileNames {
-		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB)
+		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
 		if err := file.Delete(ctx, fileName); err != nil {
 			t.Fatal(err)
 		}
@@ -521,58 +522,12 @@ func testListFiles(
 	}
 }
 
-func TestPutGoogleCloud(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	bucket := os.Getenv("GS_BUCKET")
-	if bucket == "" {
-		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
-	}
-
-	user := security.RootUserName()
-
-	testutils.RunTrueAndFalse(t, "specified", func(t *testing.T, specified bool) {
-		credentials := os.Getenv("GS_JSONKEY")
-		if credentials == "" {
-			skip.IgnoreLint(t, "GS_JSONKEY env var must be set")
-		}
-		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
-		uri := fmt.Sprintf("gs://%s/%s?%s=%s",
-			bucket,
-			"backup-test-specified",
-			gcp.CredentialsParam,
-			url.QueryEscape(encoded),
-		)
-		if specified {
-			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
-		}
-		t.Log(uri)
-		testExportStore(t, uri, false, user, nil, nil)
-		testListFiles(t,
-			fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
-				bucket,
-				"backup-test-specified",
-				"listing-test",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				gcp.CredentialsParam,
-				url.QueryEscape(encoded),
-			),
-			security.RootUserName(), nil, nil,
-		)
-	})
-	t.Run("implicit", func(t *testing.T) {
-		// Only test these if they exist.
-		if _, err := google.FindDefaultCredentials(context.Background()); err != nil {
-			skip.IgnoreLint(t, err)
-		}
-		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
-			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil)
-	})
-}
-
 func uploadData(
-	t *testing.T, rnd *rand.Rand, dest roachpb.ExternalStorage, basename string,
+	t *testing.T,
+	testSettings *cluster.Settings,
+	rnd *rand.Rand,
+	dest roachpb.ExternalStorage,
+	basename string,
 ) ([]byte, func()) {
 	data := randutil.RandBytes(rnd, 16<<20)
 	ctx := context.Background()
@@ -588,11 +543,15 @@ func uploadData(
 	}
 }
 
-func testAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage) {
+// CheckAntagonisticRead checks an external storage is able to perform reads if
+// the HTTP client's dialer artificially degrades its connections.
+func CheckAntagonisticRead(
+	t *testing.T, conf roachpb.ExternalStorage, testSettings *cluster.Settings,
+) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	const basename = "test-antagonistic-read"
-	data, cleanup := uploadData(t, rnd, conf, basename)
+	data, cleanup := uploadData(t, testSettings, rnd, conf, basename)
 	defer cleanup()
 
 	// Try reading the data while injecting errors.
@@ -626,88 +585,4 @@ func testAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage) {
 	read, err := ioutil.ReadAll(stream)
 	require.NoError(t, err)
 	require.Equal(t, data, read)
-}
-
-func makeUserfile(
-	ctx context.Context,
-	t *testing.T,
-	s serverutils.TestServerInterface,
-	sqlDB *gosql.DB,
-	kvDB *kv.DB,
-) cloud.ExternalStorage {
-	qualifiedTableName := "defaultdb.public.user_file_table_test"
-
-	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-
-	// Create a user and grant them privileges on defaultdb.
-	user1 := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	require.NoError(t, createUserGrantAllPrivieleges(user1, "defaultdb", sqlDB))
-
-	// Create a userfile connection as user1.
-	fileTableSystem, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB)
-	require.NoError(t, err)
-
-	return fileTableSystem
-}
-
-func makeNodelocal(ctx context.Context, t *testing.T, kvDB *kv.DB) cloud.ExternalStorage {
-	user := security.RootUserName()
-
-	// Setup a sink for the given args.
-	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	store := storeFromURI(ctx, t, "nodelocal://self/base", clientFactory,
-		user, nil /* ie */, kvDB)
-	return store
-}
-
-// TestFileExistence checks that the appropriate error is returned when trying
-// to read a file that doesn't exist.
-func TestFileExistence(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-
-	// Setup a server.
-	params, _ := tests.CreateTestServerParams()
-
-	tmp, cleanupTmp := testutils.TempDir(t)
-	defer cleanupTmp()
-	testSettings.ExternalIODir = tmp
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	// Create external storages to tests.
-	// TODO: Add more here (e.g. s3, azure, gcs).
-	uf := makeUserfile(ctx, t, s, sqlDB, kvDB)
-	defer uf.Close()
-	nl := makeNodelocal(ctx, t, kvDB)
-	defer nl.Close()
-
-	externalStorages := []cloud.ExternalStorage{uf, nl}
-
-	for _, es := range externalStorages {
-		// Try reading a file that doesn't exist and assert we get the error the
-		// interface claims it provides.
-		_, err := es.ReadFile(ctx, "this-doesnt-exist")
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			t.Fatalf("expected a file does not exist error, got %+v", err)
-		}
-
-		_, _, err = es.ReadFileAt(ctx, "this-doesnt-exist", 0 /* offset */)
-		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
-			t.Fatalf("expected a file does not exist error, got %+v", err)
-		}
-
-		// Create a file that exists and assert that we don't get the error.
-		filename := "exists"
-		require.NoError(t, es.WriteFile(ctx, filename, bytes.NewReader([]byte("data"))))
-
-		_, err = es.ReadFile(ctx, filename)
-		require.NoError(t, err)
-		_, _, err = es.ReadFileAt(ctx, filename, 0 /* offset */)
-		require.NoError(t, err)
-	}
 }

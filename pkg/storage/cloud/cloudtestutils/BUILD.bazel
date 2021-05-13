@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cloudtestutils",
+    srcs = ["cloud_test_helpers.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlutil",
+        "//pkg/storage/cloud",
+        "//pkg/util/randutil",
+        "//pkg/util/sysutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

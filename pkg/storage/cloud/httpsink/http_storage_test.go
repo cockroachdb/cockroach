@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package httpsink
 
 import (
 	"bytes"
@@ -32,8 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/httpsink"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,6 +47,8 @@ func TestPutHttp(t *testing.T) {
 
 	tmp, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
+
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	const badHeadResponse = "bad-head-response"
 	user := security.RootUserName()
@@ -114,7 +117,7 @@ func TestPutHttp(t *testing.T) {
 	t.Run("singleHost", func(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
-		testExportStore(t, srv.String(), false, user, nil, nil)
+		cloudtestutils.CheckExportStore(t, srv.String(), false, user, nil, nil, testSettings)
 		if expected, actual := 14, files(); expected != actual {
 			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
@@ -131,7 +134,7 @@ func TestPutHttp(t *testing.T) {
 		combined := *srv1
 		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
 
-		testExportStore(t, combined.String(), true, user, nil, nil)
+		cloudtestutils.CheckExportStore(t, combined.String(), true, user, nil, nil, testSettings)
 		if expected, actual := 3, files1(); expected != actual {
 			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
 		}
@@ -203,6 +206,8 @@ func TestHttpGet(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
 	cloud.HTTPRetryOptions.MaxRetries = 25
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	for _, tc := range []int{1, 2, 5, 16, 32, len(data) - 1, len(data)} {
 		t.Run(fmt.Sprintf("read-%d", tc), func(t *testing.T) {
 			limit := tc
@@ -249,7 +254,7 @@ func TestHttpGet(t *testing.T) {
 			})
 
 			conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-			store, err := httpsink.MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
+			store, err := MakeHTTPStorage(ctx, cloud.ExternalStorageContext{Settings: testSettings}, conf)
 			require.NoError(t, err)
 
 			var file io.ReadCloser
@@ -283,9 +288,10 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer s.Close()
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: s.URL}}
-	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -303,6 +309,8 @@ func TestCanDisableHttp(t *testing.T) {
 	conf := base.ExternalIODirConfig{
 		DisableHTTP: true,
 	}
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	s, err := cloud.MakeExternalStorage(
 		context.Background(),
 		roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_http},
@@ -316,6 +324,8 @@ func TestCanDisableOutbound(t *testing.T) {
 	conf := base.ExternalIODirConfig{
 		DisableOutbound: true,
 	}
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	for _, provider := range []roachpb.ExternalStorageProvider{
 		roachpb.ExternalStorageProvider_http,
 		roachpb.ExternalStorageProvider_s3,
@@ -337,6 +347,8 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		_, _ = w.Write([]byte(fmt.Sprintf("proxied-%s", r.URL)))
 	}))
 	defer proxy.Close()
+
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	// Normally, we would set proxy via HTTP_PROXY environment variable.
 	// However, if we run multiple tests in this package, and earlier tests
@@ -371,11 +383,13 @@ type alwaysRefuseConnectionDialer struct {
 func (d *alwaysRefuseConnectionDialer) DialContext(
 	_ context.Context, _, _ string,
 ) (net.Conn, error) {
-	return nil, econnrefused
+	return nil, cloudtestutils.EConnRefused
 }
 
 func TestExhaustRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	// Override DialContext implementation in http transport.
 	dialer := &alwaysRefuseConnectionDialer{}
@@ -401,7 +415,7 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := roachpb.ExternalStorage{HttpPath: roachpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
-	store, err := httpsink.MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())

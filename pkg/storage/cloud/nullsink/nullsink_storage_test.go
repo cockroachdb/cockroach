@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package nullsink
 
 import (
 	"bytes"
@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/nullsink"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -30,7 +29,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	dest := nullsink.MakeNullSinkStorageURI("foo")
+	dest := MakeNullSinkStorageURI("foo")
 
 	conf, err := cloud.ExternalStorageConfFromURI(dest, security.RootUserName())
 	if err != nil {
