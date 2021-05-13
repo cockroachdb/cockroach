@@ -654,8 +654,9 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		// We copy the byte buffer here, because the JSON decoding is lazy, and we
 		// do not want to hang on to the backing byte buffer, which might be an
 		// entire KV batch.
-		data = append([]byte{}, data...)
-		j, err := json.FromEncoding(data)
+		cpy := make([]byte, len(data))
+		copy(cpy, data)
+		j, err := json.FromEncoding(cpy)
 		if err != nil {
 			return nil, b, err
 		}
