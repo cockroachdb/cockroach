@@ -224,7 +224,7 @@ func (c *sqlConn) getServerMetadata() (
 	defer func() { _ = rows.Close() }()
 
 	// Read the node_build_info table as an array of strings.
-	rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
+	rowVals, err := getAllRowStrings(rows, rows.getColTypes(), true /* showMoreChars */)
 	if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
 		return 0, "", "", errors.New("incorrect data while retrieving the server version")
 	}
@@ -352,28 +352,29 @@ func (c *sqlConn) checkServerMetadata() error {
 // getServerValue retrieves the first driverValue returned by the
 // given sql query. If the query fails or does not return a single
 // column, `false` is returned in the second result.
-func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
+func (c *sqlConn) getServerValue(what, sql string) (driver.Value, string, bool) {
 	rows, err := c.Query(sql, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
-		return nil, false
+		return nil, "", false
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
 		fmt.Fprintf(stderr, "warning: cannot get the %s\n", what)
-		return nil, false
+		return nil, "", false
 	}
 
+	dbColType := rows.ColumnTypeDatabaseTypeName(0)
 	dbVals := make([]driver.Value, len(rows.Columns()))
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: invalid %s: %v\n", what, err)
-		return nil, false
+		return nil, "", false
 	}
 
-	return dbVals[0], true
+	return dbVals[0], dbColType, true
 }
 
 // parseLastQueryStatistics runs the "SHOW LAST QUERY STATISTICS" statements,
@@ -419,10 +420,10 @@ func (c *sqlConn) getLastQueryStatistics() (
 			return 0, 0, 0, 0, err
 		}
 
-		parseLatencyRaw = formatVal(row[0], false, false)
-		planLatencyRaw = formatVal(row[1], false, false)
-		execLatencyRaw = formatVal(row[2], false, false)
-		serviceLatencyRaw = formatVal(row[3], false, false)
+		parseLatencyRaw = formatVal(row[0], iter.colTypes[0], false, false)
+		planLatencyRaw = formatVal(row[1], iter.colTypes[1], false, false)
+		execLatencyRaw = formatVal(row[2], iter.colTypes[2], false, false)
+		serviceLatencyRaw = formatVal(row[3], iter.colTypes[3], false, false)
 
 		nRows++
 	}
@@ -628,6 +629,14 @@ func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 
 func (r *sqlRows) ColumnTypeDatabaseTypeName(index int) string {
 	return r.rows.ColumnTypeDatabaseTypeName(index)
+}
+
+func (r *sqlRows) getColTypes() []string {
+	colTypes := make([]string, len(r.Columns()))
+	for i := range colTypes {
+		colTypes[i] = r.ColumnTypeDatabaseTypeName(i)
+	}
+	return colTypes
 }
 
 func makeSQLConn(url string) *sqlConn {
@@ -1047,7 +1056,7 @@ func maybeShowTimes(
 // If showMoreChars is true, then more characters are not escaped.
 func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, error) {
 	cols := getColumnStrings(rows, showMoreChars)
-	allRows, err := getAllRowStrings(rows, showMoreChars)
+	allRows, err := getAllRowStrings(rows, rows.getColTypes(), showMoreChars)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1058,16 +1067,16 @@ func getColumnStrings(rows *sqlRows, showMoreChars bool) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = formatVal(c, showMoreChars, showMoreChars)
+		cols[i] = formatVal(c, "NAME", showMoreChars, showMoreChars)
 	}
 	return cols
 }
 
-func getAllRowStrings(rows *sqlRows, showMoreChars bool) ([][]string, error) {
+func getAllRowStrings(rows *sqlRows, colTypes []string, showMoreChars bool) ([][]string, error) {
 	var allRows [][]string
 
 	for {
-		rowStrings, err := getNextRowStrings(rows, showMoreChars)
+		rowStrings, err := getNextRowStrings(rows, colTypes, showMoreChars)
 		if err != nil {
 			return nil, err
 		}
@@ -1080,7 +1089,7 @@ func getAllRowStrings(rows *sqlRows, showMoreChars bool) ([][]string, error) {
 	return allRows, nil
 }
 
-func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
+func getNextRowStrings(rows *sqlRows, colTypes []string, showMoreChars bool) ([]string, error) {
 	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {
@@ -1097,13 +1106,7 @@ func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
 
 	rowStrings := make([]string, len(cols))
 	for i, v := range vals {
-		databaseType := rows.ColumnTypeDatabaseTypeName(i)
-		if databaseType == "NAME" {
-			if bytes, ok := v.([]byte); ok {
-				v = string(bytes)
-			}
-		}
-		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
+		rowStrings[i] = formatVal(v, colTypes[i], showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil
 }
@@ -1114,10 +1117,25 @@ func isNotGraphicUnicodeOrTabOrNewline(r rune) bool {
 	return r != '\t' && r != '\n' && !unicode.IsGraphic(r)
 }
 
-func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs bool) string {
+func formatVal(
+	val driver.Value, colType string, showPrintableUnicode bool, showNewLinesAndTabs bool,
+) string {
+	if b, ok := val.([]byte); ok && colType == "NAME" {
+		val = string(b)
+		colType = "VARCHAR"
+	}
+
 	switch t := val.(type) {
 	case nil:
 		return "NULL"
+
+	case float64:
+		width := 64
+		if colType == "FLOAT4" {
+			width = 32
+		}
+		return strconv.FormatFloat(t, 'g', -1, width)
+
 	case string:
 		if showPrintableUnicode {
 			pred := isNotGraphicUnicode
@@ -1155,12 +1173,23 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 			sessiondatapb.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
-		// Since we do not know whether the datum is Timestamp or TimestampTZ,
-		// output the full format.
-		return t.Format(timeutil.FullTimeFormat)
+		tfmt, ok := timeOutputFormats[colType]
+		if !ok {
+			// Some unknown/new time-like format.
+			tfmt = timeutil.FullTimeFormat
+		}
+		return t.Format(tfmt)
 	}
 
 	return fmt.Sprint(val)
+}
+
+var timeOutputFormats = map[string]string{
+	"TIMESTAMP":   timeutil.TimestampWithoutTZFormat,
+	"TIMESTAMPTZ": timeutil.FullTimeFormat,
+	"TIME":        timeutil.TimeWithoutTZFormat,
+	"TIMETZ":      timeutil.TimeWithTZFormat,
+	"DATE":        timeutil.DateFormat,
 }
 
 // parseBool parses a boolean string for use in slash commands.
