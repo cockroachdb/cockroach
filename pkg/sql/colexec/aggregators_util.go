@@ -557,6 +557,17 @@ func (b *aggBucket) init(
 	b.seen = seen
 }
 
+func (b *aggBucket) reset() {
+	for _, fn := range b.fns {
+		fn.Reset()
+	}
+	for _, seen := range b.seen {
+		for k := range seen {
+			delete(seen, k)
+		}
+	}
+}
+
 const sizeOfAggBucket = int64(unsafe.Sizeof(aggBucket{}))
 const aggBucketSliceOverhead = int64(unsafe.Sizeof([]aggBucket{}))
 

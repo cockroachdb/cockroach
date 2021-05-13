@@ -88,9 +88,18 @@ type hashAggregator struct {
 		unprocessedIdx int
 	}
 
+	// numPreviouslyCreatedBuckets tracks the maximum number of buckets that
+	// have been created throughout the lifetime of this hashAggregator. This
+	// matters if the hashAggregator is reset - we reuse the same buckets on the
+	// next run.
+	// If non-zero, all buckets available to use are in
+	// buckets[len(buckets):numPreviouslyCreatedBuckets] range. Note that
+	// cap(buckets) might be higher than this number, but all buckets past
+	// numPreviouslyCreatedBuckets haven't been instantiated properly, so
+	// cap(buckets) should be ignored.
+	numPreviouslyCreatedBuckets int
 	// buckets contains all aggregation groups that we have so far. There is
-	// 1-to-1 mapping between buckets[i] and ht.Vals[i]. Once the output from
-	// the buckets has been flushed, buckets will be sliced up accordingly.
+	// 1-to-1 mapping between buckets[i] and ht.Vals[i].
 	buckets []*aggBucket
 	// ht stores tuples that are "heads" of the corresponding aggregation
 	// groups ("head" here means the tuple that was first seen from the group).
@@ -119,6 +128,10 @@ type hashAggregator struct {
 		tuples            *colexecutils.SpillingQueue
 		zeroBatchEnqueued bool
 	}
+
+	// curOutputBucketIdx tracks the index in buckets to be flushed next when
+	// populating the output.
+	curOutputBucketIdx int
 
 	output coldata.Batch
 
@@ -284,17 +297,17 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			)
 			curOutputIdx := 0
 			op.allocator.PerformOperation(op.output.ColVecs(), func() {
-				for curOutputIdx < op.output.Capacity() && curOutputIdx < len(op.buckets) {
-					bucket := op.buckets[curOutputIdx]
+				for curOutputIdx < op.output.Capacity() && op.curOutputBucketIdx < len(op.buckets) {
+					bucket := op.buckets[op.curOutputBucketIdx]
 					for fnIdx, fn := range bucket.fns {
 						fn.SetOutput(op.output.ColVec(fnIdx))
 						fn.Flush(curOutputIdx)
 					}
 					curOutputIdx++
+					op.curOutputBucketIdx++
 				}
 			})
-			op.buckets = op.buckets[curOutputIdx:]
-			if len(op.buckets) == 0 {
+			if op.curOutputBucketIdx >= len(op.buckets) {
 				op.state = hashAggregatorDone
 			}
 			op.output.SetLength(curOutputIdx)
@@ -437,22 +450,28 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	for eqChainSlot, eqChain := range op.scratch.eqChains[:eqChainsCount] {
 		if len(eqChain) > 0 {
 			// Tuples in this equality chain belong to a new aggregation group,
-			// so we'll create a new bucket and make sure that the head of this
+			// so we'll use a new bucket and make sure that the head of this
 			// equality chain is appended to the hash table in the
 			// corresponding position.
-			// TODO(yuzefovich): we could change the behavior so that we don't
-			// lose the references to the old buckets in the outputting stage,
-			// and then we could reset an old bucket if we still have some
-			// unused ones instead of always allocating a new bucket here. This
-			// will be beneficial for the external hash aggregator (but probably
-			// the difference won't be that big).
-			bucket := op.hashAlloc.newAggBucket()
-			op.buckets = append(op.buckets, bucket)
-			// We know that all selected tuples belong to the same single
-			// group, so we can pass 'nil' for the 'groups' argument.
-			bucket.init(
-				op.aggFnsAlloc.MakeAggregateFuncs(), op.aggHelper.makeSeenMaps(), nil, /* groups */
-			)
+			var bucket *aggBucket
+			if nextBucketIdx := len(op.buckets); op.numPreviouslyCreatedBuckets > nextBucketIdx {
+				// We still have a bucket created on the previous run of the
+				// hash aggregator. Increase the length of op.buckets, using
+				// previously-allocated capacity, and then reset the bucket for
+				// reuse.
+				op.buckets = op.buckets[:nextBucketIdx+1]
+				bucket = op.buckets[nextBucketIdx]
+				bucket.reset()
+			} else {
+				// Need to allocate a new bucket.
+				bucket = op.hashAlloc.newAggBucket()
+				op.buckets = append(op.buckets, bucket)
+				// We know that all selected tuples belong to the same single
+				// group, so we can pass 'nil' for the 'groups' argument.
+				bucket.init(
+					op.aggFnsAlloc.MakeAggregateFuncs(), op.aggHelper.makeSeenMaps(), nil, /* groups */
+				)
+			}
 			op.aggHelper.performAggregation(
 				ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
 			)
@@ -495,6 +514,10 @@ func (op *hashAggregator) Reset(ctx context.Context) {
 	op.bufferingState.tuples.ResetInternalBatch()
 	op.bufferingState.pendingBatch = nil
 	op.bufferingState.unprocessedIdx = 0
+	if op.numPreviouslyCreatedBuckets < len(op.buckets) {
+		op.numPreviouslyCreatedBuckets = len(op.buckets)
+	}
+	// Set up buckets for reuse.
 	op.buckets = op.buckets[:0]
 	op.ht.Reset(ctx)
 	if op.inputTrackingState.tuples != nil {
@@ -503,6 +526,7 @@ func (op *hashAggregator) Reset(ctx context.Context) {
 		}
 		op.inputTrackingState.zeroBatchEnqueued = false
 	}
+	op.curOutputBucketIdx = 0
 	op.state = hashAggregatorBuffering
 }
 
