@@ -45,16 +45,17 @@ SELECT
     %[3]s AS table_name,
     concat(create_statement,
         CASE
-        WHEN NOT has_partitions
-            THEN NULL
 				WHEN is_multi_region THEN
 					CASE
 						WHEN (SELECT mr FROM zone_configs) IS NULL THEN NULL
 						ELSE concat(e';\n', (SELECT mr FROM zone_configs))
 					END
-        WHEN (SELECT raw FROM zone_configs) IS NULL THEN
+        WHEN (SELECT raw FROM zone_configs) IS NOT NULL THEN
+					concat(e';\n', (SELECT raw FROM zone_configs))
+        WHEN NOT has_partitions
+          THEN NULL
+				ELSE
 					e'\n-- Warning: Partitioned table with no zone configurations.'
-        ELSE concat(e';\n', (SELECT raw FROM zone_configs))
         END
     ) AS create_statement
 FROM
