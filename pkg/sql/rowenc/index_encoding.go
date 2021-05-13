@@ -59,7 +59,7 @@ func MakeIndexKeyPrefix(
 // parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 //
-// Note that ExtraColumnIDs are not encoded, so the result isn't always a
+// Note that KeySuffixColumnIDs are not encoded, so the result isn't always a
 // full index key.
 func EncodeIndexKey(
 	tableDesc catalog.TableDescriptor,
@@ -71,7 +71,7 @@ func EncodeIndexKey(
 	return EncodePartialIndexKey(
 		tableDesc,
 		index,
-		index.NumColumns(), /* encode all columns */
+		index.NumKeyColumns(), /* encode all columns */
 		colMap,
 		values,
 		keyPrefix,
@@ -95,7 +95,7 @@ func EncodePartialIndexSpan(
 	if err != nil {
 		return span, containsNull, err
 	}
-	if numCols == index.NumColumns() {
+	if numCols == index.NumKeyColumns() {
 		// If all values in the input index were specified, append an interleave
 		// marker instead of PrefixEnding the key, to avoid including any child
 		// interleaves of the input key.
@@ -108,8 +108,8 @@ func EncodePartialIndexSpan(
 
 // EncodePartialIndexKey encodes a partial index key; only the first numCols of
 // the index key columns are encoded. The index key columns are
-//  - index.ColumnIDs for unique indexes, and
-//  - append(index.ColumnIDs, index.ExtraColumnIDs) for non-unique indexes.
+//  - index.KeyColumnIDs for unique indexes, and
+//  - append(index.KeyColumnIDs, index.KeySuffixColumnIDs) for non-unique indexes.
 func EncodePartialIndexKey(
 	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
@@ -119,14 +119,14 @@ func EncodePartialIndexKey(
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
 	var colIDs, extraColIDs []descpb.ColumnID
-	if numCols <= index.NumColumns() {
-		colIDs = index.IndexDesc().ColumnIDs[:numCols]
+	if numCols <= index.NumKeyColumns() {
+		colIDs = index.IndexDesc().KeyColumnIDs[:numCols]
 	} else {
-		if index.IsUnique() || numCols > index.NumColumns()+index.NumExtraColumns() {
+		if index.IsUnique() || numCols > index.NumKeyColumns()+index.NumKeySuffixColumns() {
 			return nil, false, errors.Errorf("encoding too many columns (%d)", numCols)
 		}
-		colIDs = index.IndexDesc().ColumnIDs
-		extraColIDs = index.IndexDesc().ExtraColumnIDs[:numCols-index.NumColumns()]
+		colIDs = index.IndexDesc().KeyColumnIDs
+		extraColIDs = index.IndexDesc().KeySuffixColumnIDs[:numCols-index.NumKeyColumns()]
 	}
 
 	// We know we will append to the key which will cause the capacity to grow so
@@ -136,7 +136,7 @@ func EncodePartialIndexKey(
 	// Add 2 bytes for every column value. An underestimate for all but low integers.
 	key = growKey(keyPrefix, len(keyPrefix)+3*index.NumInterleaveAncestors()+2*len(values))
 
-	dirs := directions(index.IndexDesc().ColumnDirections)
+	dirs := directions(index.IndexDesc().KeyColumnDirections)
 
 	if index.NumInterleaveAncestors() > 0 {
 		for i := 0; i < index.NumInterleaveAncestors(); i++ {
@@ -259,8 +259,8 @@ func NeededColumnFamilyIDs(
 	var indexedCols util.FastIntSet
 	var compositeCols util.FastIntSet
 	var extraCols util.FastIntSet
-	for i := 0; i < index.NumColumns(); i++ {
-		columnID := index.GetColumnID(i)
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		columnID := index.GetKeyColumnID(i)
 		columnOrdinal := colIdxMap.GetDefault(columnID)
 		indexedCols.Add(columnOrdinal)
 	}
@@ -269,8 +269,8 @@ func NeededColumnFamilyIDs(
 		columnOrdinal := colIdxMap.GetDefault(columnID)
 		compositeCols.Add(columnOrdinal)
 	}
-	for i := 0; i < index.NumExtraColumns(); i++ {
-		columnID := index.GetExtraColumnID(i)
+	for i := 0; i < index.NumKeySuffixColumns(); i++ {
+		columnID := index.GetKeySuffixColumnID(i)
 		columnOrdinal := colIdxMap.GetDefault(columnID)
 		extraCols.Add(columnOrdinal)
 	}
@@ -490,7 +490,7 @@ func MakeKeyFromEncDatums(
 		return key, false, false, err
 	}
 	containsNull = containsNull || n
-	return key, len(types) == index.NumColumns(), containsNull, err
+	return key, len(types) == index.NumKeyColumns(), containsNull, err
 }
 
 // findColumnValue returns the value corresponding to the column. If
@@ -793,15 +793,15 @@ func EncodeInvertedIndexKeys(
 func EncodeInvertedIndexPrefixKeys(
 	index catalog.Index, colMap catalog.TableColMap, values []tree.Datum, keyPrefix []byte,
 ) (_ []byte, err error) {
-	numColumns := index.NumColumns()
+	numColumns := index.NumKeyColumns()
 
 	// If the index is a multi-column inverted index, we encode the non-inverted
 	// columns in the key prefix.
 	if numColumns > 1 {
 		// Do not encode the last column, which is the inverted column, here. It
 		// is encoded below this block.
-		colIDs := index.IndexDesc().ColumnIDs[:numColumns-1]
-		dirs := directions(index.IndexDesc().ColumnDirections)
+		colIDs := index.IndexDesc().KeyColumnIDs[:numColumns-1]
+		dirs := directions(index.IndexDesc().KeyColumnDirections)
 
 		// Double the size of the key to make the imminent appends more
 		// efficient.
@@ -971,7 +971,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.EmptyArraysInInvertedIndexesVersion, false /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.StrictIndexColumnIDGuaranteesVersion, false /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -1014,7 +1014,7 @@ func encodeContainedArrayInvertedIndexSpans(
 	// We always exclude nulls from the list of keys when evaluating <@.
 	// This is because an expression like ARRAY[NULL] <@ ARRAY[NULL] is false,
 	// since NULL in SQL represents an unknown value.
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.EmptyArraysInInvertedIndexesVersion, true /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.StrictIndexColumnIDGuaranteesVersion, true /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -1106,12 +1106,7 @@ func EncodePrimaryIndex(
 	if err != nil {
 		return nil, err
 	}
-	// This information should be precomputed on the table descriptor.
-	var indexedColumns catalog.TableColSet
-	for i := 0; i < index.NumColumns(); i++ {
-		colID := index.GetColumnID(i)
-		indexedColumns.Add(colID)
-	}
+	indexedColumns := index.CollectKeyColumnIDs()
 	var entryValue []byte
 	indexEntries := make([]IndexEntry, 0, tableDesc.NumFamilies())
 	var columnsToEncode []valueEncodedColumn
@@ -1214,7 +1209,7 @@ func EncodeSecondaryIndex(
 
 	// Add the extra columns - they are encoded in ascending order which is done
 	// by passing nil for the encoding directions.
-	extraKey, _, err := EncodeColumns(secondaryIndex.IndexDesc().ExtraColumnIDs, nil,
+	extraKey, _, err := EncodeColumns(secondaryIndex.IndexDesc().KeySuffixColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
 		return []IndexEntry{}, err
@@ -1261,7 +1256,7 @@ func EncodeSecondaryIndex(
 				addToFamilyColMap(0, valueEncodedColumn{id: id, isComposite: true})
 			}
 			_ = tableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-				for i := 0; i < secondaryIndex.NumStoredColumns(); i++ {
+				for i := 0; i < secondaryIndex.NumSecondaryStoredColumns(); i++ {
 					id := secondaryIndex.GetStoredColumnID(i)
 					for _, col := range family.ColumnIDs {
 						if id == col {
@@ -1394,7 +1389,7 @@ func encodeSecondaryIndexNoFamilies(
 	}
 	var cols []valueEncodedColumn
 	// Since we aren't encoding data with families, we just encode all stored and composite columns in the value.
-	for i := 0; i < index.NumStoredColumns(); i++ {
+	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 		id := index.GetStoredColumnID(i)
 		cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
 	}
@@ -1402,7 +1397,7 @@ func encodeSecondaryIndexNoFamilies(
 		id := index.GetCompositeColumnID(i)
 		// Inverted indexes on a composite type (i.e. an array of composite types)
 		// should not add the indexed column to the value.
-		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.GetColumnID(0) {
+		if index.GetType() == descpb.IndexDescriptor_INVERTED && id == index.GetKeyColumnID(0) {
 			continue
 		}
 		cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
@@ -1681,14 +1676,14 @@ func TableEquivSignatures(
 // This returns the maximum number of <tokens> in this prefix.
 func maxKeyTokens(index catalog.Index, containsNull bool) int {
 	nTables := index.NumInterleaveAncestors() + 1
-	nKeyCols := index.NumColumns()
+	nKeyCols := index.NumKeyColumns()
 
 	// Non-unique secondary indexes or unique secondary indexes with a NULL
 	// value have additional columns in the key that may appear in a span
 	// (e.g. primary key columns not part of the index).
 	// See EncodeSecondaryIndex.
 	if !index.IsUnique() || containsNull {
-		nKeyCols += index.NumExtraColumns()
+		nKeyCols += index.NumKeySuffixColumns()
 	}
 
 	// To illustrate how we compute max # of key tokens, take the
@@ -1894,9 +1889,9 @@ func AdjustEndKeyForInterleave(
 	return end[:firstNTokenLen+1], nil
 }
 
-// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
-// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
-// appends directly to keyPrefix.
+// EncodeColumns is a version of EncodePartialIndexKey that takes KeyColumnIDs
+// and directions explicitly. WARNING: unlike EncodePartialIndexKey,
+// EncodeColumns appends directly to keyPrefix.
 func EncodeColumns(
 	columnIDs []descpb.ColumnID,
 	directions directions,

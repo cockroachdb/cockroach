@@ -4015,13 +4015,13 @@ may increase either contention or retry errors, or both.`,
 				}
 				// Collect the index columns. If the index is a non-unique secondary
 				// index, it might have some extra key columns.
-				indexColIDs := make([]descpb.ColumnID, index.NumColumns(), index.NumColumns()+index.NumExtraColumns())
-				for i := 0; i < index.NumColumns(); i++ {
-					indexColIDs[i] = index.GetColumnID(i)
+				indexColIDs := make([]descpb.ColumnID, index.NumKeyColumns(), index.NumKeyColumns()+index.NumKeySuffixColumns())
+				for i := 0; i < index.NumKeyColumns(); i++ {
+					indexColIDs[i] = index.GetKeyColumnID(i)
 				}
 				if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() {
-					for i := 0; i < index.NumExtraColumns(); i++ {
-						indexColIDs = append(indexColIDs, index.GetExtraColumnID(i))
+					for i := 0; i < index.NumKeySuffixColumns(); i++ {
+						indexColIDs = append(indexColIDs, index.GetKeySuffixColumnID(i))
 					}
 				}
 
@@ -4033,10 +4033,10 @@ may increase either contention or retry errors, or both.`,
 					)
 					// If the index has some extra key columns, then output an error
 					// message with some extra information to explain the subtlety.
-					if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() && index.NumExtraColumns() > 0 {
+					if index.GetID() != tableDesc.GetPrimaryIndexID() && !index.IsUnique() && index.NumKeySuffixColumns() > 0 {
 						var extraColNames []string
-						for i := 0; i < index.NumExtraColumns(); i++ {
-							id := index.GetExtraColumnID(i)
+						for i := 0; i < index.NumKeySuffixColumns(); i++ {
+							id := index.GetKeySuffixColumnID(i)
 							col, colErr := tableDesc.FindColumnWithID(id)
 							if colErr != nil {
 								return nil, errors.CombineErrors(err, colErr)
@@ -7477,9 +7477,9 @@ func arrayNumInvertedIndexEntries(
 
 	v := descpb.SecondaryIndexFamilyFormatVersion
 	if version == tree.DNull {
-		if ctx.Settings.Version.IsActive(
-			ctx.Context, clusterversion.EmptyArraysInInvertedIndexes,
-		) {
+		if ctx.Settings.Version.IsActive(ctx.Context, clusterversion.StrictIndexColumnIDGuarantees) {
+			v = descpb.StrictIndexColumnIDGuaranteesVersion
+		} else if ctx.Settings.Version.IsActive(ctx.Context, clusterversion.EmptyArraysInInvertedIndexes) {
 			v = descpb.EmptyArraysInInvertedIndexesVersion
 		}
 	} else {

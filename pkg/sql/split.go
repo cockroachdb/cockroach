@@ -89,12 +89,12 @@ func (n *splitNode) Close(ctx context.Context) {
 func getRowKey(
 	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, index catalog.Index, values []tree.Datum,
 ) ([]byte, error) {
-	if index.NumColumns() < len(values) {
-		return nil, pgerror.Newf(pgcode.Syntax, "excessive number of values provided: expected %d, got %d", index.NumColumns(), len(values))
+	if index.NumKeyColumns() < len(values) {
+		return nil, pgerror.Newf(pgcode.Syntax, "excessive number of values provided: expected %d, got %d", index.NumKeyColumns(), len(values))
 	}
 	var colMap catalog.TableColMap
 	for i := range values {
-		colMap.Set(index.GetColumnID(i), i)
+		colMap.Set(index.GetKeyColumnID(i), i)
 	}
 	prefix := rowenc.MakeIndexKeyPrefix(codec, tableDesc, index.GetID())
 	key, _, err := rowenc.EncodePartialIndexKey(

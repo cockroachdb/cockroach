@@ -390,7 +390,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	var storeColNames []string
 	for _, col := range table.PublicColumns() {
 		containsCol := false
-		for _, id := range newIdx.ColumnIDs {
+		for _, id := range newIdx.KeyColumnIDs {
 			if id == col.GetID() {
 				containsCol = true
 				break
@@ -464,7 +464,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	var dropStoreColNames []string
 	for _, col := range table.PublicColumns() {
 		containsCol := false
-		for _, id := range newIdx.ColumnIDs {
+		for _, id := range newIdx.KeyColumnIDs {
 			if id == col.GetID() {
 				containsCol = true
 				break

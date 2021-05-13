@@ -276,7 +276,7 @@ func MakeIndexDescriptor(
 		if indexDesc.IsPartial() {
 			telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
 		}
-		if len(indexDesc.ColumnNames) > 1 {
+		if len(indexDesc.KeyColumnNames) > 1 {
 			telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
 		}
 	}
@@ -484,7 +484,9 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
-	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.EmptyArraysInInvertedIndexes) {
+	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.StrictIndexColumnIDGuarantees) {
+		encodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
+	} else if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.EmptyArraysInInvertedIndexes) {
 		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 	}
 	indexDesc.Version = encodingVersion

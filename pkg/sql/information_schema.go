@@ -1318,31 +1318,31 @@ CREATE TABLE information_schema.statistics (
 				}
 
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					// Columns in the primary key that aren't in index.ColumnNames or
+					// Columns in the primary key that aren't in index.KeyColumnNames or
 					// index.StoreColumnNames are implicit columns in the index.
 					var implicitCols map[string]struct{}
 					var hasImplicitCols bool
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = index.NumExtraColumns() > index.NumStoredColumns()
+						hasImplicitCols = index.NumKeySuffixColumns() > index.NumSecondaryStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
-						hasImplicitCols = index.NumExtraColumns() > 0
+						hasImplicitCols = index.NumKeySuffixColumns() > 0
 					}
 					if hasImplicitCols {
 						implicitCols = make(map[string]struct{})
-						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
-							col := table.GetPrimaryIndex().GetColumnName(i)
+						for i := 0; i < table.GetPrimaryIndex().NumKeyColumns(); i++ {
+							col := table.GetPrimaryIndex().GetKeyColumnName(i)
 							implicitCols[col] = struct{}{}
 						}
 					}
 
 					sequence := 1
-					for i := 0; i < index.NumColumns(); i++ {
-						col := index.GetColumnName(i)
+					for i := 0; i < index.NumKeyColumns(); i++ {
+						col := index.GetKeyColumnName(i)
 						// We add a row for each column of index.
-						dir := dStringForIndexDirection(index.GetColumnDirection(i))
+						dir := dStringForIndexDirection(index.GetKeyColumnDirection(i))
 						if err := appendRow(
 							index,
 							col,
@@ -1356,7 +1356,7 @@ CREATE TABLE information_schema.statistics (
 						sequence++
 						delete(implicitCols, col)
 					}
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
 						if err := appendRow(index, col, sequence,
@@ -1373,8 +1373,8 @@ CREATE TABLE information_schema.statistics (
 						//
 						// Note that simply iterating over implicitCols map
 						// produces non-deterministic output.
-						for i := 0; i < table.GetPrimaryIndex().NumColumns(); i++ {
-							col := table.GetPrimaryIndex().GetColumnName(i)
+						for i := 0; i < table.GetPrimaryIndex().NumKeyColumns(); i++ {
+							col := table.GetPrimaryIndex().GetKeyColumnName(i)
 							if _, isImplicit := implicitCols[col]; isImplicit {
 								// We add a row for each implicit column of index.
 								if err := appendRow(index, col, sequence,
