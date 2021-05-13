@@ -488,9 +488,10 @@ func (oc *OrderingChoice) Copy() OrderingChoice {
 
 // CanSimplify returns true if a call to Simplify would result in any changes to
 // the OrderingChoice. Changes include additional constant columns, removed
-// groups, and additional equivalent columns. This is used to quickly check
-// whether Simplify needs to be called without requiring allocations in the
-// common case. This logic should be changed in concert with the Simplify logic.
+// groups, additional equivalent columns, or removed non-equivalent columns.
+// This is used to quickly check whether Simplify needs to be called without
+// requiring allocations in the common case. This logic should be changed in
+// concert with the Simplify logic.
 func (oc *OrderingChoice) CanSimplify(fdset *props.FuncDepSet) bool {
 	if oc.Any() {
 		// Any ordering allowed, so can't simplify further.
@@ -519,8 +520,8 @@ func (oc *OrderingChoice) CanSimplify(fdset *props.FuncDepSet) bool {
 			return true
 		}
 
-		// Check whether new equivalent columns can be added by the FD set.
-		equiv := fdset.ComputeEquivClosure(group.Group)
+		// Check whether the equivalency group needs to change based on the FD.
+		equiv := fdset.ComputeEquivGroup(group.AnyID())
 		if !equiv.Equals(group.Group) {
 			return true
 		}
@@ -534,14 +535,16 @@ func (oc *OrderingChoice) CanSimplify(fdset *props.FuncDepSet) bool {
 }
 
 // Simplify uses the given FD set to streamline the orderings allowed by this
-// instance, and to potentially increase the number of allowed orderings:
+// instance. It can both increase and decrease the number of allowed orderings:
 //
 //   1. Constant columns add additional optional column choices.
 //
 //   2. Equivalent columns allow additional choices within an ordering column
 //      group.
 //
-//   3. If the columns in a group are functionally determined by columns from
+//   3. Non-equivalent columns in an ordering column group are removed.
+//
+//   4. If the columns in a group are functionally determined by columns from
 //      previous groups, the group can be dropped. This technique is described
 //      in the "Reduce Order" section of this paper:
 //
@@ -574,8 +577,10 @@ func (oc *OrderingChoice) Simplify(fdset *props.FuncDepSet) {
 			continue
 		}
 
-		// Expand group with equivalent columns from FD set.
-		group.Group = fdset.ComputeEquivClosure(group.Group)
+		// Set group to columns equivalent to an arbitrary column in the group
+		// based on the FD set. This can both add and remove columns from the
+		// group.
+		group.Group = fdset.ComputeEquivGroup(group.AnyID())
 
 		// Add this group's columns and find closure with the new columns.
 		closure = closure.Union(group.Group)
