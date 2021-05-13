@@ -405,6 +405,7 @@ var debugCtx struct {
 	maxResults        int
 	decodeAsTableDesc string
 	verbose           bool
+	keyTypes          keyTypeFilter
 }
 
 // setDebugContextDefaults set the default values in debugCtx.  This
@@ -412,7 +413,7 @@ var debugCtx struct {
 // test that exercises command-line parsing.
 func setDebugContextDefaults() {
 	debugCtx.startKey = storage.NilKey
-	debugCtx.endKey = storage.MVCCKeyMax
+	debugCtx.endKey = storage.NilKey
 	debugCtx.values = false
 	debugCtx.sizes = false
 	debugCtx.replicated = false
@@ -422,6 +423,7 @@ func setDebugContextDefaults() {
 	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false
+	debugCtx.keyTypes = showAll
 }
 
 // startCtx captures the command-line arguments for the `start` command.
