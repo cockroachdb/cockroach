@@ -191,28 +191,11 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		return descpb.TableDescriptor{}, err
 	}
 	for _, index := range mutDesc.PublicNonPrimaryIndexes() {
-		if index.NumColumns() > 1 {
+		if index.NumKeyColumns() > 1 {
 			panic("we don't know how to deal with virtual composite indexes yet")
 		}
-		idx := *index.IndexDesc()
-		// All indexes of virtual tables automatically STORE all other columns in
-		// the table.
-		idx.StoreColumnIDs = make([]descpb.ColumnID, len(mutDesc.Columns)-len(idx.ColumnIDs))
-		idx.StoreColumnNames = make([]string, len(mutDesc.Columns)-len(idx.ColumnIDs))
-		// Store all columns but the ones in the index.
-		outputIdx := 0
-	EACHCOLUMN:
-		for j := range mutDesc.Columns {
-			for _, id := range idx.ColumnIDs {
-				if mutDesc.Columns[j].ID == id {
-					// Skip columns in the index.
-					continue EACHCOLUMN
-				}
-			}
-			idx.StoreColumnIDs[outputIdx] = mutDesc.Columns[j].ID
-			idx.StoreColumnNames[outputIdx] = mutDesc.Columns[j].Name
-			outputIdx++
-		}
+		idx := index.IndexDescDeepCopy()
+		tabledesc.PopulateAllStoreColumns(&idx, mutDesc)
 		mutDesc.SetPublicNonPrimaryIndex(index.Ordinal(), idx)
 	}
 	return mutDesc.TableDescriptor, nil
@@ -548,7 +531,7 @@ func (e *virtualDefEntry) getPlanInfo(
 
 			// Figure out the ordinal position of the column that we're filtering on.
 			columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
-			indexKeyDatums := make([]tree.Datum, index.NumColumns())
+			indexKeyDatums := make([]tree.Datum, index.NumKeyColumns())
 
 			generator, cleanup, setupError := setupGenerator(ctx, e.makeConstrainedRowsGenerator(
 				ctx, p, dbDesc, index, indexKeyDatums, columnIdxMap, idxConstraint, columns), stopper)
@@ -583,8 +566,8 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 		var span constraint.Span
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
-				for i := 0; i < index.NumColumns(); i++ {
-					id := index.GetColumnID(i)
+				for i := 0; i < index.NumKeyColumns(); i++ {
+					id := index.GetKeyColumnID(i)
 					indexKeyDatums[i] = datums[columnIdxMap.GetDefault(id)]
 				}
 				// Construct a single key span out of the current row, so that

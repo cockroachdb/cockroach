@@ -68,7 +68,7 @@ func MakeBuilder(
 		table:          table,
 		index:          index,
 		KeyPrefix:      rowenc.MakeIndexKeyPrefix(codec, table, index.GetID()),
-		interstices:    make([][]byte, index.NumColumns()+index.NumExtraColumns()+1),
+		interstices:    make([][]byte, index.NumKeyColumns()+index.NumKeySuffixColumns()+1),
 		neededFamilies: nil,
 	}
 
@@ -197,7 +197,7 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 	}
 
 	// * The index is fully constrained.
-	if prefixLen != s.index.NumColumns() {
+	if prefixLen != s.index.NumKeyColumns() {
 		return false
 	}
 
@@ -222,7 +222,7 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 		}
 
 		// * The index must store some columns.
-		if s.index.NumStoredColumns() == 0 {
+		if s.index.NumSecondaryStoredColumns() == 0 {
 			return false
 		}
 
@@ -342,8 +342,8 @@ func (s *Builder) encodeConstraintKey(
 		// For extra columns (like implicit columns), the direction
 		// is ascending.
 		dir := encoding.Ascending
-		if i < s.index.NumColumns() {
-			dir, err = s.index.GetColumnDirection(i).ToEncodingDirection()
+		if i < s.index.NumKeyColumns() {
+			dir, err = s.index.GetKeyColumnDirection(i).ToEncodingDirection()
 			if err != nil {
 				return nil, false, err
 			}

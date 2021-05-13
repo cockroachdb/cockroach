@@ -77,15 +77,15 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 			columnIDs = append(columnIDs, tree.ColumnID(c.GetID()))
 		}
 	} else {
-		for i := 0; i < o.index.NumColumns(); i++ {
-			id := o.index.GetColumnID(i)
+		for i := 0; i < o.index.NumKeyColumns(); i++ {
+			id := o.index.GetKeyColumnID(i)
 			columnIDs = append(columnIDs, tree.ColumnID(id))
 		}
-		for i := 0; i < o.index.NumExtraColumns(); i++ {
-			id := o.index.GetExtraColumnID(i)
+		for i := 0; i < o.index.NumKeySuffixColumns(); i++ {
+			id := o.index.GetKeySuffixColumnID(i)
 			columnIDs = append(columnIDs, tree.ColumnID(id))
 		}
-		for i := 0; i < o.index.NumStoredColumns(); i++ {
+		for i := 0; i < o.index.NumSecondaryStoredColumns(); i++ {
 			id := o.index.GetStoredColumnID(i)
 			columnIDs = append(columnIDs, tree.ColumnID(id))
 		}

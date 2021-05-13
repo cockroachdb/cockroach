@@ -509,13 +509,13 @@ const (
     "nextMutationId": 2,
     "parentId": 50,
     "primaryIndex": {
-      "columnDirections": [
+      "keyColumnDirections": [
         "ASC"
       ],
-      "columnIds": [
+      "keyColumnIds": [
         1
       ],
-      "columnNames": [
+      "keyColumnNames": [
         "i"
       ],
       "compositeColumnIds": [],
@@ -622,9 +622,9 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     "nextMutationId": 1,
     "parentId": 52,
     "primaryIndex": {
-      "columnDirections": [ "ASC" ],
-      "columnIds": [ 1 ],
-      "columnNames": [ "i" ],
+      "keyColumnDirections": [ "ASC" ],
+      "keyColumnIds": [ 1 ],
+      "keyColumnNames": [ "i" ],
       "id": 1,
       "name": "primary",
       "type": "FORWARD",
@@ -675,9 +675,9 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
     "nextMutationId": 1,
     "parentId": 52,
     "primaryIndex": {
-      "columnDirections": [ "ASC" ],
-      "columnIds": [ 1 ],
-      "columnNames": [ "i" ],
+      "keyColumnDirections": [ "ASC" ],
+      "keyColumnIds": [ 1 ],
+      "keyColumnNames": [ "i" ],
       "id": 1,
       "name": "primary",
       "type": "FORWARD",

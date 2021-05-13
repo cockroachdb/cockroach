@@ -2232,7 +2232,7 @@ func showCreateIndexWithInterleave(
 	// Get all of the columns and write them.
 	comma := ""
 	for i := 0; i < sharedPrefixLen; i++ {
-		name := idx.GetColumnName(i)
+		name := idx.GetKeyColumnName(i)
 		f.WriteString(comma)
 		f.FormatNameP(&name)
 		comma = ", "
@@ -2390,26 +2390,27 @@ CREATE TABLE crdb_internal.index_columns (
 					idxName := tree.NewDString(idx.GetName())
 
 					// Report the main (key) columns.
-					for i, c := range idx.IndexDesc().ColumnIDs {
+					for i := 0; i < idx.NumKeyColumns(); i++ {
+						c := idx.GetKeyColumnID(i)
 						colName := tree.DNull
 						colDir := tree.DNull
-						if i >= len(idx.IndexDesc().ColumnNames) {
+						if i >= len(idx.IndexDesc().KeyColumnNames) {
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
-								len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnNames))
+								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnNames))
 						} else {
-							colName = tree.NewDString(idx.GetColumnName(i))
+							colName = tree.NewDString(idx.GetKeyColumnName(i))
 						}
-						if i >= len(idx.IndexDesc().ColumnDirections) {
+						if i >= len(idx.IndexDesc().KeyColumnDirections) {
 							// See comment above.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
 								table.GetID(), idx.GetID(), parentName, table.GetName(), idx.GetName(),
-								len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnDirections))
+								len(idx.IndexDesc().KeyColumnIDs), len(idx.IndexDesc().KeyColumnDirections))
 						} else {
-							colDir = idxDirMap[idx.GetColumnDirection(i)]
+							colDir = idxDirMap[idx.GetKeyColumnDirection(i)]
 						}
 
 						if err := addRow(
@@ -2424,7 +2425,8 @@ CREATE TABLE crdb_internal.index_columns (
 					notImplicit := tree.DBoolFalse
 
 					// Report the stored columns.
-					for _, c := range idx.IndexDesc().StoreColumnIDs {
+					for i := 0; i < idx.NumSecondaryStoredColumns(); i++ {
+						c := idx.GetStoredColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2435,7 +2437,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the extra columns.
-					for _, c := range idx.IndexDesc().ExtraColumnIDs {
+					for i := 0; i < idx.NumKeySuffixColumns(); i++ {
+						c := idx.GetKeySuffixColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -2446,7 +2449,8 @@ CREATE TABLE crdb_internal.index_columns (
 					}
 
 					// Report the composite columns
-					for _, c := range idx.IndexDesc().CompositeColumnIDs {
+					for i := 0; i < idx.NumCompositeColumns(); i++ {
+						c := idx.GetCompositeColumnID(i)
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
 							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
@@ -3616,7 +3620,7 @@ func addPartitioningRows(
 		if i != uint32(colOffset) {
 			buf.WriteString(`, `)
 		}
-		buf.WriteString(index.GetColumnName(int(i)))
+		buf.WriteString(index.GetKeyColumnName(int(i)))
 	}
 	colNames := tree.NewDString(buf.String())
 

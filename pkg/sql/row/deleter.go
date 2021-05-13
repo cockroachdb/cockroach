@@ -62,22 +62,22 @@ func MakeDeleter(
 			}
 			return nil
 		}
-		for j := 0; j < tableDesc.GetPrimaryIndex().NumColumns(); j++ {
-			colID := tableDesc.GetPrimaryIndex().GetColumnID(j)
+		for j := 0; j < tableDesc.GetPrimaryIndex().NumKeyColumns(); j++ {
+			colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(j)
 			if err := maybeAddCol(colID); err != nil {
 				return Deleter{}
 			}
 		}
 		for _, index := range indexes {
-			for j := 0; j < index.NumColumns(); j++ {
-				colID := index.GetColumnID(j)
+			for j := 0; j < index.NumKeyColumns(); j++ {
+				colID := index.GetKeyColumnID(j)
 				if err := maybeAddCol(colID); err != nil {
 					return Deleter{}
 				}
 			}
 			// The extra columns are needed to fix #14601.
-			for j := 0; j < index.NumExtraColumns(); j++ {
-				colID := index.GetExtraColumnID(j)
+			for j := 0; j < index.NumKeySuffixColumns(); j++ {
+				colID := index.GetKeySuffixColumnID(j)
 				if err := maybeAddCol(colID); err != nil {
 					return Deleter{}
 				}

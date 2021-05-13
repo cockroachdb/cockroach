@@ -299,9 +299,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			numCols := ref.SharedPrefixLen
 			outFK := descpb.ForeignKeyConstraint{
 				OriginTableID:       desc.ID,
-				OriginColumnIDs:     idx.ColumnIDs[:numCols],
+				OriginColumnIDs:     idx.KeyColumnIDs[:numCols],
 				ReferencedTableID:   ref.Table,
-				ReferencedColumnIDs: referencedIndex.IndexDesc().ColumnIDs[:numCols],
+				ReferencedColumnIDs: referencedIndex.IndexDesc().KeyColumnIDs[:numCols],
 				Name:                ref.Name,
 				Validity:            ref.Validity,
 				OnDelete:            ref.OnDelete,
@@ -352,7 +352,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					// referenced table ID, and that the index we point to is a valid
 					// index to satisfy the columns in the foreign key.
 					if otherFK.ReferencedTableID == desc.ID &&
-						descpb.ColumnIDs(originIndex.ColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
+						descpb.ColumnIDs(originIndex.KeyColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
 					}
@@ -382,9 +382,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				numCols := originIndex.ForeignKey.SharedPrefixLen
 				inFK = descpb.ForeignKeyConstraint{
 					OriginTableID:       ref.Table,
-					OriginColumnIDs:     originIndex.ColumnIDs[:numCols],
+					OriginColumnIDs:     originIndex.KeyColumnIDs[:numCols],
 					ReferencedTableID:   desc.ID,
-					ReferencedColumnIDs: idx.ColumnIDs[:numCols],
+					ReferencedColumnIDs: idx.KeyColumnIDs[:numCols],
 					Name:                originIndex.ForeignKey.Name,
 					Validity:            originIndex.ForeignKey.Validity,
 					OnDelete:            originIndex.ForeignKey.OnDelete,
@@ -419,7 +419,7 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 	}
 
 	var primaryIndexColumnIDs catalog.TableColSet
-	for _, colID := range desc.PrimaryIndex.ColumnIDs {
+	for _, colID := range desc.PrimaryIndex.KeyColumnIDs {
 		primaryIndexColumnIDs.Add(colID)
 	}
 
@@ -468,9 +468,9 @@ func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged boo
 	if idx.Version != descpb.EmptyArraysInInvertedIndexesVersion {
 		return false
 	}
-	slice := make([]descpb.ColumnID, 0, len(idx.ColumnIDs)+len(idx.ExtraColumnIDs)+len(idx.StoreColumnIDs))
-	slice = append(slice, idx.ColumnIDs...)
-	slice = append(slice, idx.ExtraColumnIDs...)
+	slice := make([]descpb.ColumnID, 0, len(idx.KeyColumnIDs)+len(idx.KeySuffixColumnIDs)+len(idx.StoreColumnIDs))
+	slice = append(slice, idx.KeyColumnIDs...)
+	slice = append(slice, idx.KeySuffixColumnIDs...)
 	slice = append(slice, idx.StoreColumnIDs...)
 	set := catalog.MakeTableColSet(slice...)
 	if len(slice) != set.Len() {

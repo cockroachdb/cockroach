@@ -1792,7 +1792,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
 				if idx := mutation.GetIndex(); idx != nil {
-					for _, name := range idx.ColumnNames {
+					for _, name := range idx.KeyColumnNames {
 						if _, ok := columns[name]; ok {
 							// Such an index mutation has to be with direction ADD and
 							// in the DELETE_ONLY state. Live indexes referencing live
