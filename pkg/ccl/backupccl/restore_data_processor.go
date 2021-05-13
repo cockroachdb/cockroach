@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -178,51 +180,58 @@ func inputReader(
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
-	ctx := rd.Ctx
-	doneCh := ctx.Done()
-	for {
-		done, err := func() (done bool, _ error) {
-			entry, ok := <-entries
-			if !ok {
-				done = true
-				return done, nil
-			}
+	loadedEntries := make(chan entryIterator, 1)
+	doneCh := rd.Ctx.Done()
 
-			summary, err := rd.processRestoreSpanEntry(entry)
+	g := ctxgroup.WithContext(rd.Ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(loadedEntries)
+		for entry := range entries {
+			if err := rd.openIterators(entry, loadedEntries); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		for le := range loadedEntries {
+			entry := le.entry
+			summary, err := rd.processRestoreSpanEntry(le)
 			if err != nil {
-				return done, err
+				return err
 			}
 
 			select {
 			case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs):
 			case <-doneCh:
-				return done, ctx.Err()
+				return ctx.Err()
 			}
-
-			return done, nil
-		}()
-
-		if err != nil {
-			return err
 		}
+		return nil
+	})
 
-		if done {
-			return nil
-		}
-	}
+	return g.Wait()
 }
 
-func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	entry execinfrapb.RestoreSpanEntry,
-) (roachpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
+// entryIterator groups a RestoreSpanEntry along with the iterator that reads
+// the data for that entry.
+type entryIterator struct {
+	entry   execinfrapb.RestoreSpanEntry
+	iter    storage.SimpleMVCCIterator
+	cleanup func()
+}
+
+func (rd *restoreDataProcessor) openIterators(
+	entry execinfrapb.RestoreSpanEntry, entryIters chan entryIterator,
+) error {
 	ctx := rd.Ctx
-	evalCtx := rd.EvalCtx
-	var summary roachpb.BulkOpSummary
+	ctx, itersSpan := tracing.ChildSpan(ctx, "opening iterators")
+	defer itersSpan.Finish()
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
 	// iterator is sufficient.
 	var iters []storage.SimpleMVCCIterator
+	var dirs []cloud.ExternalStorage
 
 	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
 
@@ -231,21 +240,55 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
-			return summary, err
+			return err
 		}
-		defer func() {
+		dirs = append(dirs, dir)
+		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
+		if err != nil {
+			return err
+		}
+		iters = append(iters, iter)
+	}
+	iter := storage.MakeMultiIterator(iters)
+	cleanup := func() {
+		for _, dir := range dirs {
 			if err := dir.Close(); err != nil {
 				log.Warningf(ctx, "close export storage failed %v", err)
 			}
-		}()
-		iter, err := storageccl.ExternalSSTReader(ctx, dir, file.Path, rd.spec.Encryption)
-		if err != nil {
-			return summary, err
 		}
-		defer iter.Close()
-		iters = append(iters, iter)
+		for _, iter := range iters {
+			iter.Close()
+		}
+		iter.Close()
 	}
 
+	log.VEvent(ctx, 2, "done opening iterators, sending on ch")
+
+	entryIter := entryIterator{
+		entry:   entry,
+		iter:    iter,
+		cleanup: cleanup,
+	}
+
+	select {
+	case entryIters <- entryIter:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
+}
+
+func (rd *restoreDataProcessor) processRestoreSpanEntry(
+	entryIter entryIterator,
+) (roachpb.BulkOpSummary, error) {
+	ctx, entrySpan := tracing.ChildSpan(rd.Ctx, "ingesting restore entry")
+	defer entrySpan.Finish()
+
+	var summary roachpb.BulkOpSummary
+
+	db := rd.flowCtx.Cfg.DB
+	evalCtx := rd.EvalCtx
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
 	if err != nil {
@@ -253,11 +296,15 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 	defer batcher.Close()
 
+	entry := entryIter.entry
+
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
-	iter := storage.MakeMultiIterator(iters)
-	defer iter.Close()
+
 	var keyScratch, valueScratch []byte
+
+	iter := entryIter.iter
+	defer entryIter.cleanup()
 
 	for iter.SeekGE(startKeyMVCC); ; {
 		ok, err := iter.Valid()
@@ -316,6 +363,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 	}
+	log.VEvent(ctx, 2, "done adding, flushing")
 	// Flush out the last batch.
 	if err := batcher.Flush(ctx); err != nil {
 		return summary, err
