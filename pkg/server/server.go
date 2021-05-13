@@ -1189,7 +1189,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx)
 
 	// Set up the init server. We have to do this relatively early because we
-	// can't call RegisterInitServer() after `grpc.Serve`, which is called in
+	// can't call RegisterInitServer() after `grpc.serve`, which is called in
 	// startRPCServer (and for the loopback grpc-gw connection).
 	var initServer *initServer
 	{
@@ -1735,7 +1735,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	s.oidc = oidc
 
-	// Serve UI assets.
+	// serve UI assets.
 	//
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI
 	// assets are served up whether or not there is a session. If there is a session, the mux
@@ -2121,7 +2121,7 @@ func (s *Server) startListenRPCAndSQL(
 	// initialize) before we accept RPC requests. The caller
 	// (Server.Start) will call this at the right moment.
 	startRPCServer = func(ctx context.Context) {
-		// Serve the gRPC endpoint.
+		// serve the gRPC endpoint.
 		_ = s.stopper.RunAsyncTask(workersCtx, "serve-grpc", func(context.Context) {
 			netutil.FatalIfUnexpected(s.grpc.Serve(anyL))
 		})
@@ -2174,7 +2174,7 @@ func (s *Server) startServeUI(
 			return err
 		}
 
-		// Serve the plain HTTP (non-TLS) connection over clearL.
+		// serve the plain HTTP (non-TLS) connection over clearL.
 		// This produces a HTTP redirect to the `https` URL for the path /,
 		// handles the request normally (via s.ServeHTTP) for the path /health,
 		// and produces 404 for anything else.
@@ -2195,7 +2195,7 @@ func (s *Server) startServeUI(
 		httpLn = tls.NewListener(tlsL, uiTLSConfig)
 	}
 
-	// Serve the HTTP endpoint. This will be the original httpLn
+	// serve the HTTP endpoint. This will be the original httpLn
 	// listening on --http-addr without TLS if uiTLSConfig was
 	// nil, or overridden above if uiTLSConfig was not nil to come from
 	// the TLS negotiation over the HTTP port.

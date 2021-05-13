@@ -894,7 +894,7 @@ func (s *statusServer) GetFiles(
 
 	var dir string
 	switch req.Type {
-	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
+	//TODO(ridwanmsharif): serve logfiles so debug-zip can fetch them
 	// intead of reading indididual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = s.admin.server.cfg.HeapProfileDirName

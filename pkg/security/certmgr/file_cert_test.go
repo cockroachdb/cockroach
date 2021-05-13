@@ -58,7 +58,6 @@ func TestFileCert_Err(t *testing.T) {
 	require.Nil(t, fc.Err())
 	fc.Reload(context.Background())
 	require.NotNil(t, fc.Err())
-	require.NotNil(t, fc.Err())
 	fc.ClearErr()
 	require.Nil(t, fc.Err())
 }

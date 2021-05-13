@@ -109,7 +109,7 @@ func servePseudoFluent(t *testing.T) (serverAddr string, cleanup func(), fluentD
 			}
 			t.Logf("got client: %v", conn.RemoteAddr())
 
-			// Serve the connection.
+			// serve the connection.
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

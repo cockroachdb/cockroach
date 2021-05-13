@@ -136,6 +136,10 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, drainSignals...)
-	sig := <-ch
-	return errors.Newf("received signal %v", sig)
+	select {
+	case sig := <-ch:
+		return errors.Newf("received signal %v", sig)
+	case <-stopper.ShouldQuiesce():
+		return nil
+	}
 }

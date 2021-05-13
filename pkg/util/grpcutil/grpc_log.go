@@ -231,7 +231,7 @@ const (
 	// When a TCP probe simply opens and immediately closes the
 	// connection, gRPC is unhappy that the TLS handshake did not
 	// complete. We don't care.
-	incomingConnSpamReSrc = `^grpc: Server\.Serve failed to complete security handshake from "[^"]*": EOF`
+	incomingConnSpamReSrc = `^grpc: Server\.serve failed to complete security handshake from "[^"]*": EOF`
 )
 
 var outgoingConnSpamRe = regexp.MustCompile(outgoingConnSpamReSrc)

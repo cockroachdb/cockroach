@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlproxyccl
+package idle
 
 import (
 	"fmt"
@@ -31,7 +31,7 @@ func setupServerWithIdleDisconnect(t testing.TB, timeout time.Duration) net.Addr
 			t.Errorf("Error during accept: %v", err)
 		}
 		defer cServ.Close()
-		cServ = IdleDisconnectOverlay(cServ, timeout)
+		cServ = DisconnectOverlay(cServ, timeout)
 		_, _ = io.Copy(cServ, cServ)
 	}()
 	return server.Addr()

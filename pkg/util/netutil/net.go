@@ -72,7 +72,7 @@ type Server struct {
 //
 // It can serve two different purposes simultaneously:
 //
-// - to serve as actual HTTP server, using the .Serve(net.Listener) method.
+// - to serve as actual HTTP server, using the .serve(net.Listener) method.
 // - to serve as plain TCP server, using the .ServeWith(...) method.
 //
 // The latter is used e.g. to accept SQL client connections.
@@ -103,7 +103,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 
 	ctx := context.TODO()
 
-	// net/http.(*Server).Serve/http2.ConfigureServer are not thread safe with
+	// net/http.(*Server).serve/http2.ConfigureServer are not thread safe with
 	// respect to net/http.(*Server).TLSConfig, so we call it synchronously here.
 	if err := http2.ConfigureServer(server.Server, nil); err != nil {
 		log.Fatalf(ctx, "%v", err)
@@ -129,7 +129,7 @@ func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handl
 func (s *Server) ServeWith(
 	ctx context.Context, stopper *stop.Stopper, l net.Listener, serveConn func(net.Conn),
 ) error {
-	// Inspired by net/http.(*Server).Serve
+	// Inspired by net/http.(*Server).serve
 	var tempDelay time.Duration // how long to sleep on accept failure
 	for {
 		rw, e := l.Accept()
@@ -152,7 +152,7 @@ func (s *Server) ServeWith(
 		tempDelay = 0
 		go func() {
 			defer stopper.Recover(ctx)
-			s.Server.ConnState(rw, http.StateNew) // before Serve can return
+			s.Server.ConnState(rw, http.StateNew) // before serve can return
 			serveConn(rw)
 			s.Server.ConnState(rw, http.StateClosed)
 		}()
