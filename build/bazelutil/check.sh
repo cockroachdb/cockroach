@@ -3,7 +3,7 @@
 set -euo pipefail
 
 EXISTING_GO_GENERATE_COMMENTS="
-pkg/ccl/sqlproxyccl/admitter/service.go://go:generate mockgen -package=admitter -destination=mocks_generated.go -source=service.go . Service
+pkg/ccl/sqlproxyccl/throttler/service.go://go:generate mockgen -package=throttler -destination=mocks_generated.go -source=service.go . Service
 pkg/ccl/sqlproxyccl/denylist/service.go://go:generate mockgen -package=denylist -destination=mocks_generated.go -source=service.go . Service
 pkg/ccl/sqlproxyccl/tenant/directory.go://go:generate mockgen -package=tenant -destination=mocks_generated.go . DirectoryClient,Directory_WatchEndpointsClient
 pkg/cmd/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json

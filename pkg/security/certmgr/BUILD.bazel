@@ -15,6 +15,7 @@ go_library(
     srcs = [
         "cert_manager.go",
         "file_cert.go",
+        "self_signed_cert.go",
         ":mocks_certmgr",  # keep
     ],
     embed = [":certlib"],  # keep
@@ -25,6 +26,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_golang_mock//gomock",  # keep
     ],
@@ -35,6 +37,7 @@ go_test(
     srcs = [
         "cert_manager_test.go",
         "file_cert_test.go",
+        "self_signed_cert_test.go",
     ],
     embed = [":certmgr"],
     deps = [

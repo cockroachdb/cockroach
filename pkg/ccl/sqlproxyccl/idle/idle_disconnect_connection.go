@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlproxyccl
+package idle
 
 import (
 	"net"
@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// IdleDisconnectConnection is a wrapper around net.Conn that disconnects if
+// DisconnectConnection is a wrapper around net.Conn that disconnects if
 // connection is idle. The idle time is only counted while the client is
 // waiting, blocked on Read.
-type IdleDisconnectConnection struct {
+type DisconnectConnection struct {
 	net.Conn
 	timeout time.Duration
 	mu      struct {
@@ -30,10 +30,10 @@ type IdleDisconnectConnection struct {
 }
 
 var errNotSupported = errors.Errorf(
-	"Not supported for IdleDisconnectConnection",
+	"Not supported for DisconnectConnection",
 )
 
-func (c *IdleDisconnectConnection) updateDeadline() error {
+func (c *DisconnectConnection) updateDeadline() error {
 	now := timeutil.Now()
 	// If it has been more than 1% of the timeout duration - advance the deadline.
 	c.mu.Lock()
@@ -49,7 +49,7 @@ func (c *IdleDisconnectConnection) updateDeadline() error {
 }
 
 // Read reads data from the connection with timeout.
-func (c *IdleDisconnectConnection) Read(b []byte) (n int, err error) {
+func (c *DisconnectConnection) Read(b []byte) (n int, err error) {
 	if err := c.updateDeadline(); err != nil {
 		return 0, err
 	}
@@ -57,7 +57,7 @@ func (c *IdleDisconnectConnection) Read(b []byte) (n int, err error) {
 }
 
 // Write writes data to the connection and sets the read timeout.
-func (c *IdleDisconnectConnection) Write(b []byte) (n int, err error) {
+func (c *DisconnectConnection) Write(b []byte) (n int, err error) {
 	// The Write for the connection is not blocking (or can block only temporary
 	// in case of flow control). For idle connections, the Read will be the call
 	// that will block and stay blocked until the backend doesn't send something.
@@ -72,26 +72,26 @@ func (c *IdleDisconnectConnection) Write(b []byte) (n int, err error) {
 }
 
 // SetDeadline is unsupported as it will interfere with the reads.
-func (c *IdleDisconnectConnection) SetDeadline(t time.Time) error {
+func (c *DisconnectConnection) SetDeadline(t time.Time) error {
 	return errNotSupported
 }
 
 // SetReadDeadline is unsupported as it will interfere with the reads.
-func (c *IdleDisconnectConnection) SetReadDeadline(t time.Time) error {
+func (c *DisconnectConnection) SetReadDeadline(t time.Time) error {
 	return errNotSupported
 }
 
 // SetWriteDeadline is unsupported as it will interfere with the reads.
-func (c *IdleDisconnectConnection) SetWriteDeadline(t time.Time) error {
+func (c *DisconnectConnection) SetWriteDeadline(t time.Time) error {
 	return errNotSupported
 }
 
-// IdleDisconnectOverlay upgrades the connection to one that closes when
+// DisconnectOverlay upgrades the connection to one that closes when
 // idle for more than timeout duration. Timeout of zero will turn off
 // the idle disconnect code.
-func IdleDisconnectOverlay(conn net.Conn, timeout time.Duration) net.Conn {
+func DisconnectOverlay(conn net.Conn, timeout time.Duration) net.Conn {
 	if timeout != 0 {
-		return &IdleDisconnectConnection{Conn: conn, timeout: timeout}
+		return &DisconnectConnection{Conn: conn, timeout: timeout}
 	}
 	return conn
 }

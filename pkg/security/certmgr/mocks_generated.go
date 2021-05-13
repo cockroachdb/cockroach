@@ -6,6 +6,7 @@ package certmgr
 
 import (
 	context "context"
+	tls "crypto/tls"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -70,4 +71,18 @@ func (m *MockCert) Reload(ctx context.Context) {
 func (mr *MockCertMockRecorder) Reload(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockCert)(nil).Reload), ctx)
+}
+
+// TLSCert mocks base method.
+func (m *MockCert) TLSCert() *tls.Certificate {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TLSCert")
+	ret0, _ := ret[0].(*tls.Certificate)
+	return ret0
+}
+
+// TLSCert indicates an expected call of TLSCert.
+func (mr *MockCertMockRecorder) TLSCert() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TLSCert", reflect.TypeOf((*MockCert)(nil).TLSCert))
 }

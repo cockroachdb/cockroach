@@ -945,6 +945,28 @@ func init() {
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
 
 	}
+	// Multi-tenancy proxy command flags.
+	{
+		f := mtStartSQLProxyCmd.Flags()
+		stringFlag(f, &proxyContext.Denylist, cliflags.DenyList)
+		stringFlag(f, &proxyContext.ListenAddr, cliflags.ProxyListenAddr)
+		stringFlag(f, &proxyContext.ListenCert, cliflags.ListenCert)
+		stringFlag(f, &proxyContext.ListenKey, cliflags.ListenKey)
+		stringFlag(f, &proxyContext.MetricsAddress, cliflags.ListenMetrics)
+		stringFlag(f, &proxyContext.RoutingRule, cliflags.RoutingRule)
+		stringFlag(f, &proxyContext.DirectoryAddr, cliflags.DirectoryAddr)
+		boolFlag(f, &proxyContext.SkipVerify, cliflags.SkipVerify)
+		boolFlag(f, &proxyContext.Insecure, cliflags.InsecureBackend)
+		durationFlag(f, &proxyContext.RatelimitBaseDelay, cliflags.RatelimitBaseDelay)
+		durationFlag(f, &proxyContext.ValidateAccessInterval, cliflags.ValidateAccessInterval)
+		durationFlag(f, &proxyContext.PollConfigInterval, cliflags.PollConfigInterval)
+		durationFlag(f, &proxyContext.IdleTimeout, cliflags.IdleTimeout)
+	}
+	// Multi-tenancy test directory command flags.
+	{
+		f := mtTestDirectorySvr.Flags()
+		intFlag(f, &testDirectorySvrContext.port, cliflags.TestDirectoryListenPort)
+	}
 }
 
 type tenantIDWrapper struct {

@@ -65,8 +65,9 @@ func NewSubStopper(parentStopper *stop.Stopper) *stop.Stopper {
 // TestDirectoryServer is a directory server implementation that is used
 // for testing.
 type TestDirectoryServer struct {
-	stopper    *stop.Stopper
-	grpcServer *grpc.Server
+	stopper             *stop.Stopper
+	grpcServer          *grpc.Server
+	cockroachExecutable string
 	// TenantStarterFunc will be used to launch a new tenant process.
 	TenantStarterFunc func(ctx context.Context, tenantID uint64) (*Process, error)
 
@@ -193,7 +194,7 @@ func (s *TestDirectoryServer) EnsureEndpoint(
 	s.proc.Lock()
 	defer s.proc.Unlock()
 
-	lst, err := s.listLocked(ctx, &ListEndpointsRequest{req.TenantID})
+	lst, err := s.listLocked(ctx, &ListEndpointsRequest{TenantID: req.TenantID})
 	if err != nil {
 		return nil, err
 	}
@@ -217,16 +218,23 @@ func (s *TestDirectoryServer) Serve(listener net.Listener) error {
 }
 
 // NewTestDirectoryServer will create a new server.
-func NewTestDirectoryServer(stopper *stop.Stopper) *TestDirectoryServer {
+func NewTestDirectoryServer(stopper *stop.Stopper) (*TestDirectoryServer, error) {
+	// Determine the path to cockroach executable.
+	cockroachExecutable, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
 	dir := &TestDirectoryServer{
-		grpcServer: grpc.NewServer(),
-		stopper:    stopper,
+		grpcServer:          grpc.NewServer(),
+		stopper:             stopper,
+		cockroachExecutable: cockroachExecutable,
 	}
 	dir.TenantStarterFunc = dir.startTenantLocked
 	dir.proc.processByAddrByTenantID = map[uint64]map[net.Addr]*Process{}
 	dir.listen.eventListeners = list.New()
+	stopper.AddCloser(stop.CloserFn(func() { dir.grpcServer.GracefulStop() }))
 	RegisterDirectoryServer(dir.grpcServer, dir)
-	return dir
+	return dir, nil
 }
 
 func (s *TestDirectoryServer) listLocked(
@@ -301,6 +309,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 		fmt.Sprintf("--sql-addr=%s", sql.Addr().String()),
 		fmt.Sprintf("--http-addr=%s", http.Addr().String()),
 		fmt.Sprintf("--tenant-id=%d", tenantID),
+		"--insecure",
 	}
 	if err = sql.Close(); err != nil {
 		return nil, err
@@ -309,7 +318,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 		return nil, err
 	}
 
-	c := exec.Command("cockroach", args...)
+	c := exec.Command(s.cockroachExecutable, args...)
 	process.Cmd = c
 	c.Env = append(os.Environ(), "COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR=true")
 
@@ -331,7 +340,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 		_ = c.Process.Kill()
 		s.deregisterInstance(tenantID, process.SQL)
 	}))
-	err = process.Stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
+	err = s.stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
 		if err := c.Wait(); err != nil {
 			log.Infof(ctx, "finished %s with err %s", process.Cmd.Args, err)
 			log.Infof(ctx, "output %s", b.Bytes())
