@@ -232,12 +232,13 @@ func TestStoreMetrics(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				CacheSize: 1 << 20, /* 1 MiB */
 				StoreSpecs: []base.StoreSpec{
 					{
 						InMemory: true,
 						// Specify a size to trigger the BlockCache in Pebble.
 						Size: base.SizeSpec{
-							InBytes: 1 << 20,
+							InBytes: 512 << 20, /* 512 MiB */
 						},
 					},
 				},
