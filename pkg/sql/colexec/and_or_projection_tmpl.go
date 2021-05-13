@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -118,7 +119,6 @@ func new_OP_TITLEProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -163,7 +163,8 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 

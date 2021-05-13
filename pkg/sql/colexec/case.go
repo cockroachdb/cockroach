@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -94,8 +95,6 @@ func NewCaseOp(
 		thenIdxs:  thenIdxs,
 		outputIdx: outputIdx,
 		typ:       typ,
-		origSel:   make([]int, coldata.BatchSize()),
-		prevSel:   make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -115,6 +114,7 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	var origHasSel bool
 	if sel := c.buffer.batch.Selection(); sel != nil {
 		origHasSel = true
+		c.origSel = colexecutils.EnsureSelectionVectorLength(c.origSel, origLen)
 		copy(c.origSel, sel)
 	}
 
@@ -122,8 +122,8 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 	prevHasSel := false
 	if sel := c.buffer.batch.Selection(); sel != nil {
 		prevHasSel = true
-		c.prevSel = c.prevSel[:origLen]
-		copy(c.prevSel[:origLen], sel[:origLen])
+		c.prevSel = colexecutils.EnsureSelectionVectorLength(c.prevSel, origLen)
+		copy(c.prevSel, sel)
 	}
 	outputCol := c.buffer.batch.ColVec(c.outputIdx)
 	if outputCol.MaybeHasNulls() {
@@ -199,8 +199,12 @@ func (c *caseOp) Next(ctx context.Context) coldata.Batch {
 					// No selection vector means there have been no matches yet, and we were
 					// considering the entire batch of tuples for this case arm. Make a new
 					// selection vector with all of the tuples but the ones that just matched.
-					c.prevSel = c.prevSel[:cap(c.prevSel)]
+					c.prevSel = colexecutils.EnsureSelectionVectorLength(c.prevSel, origLen)
 					for i := 0; i < origLen; i++ {
+						// Note that here we rely on the assumption that
+						// toSubtract is an increasing sequence (because our
+						// selection vectors are such) to optimize the
+						// subtraction.
 						if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
 							subtractIdx++
 							continue
