@@ -1,0 +1,171 @@
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+
+exec-ddl
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY (a,b,c))
+----
+
+assign-placeholders-norm query-args=(1)
+SELECT v FROM kv WHERE k = $1
+----
+project
+ ├── columns: v:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── select
+      ├── columns: k:1!null v:2
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan kv
+      │    ├── columns: k:1!null v:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+assign-placeholders-opt query-args=(1)
+SELECT v FROM kv WHERE k = $1
+----
+project
+ ├── columns: v:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── scan kv
+      ├── columns: k:1!null v:2
+      ├── constraint: /1: [/1 - /1]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+# This is what we ideally want to obtain after assigning placeholders in the
+# test below.
+norm
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest('{1}'::INT[]),
+         unnest('{2}'::INT[])
+)
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── key: (3)
+ ├── fd: ()-->(1,2), (3)-->(4)
+ ├── scan abcd
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── key: (1-3)
+ │    └── fd: (1-3)-->(4)
+ └── filters
+      └── (a:1, b:2) IN ((1, 2),) [outer=(1,2), constraints=(/1/2: [/1/2 - /1/2]; /2: [/2 - /2]; tight), fd=()-->(1,2)]
+
+# The normalized expression above can be explored into a constrained scan.
+opt
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest('{1}'::INT[]),
+         unnest('{2}'::INT[])
+)
+----
+scan abcd
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── constraint: /1/2/3: [/1/2 - /1/2]
+ ├── key: (3)
+ └── fd: ()-->(1,2), (3)-->(4)
+
+assign-placeholders-norm query-args=('{1}','{2}')
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest($1:::STRING::INT[]),
+         unnest($2:::STRING::INT[])
+)
+----
+select
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── key: (3)
+ ├── fd: ()-->(1,2), (3)-->(4)
+ ├── scan abcd
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── key: (1-3)
+ │    └── fd: (1-3)-->(4)
+ └── filters
+      ├── a:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── b:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+
+# We want this query to be optimized into a constrained scan, just like the
+# no-placeholders variant above.
+assign-placeholders-opt query-args=('{1}','{2}')
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest($1:::STRING::INT[]),
+         unnest($2:::STRING::INT[])
+)
+----
+scan abcd
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── constraint: /1/2/3: [/1/2 - /1/2]
+ ├── key: (3)
+ └── fd: ()-->(1,2), (3)-->(4)
+
+# Note: \x2c is a comma; we can't use a comma directly because of the
+# datadriven parser.
+assign-placeholders-norm query-args=('{1\x2c 2}','{3\x2c 4}')
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest($1:::STRING::INT[]),
+         unnest($2:::STRING::INT[])
+)
+----
+semi-join (hash)
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── stable
+ ├── key: (1-3)
+ ├── fd: (1-3)-->(4)
+ ├── scan abcd
+ │    ├── columns: a:1!null b:2!null c:3!null d:4
+ │    ├── key: (1-3)
+ │    └── fd: (1-3)-->(4)
+ ├── project-set
+ │    ├── columns: unnest:6 unnest:7
+ │    ├── stable
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         ├── unnest(e'{1\\x2c 2}'::INT8[]) [stable]
+ │         └── unnest(e'{3\\x2c 4}'::INT8[]) [stable]
+ └── filters
+      ├── unnest:6 = a:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── unnest:7 = b:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+assign-placeholders-opt query-args=('{1\x2c 2}','{3\x2c 4}')
+SELECT * FROM abcd WHERE (a, b) IN (
+  SELECT unnest($1:::STRING::INT[]),
+         unnest($2:::STRING::INT[])
+)
+----
+project
+ ├── columns: a:1!null b:2!null c:3!null d:4
+ ├── stable
+ ├── key: (1-3)
+ ├── fd: (1-3)-->(4)
+ └── inner-join (lookup abcd)
+      ├── columns: a:1!null b:2!null c:3!null d:4 unnest:6!null unnest:7!null
+      ├── key columns: [6 7] = [1 2]
+      ├── stable
+      ├── key: (3,6,7)
+      ├── fd: (1-3)-->(4), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
+      ├── distinct-on
+      │    ├── columns: unnest:6 unnest:7
+      │    ├── grouping columns: unnest:6 unnest:7
+      │    ├── stable
+      │    ├── key: (6,7)
+      │    └── project-set
+      │         ├── columns: unnest:6 unnest:7
+      │         ├── stable
+      │         ├── values
+      │         │    ├── cardinality: [1 - 1]
+      │         │    ├── key: ()
+      │         │    └── ()
+      │         └── zip
+      │              ├── unnest(e'{1\\x2c 2}'::INT8[]) [stable]
+      │              └── unnest(e'{3\\x2c 4}'::INT8[]) [stable]
+      └── filters (true)
