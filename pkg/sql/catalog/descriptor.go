@@ -234,7 +234,7 @@ type TableDescriptor interface {
 	// See also Index.Ordinal().
 	NonDropIndexes() []Index
 
-	// NonDropIndexes returns a slice of all partial indexes in the underlying
+	// PartialIndexes returns a slice of all partial indexes in the underlying
 	// proto, in their canonical order. This is equivalent to taking the slice
 	// produced by AllIndexes and removing indexes with empty expressions.
 	PartialIndexes() []Index

@@ -54,7 +54,7 @@ func partitionByFromTableDescImpl(
 		Range:  make([]tree.RangePartition, 0, part.NumRanges()),
 	}
 	for i := 0; i < part.NumColumns(); i++ {
-		partitionBy.Fields[i] = tree.Name(idx.GetColumnName(colOffset + i))
+		partitionBy.Fields[i] = tree.Name(idx.GetKeyColumnName(colOffset + i))
 	}
 
 	// Copy the LIST of the PARTITION BY clause.

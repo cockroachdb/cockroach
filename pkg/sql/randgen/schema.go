@@ -534,8 +534,8 @@ func TestingMakePrimaryIndexKeyForTenant(
 	desc catalog.TableDescriptor, codec keys.SQLCodec, vals ...interface{},
 ) (roachpb.Key, error) {
 	index := desc.GetPrimaryIndex()
-	if len(vals) > index.NumColumns() {
-		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), index.NumColumns())
+	if len(vals) > index.NumKeyColumns() {
+		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), index.NumKeyColumns())
 	}
 	datums := make([]tree.Datum, len(vals))
 	for i, v := range vals {
@@ -552,7 +552,7 @@ func TestingMakePrimaryIndexKeyForTenant(
 			return nil, errors.Errorf("unexpected value type %T", v)
 		}
 		// Check that the value type matches.
-		colID := index.GetColumnID(i)
+		colID := index.GetKeyColumnID(i)
 		col, _ := desc.FindColumnWithID(colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
@@ -565,7 +565,7 @@ func TestingMakePrimaryIndexKeyForTenant(
 	// MakeIndexKeyPrefix.
 	var colIDToRowIndex catalog.TableColMap
 	for i := range vals {
-		colIDToRowIndex.Set(index.GetColumnID(i), i)
+		colIDToRowIndex.Set(index.GetKeyColumnID(i), i)
 	}
 
 	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc, index.GetID())

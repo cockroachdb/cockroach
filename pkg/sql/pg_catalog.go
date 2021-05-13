@@ -398,8 +398,8 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Columns for each index.
 		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-			for i := 0; i < index.NumColumns(); i++ {
-				colID := index.GetColumnID(i)
+			for i := 0; i < index.NumKeyColumns(); i++ {
+				colID := index.GetKeyColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
 				if err := addColumn(column, idxID, column.GetPGAttributeNum()); err != nil {
@@ -613,7 +613,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				relPersistencePermanent,                  // relPersistence
 				tree.DBoolFalse,                          // relistemp
 				relKindIndex,                             // relkind
-				tree.NewDInt(tree.DInt(index.NumColumns())), // relnatts
+				tree.NewDInt(tree.DInt(index.NumKeyColumns())), // relnatts
 				zeroVal,         // relchecks
 				tree.DBoolFalse, // relhasoids
 				tree.DBoolFalse, // relhaspkey
@@ -752,7 +752,7 @@ func populateTableConstraints(
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 
 			var err error
-			if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+			if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
 				return err
 			}
 			condef = tree.NewDString(table.PrimaryKeyString())
@@ -809,7 +809,7 @@ func populateTableConstraints(
 				oid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
 				conindid = h.IndexOid(table.GetID(), con.Index.ID)
 				var err error
-				if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+				if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
 					return err
 				}
 				f.WriteString("UNIQUE (")
@@ -1460,9 +1460,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					collationOids := tree.NewDArray(types.Oid)
 					indoption := tree.NewDArray(types.Int)
 
-					colIDs := make([]descpb.ColumnID, 0, index.NumColumns())
-					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumColumns(); i++ {
-						columnID := index.GetColumnID(i)
+					colIDs := make([]descpb.ColumnID, 0, index.NumKeyColumns())
+					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
+						columnID := index.GetKeyColumnID(i)
 						colIDs = append(colIDs, columnID)
 						col, err := table.FindColumnWithID(columnID)
 						if err != nil {
@@ -1474,7 +1474,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						// Currently, nulls always appear first if the order is ascending,
 						// and always appear last if the order is descending.
 						var thisIndOption tree.DInt
-						if index.GetColumnDirection(i) == descpb.IndexDescriptor_ASC {
+						if index.GetKeyColumnDirection(i) == descpb.IndexDescriptor_ASC {
 							thisIndOption = indoptionNullsFirst
 						} else {
 							thisIndOption = indoptionDesc
@@ -1485,7 +1485,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 						colIDs = append(colIDs, index.GetStoredColumnID(i))
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
@@ -1569,13 +1569,13 @@ func indexDefFromDescriptor(
 	index catalog.Index,
 	tableLookup tableLookupFn,
 ) (string, error) {
-	colNames := index.IndexDesc().ColumnNames[index.ExplicitColumnStartIdx():]
+	colNames := index.IndexDesc().KeyColumnNames[index.ExplicitColumnStartIdx():]
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.GetName()),
 		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
 		Unique:   index.IsUnique(),
 		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, index.NumStoredColumns()),
+		Storing:  make(tree.NameList, index.NumSecondaryStoredColumns()),
 		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
 	}
 	for i, name := range colNames {
@@ -1583,12 +1583,12 @@ func indexDefFromDescriptor(
 			Column:    tree.Name(name),
 			Direction: tree.Ascending,
 		}
-		if index.GetColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
+		if index.GetKeyColumnDirection(index.ExplicitColumnStartIdx()+i) == descpb.IndexDescriptor_DESC {
 			elem.Direction = tree.Descending
 		}
 		indexDef.Columns[i] = elem
 	}
-	for i := 0; i < index.NumStoredColumns(); i++ {
+	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 		name := index.GetStoredColumnName(i)
 		indexDef.Storing[i] = tree.Name(name)
 	}

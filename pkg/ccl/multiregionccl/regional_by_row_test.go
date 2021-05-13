@@ -428,16 +428,16 @@ USE t;
 										len(tableDesc.AllMutations()),
 									)
 								}
-								if tableDesc.GetPrimaryIndex().NumColumns() != len(testCase.originalPKCols) {
+								if tableDesc.GetPrimaryIndex().NumKeyColumns() != len(testCase.originalPKCols) {
 									return errors.Errorf("expected primary key change to not succeed after cancellation")
 								}
 								for i, name := range testCase.originalPKCols {
-									if tableDesc.GetPrimaryIndex().GetColumnName(i) != name {
+									if tableDesc.GetPrimaryIndex().GetKeyColumnName(i) != name {
 										return errors.Errorf(
 											"expected primary key change to not succeed after cancellation\nmismatch idx %d: exp %s, got %s",
 											i,
 											name,
-											tableDesc.GetPrimaryIndex().GetColumnName(i),
+											tableDesc.GetPrimaryIndex().GetKeyColumnName(i),
 										)
 									}
 								}

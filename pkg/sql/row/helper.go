@@ -137,8 +137,8 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 // #6233). Once it is, use the shared one.
 func (rh *rowHelper) skipColumnInPK(colID descpb.ColumnID, value tree.Datum) (bool, error) {
 	if rh.primaryIndexCols.Empty() {
-		for i := 0; i < rh.TableDesc.GetPrimaryIndex().NumColumns(); i++ {
-			pkColID := rh.TableDesc.GetPrimaryIndex().GetColumnID(i)
+		for i := 0; i < rh.TableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+			pkColID := rh.TableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 			rh.primaryIndexCols.Add(pkColID)
 		}
 	}

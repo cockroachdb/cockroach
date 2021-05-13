@@ -272,20 +272,23 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetShardColumnName", idx.GetName())
 		require.Equal(t, idx == s4, !(&descpb.ShardedDescriptor{}).Equal(idx.GetSharded()),
 			errMsgFmt, "GetSharded", idx.GetName())
-		require.Equalf(t, idx != s3, idx.NumStoredColumns() == 0,
-			errMsgFmt, "NumStoredColumns", idx.GetName())
+		require.Equalf(t, idx != s3, idx.NumSecondaryStoredColumns() == 0,
+			errMsgFmt, "NumSecondaryStoredColumns", idx.GetName())
 	}
 
 	// Check index columns.
 	for i, idx := range indexes {
 		expectedColNames := indexColumns[i]
-		actualColNames := make([]string, idx.NumColumns())
+		actualColNames := make([]string, idx.NumKeyColumns())
+		colIDs := idx.CollectKeyColumnIDs()
+		colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
 		for j := range actualColNames {
-			actualColNames[j] = idx.GetColumnName(j)
-			require.Equalf(t, idx == s1, idx.GetColumnDirection(j) == descpb.IndexDescriptor_DESC,
+			actualColNames[j] = idx.GetKeyColumnName(j)
+			require.Equalf(t, idx == s1, idx.GetKeyColumnDirection(j) == descpb.IndexDescriptor_DESC,
 				"mismatched column directions for index '%s'", idx.GetName())
-			require.True(t, idx.ContainsColumnID(idx.GetColumnID(j)),
-				"column ID resolution failure for column '%s' in index '%s'", idx.GetColumnName(j), idx.GetName())
+			require.True(t, colIDs.Contains(idx.GetKeyColumnID(j)),
+				"column ID resolution failure for column '%s' in index '%s'", idx.GetKeyColumnName(j), idx.GetName())
 		}
 		require.Equalf(t, expectedColNames, actualColNames,
 			"mismatched columns for index '%s'", idx.GetName())
@@ -295,11 +298,11 @@ func TestIndexInterface(t *testing.T) {
 	for i, idx := range indexes {
 		expectedExtraColIDs := make([]descpb.ColumnID, len(extraColumnsAsPkColOrdinals[i]))
 		for j, pkColOrdinal := range extraColumnsAsPkColOrdinals[i] {
-			expectedExtraColIDs[j] = pk.GetColumnID(pkColOrdinal)
+			expectedExtraColIDs[j] = pk.GetKeyColumnID(pkColOrdinal)
 		}
-		actualExtraColIDs := make([]descpb.ColumnID, idx.NumExtraColumns())
+		actualExtraColIDs := make([]descpb.ColumnID, idx.NumKeySuffixColumns())
 		for j := range actualExtraColIDs {
-			actualExtraColIDs[j] = idx.GetExtraColumnID(j)
+			actualExtraColIDs[j] = idx.GetKeySuffixColumnID(j)
 		}
 		require.Equalf(t, expectedExtraColIDs, actualExtraColIDs,
 			"mismatched extra columns for index '%s'", idx.GetName())
@@ -307,10 +310,10 @@ func TestIndexInterface(t *testing.T) {
 
 	// Check particular index column features.
 	require.Equal(t, "c6", s2.InvertedColumnName())
-	require.Equal(t, s2.GetColumnID(0), s2.InvertedColumnID())
+	require.Equal(t, s2.GetKeyColumnID(0), s2.InvertedColumnID())
 	require.Equal(t, "c7", s6.InvertedColumnName())
-	require.Equal(t, s6.GetColumnID(0), s6.InvertedColumnID())
-	require.Equal(t, 2, s3.NumStoredColumns())
+	require.Equal(t, s6.GetKeyColumnID(0), s6.InvertedColumnID())
+	require.Equal(t, 2, s3.NumSecondaryStoredColumns())
 	require.Equal(t, "c5", s3.GetStoredColumnName(0))
 	require.Equal(t, "c6", s3.GetStoredColumnName(1))
 }
@@ -340,12 +343,12 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	// index while still passing validation.
 	mut := catalogkv.TestingGetMutableExistingTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
 	idx := &mut.Indexes[0]
-	id := idx.ColumnIDs[0]
-	name := idx.ColumnNames[0]
+	id := idx.KeyColumnIDs[0]
+	name := idx.KeyColumnNames[0]
 	idx.Version = descpb.EmptyArraysInInvertedIndexesVersion
 	idx.StoreColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
 	idx.StoreColumnNames = append([]string{}, name, name, name, name)
-	idx.ExtraColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
+	idx.KeySuffixColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
 	mut.Version++
 	require.NoError(t, catalog.ValidateSelf(mut))
 
@@ -379,7 +382,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	// considered invalid.
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	require.EqualError(t, catalog.ValidateSelf(mut),
-		`relation "t" (53): index "sec" has duplicates in ExtraColumnIDs: [2 2 2 2]`)
+		`relation "t" (53): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`)
 
 	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
 	require.NoError(t, err)

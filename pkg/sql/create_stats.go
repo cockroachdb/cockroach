@@ -362,9 +362,9 @@ func createStatsDefaultColumns(
 	}
 
 	// Add column stats for the primary key.
-	for i := 0; i < desc.GetPrimaryIndex().NumColumns(); i++ {
+	for i := 0; i < desc.GetPrimaryIndex().NumKeyColumns(); i++ {
 		// Generate stats for each column in the primary key.
-		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().GetColumnID(i), false /* isInverted */)
+		addIndexColumnStatsIfNotExists(desc.GetPrimaryIndex().GetKeyColumnID(i), false /* isInverted */)
 
 		// Only collect multi-column stats if enabled.
 		if i == 0 || !multiColEnabled {
@@ -373,7 +373,7 @@ func createStatsDefaultColumns(
 
 		colIDs := make([]descpb.ColumnID, i+1)
 		for j := 0; j <= i; j++ {
-			colIDs[j] = desc.GetPrimaryIndex().GetColumnID(j)
+			colIDs[j] = desc.GetPrimaryIndex().GetKeyColumnID(j)
 		}
 
 		// Remember the requested stats so we don't request duplicates.
@@ -388,8 +388,8 @@ func createStatsDefaultColumns(
 
 	// Add column stats for each secondary index.
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
-		for j, n := 0, idx.NumColumns(); j < n; j++ {
-			colID := idx.GetColumnID(j)
+		for j, n := 0, idx.NumKeyColumns(); j < n; j++ {
+			colID := idx.GetKeyColumnID(j)
 			isInverted := idx.GetType() == descpb.IndexDescriptor_INVERTED && colID == idx.InvertedColumnID()
 
 			// Generate stats for each indexed column.
@@ -402,7 +402,7 @@ func createStatsDefaultColumns(
 
 			colIDs := make([]descpb.ColumnID, j+1)
 			for k := 0; k <= j; k++ {
-				colIDs[k] = idx.GetColumnID(k)
+				colIDs[k] = idx.GetKeyColumnID(k)
 			}
 
 			// Check for existing stats and remember the requested stats.

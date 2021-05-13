@@ -61,11 +61,11 @@ func TestMessageToJSONBRoundTrip(t *testing.T) {
 		{ // Message with an array and other embedded descriptors
 			pbname: "cockroach.sql.sqlbase.IndexDescriptor",
 			message: &descpb.IndexDescriptor{
-				Name:             "myidx",
-				ID:               500,
-				Unique:           true,
-				ColumnNames:      []string{"foo", "bar", "buz"},
-				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				Name:                "myidx",
+				ID:                  500,
+				Unique:              true,
+				KeyColumnNames:      []string{"foo", "bar", "buz"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				GeoConfig: geoindex.Config{
 					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
 						MinLevel: 123,

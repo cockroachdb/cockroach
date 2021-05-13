@@ -190,7 +190,7 @@ func newJoinReader(
 	tableDesc := spec.BuildTableDescriptor()
 	switch readerType {
 	case indexJoinReaderType:
-		lookupCols = make([]uint32, tableDesc.GetPrimaryIndex().NumColumns())
+		lookupCols = make([]uint32, tableDesc.GetPrimaryIndex().NumKeyColumns())
 		for i := range lookupCols {
 			lookupCols[i] = uint32(i)
 		}
@@ -292,10 +292,7 @@ func newJoinReader(
 
 	rightCols := jr.neededRightCols()
 	if isSecondary {
-		set, err := getIndexColSet(jr.index, jr.colIdxMap)
-		if err != nil {
-			return nil, err
-		}
+		set := getIndexColSet(jr.index, jr.colIdxMap)
 		if !rightCols.SubsetOf(set) {
 			return nil, errors.Errorf("joinreader index does not cover all columns")
 		}
@@ -438,13 +435,17 @@ func (jr *joinReader) initJoinReaderStrategy(
 }
 
 // getIndexColSet returns a set of all column indices for the given index.
-func getIndexColSet(index catalog.Index, colIdxMap catalog.TableColMap) (util.FastIntSet, error) {
+func getIndexColSet(index catalog.Index, colIdxMap catalog.TableColMap) util.FastIntSet {
 	cols := util.MakeFastIntSet()
-	err := index.ForEachColumnID(func(id descpb.ColumnID) error {
-		cols.Add(colIdxMap.GetDefault(id))
-		return nil
-	})
-	return cols, err
+	{
+		colIDs := index.CollectKeyColumnIDs()
+		colIDs.UnionWith(index.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
+		colIDs.ForEach(func(colID descpb.ColumnID) {
+			cols.Add(colIdxMap.GetDefault(colID))
+		})
+	}
+	return cols
 }
 
 // SetBatchSizeBytes sets the desired batch size. It should only be used in tests.

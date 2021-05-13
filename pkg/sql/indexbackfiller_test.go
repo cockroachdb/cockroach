@@ -236,16 +236,16 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					ID:      mut.NextIndexID,
 					Unique:  true,
 					Version: descpb.StrictIndexColumnIDGuaranteesVersion,
-					ColumnNames: []string{
+					KeyColumnNames: []string{
 						mut.Columns[2].Name,
 					},
-					ColumnDirections: []descpb.IndexDescriptor_Direction{
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 						descpb.IndexDescriptor_ASC,
 					},
-					ColumnIDs: []descpb.ColumnID{
+					KeyColumnIDs: []descpb.ColumnID{
 						mut.Columns[2].ID,
 					},
-					ExtraColumnIDs: []descpb.ColumnID{
+					KeySuffixColumnIDs: []descpb.ColumnID{
 						mut.Columns[0].ID,
 					},
 					Type:         descpb.IndexDescriptor_FORWARD,
@@ -313,20 +313,20 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ID:      mut.NextIndexID,
 					Unique:  true,
 					Version: descpb.StrictIndexColumnIDGuaranteesVersion,
-					ColumnNames: []string{
+					KeyColumnNames: []string{
 						mut.Columns[0].Name,
 					},
-					ColumnDirections: []descpb.IndexDescriptor_Direction{
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{
 						descpb.IndexDescriptor_ASC,
 					},
 					StoreColumnNames: []string{
 						columnWithDefault.Name,
 						computedColumnNotInPrimaryIndex.Name,
 					},
-					ColumnIDs: []descpb.ColumnID{
+					KeyColumnIDs: []descpb.ColumnID{
 						mut.Columns[0].ID,
 					},
-					ExtraColumnIDs: nil,
+					KeySuffixColumnIDs: nil,
 					StoreColumnIDs: []descpb.ColumnID{
 						columnWithDefault.ID,
 						computedColumnNotInPrimaryIndex.ID,
@@ -360,16 +360,21 @@ INSERT INTO foo VALUES (1), (10), (100);
 		idx, err := table.FindIndexWithID(indexID)
 		colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		var valsNeeded util.FastIntSet
-		if idx.Primary() {
-			for _, column := range table.PublicColumns() {
-				if !column.IsVirtual() {
-					valsNeeded.Add(colIdxMap.GetDefault(column.GetID()))
+		{
+			colIDsNeeded := idx.CollectKeyColumnIDs()
+			if idx.Primary() {
+				for _, column := range table.PublicColumns() {
+					if !column.IsVirtual() {
+						colIDsNeeded.Add(column.GetID())
+					}
 				}
+			} else {
+				colIDsNeeded.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+				colIDsNeeded.UnionWith(idx.CollectKeySuffixColumnIDs())
 			}
-		} else {
-			_ = idx.ForEachColumnID(func(id descpb.ColumnID) error {
-				valsNeeded.Add(colIdxMap.GetDefault(id))
-				return nil
+
+			colIDsNeeded.ForEach(func(colID descpb.ColumnID) {
+				valsNeeded.Add(colIdxMap.GetDefault(colID))
 			})
 		}
 		require.NoError(t, err)

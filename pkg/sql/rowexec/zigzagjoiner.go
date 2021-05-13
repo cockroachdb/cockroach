@@ -520,8 +520,8 @@ func (z *zigzagJoiner) close() {
 }
 
 func findColumnOrdinalInIndex(index catalog.Index, t descpb.ColumnID) int {
-	for i := 0; i < index.NumColumns(); i++ {
-		if index.GetColumnID(i) == t {
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		if index.GetKeyColumnID(i) == t {
 			return i
 		}
 	}
@@ -592,12 +592,12 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		}
 
 		decodedDatums[i] = encDatum.Datum
-		if i < info.index.NumColumns() {
-			colMap.Set(info.index.GetColumnID(i), i)
+		if i < info.index.NumKeyColumns() {
+			colMap.Set(info.index.GetKeyColumnID(i), i)
 		} else {
 			// This column's value will be encoded in the second part (i.e.
 			// EncodeColumns).
-			colMap.Set(info.index.GetExtraColumnID(i-info.index.NumColumns()), i)
+			colMap.Set(info.index.GetKeySuffixColumnID(i-info.index.NumKeyColumns()), i)
 		}
 	}
 
@@ -625,7 +625,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 
 	// Append remaining (non-JSON) datums to the key.
 	keyBytes, _, err := rowenc.EncodeColumns(
-		info.index.IndexDesc().ExtraColumnIDs[:len(datums)-1],
+		info.index.IndexDesc().KeySuffixColumnIDs[:len(datums)-1],
 		info.indexDirs[1:],
 		colMap,
 		decodedDatums,
@@ -675,12 +675,12 @@ func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
 		var direction encoding.Direction
 		var err error
 		if idx := findColumnOrdinalInIndex(zi.index, colID); idx != -1 {
-			direction, err = zi.index.GetColumnDirection(idx).ToEncodingDirection()
+			direction, err = zi.index.GetKeyColumnDirection(idx).ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}
 		} else if idx := findColumnOrdinalInIndex(zi.table.GetPrimaryIndex(), colID); idx != -1 {
-			direction, err = zi.table.GetPrimaryIndex().GetColumnDirection(idx).ToEncodingDirection()
+			direction, err = zi.table.GetPrimaryIndex().GetKeyColumnDirection(idx).ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}

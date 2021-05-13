@@ -415,7 +415,7 @@ func showCreateInterleave(
 	fmtCtx.FormatNode(&parentName)
 	buf.WriteString(fmtCtx.CloseAndGetString())
 	buf.WriteString(" (")
-	formatQuoteNames(buf, idx.IndexDesc().ColumnNames[:sharedPrefixLen]...)
+	formatQuoteNames(buf, idx.IndexDesc().KeyColumnNames[:sharedPrefixLen]...)
 	buf.WriteString(")")
 	return nil
 }
@@ -479,7 +479,7 @@ func ShowCreatePartitioning(
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idx.GetColumnName(colOffset + i))
+		buf.WriteString(idx.GetKeyColumnName(colOffset + i))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)

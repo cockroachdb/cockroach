@@ -45,7 +45,7 @@ func IndexForDisplay(
 	interleave string,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
-	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), partition, interleave, semaCtx)
+	return indexForDisplay(ctx, table, tableName, index.IndexDesc(), index.Primary(), partition, interleave, semaCtx)
 }
 
 func indexForDisplay(
@@ -53,6 +53,7 @@ func indexForDisplay(
 	table catalog.TableDescriptor,
 	tableName *tree.TableName,
 	index *descpb.IndexDescriptor,
+	isPrimary bool,
 	partition string,
 	interleave string,
 	semaCtx *tree.SemaContext,
@@ -79,7 +80,7 @@ func indexForDisplay(
 			index.Sharded.ShardBuckets)
 	}
 
-	if len(index.StoreColumnNames) > 0 {
+	if !isPrimary && len(index.StoreColumnNames) > 0 {
 		f.WriteString(" STORING (")
 		for i := range index.StoreColumnNames {
 			if i > 0 {

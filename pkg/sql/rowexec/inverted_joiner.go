@@ -446,7 +446,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
 					ij.indexRow[:len(ij.prefixEqualityCols)],
 					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-					ij.index.IndexDesc().ColumnDirections,
+					ij.index.IndexDesc().KeyColumnDirections,
 					ij.desc,
 					ij.index,
 					&ij.alloc,
@@ -540,7 +540,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
 				ij.indexRow[:len(ij.prefixEqualityCols)],
 				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-				ij.index.IndexDesc().ColumnDirections,
+				ij.index.IndexDesc().KeyColumnDirections,
 				ij.desc,
 				ij.index,
 				&ij.alloc,
