@@ -197,9 +197,8 @@ func (p partitionerBool) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -303,9 +302,8 @@ func (p partitionerBool) partition(colVec coldata.Vec, outputCol []bool, n int) 
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -368,7 +366,7 @@ func (p partitionerBytes) partitionWithOrder(
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal = append(lastVal[:0], v...)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -394,9 +392,8 @@ func (p partitionerBytes) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = append(lastVal[:0], v...)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -455,7 +452,7 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal = append(lastVal[:0], v...)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -484,9 +481,8 @@ func (p partitionerBytes) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = append(lastVal[:0], v...)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -549,7 +545,7 @@ func (p partitionerDecimal) partitionWithOrder(
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal.Set(&v)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -575,9 +571,8 @@ func (p partitionerDecimal) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal.Set(&v)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -636,7 +631,7 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 
 							outputCol[outputIdx] = outputCol[outputIdx] || unique
 						}
-						lastVal.Set(&v)
+						lastVal = v
 					}
 					{
 						__retval_lastVal = lastVal
@@ -665,9 +660,8 @@ func (p partitionerDecimal) partition(colVec coldata.Vec, outputCol []bool, n in
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal.Set(&v)
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -778,9 +772,8 @@ func (p partitionerInt16) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -890,9 +883,8 @@ func (p partitionerInt16) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1003,9 +995,8 @@ func (p partitionerInt32) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1115,9 +1106,8 @@ func (p partitionerInt32) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1228,9 +1218,8 @@ func (p partitionerInt64) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1340,9 +1329,8 @@ func (p partitionerInt64) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1469,9 +1457,8 @@ func (p partitionerFloat64) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1597,9 +1584,8 @@ func (p partitionerFloat64) partition(colVec coldata.Vec, outputCol []bool, n in
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1702,9 +1688,8 @@ func (p partitionerTimestamp) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1806,9 +1791,8 @@ func (p partitionerTimestamp) partition(colVec coldata.Vec, outputCol []bool, n 
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1897,9 +1881,8 @@ func (p partitionerInterval) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -1987,9 +1970,8 @@ func (p partitionerInterval) partition(colVec coldata.Vec, outputCol []bool, n i
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -2082,9 +2064,8 @@ func (p partitionerDatum) partitionWithOrder(
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
@@ -2176,9 +2157,8 @@ func (p partitionerDatum) partition(colVec coldata.Vec, outputCol []bool, n int)
 					}
 
 					outputCol[outputIdx] = outputCol[outputIdx] || unique
-					lastVal = v
 					{
-						__retval_0 = lastVal
+						__retval_0 = v
 					}
 				}
 				lastVal = __retval_0
