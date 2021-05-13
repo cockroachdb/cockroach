@@ -316,8 +316,9 @@ ORDER BY
 				continue
 			}
 			currentCols = append(currentCols, &tree.ColumnTableDef{
-				Name: tree.Name(col.Name),
-				Type: col.Type,
+				Name:   tree.Name(col.Name),
+				Type:   col.Type,
+				Hidden: true,
 			})
 		}
 		tableName := tree.MakeTableNameWithSchema(lastCatalog, lastSchema, lastName)
