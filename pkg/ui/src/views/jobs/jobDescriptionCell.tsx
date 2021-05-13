@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Tooltip } from "src/components";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 
 export class JobDescriptionCell extends React.PureComponent<{ job: Job }> {

@@ -10,7 +10,7 @@
 
 import React from "react";
 import { jobStatusToBadgeStatus } from "src/views/jobs/jobStatusOptions";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 import { Badge } from "src/components";
 import { Line } from "rc-progress";
