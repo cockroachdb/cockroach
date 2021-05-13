@@ -386,7 +386,11 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx,
 				mockRestoreDataSpec)
 			require.NoError(t, err)
-			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(restoreSpanEntry)
+			entryIters := make(chan entryIterator, 1)
+			require.NoError(t, mockRestoreDataProcessor.openIterators(restoreSpanEntry, entryIters))
+			close(entryIters)
+			entryIter := <-entryIters
+			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(entryIter)
 			require.NoError(t, err)
 
 			clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
