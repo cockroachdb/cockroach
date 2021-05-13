@@ -131,10 +131,7 @@ func joinRelativePath(filePath string, file string) string {
 func (l *localFileStorage) Writer(
 	ctx context.Context, basename string,
 ) (cloud.WriteCloserWithError, error) {
-	// TODO(dt): don't need this pipe.
-	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
-		return l.blobClient.WriteFile(ctx, joinRelativePath(l.base, basename), r)
-	}), nil
+	return l.blobClient.Writer(ctx, joinRelativePath(l.base, basename))
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
