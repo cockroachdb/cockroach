@@ -154,12 +154,15 @@ type Index interface {
 	GetColumnName(columnOrdinal int) string
 	GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
 
-	ForEachColumnID(func(id descpb.ColumnID) error) error
-	ContainsColumnID(colID descpb.ColumnID) bool
+	CollectColumnIDs() TableColSet
+	CollectSecondaryStoredColumnIDs() TableColSet
+	CollectExtraColumnIDs() TableColSet
+	CollectCompositeColumnIDs() TableColSet
+
 	InvertedColumnID() descpb.ColumnID
 	InvertedColumnName() string
 
-	NumStoredColumns() int
+	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
 	GetStoredColumnName(storedColumnOrdinal int) string
 	HasOldStoredColumns() bool

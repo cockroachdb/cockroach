@@ -523,3 +523,19 @@ func FindVirtualColumn(
 	*virtualColumn.ColumnDesc() = *virtualColDesc
 	return virtualColumn
 }
+
+// PopulateStoreColumns populates the store column IDs and names slices with all
+// non-virtual public columns in the table which aren't already in the index.
+func PopulateStoreColumns(idx *descpb.IndexDescriptor, tbl catalog.TableDescriptor) {
+	idx.StoreColumnNames, idx.StoreColumnIDs = nil, nil
+	publicColumns := tbl.PublicColumns()
+	presentInIndex := catalog.MakeTableColSet(idx.ColumnIDs...)
+	for _, col := range publicColumns {
+		// We do not store virtual columns.
+		if col.IsVirtual() || presentInIndex.Contains(col.GetID()) {
+			continue
+		}
+		idx.StoreColumnIDs = append(idx.StoreColumnIDs, col.GetID())
+		idx.StoreColumnNames = append(idx.StoreColumnNames, col.GetName())
+	}
+}

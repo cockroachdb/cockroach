@@ -899,84 +899,83 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
-	for _, indexI := range desc.NonDropIndexes() {
-		index := indexI.IndexDesc()
-		if err := catalog.ValidateName(index.Name, "index"); err != nil {
+	for _, idx := range desc.NonDropIndexes() {
+		if err := catalog.ValidateName(idx.GetName(), "index"); err != nil {
 			return err
 		}
-		if index.ID == 0 {
-			return fmt.Errorf("invalid index ID %d", index.ID)
+		if idx.GetID() == 0 {
+			return fmt.Errorf("invalid index ID %d", idx.GetID())
 		}
 
-		if _, indexNameExists := indexNames[index.Name]; indexNameExists {
+		if _, indexNameExists := indexNames[idx.GetName()]; indexNameExists {
 			for i := range desc.Indexes {
-				if desc.Indexes[i].Name == index.Name {
+				if desc.Indexes[i].Name == idx.GetName() {
 					// This error should be caught in MakeIndexDescriptor or NewTableDesc.
-					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", index.Name))
+					return errors.HandleAsAssertionFailure(fmt.Errorf("duplicate index name: %q", idx.GetName()))
 				}
 			}
 			// This error should be caught in MakeIndexDescriptor.
 			return errors.HandleAsAssertionFailure(fmt.Errorf(
-				"duplicate: index %q in the middle of being added, not yet public", index.Name))
+				"duplicate: index %q in the middle of being added, not yet public", idx.GetName()))
 		}
-		indexNames[index.Name] = struct{}{}
+		indexNames[idx.GetName()] = struct{}{}
 
-		if other, ok := indexIDs[index.ID]; ok {
+		if other, ok := indexIDs[idx.GetID()]; ok {
 			return fmt.Errorf("index %q duplicate ID of index %q: %d",
-				index.Name, other, index.ID)
+				idx.GetName(), other, idx.GetID())
 		}
-		indexIDs[index.ID] = index.Name
+		indexIDs[idx.GetID()] = idx.GetName()
 
-		if index.ID >= desc.NextIndexID {
+		if idx.GetID() >= desc.NextIndexID {
 			return fmt.Errorf("index %q invalid index ID (%d) > next index ID (%d)",
-				index.Name, index.ID, desc.NextIndexID)
+				idx.GetName(), idx.GetID(), desc.NextIndexID)
 		}
 
-		if len(index.ColumnIDs) != len(index.ColumnNames) {
+		if len(idx.IndexDesc().ColumnIDs) != len(idx.IndexDesc().ColumnNames) {
 			return fmt.Errorf("mismatched column IDs (%d) and names (%d)",
-				len(index.ColumnIDs), len(index.ColumnNames))
+				len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnNames))
 		}
-		if len(index.ColumnIDs) != len(index.ColumnDirections) {
+		if len(idx.IndexDesc().ColumnIDs) != len(idx.IndexDesc().ColumnDirections) {
 			return fmt.Errorf("mismatched column IDs (%d) and directions (%d)",
-				len(index.ColumnIDs), len(index.ColumnDirections))
+				len(idx.IndexDesc().ColumnIDs), len(idx.IndexDesc().ColumnDirections))
 		}
 		// In the old STORING encoding, stored columns are in ExtraColumnIDs;
 		// tolerate a longer list of column names.
-		if len(index.StoreColumnIDs) > len(index.StoreColumnNames) {
+		if len(idx.IndexDesc().StoreColumnIDs) > len(idx.IndexDesc().StoreColumnNames) {
 			return fmt.Errorf("mismatched STORING column IDs (%d) and names (%d)",
-				len(index.StoreColumnIDs), len(index.StoreColumnNames))
+				len(idx.IndexDesc().StoreColumnIDs), len(idx.IndexDesc().StoreColumnNames))
 		}
 
-		if len(index.ColumnIDs) == 0 {
-			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
+		if len(idx.IndexDesc().ColumnIDs) == 0 {
+			return fmt.Errorf("index %q must contain at least 1 column", idx.GetName())
 		}
 
 		var validateIndexDup catalog.TableColSet
-		for i, name := range index.ColumnNames {
+		for i, name := range idx.IndexDesc().ColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
-				return fmt.Errorf("index %q contains unknown column %q", index.Name, name)
+				return fmt.Errorf("index %q contains unknown column %q", idx.GetName(), name)
 			}
-			if colID != index.ColumnIDs[i] {
+			if colID != idx.IndexDesc().ColumnIDs[i] {
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
-					index.Name, name, colID, index.ColumnIDs[i])
+					idx.GetName(), name, colID, idx.IndexDesc().ColumnIDs[i])
 			}
 			if validateIndexDup.Contains(colID) {
-				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
+				return fmt.Errorf("index %q contains duplicate column %q", idx.GetName(), name)
 			}
 			validateIndexDup.Add(colID)
 		}
-		if index.IsSharded() {
-			if err := desc.ensureShardedIndexNotComputed(index); err != nil {
+		if idx.IsSharded() {
+			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
 			}
-			if _, exists := columnNames[index.Sharded.Name]; !exists {
+			if _, exists := columnNames[idx.GetSharded().Name]; !exists {
 				return fmt.Errorf("index %q refers to non-existent shard column %q",
-					index.Name, index.Sharded.Name)
+					idx.GetName(), idx.GetSharded().Name)
 			}
 		}
-		if index.IsPartial() {
-			expr, err := parser.ParseExpr(index.Predicate)
+		if idx.IsPartial() {
+			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -986,22 +985,63 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 			if !valid {
 				return fmt.Errorf("partial index %q refers to unknown columns in predicate: %s",
-					index.Name, index.Predicate)
+					idx.GetName(), idx.GetPredicate())
 			}
 		}
 		// Ensure that indexes do not STORE virtual columns.
-		for _, col := range index.ExtraColumnIDs {
+		for _, col := range idx.IndexDesc().ExtraColumnIDs {
 			if virtualCols.Contains(col) {
-				return fmt.Errorf("index %q cannot store virtual column %d", index.Name, col)
+				return fmt.Errorf("index %q cannot store virtual column %d", idx.GetName(), col)
 			}
 		}
-		for i, col := range index.StoreColumnIDs {
+		for i, col := range idx.IndexDesc().StoreColumnIDs {
 			if virtualCols.Contains(col) {
-				return fmt.Errorf("index %q cannot store virtual column %q", index.Name, index.StoreColumnNames[i])
+				return fmt.Errorf("index %q cannot store virtual column %q",
+					idx.GetName(), idx.IndexDesc().StoreColumnNames[i])
+			}
+		}
+		// Ensure that index column ID subsets are well formed.
+		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
+			continue
+		}
+		allIDs := catalog.MakeTableColSet()
+		sets := map[string]catalog.TableColSet{}
+		for _, s := range []struct {
+			name  string
+			slice []descpb.ColumnID
+		}{
+			{"ColumnIDs", idx.IndexDesc().ColumnIDs},
+			{"StoreColumnIDs", idx.IndexDesc().StoreColumnIDs},
+			{"ExtraColumnIDs", idx.IndexDesc().ExtraColumnIDs}} {
+			set := catalog.MakeTableColSet(s.slice...)
+			sets[s.name] = set
+			if set.Len() == 0 {
+				continue
+			}
+			if set.Ordered()[0] <= 0 {
+				return errors.AssertionFailedf("index %q contains invalid column ID %d in %s",
+					idx.GetName(), set.Ordered()[0], s.slice)
+			}
+			if set.Len() < len(s.slice) {
+				return errors.AssertionFailedf("index %q has duplicates in %s: %v",
+					idx.GetName(), s.name, s.slice)
+			}
+			allIDs.UnionWith(set)
+		}
+		foundIn := make([]string, 0, len(sets))
+		for _, colID := range allIDs.Ordered() {
+			foundIn = foundIn[:0]
+			for name, set := range sets {
+				if set.Contains(colID) {
+					foundIn = append(foundIn, name)
+				}
+			}
+			if len(foundIn) > 1 {
+				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
+					idx.GetName(), colID, foundIn)
 			}
 		}
 	}
-
 	return nil
 }
 

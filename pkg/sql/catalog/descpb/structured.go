@@ -66,6 +66,10 @@ const (
 	// InterleavedFormatVersion corresponds to the encoding described in
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
 	InterleavedFormatVersion
+	// StrictIndexFormatVersion is the same encoding as above but with additional
+	// uniqueness and non-overlap guarantees enforced on the column IDs in table
+	// indexes.
+	StrictIndexFormatVersion
 )
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
@@ -104,6 +108,12 @@ const (
 	// that is identical to SecondaryIndexFamilyFormatVersion, but also includes a key encoding
 	// for empty arrays in array inverted indexes.
 	EmptyArraysInInvertedIndexesVersion
+	// StrictIndexColumnIDGuaranteesVersion corresponds to the encoding of
+	// secondary indexes that is identical to EmptyArraysInInvertedIndexesVersion,
+	// but also includes guarantees on the column ID slices in the index:
+	// each column ID in the ColumnIDs, StoreColumnIDs and ExtraColumnIDs slices
+	// are unique within each slice, and the slices form disjoint sets.
+	StrictIndexColumnIDGuaranteesVersion
 )
 
 // ColumnID is a custom type for ColumnDescriptor IDs.

@@ -334,6 +334,9 @@ const (
 	// SerializeViewUDTs serializes user defined types used in views to allow
 	// for renaming of the referenced types.
 	SerializeViewUDTs
+	// StrictIndexColumnIDGuarantees adds extra validation on the column IDs
+	// inside a descpb.IndexDescriptor.
+	StrictIndexColumnIDGuarantees
 
 	// Step (1): Add new versions here.
 )
@@ -555,10 +558,13 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     AcquisitionTypeInLeaseHistory,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 6},
 	},
-
 	{
 		Key:     SerializeViewUDTs,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     StrictIndexColumnIDGuarantees,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 10},
 	},
 	// Step (2): Add new versions here.
 })

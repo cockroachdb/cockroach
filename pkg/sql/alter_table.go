@@ -507,7 +507,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if n.tableDesc.GetPrimaryIndex().ContainsColumnID(colToDrop.GetID()) {
+			if n.tableDesc.GetPrimaryIndex().CollectColumnIDs().Contains(colToDrop.GetID()) {
 				return pgerror.Newf(pgcode.InvalidColumnReference,
 					"column %q is referenced by the primary key", colToDrop.GetName())
 			}
@@ -530,7 +530,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if !containsThisColumn {
 					for j := 0; j < idx.NumExtraColumns(); j++ {
 						id := idx.GetExtraColumnID(j)
-						if n.tableDesc.GetPrimaryIndex().ContainsColumnID(id) {
+						if n.tableDesc.GetPrimaryIndex().CollectColumnIDs().Contains(id) {
 							// All secondary indices necessary contain the PK
 							// columns, too. (See the comments on the definition of
 							// IndexDescriptor). The presence of a PK column in the
@@ -548,7 +548,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					// The loop above this comment is for the old STORING encoding. The
 					// loop below is for the new encoding (where the STORING columns are
 					// always in the value part of a KV).
-					for j := 0; j < idx.NumStoredColumns(); j++ {
+					for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
 						if idx.GetStoredColumnID(j) == colToDrop.GetID() {
 							containsThisColumn = true
 							break
@@ -1051,9 +1051,11 @@ func addIndexMutationWithSpecificPrimaryKey(
 		return err
 	}
 	// Use the columns in the given primary index to construct this indexes ExtraColumnIDs list.
+	presentColIDs := catalog.MakeTableColSet(toAdd.ColumnIDs...)
+	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
 	toAdd.ExtraColumnIDs = nil
 	for _, colID := range primary.ColumnIDs {
-		if !toAdd.ContainsColumnID(colID) {
+		if !presentColIDs.Contains(colID) {
 			toAdd.ExtraColumnIDs = append(toAdd.ExtraColumnIDs, colID)
 		}
 	}
@@ -1155,7 +1157,7 @@ func applyColumnMutation(
 		}
 
 		// Prevent a column in a primary key from becoming non-null.
-		if tableDesc.GetPrimaryIndex().ContainsColumnID(col.GetID()) {
+		if tableDesc.GetPrimaryIndex().CollectColumnIDs().Contains(col.GetID()) {
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.GetName())
 		}

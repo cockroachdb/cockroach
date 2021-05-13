@@ -1485,7 +1485,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					// indnkeyatts is the number of attributes without INCLUDED columns.
 					indnkeyatts := len(colIDs)
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 						colIDs = append(colIDs, index.GetStoredColumnID(i))
 					}
 					// indnatts is the number of attributes with INCLUDED columns.
@@ -1575,7 +1575,7 @@ func indexDefFromDescriptor(
 		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
 		Unique:   index.IsUnique(),
 		Columns:  make(tree.IndexElemList, len(colNames)),
-		Storing:  make(tree.NameList, index.NumStoredColumns()),
+		Storing:  make(tree.NameList, index.NumSecondaryStoredColumns()),
 		Inverted: index.GetType() == descpb.IndexDescriptor_INVERTED,
 	}
 	for i, name := range colNames {
@@ -1588,7 +1588,7 @@ func indexDefFromDescriptor(
 		}
 		indexDef.Columns[i] = elem
 	}
-	for i := 0; i < index.NumStoredColumns(); i++ {
+	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 		name := index.GetStoredColumnName(i)
 		indexDef.Storing[i] = tree.Name(name)
 	}

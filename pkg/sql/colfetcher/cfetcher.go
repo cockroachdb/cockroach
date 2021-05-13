@@ -569,10 +569,13 @@ func (rf *cFetcher) Init(
 	}
 
 	if table.isSecondaryIndex {
+		colIDs := table.index.CollectColumnIDs()
+		colIDs.UnionWith(table.index.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(table.index.CollectExtraColumnIDs())
 		for i := range colDescriptors {
 			//gcassert:bce
 			id := colDescriptors[i].GetID()
-			if neededCols.Contains(int(id)) && !table.index.ContainsColumnID(id) {
+			if neededCols.Contains(int(id)) && !colIDs.Contains(id) {
 				return errors.Errorf("requested column %s not in index", colDescriptors[i].GetName())
 			}
 		}

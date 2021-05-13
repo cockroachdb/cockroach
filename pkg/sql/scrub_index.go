@@ -88,21 +88,21 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		colToIdx.Set(colID, -1)
 	}
 
-	maybeAddOtherCol := func(colID descpb.ColumnID) error {
-		pos := colToIdx.GetDefault(colID)
-		if pos == -1 {
-			// Skip PK column.
-			return nil
-		}
-		col := o.tableDesc.PublicColumns()[pos]
-		otherColumns = append(otherColumns, col)
-		return nil
-	}
-
 	// Collect all of the columns we are fetching from the index. This
 	// includes the columns involved in the index: columns, extra columns,
 	// and store columns.
-	_ = o.index.ForEachColumnID(maybeAddOtherCol)
+	colIDs := catalog.TableColSet{}
+	colIDs.UnionWith(o.index.CollectColumnIDs())
+	colIDs.UnionWith(o.index.CollectSecondaryStoredColumnIDs())
+	colIDs.UnionWith(o.index.CollectExtraColumnIDs())
+	colIDs.ForEach(func(colID descpb.ColumnID) {
+		pos := colToIdx.GetDefault(colID)
+		if pos == -1 {
+			return
+		}
+		col := o.tableDesc.PublicColumns()[pos]
+		otherColumns = append(otherColumns, col)
+	})
 
 	colNames := func(cols []catalog.Column) []string {
 		res := make([]string, len(cols))

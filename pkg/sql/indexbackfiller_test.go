@@ -235,7 +235,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					Name:    "virtual_column_backed_index",
 					ID:      mut.NextIndexID,
 					Unique:  true,
-					Version: descpb.EmptyArraysInInvertedIndexesVersion,
+					Version: descpb.StrictIndexColumnIDGuaranteesVersion,
 					ColumnNames: []string{
 						mut.Columns[2].Name,
 					},
@@ -312,7 +312,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					Name:    "new_primary_index",
 					ID:      mut.NextIndexID,
 					Unique:  true,
-					Version: descpb.EmptyArraysInInvertedIndexesVersion,
+					Version: descpb.StrictIndexColumnIDGuaranteesVersion,
 					ColumnNames: []string{
 						mut.Columns[0].Name,
 					},
@@ -360,16 +360,21 @@ INSERT INTO foo VALUES (1), (10), (100);
 		idx, err := table.FindIndexWithID(indexID)
 		colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		var valsNeeded util.FastIntSet
-		if idx.Primary() {
-			for _, column := range table.PublicColumns() {
-				if !column.IsVirtual() {
-					valsNeeded.Add(colIdxMap.GetDefault(column.GetID()))
+		{
+			colIDsNeeded := idx.CollectColumnIDs()
+			if idx.Primary() {
+				for _, column := range table.PublicColumns() {
+					if !column.IsVirtual() {
+						colIDsNeeded.Add(column.GetID())
+					}
 				}
+			} else {
+				colIDsNeeded.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+				colIDsNeeded.UnionWith(idx.CollectExtraColumnIDs())
 			}
-		} else {
-			_ = idx.ForEachColumnID(func(id descpb.ColumnID) error {
-				valsNeeded.Add(colIdxMap.GetDefault(id))
-				return nil
+
+			colIDsNeeded.ForEach(func(colID descpb.ColumnID) {
+				valsNeeded.Add(colIdxMap.GetDefault(colID))
 			})
 		}
 		require.NoError(t, err)

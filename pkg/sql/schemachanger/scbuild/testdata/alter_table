@@ -39,7 +39,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 1
         storeColumnIds:
         - 2
@@ -66,7 +66,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 2
         tableId: 52
   state: PUBLIC
@@ -109,7 +109,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 1
         storeColumnIds:
         - 2
@@ -136,7 +136,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 2
         tableId: 52
   state: PUBLIC
@@ -180,7 +180,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 1
         storeColumnIds:
         - 2
@@ -209,7 +209,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 2
         tableId: 52
   state: PUBLIC
@@ -268,7 +268,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 1
         storeColumnIds:
         - 2
@@ -295,7 +295,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 2
         tableId: 52
   state: PUBLIC
@@ -342,7 +342,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 1
         storeColumnIds:
         - 2
@@ -369,7 +369,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
           partitioning: {}
           sharded: {}
           unique: true
-          version: 2
+          version: 3
         otherPrimaryIndexId: 2
         tableId: 52
   state: PUBLIC

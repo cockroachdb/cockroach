@@ -3751,10 +3751,10 @@ CREATE TABLE d.t (
 		if index.NumExtraColumns() != 1 {
 			t.Fatalf("ExtraColumnIDs not set properly: %s", tableDesc)
 		}
-		if index.NumStoredColumns() != 1 {
+		if index.NumSecondaryStoredColumns() != 1 {
 			t.Fatalf("StoreColumnIDs not set properly: %s", tableDesc)
 		}
-		newIndexDesc := *index.IndexDesc()
+		newIndexDesc := index.IndexDescDeepCopy()
 		newIndexDesc.ExtraColumnIDs = append(newIndexDesc.ExtraColumnIDs, newIndexDesc.StoreColumnIDs...)
 		newIndexDesc.StoreColumnIDs = nil
 		tableDesc.SetPublicNonPrimaryIndex(index.Ordinal(), newIndexDesc)

@@ -485,8 +485,11 @@ func (rf *Fetcher) Init(
 		table.neededValueCols = table.neededCols.Len() - neededIndexCols + table.index.NumCompositeColumns()
 
 		if table.isSecondaryIndex {
+			colIDs := table.index.CollectColumnIDs()
+			colIDs.UnionWith(table.index.CollectSecondaryStoredColumnIDs())
+			colIDs.UnionWith(table.index.CollectExtraColumnIDs())
 			for i := range table.cols {
-				if table.neededCols.Contains(int(table.cols[i].GetID())) && !table.index.ContainsColumnID(table.cols[i].GetID()) {
+				if table.neededCols.Contains(int(table.cols[i].GetID())) && !colIDs.Contains(table.cols[i].GetID()) {
 					return errors.Errorf("requested column %s not in index", table.cols[i].GetName())
 				}
 			}

@@ -18,27 +18,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// RunOverAllColumns applies its argument fn to each of the column IDs in desc.
-// If there is an error, that error is returned immediately.
-func (desc *IndexDescriptor) RunOverAllColumns(fn func(id ColumnID) error) error {
-	for _, colID := range desc.ColumnIDs {
-		if err := fn(colID); err != nil {
-			return err
-		}
-	}
-	for _, colID := range desc.ExtraColumnIDs {
-		if err := fn(colID); err != nil {
-			return err
-		}
-	}
-	for _, colID := range desc.StoreColumnIDs {
-		if err := fn(colID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // IsInterleaved returns whether the index is interleaved or not.
 func (desc *IndexDescriptor) IsInterleaved() bool {
 	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
@@ -102,24 +81,6 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	return nil
 }
 
-type returnTrue struct{}
-
-func (returnTrue) Error() string { panic("unimplemented") }
-
-var returnTruePseudoError error = returnTrue{}
-
-// ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs, the extra column IDs, or the
-// stored column IDs.
-func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
-	return desc.RunOverAllColumns(func(id ColumnID) error {
-		if id == colID {
-			return returnTruePseudoError
-		}
-		return nil
-	}) != nil
-}
-
 // TODO (tyler): Issue #39771 This method needs more thorough testing, probably
 // in structured_test.go. Or possibly replace it with a format method taking
 // a format context as argument.
@@ -152,12 +113,6 @@ func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs 
 // GetName is part of the UniqueConstraint interface.
 func (desc *IndexDescriptor) GetName() string {
 	return desc.Name
-}
-
-// HasOldStoredColumns returns whether the index has stored columns in the old
-// format (data encoded the same way as if they were in an implicit column).
-func (desc *IndexDescriptor) HasOldStoredColumns() bool {
-	return len(desc.ExtraColumnIDs) > 0 && len(desc.StoreColumnIDs) < len(desc.StoreColumnNames)
 }
 
 // InvertedColumnID returns the ColumnID of the inverted column of the inverted

@@ -11,11 +11,12 @@ func _() {
 	_ = x[BaseFormatVersion-1]
 	_ = x[FamilyFormatVersion-2]
 	_ = x[InterleavedFormatVersion-3]
+	_ = x[StrictIndexFormatVersion-4]
 }
 
-const _FormatVersion_name = "BaseFormatVersionFamilyFormatVersionInterleavedFormatVersion"
+const _FormatVersion_name = "BaseFormatVersionFamilyFormatVersionInterleavedFormatVersionStrictIndexFormatVersion"
 
-var _FormatVersion_index = [...]uint8{0, 17, 36, 60}
+var _FormatVersion_index = [...]uint8{0, 17, 36, 60, 84}
 
 func (i FormatVersion) String() string {
 	i -= 1
