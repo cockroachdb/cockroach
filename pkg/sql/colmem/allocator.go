@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -370,12 +371,19 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	// (excluding any Bytes vectors, those are tracked separately).
 	acc := 0
 	numBytesVectors := 0
+	// We will track Uuid vectors separately because they use smaller initial
+	// allocation factor.
+	numUUIDVectors := 0
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
 			acc += sizeOfBool
 		case types.BytesFamily:
-			numBytesVectors++
+			if t.Family() == types.UuidFamily {
+				numUUIDVectors++
+			} else {
+				numBytesVectors++
+			}
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
@@ -416,15 +424,20 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 		}
 	}
-	// For byte arrays, we initially allocate BytesInitialAllocationFactor
-	// number of bytes (plus an int32 for the offset) for each row, so we use
-	// the sum of two values as the estimate. However, later, the exact
-	// memory footprint will be used: whenever a modification of Bytes takes
-	// place, the Allocator will measure the old footprint and the updated
-	// one and will update the memory account accordingly. We also account for
-	// the overhead and for the additional offset value that are needed for
-	// Bytes vectors (to be in line with coldata.Bytes.Size() method).
-	bytesVectorsSize := numBytesVectors * (int(coldata.FlatBytesOverhead) +
-		coldata.BytesInitialAllocationFactor*batchLength + sizeOfInt32*(batchLength+1))
+	// For byte arrays, we initially allocate a constant number of bytes (plus
+	// an int32 for the offset) for each row, so we use the sum of two values as
+	// the estimate. However, later, the exact memory footprint will be used:
+	// whenever a modification of Bytes takes place, the Allocator will measure
+	// the old footprint and the updated one and will update the memory account
+	// accordingly. We also account for the overhead and for the additional
+	// offset value that are needed for Bytes vectors (to be in line with
+	// coldata.Bytes.Size() method).
+	var bytesVectorsSize int
+	// Add the overhead.
+	bytesVectorsSize += (numBytesVectors + numUUIDVectors) * (int(coldata.FlatBytesOverhead))
+	// Add the data for both Bytes and Uuids.
+	bytesVectorsSize += (numBytesVectors*coldata.BytesInitialAllocationFactor + numUUIDVectors*uuid.Size) * batchLength
+	// Add the offsets.
+	bytesVectorsSize += (numBytesVectors + numUUIDVectors) * sizeOfInt32 * (batchLength + 1)
 	return acc*batchLength + bytesVectorsSize
 }

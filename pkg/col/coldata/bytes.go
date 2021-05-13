@@ -45,12 +45,24 @@ const BytesInitialAllocationFactor = 64
 // NewBytes returns a Bytes struct with enough capacity for n zero-length
 // []byte values. It is legal to call Set on the returned Bytes at this point,
 // but Get is undefined until at least one element is Set.
+// BytesInitialAllocationFactor number of bytes are allocated initially for each
+// []byte element.
 func NewBytes(n int) *Bytes {
+	return NewBytesWithAvgLength(n, BytesInitialAllocationFactor)
+}
+
+// NewBytesWithAvgLength returns a Bytes struct with enough capacity for n
+// []byte values with the average length of avgElementLength. It is legal to
+// call Set on the returned Bytes at this point, but Get is undefined until at
+// least one element is Set.
+// - avgElementLength determines the average length of a single []byte element
+// that will be added to this Bytes.
+func NewBytesWithAvgLength(n int, avgElementLength int) *Bytes {
 	return &Bytes{
 		// Given that the []byte slices are of variable length, we multiply the
 		// number of elements by some constant factor.
 		// TODO(asubiotto): Make this tunable.
-		data:    make([]byte, 0, n*BytesInitialAllocationFactor),
+		data:    make([]byte, 0, n*avgElementLength),
 		offsets: make([]int32, n+1),
 	}
 }

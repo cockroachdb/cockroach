@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/duration",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
