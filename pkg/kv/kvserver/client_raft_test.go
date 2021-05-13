@@ -2016,7 +2016,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	if removeBeforeTruncateAndReAdd {
 		// Verify old replica is GC'd. Wait out the replica gc queue
 		// inactivity threshold and force a gc scan.
-		manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
+		manualClock.Increment(int64(kvserver.ReplicaGCQueueCheckInterval + 1))
 		testutils.SucceedsSoon(t, func() error {
 			tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 			_, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
@@ -2126,7 +2126,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 
 	// Wait out the range lease and the unleased duration to make the replica GC'able.
 	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
-	manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
+	manualClock.Increment(int64(kvserver.ReplicaGCQueueCheckInterval + 1))
 	tc.GetFirstStoreFromServer(t, 1).SetReplicaGCQueueActive(true)
 	tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 
@@ -3275,7 +3275,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 		manualClock.Increment(int64(
-			kvserver.ReplicaGCQueueInactivityThreshold) + 1)
+			kvserver.ReplicaGCQueueCheckInterval) + 1)
 		tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 
 		actual := tc.ReadIntFromStores(key)
@@ -3365,7 +3365,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	tc.GetFirstStoreFromServer(t, 2).SetReplicaGCQueueActive(true)
 	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 	manualClock.Increment(int64(
-		kvserver.ReplicaGCQueueInactivityThreshold) + 1)
+		kvserver.ReplicaGCQueueCheckInterval) + 1)
 	tc.GetFirstStoreFromServer(t, 2).MustForceReplicaGCScanAndProcess()
 	tc.WaitForValues(t, key, []int64{16, 0, 0})
 
