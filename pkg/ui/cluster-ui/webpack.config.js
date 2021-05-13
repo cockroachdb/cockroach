@@ -103,7 +103,7 @@ module.exports = {
 
   plugins: [
     new WebpackBar({
-      name: "admin-ui",
+      name: "cluster-ui",
       color: "cyan",
       profile: true,
     }),

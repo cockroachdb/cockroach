@@ -1,4 +1,5 @@
 {
+  "root": true,
   "extends": "@cockroachlabs/eslint-config",
   "env": {
     "browser": true,
