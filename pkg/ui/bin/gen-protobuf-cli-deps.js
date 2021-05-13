@@ -9,7 +9,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-
 // ProtobufJS's CLI attempts to install its own CLI dependencies at runtime by
 // exec'ing NPM. This is crazy. It introduces a dependency on NPM and breaks our
 // dependency pinning and vendoring. There is an upstream issue about this [1],
@@ -28,6 +27,7 @@
 // [0]: https://github.com/dcodeIO/protobuf.js/blob/e8449c4/cli/util.js#L135-L157
 // [1]: https://github.com/dcodeIO/protobuf.js/issues/716
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 var pbjsPkg = require("protobufjs/package");
 
 const pbjsCliPkg = {
@@ -35,9 +35,10 @@ const pbjsCliPkg = {
   dependencies: {},
 };
 
-pbjsPkg.cliDependencies.forEach(dep => {
+pbjsPkg.cliDependencies.forEach((dep) => {
   const version = pbjsPkg.dependencies[dep] || pbjsPkg.devDependencies[dep];
   pbjsCliPkg.dependencies[dep] = version;
-})
+});
 
+// eslint-disable-next-line no-undef
 process.stdout.write(JSON.stringify(pbjsCliPkg, null, 2));
