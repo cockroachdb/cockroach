@@ -469,13 +469,6 @@ func SetMockAddSSTable() (undo func()) {
 	}
 }
 
-// IsQuiescent returns whether the replica is quiescent or not.
-func (r *Replica) IsQuiescent() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.mu.quiescent
-}
-
 // GetQueueLastProcessed returns the last processed timestamp for the
 // specified queue, or the zero timestamp if not available.
 func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
