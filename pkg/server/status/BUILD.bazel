@@ -53,6 +53,7 @@ go_library(
         "//pkg/ts/tspb",
         "//pkg/util/cgroups",
         "//pkg/util/envutil",
+        "//pkg/util/goschedstats",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
