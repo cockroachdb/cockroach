@@ -8,7 +8,10 @@
 
 package sqlproxyccl
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
+)
 
 // Metrics contains pointers to the metrics for monitoring proxy
 // operations.
@@ -106,5 +109,36 @@ func MakeProxyMetrics() Metrics {
 		SuccessfulConnCount:    metric.NewCounter(metaSuccessfulConnCount),
 		AuthFailedCount:        metric.NewCounter(metaAuthFailedCount),
 		ExpiredClientConnCount: metric.NewCounter(metaExpiredClientConnCount),
+	}
+}
+
+// updateForError updates the metrics relevant for the type of the
+// error message.
+func (metrics *Metrics) updateForError(err error) {
+	if err == nil {
+		return
+	}
+	codeErr := (*CodeError)(nil)
+	if errors.As(err, &codeErr) {
+		switch codeErr.Code {
+		case CodeExpiredClientConnection:
+			metrics.ExpiredClientConnCount.Inc(1)
+		case CodeBackendDisconnected:
+			metrics.BackendDisconnectCount.Inc(1)
+		case CodeClientDisconnected:
+			metrics.ClientDisconnectCount.Inc(1)
+		case CodeIdleDisconnect:
+			metrics.IdleDisconnectCount.Inc(1)
+		case CodeProxyRefusedConnection:
+			metrics.RefusedConnCount.Inc(1)
+			metrics.BackendDownCount.Inc(1)
+		case CodeParamsRoutingFailed:
+			metrics.RoutingErrCount.Inc(1)
+			metrics.BackendDownCount.Inc(1)
+		case CodeBackendDown:
+			metrics.BackendDownCount.Inc(1)
+		case CodeAuthFailed:
+			metrics.AuthFailedCount.Inc(1)
+		}
 	}
 }
