@@ -483,6 +483,18 @@ func handleNulls(arr array.Interface, vec coldata.Vec, batchLength int) {
 		// For types with the canonical type family of Bool, Bytes, Int, or
 		// Float, when there are no nulls, we have a null bitmap with zero
 		// length.
-		vec.Nulls().UnsetNulls()
+		if vec.Nulls().MaxNumElements() < batchLength {
+			// The current null bitmap doesn't have enough space, so we need to
+			// allocate a new one.
+			//
+			// Note that this has likely occurred because on the previous batch
+			// there were some nulls and we replaced the null bitmap with the
+			// arrowBitmap which happened to be of insufficient capacity for the
+			// current batch.
+			nulls := coldata.NewNulls(batchLength)
+			vec.SetNulls(&nulls)
+		} else {
+			vec.Nulls().UnsetNulls()
+		}
 	}
 }

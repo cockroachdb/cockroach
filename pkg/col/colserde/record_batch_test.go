@@ -302,8 +302,9 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	typs := []*types.T{types.Bytes}
-	b := testAllocator.NewMemBatchWithFixedCapacity(typs, coldata.BatchSize())
-	bytesVec := b.ColVec(0).Bytes()
+	src := testAllocator.NewMemBatchWithMaxCapacity(typs)
+	dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
+	bytesVec := src.ColVec(0).Bytes()
 	maxValueLen := coldata.BytesInitialAllocationFactor * 8
 	value := make([]byte, maxValueLen)
 	for i := 0; i < coldata.BatchSize(); i++ {
@@ -312,17 +313,16 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 		require.NoError(t, err)
 		bytesVec.Set(i, value)
 	}
-	b.SetLength(coldata.BatchSize())
-
-	originalMemorySize := colmem.GetBatchMemSize(b)
+	src.SetLength(coldata.BatchSize())
 
 	c, err := colserde.NewArrowBatchConverter(typs)
 	require.NoError(t, err)
 	r, err := colserde.NewRecordBatchSerializer(typs)
 	require.NoError(t, err)
-	b, err = roundTripBatch(b, c, r, typs)
-	require.NoError(t, err)
-	newMemorySize := colmem.GetBatchMemSize(b)
+	require.NoError(t, roundTripBatch(src, dest, c, r))
+
+	originalMemorySize := colmem.GetBatchMemSize(src)
+	newMemorySize := colmem.GetBatchMemSize(dest)
 
 	// We expect that the original and the new memory sizes are relatively close
 	// to each other (do not differ by more than a third). We cannot guarantee
