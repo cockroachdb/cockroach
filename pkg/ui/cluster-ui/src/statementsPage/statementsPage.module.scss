@@ -1,0 +1,82 @@
+@import "src/core/index.module";
+
+.cl-table-statistic {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 7px;
+  height: 32px;
+}
+
+.cl-count-title,
+.last-cleared-title {
+  font-family: $font-family--base;
+  font-size: 14px;
+  padding: 0px;
+  margin: 0px;
+  color: $colors--neutral-6;
+  line-height: 1.57;
+  letter-spacing: 0.1px;
+  .label {
+    font-family: $font-family--bold;
+    color: $colors--neutral-7;
+  }
+}
+
+.section {
+  flex: 0 0 auto;
+  padding: 12px 24px;
+
+  &--heading {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  &--container {
+    padding: 0 24px 0 0;
+  }
+}
+
+h1.base-heading {
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+h2.base-heading {
+  padding: 12px 0;
+  font-size: 24px;
+  font-family: $font-family--base;
+}
+
+.root {
+  flex-grow: 0;
+  width: 100%;
+}
+
+.table-area {
+  width: fit-content;
+}
+
+.app-filter-dropdown {
+  /* 
+    we are truncating the text in the filter, 
+    but need to constrain to a width
+  */
+  max-width: 75ch;
+}
+
+.app-filter-dropdown-item {
+  /*
+    Truncating and constrainging the width of the 
+    items in the app filter dropdown
+  */
+  max-width: 80ch;
+  @include text-overflow;
+}
+
+.full-table-scan-label {
+  @include text--body;
+  display: inline;
+  font-size: 14px;
+  color: $colors--title;
+}
