@@ -116,10 +116,6 @@ const (
 	// See joinreader.go.
 	joinReaderBatchSize = 100.0
 
-	// In the case of a limit hint, a scan will read this multiple of the expected
-	// number of rows. See scanNode.limitHint.
-	scanSoftLimitMultiplier = 2.0
-
 	// latencyCostFactor represents the throughput impact of doing scans on an
 	// index that may be remotely located in a different locality. If latencies
 	// are higher, then overall cluster throughput will suffer somewhat, as there
@@ -615,7 +611,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 
 	if required.LimitHint != 0 {
-		rowCount = math.Min(rowCount, required.LimitHint*scanSoftLimitMultiplier)
+		rowCount = math.Min(rowCount, required.LimitHint)
 	}
 
 	if ordering.ScanIsReverse(scan, &required.Ordering) {
