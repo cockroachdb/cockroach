@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -88,7 +88,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			return err
 		}
 
-		if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
+		if err := p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_DROP_PRIVILEGE); err != nil {
 			return err
 		}
 
@@ -118,7 +118,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if n.DropBehavior != tree.DropCascade {
 				return errors.Errorf("%q is %s table %q", tableDesc.Name, msg, other.Name)
 			}
-			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
+			if err := p.CheckPrivilege(ctx, other, privilegepb.Privilege_DROP_PRIVILEGE); err != nil {
 				return err
 			}
 			otherName, err := p.getQualifiedTableName(ctx, other)

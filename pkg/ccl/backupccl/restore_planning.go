@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -47,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -563,7 +563,7 @@ func allocateDescriptorRewrites(
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
 				}
-				if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+				if err := p.CheckPrivilege(ctx, parentDB, privilegepb.Privilege_CREATE); err != nil {
 					return err
 				}
 
@@ -638,7 +638,7 @@ func allocateDescriptorRewrites(
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
 				}
-				if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+				if err := p.CheckPrivilege(ctx, parentDB, privilegepb.Privilege_CREATE); err != nil {
 					return err
 				}
 
@@ -718,7 +718,7 @@ func allocateDescriptorRewrites(
 					// need to create the type.
 
 					// Ensure that the user has the correct privilege to create types.
-					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+					if err := p.CheckPrivilege(ctx, parentDB, privilegepb.Privilege_CREATE); err != nil {
 						return err
 					}
 

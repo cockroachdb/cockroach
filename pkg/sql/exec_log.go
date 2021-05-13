@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -354,14 +354,14 @@ func (p *planner) maybeLogStatementInternal(
 // call to this method elsewhere must find a way to ensure that
 // contributors who later add features do not have to remember to call
 // this to get it right.
-func (p *planner) maybeAudit(desc catalog.Descriptor, priv privilege.Kind) {
+func (p *planner) maybeAudit(desc catalog.Descriptor, priv privilegepb.Privilege) {
 	wantedMode := desc.GetAuditMode()
 	if wantedMode == descpb.TableDescriptor_DISABLED {
 		return
 	}
 
 	switch priv {
-	case privilege.INSERT, privilege.DELETE, privilege.UPDATE:
+	case privilegepb.Privilege_INSERT, privilegepb.Privilege_DELETE, privilegepb.Privilege_UPDATE:
 		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: true})
 	default:
 		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: false})

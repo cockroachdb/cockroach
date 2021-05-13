@@ -16,11 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -163,7 +163,7 @@ func (p *planner) addTypeBackReference(
 	// Check if this user has USAGE privilege on the type. This function if an
 	// object has a dependency on a type, the user must have USAGE privilege on
 	// the type to create a dependency.
-	if err := p.CheckPrivilege(ctx, mutDesc, privilege.USAGE); err != nil {
+	if err := p.CheckPrivilege(ctx, mutDesc, privilegepb.Privilege_USAGE); err != nil {
 		return err
 	}
 

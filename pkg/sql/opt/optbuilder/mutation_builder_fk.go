@@ -14,10 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -542,7 +542,7 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 		return false
 	}
 	// We need SELECT privileges on the referenced table.
-	mb.b.checkPrivilege(opt.DepByID(refID), h.otherTab, privilege.SELECT)
+	mb.b.checkPrivilege(opt.DepByID(refID), h.otherTab, privilegepb.Privilege_SELECT)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)
@@ -593,7 +593,7 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 		return false
 	}
 	// We need SELECT privileges on the origin table.
-	mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilege.SELECT)
+	mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilegepb.Privilege_SELECT)
 
 	numCols := h.fk.ColumnCount()
 	h.allocOrdinals(numCols)

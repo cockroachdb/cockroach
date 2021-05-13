@@ -37,11 +37,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -666,11 +666,11 @@ func checkPrivilegesForBackup(
 	for _, desc := range targetDescs {
 		switch desc := desc.(type) {
 		case catalog.DatabaseDescriptor, catalog.TableDescriptor:
-			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+			if err := p.CheckPrivilege(ctx, desc, privilegepb.Privilege_SELECT); err != nil {
 				return err
 			}
 		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
-			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
+			if err := p.CheckPrivilege(ctx, desc, privilegepb.Privilege_USAGE); err != nil {
 				return err
 			}
 		}

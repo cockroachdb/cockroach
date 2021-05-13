@@ -16,10 +16,10 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -249,7 +249,7 @@ func DepByID(id cat.StableID) MDDepName {
 // the Memo using this metadata is cached, then a call to CheckDependencies can
 // detect if the name resolves to a different data source now, or if changes to
 // schema or permissions on the data source has invalidated the cached metadata.
-func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privilege.Kind) {
+func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privilegepb.Privilege) {
 	// Search for the same name / object pair.
 	for i := range md.deps {
 		if md.deps[i].ds == ds && md.deps[i].name.equals(&name) {
@@ -301,7 +301,7 @@ func (md *Metadata) CheckDependencies(
 			// Note that priv == 0 can occur when a dependency was added with
 			// privilege.Kind = 0 (e.g. for a table within a view, where the table
 			// privileges do not need to be checked). Ignore the "zero privilege".
-			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
+			priv := privilegepb.Privilege(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
 				if err := catalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
 					return false, err

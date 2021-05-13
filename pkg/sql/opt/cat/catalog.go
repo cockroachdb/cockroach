@@ -15,7 +15,7 @@ package cat
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -127,7 +127,7 @@ type Catalog interface {
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
-	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
+	CheckPrivilege(ctx context.Context, o Object, priv privilegepb.Privilege) error
 
 	// CheckAnyPrivilege verifies that the current user has any privilege on
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.

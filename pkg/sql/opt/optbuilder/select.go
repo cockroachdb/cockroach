@@ -13,6 +13,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -100,12 +100,12 @@ func (b *Builder) buildDataSource(
 			return outScope
 		}
 
-		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
+		ds, depName, resName := b.resolveDataSource(tn, privilegepb.Privilege_SELECT)
 
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
-			b.checkPrivilege(depName, ds, privilege.UPDATE)
+			b.checkPrivilege(depName, ds, privilegepb.Privilege_UPDATE)
 		}
 
 		switch t := ds.(type) {
@@ -206,12 +206,12 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		ds, depName := b.resolveDataSourceRef(source, privilege.SELECT)
+		ds, depName := b.resolveDataSourceRef(source, privilegepb.Privilege_SELECT)
 
 		locking = locking.filter(source.As.Alias)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
-			b.checkPrivilege(depName, ds, privilege.UPDATE)
+			b.checkPrivilege(depName, ds, privilegepb.Privilege_UPDATE)
 		}
 
 		switch t := ds.(type) {

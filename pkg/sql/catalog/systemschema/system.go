@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -1811,9 +1811,9 @@ var (
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
 func newCommentPrivilegeDescriptor(
-	priv privilege.List, owner security.SQLUsername,
+	priv privilegepb.List, owner security.SQLUsername,
 ) *descpb.PrivilegeDescriptor {
-	selectPriv := privilege.List{privilege.SELECT}
+	selectPriv := privilegepb.List{privilegepb.Privilege_SELECT}
 	return &descpb.PrivilegeDescriptor{
 		OwnerProto: owner.EncodeProto(),
 		Users: []descpb.UserPrivileges{

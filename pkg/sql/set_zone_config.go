@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -285,8 +285,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 		if err != nil {
 			return err
 		}
-		dbCreatePrivilegeErr := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE)
-		dbZoneConfigPrivilegeErr := p.CheckPrivilege(ctx, dbDesc, privilege.ZONECONFIG)
+		dbCreatePrivilegeErr := p.CheckPrivilege(ctx, dbDesc, privilegepb.Privilege_CREATE)
+		dbZoneConfigPrivilegeErr := p.CheckPrivilege(ctx, dbDesc, privilegepb.Privilege_ZONECONFIG)
 
 		// Can set ZoneConfig if user has either CREATE privilege or ZONECONFIG privilege at the Database level
 		if dbZoneConfigPrivilegeErr == nil || dbCreatePrivilegeErr == nil {
@@ -295,7 +295,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"user %s does not have %s or %s privilege on %s %s",
-			p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, dbDesc.DescriptorType(), dbDesc.GetName())
+			p.SessionData().User(), privilegepb.Privilege_ZONECONFIG, privilegepb.Privilege_CREATE, dbDesc.DescriptorType(), dbDesc.GetName())
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
@@ -309,8 +309,8 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	}
 
 	// Can set ZoneConfig if user has either CREATE privilege or ZONECONFIG privilege at the Table level
-	tableCreatePrivilegeErr := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE)
-	tableZoneConfigPrivilegeErr := p.CheckPrivilege(ctx, tableDesc, privilege.ZONECONFIG)
+	tableCreatePrivilegeErr := p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_CREATE)
+	tableZoneConfigPrivilegeErr := p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_ZONECONFIG)
 
 	if tableCreatePrivilegeErr == nil || tableZoneConfigPrivilegeErr == nil {
 		return nil
@@ -318,7 +318,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s or %s privilege on %s %s",
-		p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, tableDesc.DescriptorType(), tableDesc.GetName())
+		p.SessionData().User(), privilegepb.Privilege_ZONECONFIG, privilegepb.Privilege_CREATE, tableDesc.DescriptorType(), tableDesc.GetName())
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,7 +61,7 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_SELECT); err != nil {
 		return nil, err
 	}
 

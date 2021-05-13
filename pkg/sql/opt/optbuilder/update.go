@@ -13,11 +13,11 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -74,7 +74,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 
 	// Find which table we're working on, check the permissions.
-	tab, depName, alias, refColumns := b.resolveTableForMutation(upd.Table, privilege.UPDATE)
+	tab, depName, alias, refColumns := b.resolveTableForMutation(upd.Table, privilegepb.Privilege_UPDATE)
 
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
@@ -82,7 +82,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 
 	// Check Select permission as well, since existing values must be read.
-	b.checkPrivilege(depName, tab, privilege.SELECT)
+	b.checkPrivilege(depName, tab, privilegepb.Privilege_SELECT)
 
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)

@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -208,7 +208,7 @@ func (p *planner) canDropTable(
 		}
 	}
 	if !hasOwnership {
-		return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
+		return p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_DROP_PRIVILEGE)
 	}
 
 	return nil
@@ -228,7 +228,7 @@ func (p *planner) canRemoveFKBackreference(
 	}
 	// Check to see whether we're allowed to edit the table that has a
 	// foreign key constraint on the table that we're dropping right now.
-	return p.CheckPrivilege(ctx, table, privilege.CREATE)
+	return p.CheckPrivilege(ctx, table, privilegepb.Privilege_CREATE)
 }
 
 func (p *planner) canRemoveInterleave(
@@ -248,7 +248,7 @@ func (p *planner) canRemoveInterleave(
 		return unimplemented.NewWithIssuef(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
-	return p.CheckPrivilege(ctx, table, privilege.CREATE)
+	return p.CheckPrivilege(ctx, table, privilegepb.Privilege_CREATE)
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyReference) error {

@@ -33,7 +33,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/roachpb"
     "github.com/cockroachdb/cockroach/pkg/security"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
-    "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+    "github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -364,11 +364,11 @@ func (u *sqlSymUnion) targetList() tree.TargetList {
 func (u *sqlSymUnion) targetListPtr() *tree.TargetList {
     return u.val.(*tree.TargetList)
 }
-func (u *sqlSymUnion) privilegeType() privilege.Kind {
-    return u.val.(privilege.Kind)
+func (u *sqlSymUnion) privilegeType() privilegepb.Privilege {
+    return u.val.(privilegepb.Privilege)
 }
-func (u *sqlSymUnion) privilegeList() privilege.List {
-    return u.val.(privilege.List)
+func (u *sqlSymUnion) privilegeList() privilegepb.List {
+    return u.val.(privilegepb.List)
 }
 func (u *sqlSymUnion) onConflict() *tree.OnConflict {
     return u.val.(*tree.OnConflict)
@@ -1213,7 +1213,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.TargetList> targets targets_roles target_types changefeed_targets
 %type <*tree.TargetList> opt_on_targets_roles opt_backup_targets
 %type <tree.NameList> for_grantee_clause
-%type <privilege.List> privileges
+%type <privilegepb.List> privileges
 %type <[]tree.KVOption> opt_role_options role_options
 %type <tree.AuditMode> audit_mode
 %type <*tree.ReplicationOptions> opt_with_replication_options replication_options replication_options_list
@@ -4116,11 +4116,11 @@ revoke_stmt:
 privileges:
   ALL opt_privileges_clause
   {
-    $$.val = privilege.List{privilege.ALL}
+    $$.val = privilegepb.List{privilegepb.Privilege_ALL}
   }
 | privilege_list
   {
-     privList, err := privilege.ListFromStrings($1.nameList().ToStrings())
+     privList, err := privilegepb.ListFromStrings($1.nameList().ToStrings())
      if err != nil {
        return setErr(sqllex, err)
      }

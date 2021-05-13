@@ -23,10 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -117,7 +117,7 @@ func CreateUserDefinedSchemaDescriptor(
 	// schemas.
 	privs := protoutil.Clone(db.GetPrivileges()).(*descpb.PrivilegeDescriptor)
 	for i := range privs.Users {
-		privs.Users[i].Privileges &= privilege.SchemaPrivileges.ToBitField()
+		privs.Users[i].Privileges &= privilegepb.SchemaPrivileges.ToBitField()
 	}
 
 	if !n.AuthRole.Undefined() {
@@ -178,7 +178,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return pgerror.New(pgcode.InvalidObjectDefinition, "cannot create schemas in the system database")
 	}
 
-	if err := p.CheckPrivilege(params.ctx, db, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(params.ctx, db, privilegepb.Privilege_CREATE); err != nil {
 		return err
 	}
 

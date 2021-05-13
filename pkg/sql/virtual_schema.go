@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -723,7 +723,7 @@ func NewVirtualSchemaHolder(
 // For instance, information_schema will only expose rows to a given user which that
 // user has access to.
 var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
-	security.PublicRoleName(), privilege.List{privilege.SELECT}, security.NodeUserName(),
+	security.PublicRoleName(), privilegepb.List{privilegepb.Privilege_SELECT}, security.NodeUserName(),
 )
 
 func initVirtualDatabaseDesc(id descpb.ID, name string) catalog.DatabaseDescriptor {

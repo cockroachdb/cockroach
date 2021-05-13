@@ -25,8 +25,8 @@ go_library(
         "//pkg/keys",
         "//pkg/security",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/privilegepb",
         "//pkg/sql/parser",
-        "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/encoding",
@@ -45,7 +45,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/security",
-        "//pkg/sql/privilege",
+        "//pkg/sql/catalog/privilegepb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
     ],

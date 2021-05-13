@@ -14,7 +14,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/multiregion",
-        "//pkg/sql/privilege",
+        "//pkg/sql/catalog/privilegepb",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/protoutil",

@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -153,7 +153,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	if err != nil {
 		return err
 	}
-	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, viewDesc, privilegepb.Privilege_DROP_PRIVILEGE); err != nil {
 		return err
 	}
 	// If this view is depended on by other views, we have to check them as well.

@@ -15,12 +15,12 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -181,7 +181,7 @@ func init() {
 // and thereby scrambles the input ordering.
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
 	// Find which table we're working on, check the permissions.
-	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
+	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilegepb.Privilege_INSERT)
 
 	// It is possible to insert into specific columns using table reference
 	// syntax:
@@ -203,12 +203,12 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	if ins.OnConflict != nil {
 		// UPSERT and INDEX ON CONFLICT will read from the table to check for
 		// duplicates.
-		b.checkPrivilege(depName, tab, privilege.SELECT)
+		b.checkPrivilege(depName, tab, privilegepb.Privilege_SELECT)
 
 		if !ins.OnConflict.DoNothing {
 			// UPSERT and INDEX ON CONFLICT DO UPDATE may modify rows if the
 			// DO NOTHING clause is not present.
-			b.checkPrivilege(depName, tab, privilege.UPDATE)
+			b.checkPrivilege(depName, tab, privilegepb.Privilege_UPDATE)
 		}
 	}
 

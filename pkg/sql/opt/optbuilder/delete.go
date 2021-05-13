@@ -11,9 +11,9 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -39,7 +39,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	}
 
 	// Find which table we're working on, check the permissions.
-	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
+	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilegepb.Privilege_DELETE)
 
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
@@ -47,7 +47,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	}
 
 	// Check Select permission as well, since existing values must be read.
-	b.checkPrivilege(depName, tab, privilege.SELECT)
+	b.checkPrivilege(depName, tab, privilegepb.Privilege_SELECT)
 
 	var mb mutationBuilder
 	mb.init(b, "delete", tab, alias)

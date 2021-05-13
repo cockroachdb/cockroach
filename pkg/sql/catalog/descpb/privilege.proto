@@ -33,3 +33,4 @@ message PrivilegeDescriptor {
   optional uint32 version = 3 [(gogoproto.nullable) = false,
                               (gogoproto.casttype) = "PrivilegeDescVersion"];
 }
+

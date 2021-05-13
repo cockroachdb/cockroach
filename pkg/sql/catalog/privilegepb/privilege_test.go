@@ -8,12 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package privilege_test
+package privilegepb_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -21,25 +21,25 @@ func TestPrivilegeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
 		raw              uint32
-		privileges       privilege.List
+		privileges       privilegepb.List
 		stringer, sorted string
 	}{
-		{0, privilege.List{}, "", ""},
+		{0, privilegepb.List{}, "", ""},
 		// We avoid 0 as a privilege value even though we use 1 << privValue.
-		{1, privilege.List{}, "", ""},
-		{2, privilege.List{privilege.ALL}, "ALL", "ALL"},
-		{10, privilege.List{privilege.ALL, privilege.DROP}, "ALL, DROP", "ALL,DROP"},
-		{144, privilege.List{privilege.GRANT, privilege.DELETE}, "GRANT, DELETE", "DELETE,GRANT"},
+		{1, privilegepb.List{}, "", ""},
+		{2, privilegepb.List{privilegepb.Privilege_ALL}, "ALL", "ALL"},
+		{10, privilegepb.List{privilegepb.Privilege_ALL, privilegepb.Privilege_DROP_PRIVILEGE}, "ALL, DROP", "ALL,DROP"},
+		{144, privilegepb.List{privilegepb.Privilege_GRANT, privilegepb.Privilege_DELETE}, "GRANT, DELETE", "DELETE,GRANT"},
 		{2046,
-			privilege.List{privilege.ALL, privilege.CREATE, privilege.DROP, privilege.GRANT,
-				privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.USAGE, privilege.ZONECONFIG},
+			privilegepb.List{privilegepb.Privilege_ALL, privilegepb.Privilege_CREATE, privilegepb.Privilege_DROP_PRIVILEGE, privilegepb.Privilege_GRANT,
+				privilegepb.Privilege_SELECT, privilegepb.Privilege_INSERT, privilegepb.Privilege_DELETE, privilegepb.Privilege_UPDATE, privilegepb.Privilege_USAGE, privilegepb.Privilege_ZONECONFIG},
 			"ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG",
 			"ALL,CREATE,DELETE,DROP,GRANT,INSERT,SELECT,UPDATE,USAGE,ZONECONFIG",
 		},
 	}
 
 	for _, tc := range testCases {
-		pl := privilege.ListFromBitField(tc.raw, privilege.Any)
+		pl := privilegepb.ListFromBitField(tc.raw, privilegepb.Any)
 		if len(pl) != len(tc.privileges) {
 			t.Fatalf("%+v: wrong privilege list from raw: %+v", tc, pl)
 		}

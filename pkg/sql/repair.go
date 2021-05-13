@@ -23,13 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -146,16 +146,16 @@ func (p *planner) UnsafeUpsertDescriptor(
 		return errors.AssertionFailedf("unknown descriptor type %T for id %d", mut, id)
 	}
 
-	objectType := privilege.Any
+	objectType := privilegepb.Any
 	switch mut.DescriptorType() {
 	case catalog.Database:
-		objectType = privilege.Database
+		objectType = privilegepb.Database
 	case catalog.Table:
-		objectType = privilege.Table
+		objectType = privilegepb.Table
 	case catalog.Type:
-		objectType = privilege.Type
+		objectType = privilegepb.Type
 	case catalog.Schema:
-		objectType = privilege.Schema
+		objectType = privilegepb.Schema
 	}
 
 	if force {
@@ -205,12 +205,12 @@ func comparePrivileges(
 	p *planner,
 	existing catalog.MutableDescriptor,
 	prevUserPrivileges []descpb.UserPrivileges,
-	objectType privilege.ObjectType,
+	objectType privilegepb.ObjectType,
 ) error {
 	computePrivilegeChanges := func(prev, cur *descpb.UserPrivileges) (granted, revoked []string) {
 		// User has no privileges anymore after upsert, all privileges revoked.
 		if cur == nil {
-			revoked = privilege.ListFromBitField(prev.Privileges, objectType).SortedNames()
+			revoked = privilegepb.ListFromBitField(prev.Privileges, objectType).SortedNames()
 			return nil, revoked
 		}
 
@@ -221,12 +221,12 @@ func comparePrivileges(
 
 		// Construct a set of this user's old privileges (before upsert).
 		prevPrivilegeSet := make(map[string]struct{})
-		for _, priv := range privilege.ListFromBitField(prev.Privileges, objectType).SortedNames() {
+		for _, priv := range privilegepb.ListFromBitField(prev.Privileges, objectType).SortedNames() {
 			prevPrivilegeSet[priv] = struct{}{}
 		}
 
 		// Compare with this user's new privileges.
-		for _, priv := range privilege.ListFromBitField(cur.Privileges, objectType).SortedNames() {
+		for _, priv := range privilegepb.ListFromBitField(cur.Privileges, objectType).SortedNames() {
 			if _, ok := prevPrivilegeSet[priv]; !ok {
 				// New privileges that do not exist in the old privileges set imply that they have been granted.
 				granted = append(granted, priv)
@@ -274,7 +274,7 @@ func comparePrivileges(
 	for i := range curUserPrivileges {
 		username := curUserPrivileges[i].User().Normalized()
 		if _, ok := curUserMap[username]; ok {
-			granted := privilege.ListFromBitField(curUserPrivileges[i].Privileges, objectType).SortedNames()
+			granted := privilegepb.ListFromBitField(curUserPrivileges[i].Privileges, objectType).SortedNames()
 			if granted == nil {
 				continue
 			}

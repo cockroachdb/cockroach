@@ -14,9 +14,9 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -64,7 +64,7 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
+	if err := d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilegepb.Privilege_SELECT); err != nil {
 		return nil, err
 	}
 	if idx.Table().IsVirtualTable() {

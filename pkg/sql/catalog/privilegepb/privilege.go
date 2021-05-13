@@ -1,14 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-
-package privilege
+package privilegepb
 
 import (
 	"bytes"
@@ -18,30 +8,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
-)
-
-//go:generate stringer -type=Kind
-
-// Kind defines a privilege. This is output by the parser,
-// and used to generate the privilege bitfields in the PrivilegeDescriptor.
-type Kind uint32
-
-// List of privileges. ALL is specifically encoded so that it will automatically
-// pick up new privileges.
-// New privileges must be added to the end since this is a bitfield.
-const (
-	_ Kind = iota
-	ALL
-	CREATE
-	DROP
-	GRANT
-	SELECT
-	INSERT
-	DELETE
-	UPDATE
-	USAGE
-	ZONECONFIG
-	CONNECT
 )
 
 // ObjectType represents objects that can have privileges.
@@ -62,42 +28,42 @@ const (
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
-	ReadData         = List{GRANT, SELECT}
-	ReadWriteData    = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
-	TypePrivileges   = List{ALL, GRANT, USAGE}
+	AllPrivileges    = List{Privilege_ALL, Privilege_CONNECT, Privilege_CREATE, Privilege_DROP_PRIVILEGE, Privilege_GRANT, Privilege_SELECT, Privilege_INSERT, Privilege_DELETE, Privilege_UPDATE, Privilege_USAGE, Privilege_ZONECONFIG}
+	ReadData         = List{Privilege_GRANT, Privilege_SELECT}
+	ReadWriteData    = List{Privilege_GRANT, Privilege_SELECT, Privilege_INSERT, Privilege_DELETE, Privilege_UPDATE}
+	DBPrivileges     = List{Privilege_ALL, Privilege_CONNECT, Privilege_CREATE, Privilege_DROP_PRIVILEGE, Privilege_GRANT, Privilege_SELECT, Privilege_INSERT, Privilege_DELETE, Privilege_UPDATE, Privilege_ZONECONFIG}
+	TablePrivileges  = List{Privilege_ALL, Privilege_CREATE, Privilege_DROP_PRIVILEGE, Privilege_GRANT, Privilege_SELECT, Privilege_INSERT, Privilege_DELETE, Privilege_UPDATE, Privilege_ZONECONFIG}
+	SchemaPrivileges = List{Privilege_ALL, Privilege_GRANT, Privilege_CREATE, Privilege_USAGE}
+	TypePrivileges   = List{Privilege_ALL, Privilege_GRANT, Privilege_USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
-func (k Kind) Mask() uint32 {
-	return 1 << k
+func (p Privilege) Mask() uint32 {
+	return 1 << p
 }
 
 // ByValue is just an array of privilege kinds sorted by value.
-var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT,
+var ByValue = [...]Privilege{
+	Privilege_ALL, Privilege_CREATE, Privilege_DROP_PRIVILEGE, Privilege_GRANT, Privilege_SELECT, Privilege_INSERT, Privilege_DELETE, Privilege_UPDATE, Privilege_USAGE, Privilege_ZONECONFIG, Privilege_CONNECT,
 }
 
 // ByName is a map of string -> kind value.
-var ByName = map[string]Kind{
-	"ALL":        ALL,
-	"CONNECT":    CONNECT,
-	"CREATE":     CREATE,
-	"DROP":       DROP,
-	"GRANT":      GRANT,
-	"SELECT":     SELECT,
-	"INSERT":     INSERT,
-	"DELETE":     DELETE,
-	"UPDATE":     UPDATE,
-	"ZONECONFIG": ZONECONFIG,
-	"USAGE":      USAGE,
+var ByName = map[string]Privilege{
+	"ALL":        Privilege_ALL,
+	"CONNECT":    Privilege_CONNECT,
+	"CREATE":     Privilege_CREATE,
+	"DROP":       Privilege_DROP_PRIVILEGE,
+	"GRANT":      Privilege_GRANT,
+	"SELECT":     Privilege_SELECT,
+	"INSERT":     Privilege_INSERT,
+	"DELETE":     Privilege_DELETE,
+	"UPDATE":     Privilege_UPDATE,
+	"ZONECONFIG": Privilege_ZONECONFIG,
+	"USAGE":      Privilege_USAGE,
 }
 
 // List is a list of privileges.
-type List []Kind
+type List []Privilege
 
 // Len, Swap, and Less implement the Sort interface.
 func (pl List) Len() int {
@@ -117,7 +83,7 @@ func (pl List) Less(i, j int) bool {
 func (pl List) names() []string {
 	ret := make([]string, len(pl))
 	for i, p := range pl {
-		ret[i] = p.String()
+		ret[i] = p.StringOverride()
 	}
 	return ret
 }
@@ -129,7 +95,7 @@ func (pl List) Format(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(p.String())
+		buf.WriteString(p.StringOverride())
 	}
 }
 
@@ -165,9 +131,9 @@ func (pl List) ToBitField() uint32 {
 }
 
 // Contains returns true iff the list contains the given privilege kind.
-func (pl List) Contains(k Kind) bool {
-	for _, p := range pl {
-		if p == k {
+func (pl List) Contains(p Privilege) bool {
+	for _, priv := range pl {
+		if priv == p {
 			return true
 		}
 	}
@@ -212,7 +178,7 @@ func ValidatePrivileges(privileges List, objectType ObjectType) error {
 	for _, priv := range privileges {
 		if validPrivs.ToBitField()&priv.Mask() == 0 {
 			return pgerror.Newf(pgcode.InvalidGrantOperation,
-				"invalid privilege type %s for %s", priv.String(), objectType)
+				"invalid privilege type %s for %s", priv.StringOverride(), objectType)
 		}
 	}
 
@@ -236,4 +202,20 @@ func GetValidPrivilegesForObject(objectType ObjectType) List {
 	default:
 		panic(errors.AssertionFailedf("unknown object type %s", objectType))
 	}
+}
+
+var stringOverride = map[string]string{
+	"DROP_PRIVILEGE": "DROP",
+}
+
+// StringOverride corrects the display name for the privilege.
+// The String method auto-generated by proto may not correspond to the
+// desired display name of the privilege.
+func (p Privilege) StringOverride() string {
+	s := p.String()
+	if val, ok := stringOverride[s]; ok {
+		return val
+	}
+
+	return s
 }

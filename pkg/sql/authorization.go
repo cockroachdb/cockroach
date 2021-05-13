@@ -20,12 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -48,12 +48,12 @@ type userRoleMembership map[security.SQLUsername]bool
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind, user security.SQLUsername,
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilegepb.Privilege, user security.SQLUsername,
 	) error
 
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+		ctx context.Context, descriptor catalog.Descriptor, privilege privilegepb.Privilege,
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
@@ -95,7 +95,7 @@ var _ AuthorizationAccessor = &planner{}
 func (p *planner) CheckPrivilegeForUser(
 	ctx context.Context,
 	descriptor catalog.Descriptor,
-	privilege privilege.Kind,
+	privilege privilegepb.Privilege,
 	user security.SQLUsername,
 ) error {
 	// Verify that the txn is valid in any case, so that
@@ -139,7 +139,7 @@ func (p *planner) CheckPrivilegeForUser(
 // it should be probably be called CheckPrivilegesOrOwnership and return
 // a better error.
 func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
+	ctx context.Context, descriptor catalog.Descriptor, privilege privilegepb.Privilege,
 ) error {
 	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
 }
@@ -531,7 +531,7 @@ func (p *planner) canCreateOnSchema(
 		if err != nil {
 			return err
 		}
-		return p.CheckPrivilegeForUser(ctx, dbDesc, privilege.CREATE, user)
+		return p.CheckPrivilegeForUser(ctx, dbDesc, privilegepb.Privilege_CREATE, user)
 	case catalog.SchemaTemporary:
 		// Callers must check whether temporary schemas are valid to create in.
 		return nil
@@ -539,7 +539,7 @@ func (p *planner) canCreateOnSchema(
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot CREATE on schema %s", resolvedSchema.Name)
 	case catalog.SchemaUserDefined:
-		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.CREATE, user)
+		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilegepb.Privilege_CREATE, user)
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
 	}
@@ -565,7 +565,7 @@ func (p *planner) canResolveDescUnderSchema(
 		// Anyone can resolve under temporary, public or virtual schemas.
 		return nil
 	case catalog.SchemaUserDefined:
-		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.USAGE, p.User())
+		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilegepb.Privilege_USAGE, p.User())
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
 	}

@@ -11,11 +11,11 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -334,7 +334,7 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 		return nil, err
 	}
 
-	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilegepb.Privilege_SELECT)
 
 	regclassOid := tree.NewDOidWithName(tree.DInt(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
 	return c.f.ConstructConstVal(regclassOid, typ), nil

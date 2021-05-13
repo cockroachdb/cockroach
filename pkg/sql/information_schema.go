@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -343,7 +343,7 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
-			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
+			columndata := privilegepb.List{privilegepb.Privilege_SELECT, privilegepb.Privilege_INSERT, privilegepb.Privilege_UPDATE} // privileges for column level granularity
 			for _, u := range table.GetPrivileges().Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
@@ -355,7 +355,7 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 								scNameStr,                              // table_schema
 								tree.NewDString(table.GetName()),       // table_name
 								tree.NewDString(cd.GetName()),          // column_name
-								tree.NewDString(priv.String()),         // privilege_type
+								tree.NewDString(priv.StringOverride()), // privilege_type
 								tree.DNull,                             // is_grantable
 							); err != nil {
 								return err
@@ -1106,9 +1106,9 @@ CREATE TABLE information_schema.type_privileges (
 						grantee   *tree.DString
 						privilege *tree.DString
 					}{
-						{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
-						{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
-						{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
+						{tree.NewDString(security.RootUser), tree.NewDString(privilegepb.Privilege_ALL.StringOverride())},
+						{tree.NewDString(security.AdminRole), tree.NewDString(privilegepb.Privilege_ALL.StringOverride())},
+						{tree.NewDString(security.PublicRole), tree.NewDString(privilegepb.Privilege_USAGE.StringOverride())},
 					} {
 						typeNameStr := tree.NewDString(typ.Name())
 						if err := addRow(
@@ -1129,7 +1129,7 @@ CREATE TABLE information_schema.type_privileges (
 					typeNameStr := tree.NewDString(typeDesc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
-					privs := typeDesc.GetPrivileges().Show(privilege.Type)
+					privs := typeDesc.GetPrivileges().Show(privilegepb.Type)
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
@@ -1169,10 +1169,10 @@ CREATE TABLE information_schema.schema_privileges (
 					var privs []descpb.UserPrivilegeString
 					if sc.Kind == catalog.SchemaUserDefined {
 						// User defined schemas have their own privileges.
-						privs = sc.Desc.GetPrivileges().Show(privilege.Schema)
+						privs = sc.Desc.GetPrivileges().Show(privilegepb.Schema)
 					} else {
 						// Other schemas inherit from the parent database.
-						privs = db.GetPrivileges().Show(privilege.Database)
+						privs = db.GetPrivileges().Show(privilegepb.Database)
 					}
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.Name)
@@ -1181,14 +1181,14 @@ CREATE TABLE information_schema.schema_privileges (
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
-							privKind := privilege.ByName[priv]
+							privKind := privilegepb.ByName[priv]
 							// Non-user defined schemas inherit privileges from the database,
 							// but the USAGE privilege is conferred by having SELECT privilege
 							// on the database. (There is no SELECT privilege on schemas.)
 							if sc.Kind != catalog.SchemaUserDefined {
-								if privKind == privilege.SELECT {
-									priv = privilege.USAGE.String()
-								} else if !privilege.SchemaPrivileges.Contains(privKind) {
+								if privKind == privilegepb.Privilege_SELECT {
+									priv = privilegepb.Privilege_USAGE.StringOverride()
+								} else if !privilegepb.SchemaPrivileges.Contains(privKind) {
 									continue
 								}
 							}
@@ -1491,7 +1491,7 @@ CREATE TABLE information_schema.user_privileges (
 				dbNameStr := tree.NewDString(dbDesc.GetName())
 				for _, u := range []string{security.RootUser, security.AdminRole} {
 					grantee := tree.NewDString(u)
-					for _, p := range privilege.GetValidPrivilegesForObject(privilege.Table).SortedNames() {
+					for _, p := range privilegepb.GetValidPrivilegesForObject(privilegepb.Table).SortedNames() {
 						if err := addRow(
 							grantee,            // grantee
 							dbNameStr,          // table_catalog
@@ -1540,7 +1540,7 @@ func populateTablePrivileges(
 			tbNameStr := tree.NewDString(table.GetName())
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
-			for _, u := range table.GetPrivileges().Show(privilege.Table) {
+			for _, u := range table.GetPrivileges().Show(privilegepb.Table) {
 				for _, priv := range u.Privileges {
 					if err := addRow(
 						tree.DNull,                           // grantor
@@ -2283,7 +2283,7 @@ func userCanSeeDescriptor(
 	canSeeDescriptor := p.CheckAnyPrivilege(ctx, desc) == nil
 	// Users can see objects in the database if they have connect privilege.
 	if parentDBDesc != nil {
-		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, parentDBDesc, privilege.CONNECT) == nil
+		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, parentDBDesc, privilegepb.Privilege_CONNECT) == nil
 	}
 	return canSeeDescriptor, nil
 }

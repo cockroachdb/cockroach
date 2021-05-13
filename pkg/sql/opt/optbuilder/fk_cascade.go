@@ -13,12 +13,12 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -88,8 +88,8 @@ func (cb *onDeleteCascadeBuilder) Build(
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_DELETE)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
@@ -272,8 +272,8 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_DELETE)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
@@ -422,8 +422,8 @@ func (cb *onDeleteSetBuilder) Build(
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_UPDATE)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
@@ -637,8 +637,8 @@ func (cb *onUpdateCascadeBuilder) Build(
 		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
 		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_UPDATE)
+		b.checkPrivilege(dep, cb.childTable, privilegepb.Privilege_SELECT)
 
 		var mb mutationBuilder
 		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))

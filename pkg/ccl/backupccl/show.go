@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -425,16 +425,16 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 	if b == nil {
 		return ""
 	}
-	var objectType privilege.ObjectType
+	var objectType privilegepb.ObjectType
 	switch b.DescriptorType() {
 	case catalog.Database:
-		objectType = privilege.Database
+		objectType = privilegepb.Database
 	case catalog.Table:
-		objectType = privilege.Table
+		objectType = privilegepb.Table
 	case catalog.Type:
-		objectType = privilege.Type
+		objectType = privilegepb.Type
 	case catalog.Schema:
-		objectType = privilege.Schema
+		objectType = privilegepb.Schema
 	default:
 		return ""
 	}

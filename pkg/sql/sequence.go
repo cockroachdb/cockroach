@@ -23,12 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -113,7 +113,7 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 func incrementSequenceHelper(
 	ctx context.Context, p *planner, descriptor catalog.TableDescriptor,
 ) (int64, error) {
-	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
+	if err := p.CheckPrivilege(ctx, descriptor, privilegepb.Privilege_UPDATE); err != nil {
 		return 0, err
 	}
 
@@ -319,7 +319,7 @@ func setSequenceValueHelper(
 	isCalled bool,
 	seqName *tree.TableName,
 ) error {
-	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
+	if err := p.CheckPrivilege(ctx, descriptor, privilegepb.Privilege_UPDATE); err != nil {
 		return err
 	}
 

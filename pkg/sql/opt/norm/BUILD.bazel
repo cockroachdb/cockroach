@@ -32,6 +32,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/privilegepb",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
@@ -39,7 +40,6 @@ go_library(
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
-        "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",

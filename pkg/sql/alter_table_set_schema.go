@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -70,7 +70,7 @@ func (p *planner) AlterTableSetSchema(
 	}
 
 	// The user needs DROP privilege on the table to set the schema.
-	err = p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
+	err = p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_DROP_PRIVILEGE)
 	if err != nil {
 		return nil, err
 	}

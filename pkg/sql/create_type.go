@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -118,7 +118,7 @@ func resolveNewTypeName(
 		return nil, nil, err
 	}
 
-	if err := params.p.CheckPrivilege(params.ctx, db, privilege.CREATE); err != nil {
+	if err := params.p.CheckPrivilege(params.ctx, db, privilegepb.Privilege_CREATE); err != nil {
 		return nil, nil, err
 	}
 
@@ -348,7 +348,7 @@ func (p *planner) createEnumWithID(
 	}
 
 	inheritUsagePrivilegeFromSchema(resolvedSchema, privs)
-	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
+	privs.Grant(params.p.User(), privilegepb.List{privilegepb.Privilege_ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
 	var regionConfig *descpb.TypeDescriptor_RegionConfig
@@ -425,7 +425,7 @@ func inheritUsagePrivilegeFromSchema(
 	switch resolvedSchema.Kind {
 	case catalog.SchemaPublic:
 		// If the type is in the public schema, the public role has USAGE on it.
-		privs.Grant(security.PublicRoleName(), privilege.List{privilege.USAGE})
+		privs.Grant(security.PublicRoleName(), privilegepb.List{privilegepb.Privilege_USAGE})
 	case catalog.SchemaTemporary, catalog.SchemaVirtual:
 		// No types should be created in a temporary schema or a virtual schema.
 		panic(errors.AssertionFailedf(
@@ -438,8 +438,8 @@ func inheritUsagePrivilegeFromSchema(
 		// Look for all users that have USAGE on the schema and add it to the
 		// privilege descriptor.
 		for _, u := range schemaPrivs.Users {
-			if u.Privileges&privilege.USAGE.Mask() == 1 {
-				privs.Grant(u.User(), privilege.List{privilege.USAGE})
+			if u.Privileges&privilegepb.Privilege_USAGE.Mask() == 1 {
+				privs.Grant(u.User(), privilegepb.List{privilegepb.Privilege_USAGE})
 			}
 		}
 	default:

@@ -16,11 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -63,7 +63,7 @@ func (p *planner) prepareSetSchema(
 	default:
 		// The user needs CREATE privilege on the target schema to move an object
 		// to the schema.
-		err = p.CheckPrivilege(ctx, res.Desc, privilege.CREATE)
+		err = p.CheckPrivilege(ctx, res.Desc, privilegepb.Privilege_CREATE)
 		if err != nil {
 			return 0, err
 		}

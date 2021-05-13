@@ -11,11 +11,11 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -117,7 +117,7 @@ func (b *Builder) addOrderByOrDistinctOnColumn(
 func (b *Builder) analyzeOrderByIndex(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
-	tab, tn := b.resolveTable(&order.Table, privilege.SELECT)
+	tab, tn := b.resolveTable(&order.Table, privilegepb.Privilege_SELECT)
 	index, err := b.findIndexByName(tab, order.Index)
 	if err != nil {
 		panic(err)

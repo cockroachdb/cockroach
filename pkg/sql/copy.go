@@ -24,11 +24,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -179,7 +179,7 @@ func newCopyMachine(
 	if err != nil {
 		return nil, err
 	}
-	if err := c.p.CheckPrivilege(ctx, tableDesc, privilege.INSERT); err != nil {
+	if err := c.p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_INSERT); err != nil {
 		return nil, err
 	}
 	cols, err := colinfo.ProcessTargetColumns(tableDesc, n.Columns,

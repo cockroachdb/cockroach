@@ -19,12 +19,12 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+import "github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 
 // Revoke represents a REVOKE statement.
 // PrivilegeList and TargetList are defined in grant.go
 type Revoke struct {
-	Privileges privilege.List
+	Privileges privilegepb.List
 	Targets    TargetList
 	Grantees   NameList
 }

@@ -19,12 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -41,23 +41,23 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
-	var grantOn privilege.ObjectType
+	var grantOn privilegepb.ObjectType
 	switch {
 	case n.Targets.Databases != nil:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
-		grantOn = privilege.Database
+		grantOn = privilegepb.Database
 	case n.Targets.Schemas != nil:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnSchema)
-		grantOn = privilege.Schema
+		grantOn = privilegepb.Schema
 	case n.Targets.Types != nil:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnType)
-		grantOn = privilege.Type
+		grantOn = privilegepb.Type
 	default:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
-		grantOn = privilege.Table
+		grantOn = privilegepb.Table
 	}
 
-	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
+	if err := privilegepb.ValidatePrivileges(n.Privileges, grantOn); err != nil {
 		return nil, err
 	}
 
@@ -92,23 +92,23 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
-	var grantOn privilege.ObjectType
+	var grantOn privilegepb.ObjectType
 	switch {
 	case n.Targets.Databases != nil:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnDatabase)
-		grantOn = privilege.Database
+		grantOn = privilegepb.Database
 	case n.Targets.Schemas != nil:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnSchema)
-		grantOn = privilege.Schema
+		grantOn = privilegepb.Schema
 	case n.Targets.Types != nil:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnType)
-		grantOn = privilege.Type
+		grantOn = privilegepb.Type
 	default:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
-		grantOn = privilege.Table
+		grantOn = privilegepb.Table
 	}
 
-	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
+	if err := privilegepb.ValidatePrivileges(n.Privileges, grantOn); err != nil {
 		return nil, err
 	}
 
@@ -137,9 +137,9 @@ type changePrivilegesNode struct {
 	isGrant         bool
 	targets         tree.TargetList
 	grantees        []security.SQLUsername
-	desiredprivs    privilege.List
+	desiredprivs    privilegepb.List
 	changePrivilege func(*descpb.PrivilegeDescriptor, security.SQLUsername)
-	grantOn         privilege.ObjectType
+	grantOn         privilegepb.ObjectType
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -197,7 +197,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
 		}
 
-		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
+		if err := p.CheckPrivilege(ctx, descriptor, privilegepb.Privilege_GRANT); err != nil {
 			return err
 		}
 

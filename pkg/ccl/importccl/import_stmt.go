@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -50,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -195,7 +195,7 @@ var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs, csv
 
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
-var importIntoRequiredPrivileges = []privilege.Kind{privilege.INSERT, privilege.DROP}
+var importIntoRequiredPrivileges = []privilegepb.Privilege{privilegepb.Privilege_INSERT, privilegepb.Privilege_DROP_PRIVILEGE}
 
 // File formats supported for IMPORT INTO
 var allowedIntoFormats = map[string]struct{}{
@@ -261,7 +261,7 @@ func importJobDescription(
 
 func ensureRequiredPrivileges(
 	ctx context.Context,
-	requiredPrivileges []privilege.Kind,
+	requiredPrivileges []privilegepb.Privilege,
 	p sql.PlanHookState,
 	desc *tabledesc.Mutable,
 ) error {
@@ -429,7 +429,7 @@ func importPlanHook(
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {
-				if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilegepb.Privilege_CREATE); err != nil {
 					return err
 				}
 			}
@@ -452,7 +452,7 @@ func importPlanHook(
 			// If this is a non-INTO import that will thus be making a new table, we
 			// need the CREATE priv in the target DB.
 			if !importStmt.Into {
-				if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilegepb.Privilege_CREATE); err != nil {
 					return err
 				}
 			}

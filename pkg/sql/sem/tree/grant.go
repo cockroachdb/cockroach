@@ -23,12 +23,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 )
 
 // Grant represents a GRANT statement.
 type Grant struct {
-	Privileges privilege.List
+	Privileges privilegepb.List
 	Targets    TargetList
 	Grantees   NameList
 }

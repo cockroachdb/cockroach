@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -420,7 +420,7 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 		// TODO(arul): It's worth noting CREATE isn't a thing on tables in postgres,
 		// so this will require some changes when (if) we move our privilege system
 		// to be more in line with postgres.
-		err := p.CheckPrivilege(ctx, desc, privilege.CREATE)
+		err := p.CheckPrivilege(ctx, desc, privilegepb.Privilege_CREATE)
 		// Wrap an insufficient privileges error a bit better to reflect the lack
 		// of ownership as well.
 		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
@@ -428,7 +428,7 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 				"user %s must be owner of %s or have %s privilege on %s %s",
 				p.SessionData().User(),
 				desc.GetName(),
-				privilege.CREATE,
+				privilegepb.Privilege_CREATE,
 				desc.DescriptorType(),
 				desc.GetName(),
 			)

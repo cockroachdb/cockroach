@@ -12,12 +12,12 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -463,7 +463,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 		panic(err)
 	}
 
-	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilegepb.Privilege_CREATE); err != nil {
 		panic(err)
 	}
 
@@ -477,9 +477,9 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 //
 // If the name does not resolve to a table, then resolveTableForMutation raises
 // an error. Privileges are checked when resolving the table, and an error is
-// raised if the current user does not have the given privilege.
+// raised if the current user does not have the given privilegepb.
 func (b *Builder) resolveTableForMutation(
-	n tree.TableExpr, priv privilege.Kind,
+	n tree.TableExpr, priv privilegepb.Privilege,
 ) (tab cat.Table, depName opt.MDDepName, alias tree.TableName, columns []tree.ColumnID) {
 	// Strip off an outer AliasedTableExpr if there is one.
 	var outerAlias *tree.TableName
@@ -533,7 +533,7 @@ func (b *Builder) resolveTableForMutation(
 // name does not resolve to a table, or if the current user does not have the
 // given privilege, then resolveTable raises an error.
 func (b *Builder) resolveTable(
-	tn *tree.TableName, priv privilege.Kind,
+	tn *tree.TableName, priv privilegepb.Privilege,
 ) (cat.Table, tree.TableName) {
 	ds, _, resName := b.resolveDataSource(tn, priv)
 	tab, ok := ds.(cat.Table)
@@ -546,7 +546,7 @@ func (b *Builder) resolveTable(
 // resolveTableRef returns the table in the catalog that matches the given
 // TableRef spec. If the name does not resolve to a table, or if the current
 // user does not have the given privilege, then resolveTableRef raises an error.
-func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.Table {
+func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilegepb.Privilege) cat.Table {
 	ds, _ := b.resolveDataSourceRef(ref, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
@@ -563,7 +563,7 @@ func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.T
 // If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
 // the fully qualified name.
 func (b *Builder) resolveDataSource(
-	tn *tree.TableName, priv privilege.Kind,
+	tn *tree.TableName, priv privilegepb.Privilege,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
 	if b.insideViewDef {
@@ -590,7 +590,7 @@ func (b *Builder) resolveDataSource(
 // matches, or if the current user does not have the given privilege, then
 // resolveDataSourceFromRef raises an error.
 func (b *Builder) resolveDataSourceRef(
-	ref *tree.TableRef, priv privilege.Kind,
+	ref *tree.TableRef, priv privilegepb.Privilege,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
 	if b.insideViewDef {
@@ -611,8 +611,10 @@ func (b *Builder) resolveDataSourceRef(
 // error. It also adds the object and it's original unresolved name as a
 // dependency to the metadata, so that the privileges can be re-checked on reuse
 // of the memo.
-func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
-	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
+func (b *Builder) checkPrivilege(
+	name opt.MDDepName, ds cat.DataSource, priv privilegepb.Privilege,
+) {
+	if !(priv == privilegepb.Privilege_SELECT && b.skipSelectPrivilegeChecks) {
 		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
 		if err != nil {
 			panic(err)

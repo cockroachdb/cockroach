@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -46,7 +46,7 @@ func (p *planner) CommentOnDatabase(
 	if err != nil {
 		return nil, err
 	}
-	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilegepb.Privilege_CREATE); err != nil {
 		return nil, err
 	}
 

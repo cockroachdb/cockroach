@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -76,7 +76,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, sqlerrors.NewUndefinedRelationError(&oldTn)
 	}
 
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilegepb.Privilege_DROP_PRIVILEGE); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +148,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newTn.ObjectNamePrefix = prefix
 	}
 
-	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, targetDbDesc, privilegepb.Privilege_CREATE); err != nil {
 		return err
 	}
 

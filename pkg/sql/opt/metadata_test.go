@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -63,7 +63,7 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected types")
 	}
 
-	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
+	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilegepb.Privilege_CREATE)
 	depsUpToDate, err := md.CheckDependencies(context.Background(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
