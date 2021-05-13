@@ -452,7 +452,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	runTest := func(left, right tree.Datum, expected, expectUnique bool) {
-		keys, err := EncodeInvertedIndexTableKeys(left, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+		keys, err := EncodeInvertedIndexTableKeys(left, nil, descpb.StrictIndexColumnIDGuaranteesVersion)
 		require.NoError(t, err)
 
 		invertedExpr, err := EncodeContainingInvertedIndexSpans(&evalCtx, right)
@@ -587,7 +587,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 	}
 
 	runTest := func(indexedValue, value tree.Datum, expectContainsKeys, expected, expectUnique bool) {
-		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.StrictIndexColumnIDGuaranteesVersion)
 		require.NoError(t, err)
 
 		invertedExpr, err := EncodeContainedInvertedIndexSpans(&evalCtx, value)

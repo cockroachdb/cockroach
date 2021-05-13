@@ -222,7 +222,7 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 		}
 
 		// * The index must store some columns.
-		if s.index.NumStoredColumns() == 0 {
+		if s.index.NumSecondaryStoredColumns() == 0 {
 			return false
 		}
 

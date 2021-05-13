@@ -1325,7 +1325,7 @@ CREATE TABLE information_schema.statistics (
 					if index.HasOldStoredColumns() {
 						// Old STORING format: implicit columns are extra columns minus stored
 						// columns.
-						hasImplicitCols = index.NumExtraColumns() > index.NumStoredColumns()
+						hasImplicitCols = index.NumExtraColumns() > index.NumSecondaryStoredColumns()
 					} else {
 						// New STORING format: implicit columns are extra columns.
 						hasImplicitCols = index.NumExtraColumns() > 0
@@ -1356,7 +1356,7 @@ CREATE TABLE information_schema.statistics (
 						sequence++
 						delete(implicitCols, col)
 					}
-					for i := 0; i < index.NumStoredColumns(); i++ {
+					for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 						col := index.GetStoredColumnName(i)
 						// We add a row for each stored column of index.
 						if err := appendRow(index, col, sequence,

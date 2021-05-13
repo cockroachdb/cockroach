@@ -168,22 +168,28 @@ func DecodeRowInfo(
 	var colIDs []descpb.ColumnID
 	if !allColumns {
 		colIDs = make([]descpb.ColumnID, index.NumColumns())
-		for i := range colIDs {
+		for i := 0; i < index.NumColumns(); i++ {
 			colIDs[i] = index.GetColumnID(i)
 		}
 	} else if index.Primary() {
-		colIDs = make([]descpb.ColumnID, len(tableDesc.PublicColumns()))
-		for i, col := range tableDesc.PublicColumns() {
+		publicColumns := tableDesc.PublicColumns()
+		colIDs = make([]descpb.ColumnID, len(publicColumns))
+		for i, col := range publicColumns {
 			colIDs[i] = col.GetID()
 		}
 	} else {
-		colIDs = make([]descpb.ColumnID, 0, index.NumColumns()+index.NumExtraColumns()+index.NumStoredColumns())
-		_ = index.ForEachColumnID(func(id descpb.ColumnID) error {
-			colIDs = append(colIDs, id)
-			return nil
-		})
+		maxNumIDs := index.NumColumns() + index.NumExtraColumns() + index.NumSecondaryStoredColumns()
+		colIDs = make([]descpb.ColumnID, 0, maxNumIDs)
+		for i := 0; i < index.NumColumns(); i++ {
+			colIDs = append(colIDs, index.GetColumnID(i))
+		}
+		for i := 0; i < index.NumExtraColumns(); i++ {
+			colIDs = append(colIDs, index.GetExtraColumnID(i))
+		}
+		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+			colIDs = append(colIDs, index.GetStoredColumnID(i))
+		}
 	}
-
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(colIDs)-1)
 

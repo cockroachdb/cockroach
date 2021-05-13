@@ -238,7 +238,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsDisabled", idx.GetName())
 		require.False(t, idx.IsCreatedExplicitly(),
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
-		require.Equal(t, descpb.IndexDescriptorVersion(0x2), idx.GetVersion(),
+		require.Equal(t, descpb.IndexDescriptorVersion(0x3), idx.GetVersion(),
 			errMsgFmt, "GetVersion", idx.GetName())
 		require.Equal(t, 0, idx.NumInterleaveAncestors(),
 			errMsgFmt, "NumInterleaveAncestors", idx.GetName())
@@ -271,19 +271,22 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetShardColumnName", idx.GetName())
 		require.Equal(t, idx == s4, !(&descpb.ShardedDescriptor{}).Equal(idx.GetSharded()),
 			errMsgFmt, "GetSharded", idx.GetName())
-		require.Equalf(t, idx != s3, idx.NumStoredColumns() == 0,
-			errMsgFmt, "NumStoredColumns", idx.GetName())
+		require.Equalf(t, idx != s3, idx.NumSecondaryStoredColumns() == 0,
+			errMsgFmt, "NumSecondaryStoredColumns", idx.GetName())
 	}
 
 	// Check index columns.
 	for i, idx := range indexes {
 		expectedColNames := indexColumns[i]
 		actualColNames := make([]string, idx.NumColumns())
+		colIDs := idx.CollectColumnIDs()
+		colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(idx.CollectExtraColumnIDs())
 		for j := range actualColNames {
 			actualColNames[j] = idx.GetColumnName(j)
 			require.Equalf(t, idx == s1, idx.GetColumnDirection(j) == descpb.IndexDescriptor_DESC,
 				"mismatched column directions for index '%s'", idx.GetName())
-			require.True(t, idx.ContainsColumnID(idx.GetColumnID(j)),
+			require.True(t, colIDs.Contains(idx.GetColumnID(j)),
 				"column ID resolution failure for column '%s' in index '%s'", idx.GetColumnName(j), idx.GetName())
 		}
 		require.Equalf(t, expectedColNames, actualColNames,
@@ -309,7 +312,7 @@ func TestIndexInterface(t *testing.T) {
 	require.Equal(t, s2.GetColumnID(0), s2.InvertedColumnID())
 	require.Equal(t, "c7", s6.InvertedColumnName())
 	require.Equal(t, s6.GetColumnID(0), s6.InvertedColumnID())
-	require.Equal(t, 2, s3.NumStoredColumns())
+	require.Equal(t, 2, s3.NumSecondaryStoredColumns())
 	require.Equal(t, "c5", s3.GetStoredColumnName(0))
 	require.Equal(t, "c6", s3.GetStoredColumnName(1))
 }

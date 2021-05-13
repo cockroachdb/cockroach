@@ -1518,7 +1518,9 @@ func NewTableDesc(
 	// server setup before the cluster version has been initialized.
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
-		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
+		if version.IsActive(clusterversion.StrictIndexColumnIDGuarantees) {
+			indexEncodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
+		} else if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
 			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
 		}
 	}
@@ -2144,7 +2146,7 @@ func NewTableDesc(
 
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
 		// Increment the counter if this index could be storing data across multiple column families.
-		if idx.NumStoredColumns() > 1 && len(desc.Families) > 1 {
+		if idx.NumSecondaryStoredColumns() > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 		}
 	}
@@ -2188,11 +2190,16 @@ func NewTableDesc(
 				// partitioned column.
 				if numImplicitCols := newPrimaryIndex.Partitioning.NumImplicitColumns; numImplicitCols > 0 {
 					for _, idx := range desc.PublicNonPrimaryIndexes() {
+						if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
+							continue
+						}
+						colIDs := idx.CollectColumnIDs()
+						colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+						colIDs.UnionWith(idx.CollectExtraColumnIDs())
 						missingExtraColumnIDs := make([]descpb.ColumnID, 0, numImplicitCols)
 						for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
-							if !idx.ContainsColumnID(implicitPrimaryColID) {
+							if !colIDs.Contains(implicitPrimaryColID) {
 								missingExtraColumnIDs = append(missingExtraColumnIDs, implicitPrimaryColID)
-								idx.IndexDesc().ExtraColumnIDs = append(idx.IndexDesc().ExtraColumnIDs, implicitPrimaryColID)
 							}
 						}
 						if len(missingExtraColumnIDs) == 0 {
@@ -2599,7 +2606,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				indexDef := tree.IndexTableDef{
 					Name:     tree.Name(idx.GetName()),
 					Inverted: idx.GetType() == descpb.IndexDescriptor_INVERTED,
-					Storing:  make(tree.NameList, 0, idx.NumStoredColumns()),
+					Storing:  make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:  make(tree.IndexElemList, 0, idx.NumColumns()),
 				}
 				numColumns := idx.NumColumns()
@@ -2623,7 +2630,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				for j := 0; j < idx.NumStoredColumns(); j++ {
+				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
 					indexDef.Storing = append(indexDef.Storing, tree.Name(idx.GetStoredColumnName(j)))
 				}
 				var def tree.TableDef = &indexDef

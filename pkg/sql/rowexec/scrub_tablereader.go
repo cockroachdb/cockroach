@@ -113,13 +113,13 @@ func newScrubTableReader(
 		}
 	} else {
 		colIdxMap := catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumns())
-		err := tr.tableDesc.PublicNonPrimaryIndexes()[spec.IndexIdx-1].ForEachColumnID(func(id descpb.ColumnID) error {
-			neededColumns.Add(colIdxMap.GetDefault(id))
-			return nil
+		idx := tr.tableDesc.PublicNonPrimaryIndexes()[spec.IndexIdx-1]
+		colIDs := idx.CollectColumnIDs()
+		colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+		colIDs.UnionWith(idx.CollectExtraColumnIDs())
+		colIDs.ForEach(func(colID descpb.ColumnID) {
+			neededColumns.Add(colIdxMap.GetDefault(colID))
 		})
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	var fetcher row.Fetcher

@@ -139,7 +139,9 @@ func (w index) IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnI
 // HasOldStoredColumns returns whether the index has stored columns in the old
 // format (data encoded the same way as if they were in an implicit column).
 func (w index) HasOldStoredColumns() bool {
-	return w.desc.HasOldStoredColumns()
+	return w.NumExtraColumns() > 0 &&
+		!w.Primary() &&
+		len(w.desc.StoreColumnIDs) < len(w.desc.StoreColumnNames)
 }
 
 // InvertedColumnID returns the ColumnID of the inverted column of the inverted
@@ -156,11 +158,31 @@ func (w index) InvertedColumnName() string {
 	return w.desc.InvertedColumnName()
 }
 
-// ContainsColumnID returns true if the index descriptor contains the specified
-// column ID either in its explicit column IDs, the extra column IDs, or the
-// stored column IDs.
-func (w index) ContainsColumnID(colID descpb.ColumnID) bool {
-	return w.desc.ContainsColumnID(colID)
+// CollectColumnIDs creates a new set containing the column IDs in this index.
+func (w index) CollectColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.ColumnIDs...)
+}
+
+// CollectSecondaryStoredColumnIDs creates a new set containing the column IDs
+// stored in this index if it is a secondary index.
+func (w index) CollectSecondaryStoredColumnIDs() catalog.TableColSet {
+	if w.Primary() {
+		return catalog.TableColSet{}
+	}
+	return catalog.MakeTableColSet(w.desc.StoreColumnIDs...)
+}
+
+// CollectExtraColumnIDs creates a new set containing the extra column IDs in
+// this index. These are the columns from the table's primary index which are
+// otherwise not in this index.
+func (w index) CollectExtraColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.ExtraColumnIDs...)
+}
+
+// CollectCompositeColumnIDs creates a new set containing the composite column
+// IDs.
+func (w index) CollectCompositeColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(w.desc.CompositeColumnIDs...)
 }
 
 // GetGeoConfig returns the geo config in the index descriptor.
@@ -239,16 +261,13 @@ func (w index) GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Dire
 	return w.desc.ColumnDirections[columnOrdinal]
 }
 
-// ForEachColumnID applies its argument fn to each of the column IDs in the
-// index descriptor. If there is an error, that error is returned immediately.
-func (w index) ForEachColumnID(fn func(colID descpb.ColumnID) error) error {
-	return w.desc.RunOverAllColumns(fn)
-}
-
-// NumStoredColumns returns the number of columns which the index stores in
-// addition to the columns which are explicitly part of the index (STORING
-// clause). Only used for secondary indexes.
-func (w index) NumStoredColumns() int {
+// NumSecondaryStoredColumns returns the number of columns which the index
+// stores in addition to the columns which are explicitly part of the index
+// (STORING clause). Returns 0 if the index isn't secondary.
+func (w index) NumSecondaryStoredColumns() int {
+	if w.Primary() {
+		return 0
+	}
 	return len(w.desc.StoreColumnIDs)
 }
 

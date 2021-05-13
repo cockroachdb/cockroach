@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -104,21 +103,31 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		}
 	}
 
-	if index.GetID() == n.tableDesc.GetPrimaryIndexID() {
+	if index.Primary() {
 		for _, col := range n.tableDesc.PublicColumns() {
 			addColumn(col)
 		}
 	} else {
-		err := index.ForEachColumnID(func(id descpb.ColumnID) error {
-			col, err := n.tableDesc.FindColumnWithID(id)
+		for i := 0; i < index.NumColumns(); i++ {
+			col, err := n.tableDesc.FindColumnWithID(index.GetColumnID(i))
 			if err != nil {
-				return err
+				return false, err
 			}
 			addColumn(col)
-			return nil
-		})
-		if err != nil {
-			return false, err
+		}
+		for i := 0; i < index.NumExtraColumns(); i++ {
+			col, err := n.tableDesc.FindColumnWithID(index.GetExtraColumnID(i))
+			if err != nil {
+				return false, err
+			}
+			addColumn(col)
+		}
+		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+			col, err := n.tableDesc.FindColumnWithID(index.GetStoredColumnID(i))
+			if err != nil {
+				return false, err
+			}
+			addColumn(col)
 		}
 	}
 

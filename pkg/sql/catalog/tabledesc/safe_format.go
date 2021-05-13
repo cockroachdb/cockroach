@@ -329,7 +329,7 @@ func formatSafeMutation(w *redact.StringBuilder, m *descpb.DescriptorMutation) {
 		w.Printf("OldPrimaryIndexID: %d", md.PrimaryKeySwap.OldPrimaryIndexId)
 		w.Printf(", OldIndexes: ")
 		formatSafeIndexIDs(w, md.PrimaryKeySwap.NewIndexes)
-		w.Printf("NewPrimaryIndexID: %d", md.PrimaryKeySwap.NewPrimaryIndexId)
+		w.Printf(", NewPrimaryIndexID: %d", md.PrimaryKeySwap.NewPrimaryIndexId)
 		w.Printf(", NewIndexes: ")
 		formatSafeIndexIDs(w, md.PrimaryKeySwap.NewIndexes)
 		w.Printf("}")

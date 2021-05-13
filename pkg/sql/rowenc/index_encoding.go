@@ -971,7 +971,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.EmptyArraysInInvertedIndexesVersion, false /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.StrictIndexColumnIDGuaranteesVersion, false /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -1014,7 +1014,7 @@ func encodeContainedArrayInvertedIndexSpans(
 	// We always exclude nulls from the list of keys when evaluating <@.
 	// This is because an expression like ARRAY[NULL] <@ ARRAY[NULL] is false,
 	// since NULL in SQL represents an unknown value.
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.EmptyArraysInInvertedIndexesVersion, true /* excludeNulls */)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.StrictIndexColumnIDGuaranteesVersion, true /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -1261,7 +1261,7 @@ func EncodeSecondaryIndex(
 				addToFamilyColMap(0, valueEncodedColumn{id: id, isComposite: true})
 			}
 			_ = tableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-				for i := 0; i < secondaryIndex.NumStoredColumns(); i++ {
+				for i := 0; i < secondaryIndex.NumSecondaryStoredColumns(); i++ {
 					id := secondaryIndex.GetStoredColumnID(i)
 					for _, col := range family.ColumnIDs {
 						if id == col {
@@ -1394,7 +1394,7 @@ func encodeSecondaryIndexNoFamilies(
 	}
 	var cols []valueEncodedColumn
 	// Since we aren't encoding data with families, we just encode all stored and composite columns in the value.
-	for i := 0; i < index.NumStoredColumns(); i++ {
+	for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
 		id := index.GetStoredColumnID(i)
 		cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
 	}

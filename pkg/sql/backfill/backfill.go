@@ -683,14 +683,22 @@ func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIn
 		}
 		if IndexMutationFilter(m) {
 			idx := m.AsIndex()
+			colIDs := idx.CollectColumnIDs()
+			if idx.GetEncodingType() == descpb.PrimaryIndexEncoding {
+				for _, col := range ib.cols {
+					if !col.IsVirtual() {
+						colIDs.Add(col.GetID())
+					}
+				}
+			} else {
+				colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+				colIDs.UnionWith(idx.CollectExtraColumnIDs())
+			}
+
 			ib.added = append(ib.added, idx)
 			for i := range ib.cols {
 				id := ib.cols[i].GetID()
-				idxContainsColumn := idx.ContainsColumnID(id)
-				isPrimaryIndex := idx.GetEncodingType() == descpb.PrimaryIndexEncoding
-				if (idxContainsColumn || isPrimaryIndex) &&
-					!ib.cols[i].IsVirtual() &&
-					i < len(desc.PublicColumns()) {
+				if colIDs.Contains(id) && i < len(desc.PublicColumns()) {
 					valNeededForCol.Add(i)
 				}
 			}

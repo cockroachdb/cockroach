@@ -1182,7 +1182,7 @@ func (oi *optIndex) init(
 	oi.zone = zone
 	oi.indexOrdinal = indexOrdinal
 	oi.invertedVirtualColOrd = invertedVirtualColOrd
-	if idx.IndexDesc() == tab.desc.GetPrimaryIndex().IndexDesc() {
+	if idx.Primary() {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
@@ -1202,7 +1202,7 @@ func (oi *optIndex) init(
 		oi.numCols = idx.NumColumns() + len(oi.storedCols)
 	} else {
 		oi.storedCols = idx.IndexDesc().StoreColumnIDs
-		oi.numCols = idx.NumColumns() + idx.NumExtraColumns() + idx.NumStoredColumns()
+		oi.numCols = idx.NumColumns() + idx.NumExtraColumns() + idx.NumSecondaryStoredColumns()
 	}
 
 	// Collect information about the partitions.
