@@ -59,6 +59,7 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	// run again and mixed-version clusters always write "good" descriptors.
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 	descpb.MaybeFixPrivileges(ddb.maybeModified.ID, &ddb.maybeModified.Privileges)
+	descpb.MaybeFixUsagePrivForTablesAndDBs(&ddb.maybeModified.Privileges)
 	return nil
 }
 
