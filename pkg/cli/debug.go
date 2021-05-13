@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -183,6 +184,56 @@ func printKey(kv storage.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
+func transactionPredicate(kv storage.MVCCKeyValue) bool {
+	if kv.Key.IsValue() {
+		return false
+	}
+	_, suffix, _, err := keys.DecodeRangeKey(kv.Key.Key)
+	if err != nil {
+		return false
+	}
+	return keys.LocalTransactionSuffix.Equal(suffix)
+}
+
+func intentPredicate(kv storage.MVCCKeyValue) bool {
+	if kv.Key.IsValue() {
+		return false
+	}
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+		return false
+	}
+	return meta.Txn != nil
+}
+
+var keyTypeParams = map[keyTypeFilter]struct {
+	predicate      func(kv storage.MVCCKeyValue) bool
+	minKey, maxKey storage.MVCCKey
+}{
+	showAll: {
+		predicate: func(kv storage.MVCCKeyValue) bool { return true },
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKeyMax,
+	},
+	showTxns: {
+		predicate: transactionPredicate,
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKey{Key: keys.LocalMax},
+	},
+	showValues: {
+		predicate: func(kv storage.MVCCKeyValue) bool {
+			return kv.Key.IsValue()
+		},
+		minKey: storage.NilKey,
+		maxKey: storage.MVCCKeyMax,
+	},
+	showIntents: {
+		predicate: intentPredicate,
+		minKey:    storage.NilKey,
+		maxKey:    storage.MVCCKeyMax,
+	},
+}
+
 func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -230,8 +281,19 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	keyTypeOptions := keyTypeParams[debugCtx.keyTypes]
+	if debugCtx.startKey.Equal(storage.NilKey) {
+		debugCtx.startKey = keyTypeOptions.minKey
+	}
+	if debugCtx.endKey.Equal(storage.NilKey) {
+		debugCtx.endKey = keyTypeOptions.maxKey
+	}
+
 	results := 0
 	iterFunc := func(kv storage.MVCCKeyValue) error {
+		if !keyTypeOptions.predicate(kv) {
+			return nil
+		}
 		done, err := printer(kv)
 		if err != nil {
 			return err
