@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestOrdinality(t *testing.T) {
@@ -150,6 +151,7 @@ func TestOrdinality(t *testing.T) {
 }
 
 func BenchmarkOrdinality(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()

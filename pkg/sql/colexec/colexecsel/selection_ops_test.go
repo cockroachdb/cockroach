@@ -156,6 +156,7 @@ func TestGetSelectionOperator(t *testing.T) {
 }
 
 func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	typs := []*types.T{types.Int}
@@ -213,6 +214,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 }
 
 func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	typs := []*types.T{types.Int, types.Int}

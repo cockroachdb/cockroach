@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -156,6 +157,7 @@ func windows(windowTestSpecs []windowTestSpec) ([]execinfrapb.WindowerSpec, erro
 }
 
 func BenchmarkWindower(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 3
 	const numRows = 100000
 

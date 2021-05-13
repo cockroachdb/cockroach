@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func BenchmarkNoop(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numRows = 1 << 16
 
 	ctx := context.Background()

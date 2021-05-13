@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestFilterer(t *testing.T) {
@@ -112,6 +113,7 @@ func TestFilterer(t *testing.T) {
 }
 
 func BenchmarkFilterer(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numRows = 1 << 16
 
 	ctx := context.Background()

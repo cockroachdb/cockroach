@@ -67,6 +67,7 @@ func TestOffset(t *testing.T) {
 }
 
 func BenchmarkOffset(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	typs := []*types.T{types.Int, types.Int, types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)

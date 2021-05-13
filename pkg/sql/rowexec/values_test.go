@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -95,6 +96,7 @@ func TestValuesProcessor(t *testing.T) {
 }
 
 func BenchmarkValuesProcessor(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()

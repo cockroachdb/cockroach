@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type mergeJoinerTestCase struct {
@@ -845,6 +846,7 @@ func TestConsumerClosed(t *testing.T) {
 }
 
 func BenchmarkMergeJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

@@ -175,6 +175,7 @@ func newBatchOfRepeatedIntRows(
 }
 
 func BenchmarkMergeJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	const nCols = 1
 	sourceTypes := []*types.T{types.Int}

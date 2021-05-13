@@ -238,6 +238,7 @@ func TestSortChunksRandomized(t *testing.T) {
 }
 
 func BenchmarkSortChunks(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 

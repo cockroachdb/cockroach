@@ -87,6 +87,7 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 }
 
 func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls bool) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -157,6 +158,7 @@ func BenchmarkBuiltinFunctions(b *testing.B) {
 // Perform a comparison between the default substring operator
 // and the specialized operator.
 func BenchmarkCompareSpecializedOperators(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)

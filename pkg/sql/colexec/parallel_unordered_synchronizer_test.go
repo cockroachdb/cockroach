@@ -195,6 +195,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numInputs = 6
 
 	typs := []*types.T{types.Int}

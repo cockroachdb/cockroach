@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -402,6 +403,7 @@ var twoColOrdering = execinfrapb.ConvertToSpecOrdering(colinfo.ColumnOrdering{
 
 // BenchmarkSortAll times how long it takes to sort an input of varying length.
 func BenchmarkSortAll(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()
@@ -444,6 +446,7 @@ func BenchmarkSortAll(b *testing.B) {
 // BenchmarkSortLimit times how long it takes to sort a fixed size input with
 // varying limits.
 func BenchmarkSortLimit(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()
@@ -490,6 +493,7 @@ func BenchmarkSortLimit(b *testing.B) {
 // BenchmarkSortChunks times how long it takes to sort an input which is already
 // sorted on a prefix.
 func BenchmarkSortChunks(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 2
 
 	ctx := context.Background()
