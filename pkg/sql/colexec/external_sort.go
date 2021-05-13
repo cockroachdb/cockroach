@@ -310,6 +310,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				// since externalSorterSpillPartition will check and re-merge if
 				// not. Proceed to the final merging state.
 				s.state = externalSorterFinalMerging
+				log.VEvent(ctx, 1, "external sorter consumed its input")
 				continue
 			}
 			if s.partitioner == nil {
@@ -536,6 +537,7 @@ func (s *externalSorter) Close(ctx context.Context) error {
 	if !s.CloserHelper.Close() {
 		return nil
 	}
+	log.VEvent(ctx, 1, "external sorter is closed")
 	var lastErr error
 	if s.partitioner != nil {
 		lastErr = s.partitioner.Close(ctx)
