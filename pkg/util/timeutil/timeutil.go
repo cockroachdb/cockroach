@@ -10,17 +10,23 @@
 
 package timeutil
 
-// FullTimeFormat is the time format used to display any timestamp
-// with date, time and time zone data.
+// FullTimeFormat is the time format used to display any unknown timestamp
+// type, and always shows the full time zone offset.
 const FullTimeFormat = "2006-01-02 15:04:05.999999-07:00:00"
 
+// TimestampWithTZFormat is the time format used to display
+// timestamps with a time zone offset. The minutes and seconds
+// offsets are only added if they are non-zero.
+const TimestampWithTZFormat = "2006-01-02 15:04:05.999999-07"
+
 // TimestampWithoutTZFormat is the time format used to display
-// timestamps without a time zone offset.
+// timestamps without a time zone offset. The minutes and seconds
+// offsets are only added if they are non-zero.
 const TimestampWithoutTZFormat = "2006-01-02 15:04:05.999999"
 
 // TimeWithTZFormat is the time format used to display a time
 // with a time zone offset.
-const TimeWithTZFormat = "15:04:05.999999-07:00:00"
+const TimeWithTZFormat = "15:04:05.999999-07"
 
 // TimeWithoutTZFormat is the time format used to display a time
 // without a time zone offset.

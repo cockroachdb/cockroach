@@ -618,8 +618,9 @@ func Example_sql_format() {
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.times (bare timestamp, withtz timestamptz)"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')"})
 	c.RunWithArgs([]string{"sql", "-e", "select bare from t.times; select withtz from t.times"})
-	c.RunWithArgs([]string{"sql", "-e", "select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz"})
-	c.RunWithArgs([]string{"sql", "-e", "select (1/3.0)::real; select (1/3.0)::double precision"})
+	c.RunWithArgs([]string{"sql", "-e",
+		"select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz; select '01:01+02:02'::timetz"})
+	c.RunWithArgs([]string{"sql", "-e", "select (1/3.0)::real; select (1/3.0)::double precision; select '-inf'::float8"})
 
 	// Output:
 	// sql -e create database t; create table t.times (bare timestamp, withtz timestamptz)
@@ -630,19 +631,23 @@ func Example_sql_format() {
 	// bare
 	// 2016-01-25 10:10:10
 	// withtz
-	// 2016-01-25 15:10:10+00:00:00
-	// sql -e select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz
+	// 2016-01-25 15:10:10+00
+	// sql -e select '2021-03-20'::date; select '01:01'::time; select '01:01'::timetz; select '01:01+02:02'::timetz
 	// date
 	// 2021-03-20
 	// time
 	// 01:01:00
 	// timetz
-	// 01:01:00+00:00:00
-	// sql -e select (1/3.0)::real; select (1/3.0)::double precision
+	// 01:01:00+00
+	// timetz
+	// 01:01:00+02:02
+	// sql -e select (1/3.0)::real; select (1/3.0)::double precision; select '-inf'::float8
 	// float4
 	// 0.33333334
 	// float8
 	// 0.3333333333333333
+	// float8
+	// -Infinity
 }
 
 func Example_sql_column_labels() {
