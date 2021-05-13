@@ -2704,30 +2704,19 @@ func MVCCIterate(
 func MVCCResolveWriteIntent(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
 ) (bool, error) {
-	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true}))
-	ok, err := MVCCResolveWriteIntentUsingIter(ctx, rw, iterAndBuf, ms, intent)
-	// Using defer would be more convenient, but it is measurably slower.
-	iterAndBuf.Cleanup()
-	return ok, err
-}
-
-// MVCCResolveWriteIntentUsingIter is a variant of MVCCResolveWriteIntent that
-// uses iterator and buffer passed as parameters (e.g. when used in a loop).
-func MVCCResolveWriteIntentUsingIter(
-	ctx context.Context,
-	rw ReadWriter,
-	iterAndBuf IterAndBuf,
-	ms *enginepb.MVCCStats,
-	intent roachpb.LockUpdate,
-) (bool, error) {
 	if len(intent.Key) == 0 {
 		return false, emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
 		return false, errors.Errorf("can't resolve range intent as point intent")
 	}
+
+	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true}))
 	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
-	return mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	ok, err := mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	// Using defer would be more convenient, but it is measurably slower.
+	iterAndBuf.Cleanup()
+	return ok, err
 }
 
 // unsafeNextVersion positions the iterator at the successor to latestKey. If this value
@@ -3108,12 +3097,6 @@ func GetBufUsingIter(iter MVCCIterator) IterAndBuf {
 	}
 }
 
-// SwitchIter switches to iter, and relinquishes ownership of the existing
-// iter.
-func (b *IterAndBuf) SwitchIter(iter MVCCIterator) {
-	b.iter = iter
-}
-
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
@@ -3122,40 +3105,22 @@ func (b IterAndBuf) Cleanup() {
 	}
 }
 
-// MVCCResolveWriteIntentRange commits or aborts (rolls back) the
-// range of write intents specified by start and end keys for a given
-// txn. ResolveWriteIntentRange will skip write intents of other
-// txns. Returns the number of intents resolved and a resume span if
-// the max keys limit was exceeded.
+// MVCCResolveWriteIntentRange commits or aborts (rolls back) the range of write
+// intents specified by start and end keys for a given txn.
+// ResolveWriteIntentRange will skip write intents of other txns. A max of zero
+// means unbounded. A max of -1 means resolve nothing and returns the entire
+// intent span as the resume span. Returns the number of intents resolved and a
+// resume span if the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
-) (int64, *roachpb.Span, error) {
-	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
-	defer iterAndBuf.Cleanup()
-	return MVCCResolveWriteIntentRangeUsingIter(ctx, rw, iterAndBuf, ms, intent, max)
-}
-
-// MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back)
-// the range of write intents specified by start and end keys for a
-// given txn. ResolveWriteIntentRange will skip write intents of other
-// txns.
-//
-// Returns the number of intents resolved and a resume span if the max
-// keys limit was exceeded. A max of zero means unbounded. A max of -1
-// means resolve nothing and return the entire intent span as the resume
-// span.
-func MVCCResolveWriteIntentRangeUsingIter(
-	ctx context.Context,
-	rw ReadWriter,
-	iterAndBuf IterAndBuf,
-	ms *enginepb.MVCCStats,
-	intent roachpb.LockUpdate,
-	max int64,
 ) (int64, *roachpb.Span, error) {
 	if max < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
 		return 0, &resumeSpan, nil
 	}
+
+	iterAndBuf := GetIterAndBuf(rw, IterOptions{UpperBound: intent.EndKey})
+	defer iterAndBuf.Cleanup()
 
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)

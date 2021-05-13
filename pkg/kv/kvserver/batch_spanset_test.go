@@ -510,21 +510,18 @@ func TestSpanSetNonMVCCBatch(t *testing.T) {
 	}
 }
 
-// TestSpanSetMVCCResolveWriteIntentRangeUsingIter verifies that
-// MVCCResolveWriteIntentRangeUsingIter does not stray outside of the passed-in
+// TestSpanSetMVCCResolveWriteIntentRange verifies that
+// MVCCResolveWriteIntentRange does not stray outside of the passed-in
 // key range (which it only used to do in this corner case tested here).
 //
 // See #20894.
-func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
+func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
-
 	ctx := context.Background()
-
 	value := roachpb.MakeValueFromString("irrelevant")
-
 	if err := storage.MVCCPut(
 		ctx,
 		eng,
@@ -536,24 +533,17 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-
 	var ss spanset.SpanSet
 	ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")})
-
 	batch := spanset.NewBatch(eng.NewBatch(), &ss)
 	defer batch.Close()
-
 	intent := roachpb.LockUpdate{
 		Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")},
 		Txn:    enginepb.TxnMeta{}, // unused
 		Status: roachpb.PENDING,
 	}
-
-	iterAndBuf := storage.GetIterAndBuf(batch, storage.IterOptions{UpperBound: intent.Span.EndKey})
-	defer iterAndBuf.Cleanup()
-
-	if _, _, err := storage.MVCCResolveWriteIntentRangeUsingIter(
-		ctx, batch, iterAndBuf, nil /* ms */, intent, 0,
+	if _, _, err := storage.MVCCResolveWriteIntentRange(
+		ctx, batch, nil /* ms */, intent, 0,
 	); err != nil {
 		t.Fatal(err)
 	}
