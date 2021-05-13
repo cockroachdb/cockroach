@@ -12,7 +12,6 @@ package status
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/net"
 )
@@ -528,28 +526,28 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	goMemStatsStale := timeutil.Now().Sub(ms.Collected) > time.Second
-	var staleMsg = ""
-	if goMemStatsStale {
-		staleMsg = "(stale)"
-	}
+	goStatsStaleness := float32(timeutil.Now().Sub(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
 
 	log.StructuredEvent(ctx, &eventpb.RuntimeStats{
-		RSS: humanize.IBytes(mem.Resident),
-		NumGoroutines: fmt.Sprintf("%d", numGoroutine),
-		StackSysMemory: humanize.IBytes(ms.StackSys),
-		GoMemoryRatio: humanize.IBytes(ms.HeapAlloc) + "/" + humanize.IBytes(goTotal) + " (alloc/total)",
-		StaleMessage: staleMsg,
-		HeapFragmentation: humanize.IBytes(ms.HeapInuse - ms.HeapAlloc),
-		HeapReserved: humanize.IBytes(ms.HeapIdle - ms.HeapReleased),
-		HeapReleased: humanize.IBytes(ms.HeapReleased),
-		CGoMemoryRatio: humanize.IBytes(cs.CGoAllocatedBytes) + "/" + humanize.IBytes(cs.CGoTotalBytes) + " (alloc/total)",
-		CGoRate: fmt.Sprintf("%.1f", cgoRate) + " CGO/sec",
-		CPURatio: fmt.Sprintf("%.1f", urate*100) + "%/" + fmt.Sprintf("%.1f", srate*100) + "% (u/s)time",
-		GCPauseRatio: fmt.Sprintf("%.1f", gcPauseRatio*100) + "%",
-		GCCount: fmt.Sprintf("%d", gc.NumGC),
-		HostNetBytesRatio: humanize.IBytes(deltaNet.BytesRecv) + "/" + humanize.IBytes(deltaNet.BytesSent) + " (r/w)",
+		MemRSSBytes:       mem.Resident,
+		GoroutineCount:    uint64(numGoroutine),
+		MemStackSysBytes:  ms.StackSys,
+		GoAllocBytes:      ms.HeapAlloc,
+		GoTotalBytes:      goTotal,
+		GoStatsStaleness:  goStatsStaleness,
+		HeapFragmentBytes: ms.HeapInuse - ms.HeapAlloc,
+		HeapReservedBytes: ms.HeapIdle - ms.HeapReleased,
+		HeapReleasedBytes: ms.HeapReleased,
+		CGoAllocBytes:     cs.CGoAllocatedBytes,
+		CGoTotalBytes:     cs.CGoTotalBytes,
+		CGoCallRate:       float32(cgoRate),
+		CPUUserPercent:    float32(urate) * 100,
+		CPUSysPercent:     float32(srate) * 100,
+		GCPausePercent:    float32(gcPauseRatio) * 100,
+		GCRunCount:        uint64(gc.NumGC),
+		NetHostRecvBytes:  deltaNet.BytesRecv,
+		NetHostSendBytes:  deltaNet.BytesSent,
 	})
 
 	rsr.last.cgoCall = numCgoCall

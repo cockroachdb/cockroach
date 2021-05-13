@@ -13,17 +13,18 @@ package status_test
 import (
 	"context"
 	"encoding/json"
+	"math"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"math"
-	"regexp"
-	"strings"
-	"testing"
-	"time"
 )
 
 var cmLogRe = regexp.MustCompile(`event_log\.go`)
@@ -57,7 +58,9 @@ func TestStructuredEventLogging(t *testing.T) {
 			continue
 		}
 		foundEntry = true
+		// TODO(knz): Remove this when crdb-v2 becomes the new format.
 		e.Message = strings.TrimPrefix(e.Message, "Structured entry:")
+		// crdb-v2 starts json with an equal sign.
 		e.Message = strings.TrimPrefix(e.Message, "=")
 		jsonPayload := []byte(e.Message)
 		var ev eventpb.RuntimeStats
