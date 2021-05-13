@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-package cloudimpltests
+package userfile
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/userfile"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,27 +38,29 @@ func TestPutUserFileTable(t *testing.T) {
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 	filename := "path/to/file"
 
+	testSettings := cluster.MakeTestingClusterSettings()
+
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, _, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, filename)
+	dest := MakeUserFileStorageURI(qualifiedTableName, filename)
 
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-	testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
+	cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), ie, kvDB, testSettings)
 
-	testListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
-		security.RootUserName(), ie, kvDB)
+	cloudtestutils.CheckListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
+		security.RootUserName(), ie, kvDB, testSettings)
 
 	t.Run("empty-qualified-table-name", func(t *testing.T) {
-		dest := userfile.MakeUserFileStorageURI("", filename)
+		dest := MakeUserFileStorageURI("", filename)
 
 		ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-		testExportStore(t, dest, false, security.RootUserName(), ie, kvDB)
+		cloudtestutils.CheckExportStore(t, dest, false, security.RootUserName(), ie, kvDB, testSettings)
 
-		testListFiles(t, "userfile:///listing-test/basepath",
-			security.RootUserName(), ie, kvDB)
+		cloudtestutils.CheckListFilesCanonical(t, "userfile:///listing-test/basepath", "userfile://defaultdb.public.userfiles_root/listing-test/basepath",
+			security.RootUserName(), ie, kvDB, testSettings)
 	})
 
 	t.Run("reject-normalized-basename", func(t *testing.T) {
@@ -103,7 +105,7 @@ func TestUserScoping(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	dest := userfile.MakeUserFileStorageURI(qualifiedTableName, "")
+	dest := MakeUserFileStorageURI(qualifiedTableName, "")
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 
 	// Create two users and grant them all privileges on defaultdb.

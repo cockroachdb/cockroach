@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloudimpltests
+package azure
 
 import (
 	"fmt"
@@ -17,8 +17,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud/azure"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -32,8 +33,8 @@ type azureConfig struct {
 func (a azureConfig) filePath(f string) string {
 	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
 		a.bucket, f,
-		azure.AzureAccountKeyParam, url.QueryEscape(a.key),
-		azure.AzureAccountNameParam, url.QueryEscape(a.account))
+		AzureAccountKeyParam, url.QueryEscape(a.key),
+		AzureAccountNameParam, url.QueryEscape(a.account))
 }
 
 func getAzureConfig() (azureConfig, error) {
@@ -47,7 +48,7 @@ func getAzureConfig() (azureConfig, error) {
 	}
 	return cfg, nil
 }
-func TestPutAzure(t *testing.T) {
+func TestAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cfg, err := getAzureConfig()
@@ -55,11 +56,11 @@ func TestPutAzure(t *testing.T) {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
 	}
-
-	testExportStore(t, cfg.filePath("backup-test"),
-		false, security.RootUserName(), nil, nil)
-	testListFiles(
-		t, cfg.filePath("listing-test"), security.RootUserName(), nil, nil,
+	testSettings := cluster.MakeTestingClusterSettings()
+	cloudtestutils.CheckExportStore(t, cfg.filePath("backup-test"),
+		false, security.RootUserName(), nil, nil, testSettings)
+	cloudtestutils.CheckListFiles(
+		t, cfg.filePath("listing-test"), security.RootUserName(), nil, nil, testSettings,
 	)
 }
 
@@ -71,10 +72,11 @@ func TestAntagonisticAzureRead(t *testing.T) {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
 	}
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	conf, err := cloud.ExternalStorageConfFromURI(
 		cfg.filePath("antagonistic-read"), security.RootUserName())
 	require.NoError(t, err)
 
-	testAntagonisticRead(t, conf)
+	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
 }
