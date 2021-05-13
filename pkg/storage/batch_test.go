@@ -209,12 +209,12 @@ func TestReadOnlyBasics(t *testing.T) {
 				}
 				shouldPanic(t, func() { ro.Close() }, "Close", "closing an already-closed "+name)
 				for i, f := range successTestCases {
-					shouldPanic(t, f, string(i), "using a closed "+name)
+					shouldPanic(t, f, fmt.Sprint(i), "using a closed "+name)
 				}
 			}()
 
 			for i, f := range successTestCases {
-				shouldNotPanic(t, f, string(i))
+				shouldNotPanic(t, f, fmt.Sprint(i))
 			}
 
 			// For a read-only ReadWriter, all Writer methods should panic.
@@ -227,7 +227,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				func() { _ = ro.Put(a, nil) },
 			}
 			for i, f := range failureTestCases {
-				shouldPanic(t, f, string(i), "not implemented")
+				shouldPanic(t, f, fmt.Sprint(i), "not implemented")
 			}
 
 			if err := e.Put(mvccKey("a"), []byte("value")); err != nil {
