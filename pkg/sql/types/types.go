@@ -1637,6 +1637,10 @@ func (t *T) InformationSchemaName() string {
 	if t.Family() == ArrayFamily {
 		return "ARRAY"
 	}
+	// TypeMeta attributes are populated only when it is user defined type
+	if t.TypeMeta.Name != nil {
+		return "USER-DEFINED"
+	}
 	return t.SQLStandardName()
 }
 
