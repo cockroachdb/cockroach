@@ -465,6 +465,11 @@ func (g *Guard) LatchSpans() *spanset.SpanSet {
 	return g.Req.LatchSpans
 }
 
+// LatchSpans returns the maximal set of lock spans that the request will access.
+func (g *Guard) LockSpans() *spanset.SpanSet {
+	return g.Req.LockSpans
+}
+
 // HoldingLatches returned whether the guard is holding latches or not.
 func (g *Guard) HoldingLatches() bool {
 	return g != nil && g.lg != nil

@@ -114,6 +114,24 @@ func (s *SpanSet) Empty() bool {
 	return s.Len() == 0
 }
 
+// Copy copies the SpanSet.
+func (s *SpanSet) Copy() *SpanSet {
+	n := &SpanSet{}
+	n.Merge(s)
+	return n
+}
+
+// Iterate iterates over a SpanSet, calling the given function.
+func (s *SpanSet) Iterate(f func(SpanAccess, SpanScope, Span)) {
+	for sa, saSpans := range s.spans {
+		for ss, spans := range saSpans {
+			for _, span := range spans {
+				f(SpanAccess(sa), SpanScope(ss), span)
+			}
+		}
+	}
+}
+
 // Reserve space for N additional spans.
 func (s *SpanSet) Reserve(access SpanAccess, scope SpanScope, n int) {
 	existing := s.spans[access][scope]
