@@ -809,12 +809,17 @@ func (r *DistSQLReceiver) Types() []*types.T {
 // function will have closed all the subquery plans because it assumes that the
 // caller will not try to run the main plan given that the subqueries'
 // evaluation failed.
+// - subqueryResultMemAcc must be a non-nil memory account that the result of
+//   subqueries' evaluation will be registered with. It is the caller's
+//   responsibility to shrink (or close) the account accordingly, once the
+//   references to those results are lost.
 func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	ctx context.Context,
 	planner *planner,
 	evalCtxFactory func() *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
+	subqueryResultMemAcc *mon.BoundAccount,
 ) bool {
 	for planIdx, subqueryPlan := range subqueryPlans {
 		if err := dsp.planAndRunSubquery(
@@ -825,6 +830,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			evalCtxFactory(),
 			subqueryPlans,
 			recv,
+			subqueryResultMemAcc,
 		); err != nil {
 			recv.SetError(err)
 			// Usually we leave the closure of subqueries to occur when the
@@ -842,6 +848,10 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	return true
 }
 
+// subqueryResultMemAcc must be a non-nil memory account that the result of the
+// subquery's evaluation will be registered with. It is the caller's
+// responsibility to shrink it (or close it) accordingly, once the references to
+// those results are lost.
 func (dsp *DistSQLPlanner) planAndRunSubquery(
 	ctx context.Context,
 	planIdx int,
@@ -850,6 +860,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	evalCtx *extendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
+	subqueryResultMemAcc *mon.BoundAccount,
 ) error {
 	subqueryMonitor := mon.NewMonitor(
 		"subquery",
@@ -953,6 +964,11 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		}
 	default:
 		return fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode)
+	}
+	// Account for the result of the subquery using the separate memory account
+	// since it outlives the execution of the subquery itself.
+	if err := subqueryResultMemAcc.Grow(ctx, int64(subqueryPlans[planIdx].result.Size())); err != nil {
+		return err
 	}
 	return nil
 }
