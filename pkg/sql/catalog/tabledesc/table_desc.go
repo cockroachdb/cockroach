@@ -12,11 +12,11 @@
 package tabledesc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -362,7 +362,8 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 			return col, nil
 		}
 	}
-	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
 }
 
 // FindColumnWithName returns the first column found whose name matches the
