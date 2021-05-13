@@ -1635,7 +1635,15 @@ SELECT 1 << 2, 1 << 2 -- identifiers removed
 parse
 SELECT OPERATOR(+) 1, OPERATOR(-) 1, OPERATOR(~) 1, OPERATOR(|/) 1, OPERATOR(||/) 1
 ----
-SELECT 1, -1, ~1, |/1, ||/1 -- normalized!
-SELECT (1), (-1), (~(1)), (|/(1)), (||/(1)) -- fully parenthetized
-SELECT _, _, ~_, |/_, ||/_ -- literals removed
-SELECT 1, -1, ~1, |/1, ||/1 -- identifiers removed
+SELECT 1, -1, OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- normalized!
+SELECT (1), (-1), (OPERATOR(~)(1)), (OPERATOR(|/)(1)), (OPERATOR(||/)(1)) -- fully parenthetized
+SELECT _, _, OPERATOR(~)_, OPERATOR(|/)_, OPERATOR(||/)_ -- literals removed
+SELECT 1, -1, OPERATOR(~)1, OPERATOR(|/)1, OPERATOR(||/)1 -- identifiers removed
+
+parse
+SELECT OPERATOR ( ~ ) 1 COLLATE ident AS ILIKE FROM ident
+----
+SELECT OPERATOR(~)1 COLLATE ident AS ilike FROM ident -- normalized!
+SELECT (OPERATOR(~)((1) COLLATE ident)) AS ilike FROM ident -- fully parenthetized
+SELECT OPERATOR(~)_ COLLATE ident AS ilike FROM ident -- literals removed
+SELECT OPERATOR(~)1 COLLATE ident AS _ FROM _ -- identifiers removed

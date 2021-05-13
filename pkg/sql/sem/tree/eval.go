@@ -108,7 +108,9 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
-func unaryOpFixups(ops map[UnaryOperator]unaryOpOverload) map[UnaryOperator]unaryOpOverload {
+func unaryOpFixups(
+	ops map[UnaryOperatorSymbol]unaryOpOverload,
+) map[UnaryOperatorSymbol]unaryOpOverload {
 	for op, overload := range ops {
 		for i, impl := range overload {
 			casted := impl.(*UnaryOp)
@@ -124,7 +126,7 @@ func unaryOpFixups(ops map[UnaryOperator]unaryOpOverload) map[UnaryOperator]unar
 type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
-var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
+var UnaryOps = unaryOpFixups(map[UnaryOperatorSymbol]unaryOpOverload{
 	UnaryMinus: {
 		&UnaryOp{
 			Typ:        types.Int,
