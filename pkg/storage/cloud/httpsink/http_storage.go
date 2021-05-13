@@ -175,12 +175,13 @@ func (h *httpStorage) ReadFileAt(
 	return stream.Body, size, nil
 }
 
-func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("PUT %s", basename),
-		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
-			_, err := h.reqNoBody(ctx, "PUT", basename, content)
-			return err
-		})
+func (h *httpStorage) Writer(
+	ctx context.Context, basename string,
+) (cloud.WriteCloserWithError, error) {
+	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		_, err := h.reqNoBody(ctx, "PUT", basename, r)
+		return err
+	}), nil
 }
 
 func (h *httpStorage) ListFiles(_ context.Context, _ string) ([]string, error) {

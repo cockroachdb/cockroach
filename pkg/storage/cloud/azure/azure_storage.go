@@ -125,19 +125,18 @@ func (s *azureStorage) Settings() *cluster.Settings {
 	return s.settings
 }
 
-func (s *azureStorage) WriteFile(
-	ctx context.Context, basename string, content io.ReadSeeker,
-) error {
-	err := contextutil.RunWithTimeout(ctx, "write azure file", cloud.Timeout.Get(&s.settings.SV),
-		func(ctx context.Context) error {
-			blob := s.getBlob(basename)
-			_, err := blob.Upload(
-				ctx, content, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{},
-				azblob.DefaultAccessTier, nil /* blobTagsMap */, azblob.ClientProvidedKeyOptions{},
-			)
-			return err
-		})
-	return errors.Wrapf(err, "write file: %s", basename)
+func (s *azureStorage) Writer(
+	ctx context.Context, basename string,
+) (cloud.WriteCloserWithError, error) {
+	blob := s.getBlob(basename)
+	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		_, err := azblob.UploadStreamToBlockBlob(
+			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
+				BufferSize: 4 << 20,
+			},
+		)
+		return err
+	}), nil
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.

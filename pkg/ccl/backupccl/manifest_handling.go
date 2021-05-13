@@ -391,7 +391,7 @@ func writeBackupManifest(
 		}
 	}
 
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
 		return err
 	}
 
@@ -400,7 +400,7 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := exportStore.WriteFile(ctx, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
 		return errors.Wrap(err, "writing manifest checksum")
 	}
 
@@ -487,7 +487,7 @@ func writeBackupPartitionDescriptor(
 		}
 	}
 
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
 }
 
 // writeTableStatistics writes a StatsTable object to a file of the filename
@@ -515,7 +515,7 @@ func writeTableStatistics(
 			return err
 		}
 	}
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(statsBuf))
+	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(statsBuf))
 }
 
 func loadBackupManifests(
@@ -951,7 +951,7 @@ func writeEncryptionInfoIfNotExists(
 	if err != nil {
 		return err
 	}
-	if err := dest.WriteFile(ctx, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
+	if err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
 		return err
 	}
 	return nil

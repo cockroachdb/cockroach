@@ -597,6 +597,10 @@ func (w *chunkWriter) Write(buf []byte) (int, error) {
 	return bufLen, nil
 }
 
+func (w *chunkWriter) CloseWithError(err error) error {
+	return w.Close()
+}
+
 // Close implements the io.Closer interface by flushing the underlying writer
 // thereby writing remaining data to the Payload table. It also updates the file
 // metadata entry in the File table with the number of bytes written.
@@ -918,7 +922,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 // the last chunk and commit the txn within which all writes occur.
 func (f *FileToTableSystem) NewFileWriter(
 	ctx context.Context, filename string, chunkSize int,
-) (io.WriteCloser, error) {
+) (cloud.WriteCloserWithError, error) {
 	e, err := resolveInternalFileToTableExecutor(f.executor)
 	if err != nil {
 		return nil, err

@@ -43,7 +43,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 	defer s.Close()
 
 	require.Equal(t, roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_null}, s.Conf())
-	require.NoError(t, s.WriteFile(ctx, "", bytes.NewReader([]byte("abc"))))
+	require.NoError(t, cloud.WriteFile(ctx, s, "", bytes.NewReader([]byte("abc"))))
 	sz, err := s.Size(ctx, "")
 	require.NoError(t, err)
 	require.Equal(t, int64(0), sz)

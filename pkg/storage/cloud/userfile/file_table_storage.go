@@ -239,53 +239,23 @@ func (f *fileTableStorage) ReadFileAt(
 	return reader, size, err
 }
 
-// WriteFile implements the ExternalStorage interface and writes the file to the
+// Writer implements the ExternalStorage interface and writes the file to the
 // user scoped FileToTableSystem.
-func (f *fileTableStorage) WriteFile(
-	ctx context.Context, basename string, content io.ReadSeeker,
-) error {
+func (f *fileTableStorage) Writer(
+	ctx context.Context, basename string,
+) (cloud.WriteCloserWithError, error) {
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// This is only possible if the method is invoked by a SQLConnFileTableStorage
 	// which should never be the case.
 	if f.ie == nil {
-		return errors.New("cannot WriteFile without a configured internal executor")
+		return nil, errors.New("cannot Write without a configured internal executor")
 	}
 
-	defer func() {
-		_, _ = f.ie.Exec(ctx, "userfile-write-file-commit", nil /* txn */, `COMMIT`)
-	}()
-
-	// We open an explicit txn within which we will write the file metadata entry
-	// and payload chunks to the userfile tables. We cannot perform these
-	// operations within a db.Txn retry loop because when coming from the
-	// copyMachine (which backs the userfile CLI upload command), we do not have
-	// access to all the file data at once. As a result of which, if a txn were to
-	// retry we are not able to seek to the start of `content` and try again,
-	// resulting in bytes being missed across txn retry attempts.
-	// See chunkWriter.WriteFile for more information about writing semantics.
-	_, err = f.ie.Exec(ctx, "userfile-write-file-txn", nil /* txn */, `BEGIN`)
-	if err != nil {
-		return err
-	}
-
-	writer, err := f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
-	if err != nil {
-		return err
-	}
-
-	if _, err = io.Copy(writer, content); err != nil {
-		return errors.Wrap(err, "failed to write using the FileTable writer")
-	}
-
-	if err := writer.Close(); err != nil {
-		return errors.Wrap(err, "failed to close the FileTable writer")
-	}
-
-	return err
+	return f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
 }
 
 // getPrefixAndPattern takes a prefix and optionally suffix of a path pattern
