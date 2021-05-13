@@ -9,18 +9,27 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHandleHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	proxyServer := NewServer(Options{})
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	handler, err := NewProxyHandler(context.Background(), stopper, ProxyOptions{})
+	require.NoError(t, err)
+	proxyServer := NewServer(func(ctx context.Context, metrics *Metrics, proxyConn *Conn) error {
+		return handler.Handle(ctx, metrics, proxyConn)
+	})
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/_status/healthz/", nil)
@@ -36,7 +45,14 @@ func TestHandleHealth(t *testing.T) {
 
 func TestHandleVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	proxyServer := NewServer(Options{})
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	handler, err := NewProxyHandler(context.Background(), stopper, ProxyOptions{})
+	require.NoError(t, err)
+	proxyServer := NewServer(func(ctx context.Context, metrics *Metrics, proxyConn *Conn) error {
+		return handler.Handle(ctx, metrics, proxyConn)
+	})
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/_status/vars/", nil)

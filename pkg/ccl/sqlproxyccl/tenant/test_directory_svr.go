@@ -193,7 +193,7 @@ func (s *TestDirectoryServer) EnsureEndpoint(
 	s.proc.Lock()
 	defer s.proc.Unlock()
 
-	lst, err := s.listLocked(ctx, &ListEndpointsRequest{req.TenantID})
+	lst, err := s.listLocked(ctx, &ListEndpointsRequest{TenantID: req.TenantID})
 	if err != nil {
 		return nil, err
 	}
@@ -301,6 +301,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 		fmt.Sprintf("--sql-addr=%s", sql.Addr().String()),
 		fmt.Sprintf("--http-addr=%s", http.Addr().String()),
 		fmt.Sprintf("--tenant-id=%d", tenantID),
+		"--insecure",
 	}
 	if err = sql.Close(); err != nil {
 		return nil, err
@@ -331,7 +332,7 @@ func (s *TestDirectoryServer) startTenantLocked(
 		_ = c.Process.Kill()
 		s.deregisterInstance(tenantID, process.SQL)
 	}))
-	err = process.Stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
+	err = s.stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
 		if err := c.Wait(); err != nil {
 			log.Infof(ctx, "finished %s with err %s", process.Cmd.Args, err)
 			log.Infof(ctx, "output %s", b.Bytes())
