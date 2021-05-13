@@ -34,7 +34,7 @@ func TestCatchVectorizedRuntimeError(t *testing.T) {
 	require.Panics(t, func() {
 		require.NoError(t, colexecerror.CatchVectorizedRuntimeError(func() {
 			require.NoError(t, colexecerror.CatchVectorizedRuntimeError(func() {
-				colexecerror.NonVectorizedTestPanic(errors.New("should not be caught"))
+				colexecerror.NonCatchablePanic(errors.New("should not be caught"))
 			}))
 		}))
 	})
@@ -62,15 +62,15 @@ func TestCatchVectorizedRuntimeError(t *testing.T) {
 	require.False(t, strings.Contains(notAnnotatedErr.Error(), annotationText))
 }
 
-// TestNonVectorizedTestPanicIsNotCaught verifies that panics emitted via
-// NonVectorizedTestPanic() method are not caught by the catcher.
-func TestNonVectorizedTestPanicIsNotCaught(t *testing.T) {
+// TestNonCatchablePanicIsNotCaught verifies that panics emitted via
+// NonCatchablePanic() method are not caught by the catcher.
+func TestNonCatchablePanicIsNotCaught(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	require.Panics(t, func() {
 		require.NoError(t, colexecerror.CatchVectorizedRuntimeError(func() {
-			colexecerror.NonVectorizedTestPanic("should panic")
+			colexecerror.NonCatchablePanic("should panic")
 		}))
 	})
 }

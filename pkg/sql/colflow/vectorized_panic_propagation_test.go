@@ -179,7 +179,7 @@ func (e *testNonVectorizedPanicEmitter) Init() {
 func (e *testNonVectorizedPanicEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
-		colexecerror.NonVectorizedTestPanic("")
+		colexecerror.NonCatchablePanic("")
 	}
 
 	e.emitBatch = false

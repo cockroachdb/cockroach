@@ -92,12 +92,18 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	return retErr
 }
 
+// We use the approach of allow-listing the packages the panics from which are
+// safe to catch (which is the case when the code doesn't update shared state
+// and doesn't manipulate locks).
+//
+// Multiple actual packages can have the same prefix as a single constant string
+// defined below, but all of such packages are allowed to be caught from.
 const (
 	colPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/col"
 	execinfraPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
 	sqlRowPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/row"
-	treePackagePrefix      = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	sqlSemPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/sem"
 )
 
 // shouldCatchPanic checks whether the panic that was emitted from
@@ -116,17 +122,17 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 		// unchanged by the higher-level catchers.
 		return false
 	}
-	const nonVectorizedTestPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.NonVectorizedTestPanic"
-	if strings.HasPrefix(panicEmittedFrom, nonVectorizedTestPrefix) {
-		// This panic came from NonVectorizedTestPanic() method and should not
-		// be caught for testing purposes.
+	const nonCatchablePanicPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.NonCatchablePanic"
+	if strings.HasPrefix(panicEmittedFrom, nonCatchablePanicPrefix) {
+		// This panic came from NonCatchablePanic() method and should not be
+		// caught.
 		return false
 	}
 	return strings.HasPrefix(panicEmittedFrom, colPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, execinfraPackagePrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlRowPackagesPrefix) ||
-		strings.HasPrefix(panicEmittedFrom, treePackagePrefix)
+		strings.HasPrefix(panicEmittedFrom, sqlSemPackagesPrefix)
 }
 
 // StorageError is an error that was created by a component below the sql
@@ -194,9 +200,10 @@ func ExpectedError(err error) {
 	panic(newNotInternalError(err))
 }
 
-// NonVectorizedTestPanic is the equivalent of Golang's 'panic' word that should
-// be used by the testing code within the vectorized engine to simulate a panic
-// that occurs outside of the engine (and, thus, should not be caught).
-func NonVectorizedTestPanic(object interface{}) {
+// NonCatchablePanic is the equivalent of Golang's 'panic' word that can be used
+// in order to crash the goroutine. It could be used by the testing code within
+// the vectorized engine to simulate a panic that occurs outside of the engine
+// (and, thus, should not be caught).
+func NonCatchablePanic(object interface{}) {
 	panic(object)
 }
