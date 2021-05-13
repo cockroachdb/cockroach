@@ -602,6 +602,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	select {
 	case <-leaseAcqCh:
 	case err := <-leaseAcqErrCh:
+		close(leaseTransferCh)
 		t.Fatalf("lease request unexpectedly finished. err: %v", err)
 	}
 	// Let the previously blocked transfer succeed. n2's lease acquisition remains
