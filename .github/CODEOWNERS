@@ -32,18 +32,28 @@
 /pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
 
 /pkg/cli/                    @cockroachdb/cli-prs
+# last-rule-wins so bulk i/o takes userfile.go even though cli-prs takes pkg/cli
+/pkg/cli/userfile.go         @cockroachdb/bulk-prs
+/pkg/cli/demo*.go            @cockroachdb/cli-prs @cockroachdb/sql-experience @cockroachdb/server-prs
+/pkg/cli/debug*.go           @cockroachdb/cli-prs @cockroachdb/kv
+/pkg/cli/import_test.go      @cockroachdb/cli-prs @cockroachdb/bulk-prs
+/pkg/cli/sql*.go             @cockroachdb/cli-prs @cockroachdb/sql-experience
+/pkg/cli/start*.go           @cockroachdb/cli-prs @cockroachdb/server-prs
+/pkg/cli/connect*.go         @cockroachdb/cli-prs @cockroachdb/server-prs
+/pkg/cli/init.go             @cockroachdb/cli-prs @cockroachdb/server-prs
+
 /pkg/server/                 @cockroachdb/server-prs
+/pkg/server/testserver*.go   @cockroachdb/server-prs @cockroachdb/test-eng
 
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/ccl/streamingccl/       @cockroachdb/cdc-prs
+# last-rule-wins so *after* CDC takes most of streamingccl bulk-prs takes ingest pkg.
+/pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
 
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
 /pkg/ccl/importccl/          @cockroachdb/bulk-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
-/pkg/cli/userfile.go         @cockroachdb/bulk-prs
-# last-rule-wins so *after* CDC takes most of streamingccl we take ingest pkg.
-/pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
 
 /pkg/geo/                    @cockroachdb/geospatial
 
@@ -81,7 +91,7 @@
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema
 /pkg/ccl/testutilsccl/       @cockroachdb/test-eng
-/pkg/ccl/utilccl/            @cockroachdb/server-noreview
+/pkg/ccl/utilccl/            @cockroachdb/server-prs
 /pkg/ccl/workloadccl/        @cockroachdb/sql-experience
 /pkg/clusterversion/         @cockroachdb/kv
 /pkg/cmd/allocsim/           @cockroachdb/kv
