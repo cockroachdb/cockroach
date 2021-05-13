@@ -202,11 +202,11 @@ func NewSequenceTableDesc(
 		},
 	}
 	desc.SetPrimaryIndex(descpb.IndexDescriptor{
-		ID:               keys.SequenceIndexID,
-		Name:             tabledesc.PrimaryKeyIndexName,
-		ColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
-		ColumnNames:      []string{tabledesc.SequenceColumnName},
-		ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+		ID:                  keys.SequenceIndexID,
+		Name:                tabledesc.PrimaryKeyIndexName,
+		KeyColumnIDs:        []descpb.ColumnID{tabledesc.SequenceColumnID},
+		KeyColumnNames:      []string{tabledesc.SequenceColumnName},
+		KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 	})
 	desc.Families = []descpb.ColumnFamilyDescriptor{
 		{

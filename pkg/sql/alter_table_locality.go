@@ -379,8 +379,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		newColumnName,
 		newColumnID,
 		newColumnDefaultExpr,
-		n.tableDesc.PrimaryIndex.ColumnNames[primaryIndexColIdxStart:],
-		n.tableDesc.PrimaryIndex.ColumnDirections[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.KeyColumnNames[primaryIndexColIdxStart:],
+		n.tableDesc.PrimaryIndex.KeyColumnDirections[primaryIndexColIdxStart:],
 	)
 }
 
@@ -527,8 +527,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
 				nil, /*	newColumnDefaultExpr */
-				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
-				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnDirections[explicitColStart:],
 			)
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityToRegionalByRow(
@@ -545,8 +545,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 				nil, /* newColumnName */
 				nil, /*	newColumnID */
 				nil, /*	newColumnDefaultExpr */
-				n.tableDesc.PrimaryIndex.ColumnNames[explicitColStart:],
-				n.tableDesc.PrimaryIndex.ColumnDirections[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnNames[explicitColStart:],
+				n.tableDesc.PrimaryIndex.KeyColumnDirections[explicitColStart:],
 			)
 		default:
 			return errors.AssertionFailedf("unknown table locality: %v", newLocality)

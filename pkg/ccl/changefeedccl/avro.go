@@ -547,8 +547,8 @@ func indexToAvroSchema(
 		colIdxByFieldIdx: make(map[int]int),
 	}
 	colIdxByID := catalog.ColumnIDToOrdinalMap(tableDesc.PublicColumns())
-	for i := 0; i < index.NumColumns(); i++ {
-		colID := index.GetColumnID(i)
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		colID := index.GetKeyColumnID(i)
 		colIdx, ok := colIdxByID.Get(colID)
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)

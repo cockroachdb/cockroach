@@ -909,12 +909,12 @@ func ResolveFK(
 		referencedColNames = make(
 			tree.NameList,
 			0,
-			target.GetPrimaryIndex().NumColumns()-numImplicitCols,
+			target.GetPrimaryIndex().NumKeyColumns()-numImplicitCols,
 		)
-		for i := numImplicitCols; i < target.GetPrimaryIndex().NumColumns(); i++ {
+		for i := numImplicitCols; i < target.GetPrimaryIndex().NumKeyColumns(); i++ {
 			referencedColNames = append(
 				referencedColNames,
-				tree.Name(target.GetPrimaryIndex().GetColumnName(i)),
+				tree.Name(target.GetPrimaryIndex().GetKeyColumnName(i)),
 			)
 		}
 	}
@@ -1095,13 +1095,13 @@ func addIndexForFK(
 	)
 	// No existing index for the referencing columns found, so we add one.
 	idx := descpb.IndexDescriptor{
-		Name:             autoIndexName,
-		ColumnNames:      make([]string, len(srcCols)),
-		ColumnDirections: make([]descpb.IndexDescriptor_Direction, len(srcCols)),
+		Name:                autoIndexName,
+		KeyColumnNames:      make([]string, len(srcCols)),
+		KeyColumnDirections: make([]descpb.IndexDescriptor_Direction, len(srcCols)),
 	}
 	for i, c := range srcCols {
-		idx.ColumnDirections[i] = descpb.IndexDescriptor_ASC
-		idx.ColumnNames[i] = c.GetName()
+		idx.KeyColumnDirections[i] = descpb.IndexDescriptor_ASC
+		idx.KeyColumnNames[i] = c.GetName()
 	}
 
 	if ts == NewTable {
@@ -1173,31 +1173,31 @@ func addInterleave(
 		typeOfIndex = "index"
 	}
 
-	if len(interleave.Fields) != parentIndex.NumColumns() {
+	if len(interleave.Fields) != parentIndex.NumKeyColumns() {
 		return pgerror.Newf(
 			pgcode.InvalidSchemaDefinition,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
 			&interleave.Fields,
-			strings.Join(parentIndex.IndexDesc().ColumnNames, ", "),
+			strings.Join(parentIndex.IndexDesc().KeyColumnNames, ", "),
 		)
 	}
-	if len(interleave.Fields) > len(index.ColumnIDs) {
+	if len(interleave.Fields) > len(index.KeyColumnIDs) {
 		return pgerror.Newf(
 			pgcode.InvalidSchemaDefinition,
 			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
 			&interleave.Fields,
 			typeOfIndex,
-			strings.Join(index.ColumnNames, ", "),
+			strings.Join(index.KeyColumnNames, ", "),
 		)
 	}
 
-	for i := 0; i < parentIndex.NumColumns(); i++ {
-		targetColID := parentIndex.GetColumnID(i)
+	for i := 0; i < parentIndex.NumKeyColumns(); i++ {
+		targetColID := parentIndex.GetKeyColumnID(i)
 		targetCol, err := parentTable.FindColumnWithID(targetColID)
 		if err != nil {
 			return err
 		}
-		col, err := desc.FindColumnWithID(index.ColumnIDs[i])
+		col, err := desc.FindColumnWithID(index.KeyColumnIDs[i])
 		if err != nil {
 			return err
 		}
@@ -1207,15 +1207,15 @@ func addInterleave(
 				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
 				&interleave.Fields,
 				typeOfIndex,
-				strings.Join(index.ColumnNames, ", "),
+				strings.Join(index.KeyColumnNames, ", "),
 			)
 		}
-		if !col.GetType().Identical(targetCol.GetType()) || index.ColumnDirections[i] != parentIndex.GetColumnDirection(i) {
+		if !col.GetType().Identical(targetCol.GetType()) || index.KeyColumnDirections[i] != parentIndex.GetKeyColumnDirection(i) {
 			return pgerror.Newf(
 				pgcode.InvalidSchemaDefinition,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
 				&interleave.Fields,
-				strings.Join(parentIndex.IndexDesc().ColumnNames, ", "),
+				strings.Join(parentIndex.IndexDesc().KeyColumnNames, ", "),
 			)
 		}
 	}
@@ -1228,7 +1228,7 @@ func addInterleave(
 	intl := descpb.InterleaveDescriptor_Ancestor{
 		TableID:         parentTable.GetID(),
 		IndexID:         parentIndex.GetID(),
-		SharedPrefixLen: uint32(parentIndex.NumColumns()),
+		SharedPrefixLen: uint32(parentIndex.NumKeyColumns()),
 	}
 	for _, ancestor := range ancestorPrefix {
 		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
@@ -2099,7 +2099,7 @@ func NewTableDesc(
 	}
 
 	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if desc.GetPrimaryIndex().NumColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
+	if desc.GetPrimaryIndex().NumKeyColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
 		evalCtx.SessionData != nil && evalCtx.SessionData.RequireExplicitPrimaryKeys {
 		return nil, errors.Errorf(
 			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
@@ -2150,7 +2150,7 @@ func NewTableDesc(
 
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
 		// Increment the counter if this index could be storing data across multiple column families.
-		if idx.NumStoredColumns() > 1 && len(desc.Families) > 1 {
+		if idx.NumSecondaryStoredColumns() > 1 && len(desc.Families) > 1 {
 			telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 		}
 	}
@@ -2197,9 +2197,12 @@ func NewTableDesc(
 						if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
 							continue
 						}
+						colIDs := idx.CollectKeyColumnIDs()
+						colIDs.UnionWith(idx.CollectSecondaryStoredColumnIDs())
+						colIDs.UnionWith(idx.CollectKeySuffixColumnIDs())
 						missingExtraColumnIDs := make([]descpb.ColumnID, 0, numImplicitCols)
-						for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
-							if !idx.ContainsColumnID(implicitPrimaryColID) {
+						for _, implicitPrimaryColID := range newPrimaryIndex.KeyColumnIDs[:numImplicitCols] {
+							if !colIDs.Contains(implicitPrimaryColID) {
 								missingExtraColumnIDs = append(missingExtraColumnIDs, implicitPrimaryColID)
 							}
 						}
@@ -2207,7 +2210,7 @@ func NewTableDesc(
 							continue
 						}
 						newIdxDesc := idx.IndexDescDeepCopy()
-						newIdxDesc.ExtraColumnIDs = append(newIdxDesc.ExtraColumnIDs, missingExtraColumnIDs...)
+						newIdxDesc.KeySuffixColumnIDs = append(newIdxDesc.KeySuffixColumnIDs, missingExtraColumnIDs...)
 						desc.SetPublicNonPrimaryIndex(idx.Ordinal(), newIdxDesc)
 					}
 				}
@@ -2343,7 +2346,7 @@ func NewTableDesc(
 			if idx.IsPartial() {
 				telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
 			}
-			if idx.NumColumns() > 1 {
+			if idx.NumKeyColumns() > 1 {
 				telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
 			}
 			if idx.GetPartitioning().NumColumns() != 0 {
@@ -2603,10 +2606,10 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				indexDef := tree.IndexTableDef{
 					Name:     tree.Name(idx.GetName()),
 					Inverted: idx.GetType() == descpb.IndexDescriptor_INVERTED,
-					Storing:  make(tree.NameList, 0, idx.NumStoredColumns()),
-					Columns:  make(tree.IndexElemList, 0, idx.NumColumns()),
+					Storing:  make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
+					Columns:  make(tree.IndexElemList, 0, idx.NumKeyColumns()),
 				}
-				numColumns := idx.NumColumns()
+				numColumns := idx.NumKeyColumns()
 				if idx.IsSharded() {
 					indexDef.Sharded = &tree.ShardedIndexDef{
 						ShardBuckets: tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets)),
@@ -2614,7 +2617,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					numColumns = len(idx.GetSharded().ColumnNames)
 				}
 				for j := 0; j < numColumns; j++ {
-					name := idx.GetColumnName(j)
+					name := idx.GetKeyColumnName(j)
 					if idx.IsSharded() {
 						name = idx.GetSharded().ColumnNames[j]
 					}
@@ -2622,12 +2625,12 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					if idx.GetColumnDirection(j) == descpb.IndexDescriptor_DESC {
+					if idx.GetKeyColumnDirection(j) == descpb.IndexDescriptor_DESC {
 						elem.Direction = tree.Descending
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				for j := 0; j < idx.NumStoredColumns(); j++ {
+				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
 					indexDef.Storing = append(indexDef.Storing, tree.Name(idx.GetStoredColumnName(j)))
 				}
 				var def tree.TableDef = &indexDef

@@ -277,7 +277,7 @@ func MakeIndexDescriptor(
 		if indexDesc.IsPartial() {
 			telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
 		}
-		if len(indexDesc.ColumnNames) > 1 {
+		if len(indexDesc.KeyColumnNames) > 1 {
 			telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
 		}
 	}

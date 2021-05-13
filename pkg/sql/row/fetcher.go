@@ -485,8 +485,11 @@ func (rf *Fetcher) Init(
 		table.neededValueCols = table.neededCols.Len() - neededIndexCols + table.index.NumCompositeColumns()
 
 		if table.isSecondaryIndex {
+			colIDs := table.index.CollectKeyColumnIDs()
+			colIDs.UnionWith(table.index.CollectSecondaryStoredColumnIDs())
+			colIDs.UnionWith(table.index.CollectKeySuffixColumnIDs())
 			for i := range table.cols {
-				if table.neededCols.Contains(int(table.cols[i].GetID())) && !table.index.ContainsColumnID(table.cols[i].GetID()) {
+				if table.neededCols.Contains(int(table.cols[i].GetID())) && !colIDs.Contains(table.cols[i].GetID()) {
 					return errors.Errorf("requested column %s not in index", table.cols[i].GetName())
 				}
 			}
@@ -509,8 +512,8 @@ func (rf *Fetcher) Init(
 			// Primary indexes only contain ascendingly-encoded
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
-			table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.IndexDesc().ExtraColumnIDs, table.extraTypes)
-			nExtraColumns := table.index.NumExtraColumns()
+			table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.IndexDesc().KeySuffixColumnIDs, table.extraTypes)
+			nExtraColumns := table.index.NumKeySuffixColumns()
 			if cap(table.extraVals) >= nExtraColumns {
 				table.extraVals = table.extraVals[:nExtraColumns]
 			} else {
@@ -809,7 +812,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// is that the extra columns are not always there, and are used to unique-ify
 		// the index key, rather than provide the primary key column values.
 		if foundNull && rf.currentTable.isSecondaryIndex && rf.currentTable.index.IsUnique() && len(rf.currentTable.desc.GetFamilies()) != 1 {
-			for i := 0; i < rf.currentTable.index.NumExtraColumns(); i++ {
+			for i := 0; i < rf.currentTable.index.NumKeySuffixColumns(); i++ {
 				var err error
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
 				rf.keyRemainingBytes, err = rowenc.SkipTableKey(rf.keyRemainingBytes)
@@ -1086,8 +1089,8 @@ func (rf *Fetcher) processKV(
 				if err != nil {
 					return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
-				for i := 0; i < table.index.NumExtraColumns(); i++ {
-					id := table.index.GetExtraColumnID(i)
+				for i := 0; i < table.index.NumKeySuffixColumns(); i++ {
+					id := table.index.GetKeySuffixColumnID(i)
 					if table.neededCols.Contains(int(id)) {
 						table.row[table.colIdxMap.GetDefault(id)] = table.extraVals[i]
 					}
@@ -1520,11 +1523,11 @@ func (rf *Fetcher) checkKeyOrdering(ctx context.Context) error {
 	// previous row in that column. When the first column with a differing value
 	// is found, compare the values to ensure the ordering matches the column
 	// ordering.
-	for i := 0; i < rf.rowReadyTable.index.NumColumns(); i++ {
-		id := rf.rowReadyTable.index.GetColumnID(i)
+	for i := 0; i < rf.rowReadyTable.index.NumKeyColumns(); i++ {
+		id := rf.rowReadyTable.index.GetKeyColumnID(i)
 		idx := rf.rowReadyTable.colIdxMap.GetDefault(id)
 		result := rf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, rf.rowReadyTable.lastDatums[idx])
-		expectedDirection := rf.rowReadyTable.index.GetColumnDirection(i)
+		expectedDirection := rf.rowReadyTable.index.GetKeyColumnDirection(i)
 		if rf.reverse && expectedDirection == descpb.IndexDescriptor_ASC {
 			expectedDirection = descpb.IndexDescriptor_DESC
 		} else if rf.reverse && expectedDirection == descpb.IndexDescriptor_DESC {
@@ -1582,7 +1585,7 @@ func (rf *Fetcher) finalizeRow() error {
 				err := errors.AssertionFailedf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
-					strings.Join(table.index.IndexDesc().ColumnNames, ","), strings.Join(indexColValues, ","))
+					strings.Join(table.index.IndexDesc().KeyColumnNames, ","), strings.Join(indexColValues, ","))
 
 				if rf.isCheck {
 					return scrub.WrapError(scrub.UnexpectedNullValueError, err)
