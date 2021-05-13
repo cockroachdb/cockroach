@@ -207,9 +207,9 @@ func (o *Outbox) Run(
 
 // handleStreamErr is a utility method used to handle an error when calling
 // a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
-// called, for all other error flowCtxCancel is. The given error is logged with
+// called, for all other errors flowCtxCancel is. The given error is logged with
 // the associated opName.
-func (o *Outbox) handleStreamErr(
+func handleStreamErr(
 	ctx context.Context, opName string, err error, flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
 	if err == io.EOF {
@@ -287,7 +287,7 @@ func (o *Outbox) sendBatches(
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
 			if err := stream.Send(o.scratch.msg); err != nil {
-				o.handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
+				handleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
 				return
 			}
 		}
@@ -333,33 +333,41 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 func (o *Outbox) runWithStream(
 	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
 ) {
+	// Cancellation functions might be nil in some tests, but we'll make them
+	// noops for convenience.
 	if flowCtxCancel == nil {
-		// The flowCtxCancel might be nil in some tests, but we'll make it a
-		// noop for convenience.
 		flowCtxCancel = func() {}
+	}
+	if outboxCtxCancel == nil {
+		outboxCtxCancel = func() {}
 	}
 	waitCh := make(chan struct{})
 	go func() {
 		// This goroutine's job is to listen continually on the stream from the
 		// consumer for errors or drain requests, while the remainder of this
 		// function concurrently is producing data and sending it over the
-		// network. This goroutine will tear down the flow if non-io.EOF error
+		// network.
+		//
+		// This goroutine will tear down the flow if non-io.EOF error
 		// is received - without it, a producer goroutine might spin doing work
 		// forever after a connection is closed, since it wouldn't notice a
 		// closed connection until it tried to Send over that connection.
+		//
+		// Similarly, if an io.EOF error is received, it indicates that the
+		// server side of FlowStream RPC (the inbox) has exited gracefully, so
+		// the inbox doesn't need anything else from this outbox, and this
+		// goroutine will shut down the tree of operators rooted in this outbox.
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				if err != io.EOF {
-					log.Warningf(ctx, "Outbox calling flowCtxCancel after Recv connection error: %+v", err)
-					flowCtxCancel()
-				}
+				handleStreamErr(ctx, "watchdog Recv", err, flowCtxCancel, outboxCtxCancel)
 				break
 			}
 			switch {
 			case msg.Handshake != nil:
 				log.VEventf(ctx, 2, "Outbox received handshake: %v", msg.Handshake)
 			case msg.DrainRequest != nil:
+				log.VEventf(ctx, 2, "Outbox received drain request")
 				o.moveToDraining(ctx)
 			}
 		}
@@ -370,14 +378,14 @@ func (o *Outbox) runWithStream(
 	if terminatedGracefully || errToSend != nil {
 		o.moveToDraining(ctx)
 		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			o.handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
+			handleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.
 			// The receiver goroutine will read from the stream until any error
 			// is returned (most likely an io.EOF).
 			if err := stream.CloseSend(); err != nil {
-				o.handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
+				handleStreamErr(ctx, "CloseSend", err, flowCtxCancel, outboxCtxCancel)
 			}
 		}
 	}
