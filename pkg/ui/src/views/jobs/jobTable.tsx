@@ -18,7 +18,7 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { isEqual, map } from "lodash";
 import { JobDescriptionCell } from "src/views/jobs/jobDescriptionCell";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
 import {
   ColumnDescriptor,

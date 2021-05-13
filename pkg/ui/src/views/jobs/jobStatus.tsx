@@ -12,7 +12,7 @@ import React from "react";
 import classNames from "classnames/bind";
 import { JobStatusBadge, ProgressBar } from "src/views/jobs/progressBar";
 import { Duration } from "src/views/jobs/duration";
-import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import Job = cockroach.server.serverpb.IJobResponse;
 import { cockroach } from "src/js/protos";
 import { JobStatusVisual, jobToVisual } from "src/views/jobs/jobStatusOptions";
 import { InlineAlert } from "src/components";
