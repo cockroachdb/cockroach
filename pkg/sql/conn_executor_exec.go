@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -515,8 +516,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			},
 			ex.generateID(),
 		)
+		var rawTypeHints []oid.Oid
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, PreparedStatementOriginSQL,
+			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}
