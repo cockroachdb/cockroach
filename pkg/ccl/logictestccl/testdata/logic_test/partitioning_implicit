@@ -228,6 +228,19 @@ CREATE TABLE fk_using_implicit_columns_against_t (
 )
 
 query T
+SELECT create_statement FROM [SHOW CREATE TABLE fk_using_implicit_columns_against_t]
+----
+CREATE TABLE public.fk_using_implicit_columns_against_t (
+   pk INT8 NOT NULL,
+   ref_t_pk INT8 NOT NULL,
+   ref_t_c INT8 NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+   CONSTRAINT fk_ref_t_pk_ref_t FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
+   CONSTRAINT fk_ref_t_c_ref_t FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
+   FAMILY fam_0_ref_t_pk_pk_ref_t_c (ref_t_pk, pk, ref_t_c)
+)
+
+query T
 EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
 ----
 distribution: local

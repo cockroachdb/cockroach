@@ -296,6 +296,14 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
 }
 
+// GetExplicitColumnIDs returns the columns of an index that do not implicitly
+// prefix a given index. An index has implicit prefix columns if a user
+// specifies a PARTITION BY with columns that are not a prefix of the given
+// index columns.
+func (w index) GetExplicitColumnIDs() descpb.ColumnIDs {
+	return w.desc.GetExplicitColumnIDs()
+}
+
 // indexCache contains precomputed slices of catalog.Index interfaces.
 type indexCache struct {
 	primary              catalog.Index
