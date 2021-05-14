@@ -1,0 +1,2 @@
+alter_range_stmt ::=
+	alter_zone_range_stmt

@@ -1,0 +1,2 @@
+generic_set ::=
+	var_name to_or_eq var_list
