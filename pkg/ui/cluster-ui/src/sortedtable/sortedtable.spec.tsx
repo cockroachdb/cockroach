@@ -93,7 +93,6 @@ describe("<SortedTable>", function() {
       .simulate("click");
     assert.isTrue(spy.calledOnce);
     assert.deepEqual(spy.getCall(0).args[0], {
-      sortKey: 0,
       ascending: false,
       columnTitle: "first",
     } as SortSetting);
@@ -130,10 +129,16 @@ describe("<SortedTable>", function() {
       });
     };
     assertMatches(data);
-    wrapper = makeTable(data, { sortKey: 0, ascending: true });
+    wrapper = makeTable(data, {
+      ascending: true,
+      columnTitle: "first",
+    });
     assertMatches(_.sortBy(data, r => r.name));
     wrapper.setProps({
-      uiSortSetting: { sortKey: 1, ascending: true } as SortSetting,
+      uiSortSetting: {
+        ascending: true,
+        columnTitle: "second",
+      } as SortSetting,
     });
     assertMatches(_.sortBy(data, r => r.value));
   });
@@ -237,10 +242,15 @@ describe("<SortedTable>", function() {
       "first row column at seconds page match",
     );
 
-    wrapper = makeTable(data, { sortKey: 0, ascending: true }, undefined, {
-      current: 1,
-      pageSize: 2,
-    });
+    wrapper = makeTable(
+      data,
+      { ascending: true, columnTitle: "first" },
+      undefined,
+      {
+        current: 1,
+        pageSize: 2,
+      },
+    );
     rows = wrapper.find("tbody");
     assert.equal(
       rows
@@ -252,10 +262,15 @@ describe("<SortedTable>", function() {
       "second row column at first page match",
     );
 
-    wrapper = makeTable(data, { sortKey: 0, ascending: true }, undefined, {
-      current: 2,
-      pageSize: 2,
-    });
+    wrapper = makeTable(
+      data,
+      { ascending: true, columnTitle: "first" },
+      undefined,
+      {
+        current: 2,
+        pageSize: 2,
+      },
+    );
     rows = wrapper.find("tbody");
     assert.equal(
       rows

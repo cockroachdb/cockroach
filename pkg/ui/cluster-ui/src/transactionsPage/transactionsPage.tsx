@@ -60,12 +60,14 @@ export class TransactionsPage extends React.Component<
 > {
   trxSearchParams = getSearchParams(this.props.history.location.search);
   filters = getFiltersFromQueryString(this.props.history.location.search);
-
   state: TState = {
     sortSetting: {
       // Sort by Execution Count column as default option.
-      sortKey: 1,
-      ascending: false,
+      ascending: this.trxSearchParams("ascending", false).toString() === "true",
+      columnTitle: this.trxSearchParams(
+        "columnTitle",
+        "execution count",
+      ).toString(),
     },
     pagination: {
       pageSize: this.props.pageSize || 20,
@@ -105,8 +107,8 @@ export class TransactionsPage extends React.Component<
       sortSetting: ss,
     });
     this.syncHistory({
-      sortKey: ss.sortKey,
-      ascending: Boolean(ss.ascending).toString(),
+      ascending: ss.ascending.toString(),
+      columnTitle: ss.columnTitle,
     });
   };
 

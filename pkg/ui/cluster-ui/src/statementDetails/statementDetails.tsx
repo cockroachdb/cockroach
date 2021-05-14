@@ -294,8 +294,9 @@ export class StatementDetails extends React.Component<
     const searchParams = new URLSearchParams(props.history.location.search);
     this.state = {
       sortSetting: {
-        sortKey: 5, // Latency
+        // Latency
         ascending: false,
+        columnTitle: "statementTime",
       },
       currentTab: searchParams.get("tab") || "overview",
     };
