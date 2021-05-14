@@ -317,10 +317,12 @@ func (n *createIndexNode) ReadingOwnWrites() {}
 var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
-// setupShardedIndex updates the index descriptor with the relevant new column.
-// It also returns the column so it can be added to the table. It returns the
-// new column set for the index. This set must be used regardless of whether or
-// not there is a newly created column.
+// setupShardedIndex creates a shard column for the given index descriptor. It
+// returns the shard column, the new column list for the index, and a boolean
+// indicating which is true if the shard column was newly created. If the shard
+// column is new, it is added to tableDesc. The column list returned must be
+// used in the index descriptor regardless whether or not the shard column was
+// newly created.
 func setupShardedIndex(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,

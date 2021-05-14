@@ -402,7 +402,7 @@ func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error
 }
 
 // FindColumnWithName returns the first column found whose name matches the
-// provided target ID, in the canonical order.
+// provided target name, in the canonical order.
 // If no column is found then an error is also returned.
 func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
 	for _, col := range desc.AllColumns() {
