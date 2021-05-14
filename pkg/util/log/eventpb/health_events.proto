@@ -1,0 +1,67 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: Health events
+// Channel: HEALTH
+//
+// Events in this category pertain to the health of one or more servers.
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// RuntimeStats is recorded every 10 seconds as server health metrics.
+message RuntimeStats {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The process resident set size. Expressed as bytes.
+  uint64 mem_rss_bytes = 2 [(gogoproto.customname) = "MemRSSBytes", (gogoproto.jsontag) = ",omitempty"];
+  // The number of goroutines.
+  uint64 goroutine_count = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The stack system memory used. Expressed as bytes.
+  uint64 mem_stack_sys_bytes = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // The memory allocated by Go. Expressed as bytes.
+  uint64 go_alloc_bytes = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // The total memory allocated by Go but not released. Expressed as bytes.
+  uint64 go_total_bytes = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // The staleness of the Go memory statistics. Expressed in seconds.
+  float go_stats_staleness = 7 [(gogoproto.jsontag) = ",omitempty"];
+  // The amount of heap fragmentation. Expressed as bytes.
+  uint64 heap_fragment_bytes = 8 [(gogoproto.jsontag) = ",omitempty"];
+  // The amount of heap reserved. Expressed as bytes.
+  uint64 heap_reserved_bytes = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // The amount of heap released. Expressed as bytes.
+  uint64 heap_released_bytes = 10 [(gogoproto.jsontag) = ",omitempty"];
+  // The memory allocated outside of Go. Expressed as bytes.
+  uint64 cgo_alloc_bytes = 11 [(gogoproto.customname) = "CGoAllocBytes", (gogoproto.jsontag) = ",omitempty"];
+  // The total memory allocated outside of Go but not released. Expressed as bytes.
+  uint64 cgo_total_bytes = 12 [(gogoproto.customname) = "CGoTotalBytes", (gogoproto.jsontag) = ",omitempty"];
+  // The total number of calls outside of Go over time. Expressed as operations per second.
+  float cgo_call_rate = 13 [(gogoproto.customname) = "CGoCallRate", (gogoproto.jsontag) = ",omitempty"];
+  // The user CPU percentage.
+  float cpu_user_percent = 14 [(gogoproto.customname) = "CPUUserPercent", (gogoproto.jsontag) = ",omitempty"];
+  // The system CPU percentage.
+  float cpu_sys_percent = 15 [(gogoproto.customname) = "CPUSysPercent", (gogoproto.jsontag) = ",omitempty"];
+  // The GC pause percentage.
+  float gc_pause_percent = 16 [(gogoproto.customname) = "GCPausePercent", (gogoproto.jsontag) = ",omitempty"];
+  // The total number of GC runs.
+  uint64 gc_run_count = 17 [(gogoproto.customname) = "GCRunCount", (gogoproto.jsontag) = ",omitempty"];
+  // The bytes received on all network interfaces since this process started.
+  uint64 net_host_recv_bytes = 18 [(gogoproto.jsontag) = ",omitempty"];
+  // The bytes sent on all network interfaces since this process started.
+  uint64 net_host_send_bytes = 19 [(gogoproto.jsontag) = ",omitempty"];
+}

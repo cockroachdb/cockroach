@@ -11,13 +11,10 @@
 package status
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
-	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -25,10 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/net"
 )
@@ -420,18 +416,6 @@ func GetCGoMemStats(ctx context.Context) *CGoMemStats {
 	}
 }
 
-var statsTemplate = template.Must(template.New("runtime stats").Funcs(template.FuncMap{
-	"iBytes":            func(i uint64) string { return humanize.IBytes(i) },
-	"oneDecimal":        func(f float64) string { return fmt.Sprintf("%.1f", f) },
-	"oneDecimalPercent": func(f float64) string { return fmt.Sprintf("%.1f", f*100) },
-	"sub":               func(a, b uint64) string { return humanize.IBytes(a - b) },
-}).Parse(`runtime stats: {{iBytes .Mem.Resident}} RSS, {{.NumGoroutines}} goroutines (stacks: {{iBytes .MS.StackSys}}), ` +
-	`{{iBytes .MS.HeapAlloc}}/{{iBytes .GoTotal}} Go alloc/total{{.StaleMsg}} ` +
-	`(heap fragmentation: {{sub .MS.HeapInuse .MS.HeapAlloc}}, heap reserved: {{sub .MS.HeapIdle .MS.HeapReleased}}, heap released: {{iBytes .MS.HeapReleased}}), ` +
-	`{{iBytes .CS.CGoAllocatedBytes}}/{{iBytes .CS.CGoTotalBytes}} CGO alloc/total ({{oneDecimal .CGORate}} CGO/sec), ` +
-	`{{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %(u/s)time, {{oneDecimalPercent .GCPauseRatio}} %gc ({{.GCCount}}x), ` +
-	`{{iBytes .DeltaNet.BytesRecv}}/{{iBytes .DeltaNet.BytesSent}} (r/w)net`))
-
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -542,31 +526,29 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
-	goMemStatsStale := timeutil.Now().Sub(ms.Collected) > time.Second
-	var staleMsg = ""
-	if goMemStatsStale {
-		staleMsg = "(stale)"
-	}
+	goStatsStaleness := float32(timeutil.Now().Sub(ms.Collected)) / float32(time.Second)
 	goTotal := ms.Sys - ms.HeapReleased
 
-	var buf bytes.Buffer
-	if err := statsTemplate.Execute(&buf,
-		struct {
-			MS                                  *GoMemStats
-			Mem                                 gosigar.ProcMem
-			DeltaNet                            net.IOCountersStat
-			CS                                  *CGoMemStats
-			GoTotal                             uint64
-			NumGoroutines, GCCount              int
-			CGORate, URate, SRate, GCPauseRatio float64
-			StaleMsg                            string
-		}{
-			MS: ms, Mem: mem, DeltaNet: deltaNet, CS: cs, GoTotal: goTotal, NumGoroutines: numGoroutine,
-			CGORate: cgoRate, URate: urate, SRate: srate, GCPauseRatio: gcPauseRatio, StaleMsg: staleMsg,
-		}); err != nil {
-		log.Warningf(ctx, "failed to render runtime stats: %s", err)
-	}
-	log.Health.Infof(ctx, "%s", redact.Safe(buf.String()))
+	log.StructuredEvent(ctx, &eventpb.RuntimeStats{
+		MemRSSBytes:       mem.Resident,
+		GoroutineCount:    uint64(numGoroutine),
+		MemStackSysBytes:  ms.StackSys,
+		GoAllocBytes:      ms.HeapAlloc,
+		GoTotalBytes:      goTotal,
+		GoStatsStaleness:  goStatsStaleness,
+		HeapFragmentBytes: ms.HeapInuse - ms.HeapAlloc,
+		HeapReservedBytes: ms.HeapIdle - ms.HeapReleased,
+		HeapReleasedBytes: ms.HeapReleased,
+		CGoAllocBytes:     cs.CGoAllocatedBytes,
+		CGoTotalBytes:     cs.CGoTotalBytes,
+		CGoCallRate:       float32(cgoRate),
+		CPUUserPercent:    float32(urate) * 100,
+		CPUSysPercent:     float32(srate) * 100,
+		GCPausePercent:    float32(gcPauseRatio) * 100,
+		GCRunCount:        uint64(gc.NumGC),
+		NetHostRecvBytes:  deltaNet.BytesRecv,
+		NetHostSendBytes:  deltaNet.BytesSent,
+	})
 
 	rsr.last.cgoCall = numCgoCall
 	rsr.last.gcCount = gc.NumGC
