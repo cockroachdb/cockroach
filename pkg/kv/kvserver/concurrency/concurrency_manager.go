@@ -54,8 +54,9 @@ type Config struct {
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
-	TxnWaitMetrics *txnwait.Metrics
-	SlowLatchGauge *metric.Gauge
+	TxnWaitMetrics                     *txnwait.Metrics
+	SlowLatchGauge                     *metric.Gauge
+	ConflictingIntentCleanupRejections *metric.Counter
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -86,11 +87,12 @@ func NewManager(cfg Config) Manager {
 			maxLocks: cfg.MaxLockTableSize,
 		},
 		ltw: &lockTableWaiterImpl{
-			st:                cfg.Settings,
-			stopper:           cfg.Stopper,
-			ir:                cfg.IntentResolver,
-			lm:                m,
-			disableTxnPushing: cfg.DisableTxnPushing,
+			st:                                  cfg.Settings,
+			stopper:                             cfg.Stopper,
+			ir:                                  cfg.IntentResolver,
+			lm:                                  m,
+			disableTxnPushing:                   cfg.DisableTxnPushing,
+			conflictingIntentsResolveRejections: cfg.ConflictingIntentCleanupRejections,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
 		// pkg/storage/concurrency/txnwait package.

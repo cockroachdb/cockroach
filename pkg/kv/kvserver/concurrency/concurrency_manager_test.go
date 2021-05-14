@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -529,11 +530,12 @@ func newCluster() *cluster {
 
 func (c *cluster) makeConfig() concurrency.Config {
 	return concurrency.Config{
-		NodeDesc:       c.nodeDesc,
-		RangeDesc:      c.rangeDesc,
-		Settings:       c.st,
-		IntentResolver: c,
-		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+		NodeDesc:                           c.nodeDesc,
+		RangeDesc:                          c.rangeDesc,
+		Settings:                           c.st,
+		IntentResolver:                     c,
+		TxnWaitMetrics:                     txnwait.NewMetrics(time.Minute),
+		ConflictingIntentCleanupRejections: metric.NewCounter(metric.Metadata{}),
 	}
 }
 

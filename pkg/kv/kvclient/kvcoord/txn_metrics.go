@@ -47,6 +47,10 @@ type TxnMetrics struct {
 	RestartsTxnAborted            telemetry.CounterWithMetric
 	RestartsTxnPush               telemetry.CounterWithMetric
 	RestartsUnknown               telemetry.CounterWithMetric
+
+	// End transaction failure counters.
+	RollbacksFailed      *metric.Counter
+	AsyncRollbacksFailed *metric.Counter
 }
 
 var (
@@ -216,6 +220,18 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRollbacksFailed = metric.Metadata{
+		Name:        "txn.rollbacks.failed",
+		Help:        "Number of KV transaction that failed to send final abort",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaAsyncRollbacksFailed = metric.Metadata{
+		Name:        "txn.rollbacks.async.failed",
+		Help:        "Number of KV transaction that failed to send abort asynchronously which is not always retried",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
@@ -243,5 +259,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		RestartsTxnAborted:            telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
 		RestartsTxnPush:               telemetry.NewCounterWithMetric(metaRestartsTxnPush),
 		RestartsUnknown:               telemetry.NewCounterWithMetric(metaRestartsUnknown),
+		RollbacksFailed:               metric.NewCounter(metaRollbacksFailed),
+		AsyncRollbacksFailed:          metric.NewCounter(metaAsyncRollbacksFailed),
 	}
 }

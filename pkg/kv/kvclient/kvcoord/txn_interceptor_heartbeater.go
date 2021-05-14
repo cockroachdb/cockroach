@@ -397,10 +397,12 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 			_, pErr := h.wrapped.SendLocked(ctx, ba)
 			if pErr != nil {
 				log.VErrEventf(ctx, 1, "async abort failed for %s: %s ", txn, pErr)
+				h.metrics.AsyncRollbacksFailed.Inc(1)
 			}
 		},
 	); err != nil {
 		log.Warningf(ctx, "%v", err)
+		h.metrics.AsyncRollbacksFailed.Inc(1)
 	}
 }
 
