@@ -104,14 +104,16 @@ func logEventInternalForSchemaChanges(
 	m.MutationID = uint32(mutationID)
 
 	// Delegate the storing of the event to the regular event logic.
-	return InsertEventRecord(
+	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
-		int32(descID),
-		int32(execCfg.NodeID.SQLInstanceID()),
-		false, /* skipExternalLog */
-		event,
-		false, /* onlyLog */
+		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		false,                                 /* skipExternalLog */
+		false,                                 /* onlyLog */
+		eventLogEntry{
+			targetID: int32(descID),
+			event:    event,
+		},
 	)
 }
 
@@ -144,14 +146,11 @@ func logEventInternalForSQLStatements(
 		}
 	}
 
-	// Delegate the storing of the event to the regular event logic.
-	if !writeToEventLog || !eventLogEnabled.Get(&execCfg.InternalExecutor.s.cfg.Settings.SV) {
-		return skipWritePath(ctx, txn, entries, !writeToEventLog)
-	}
-
-	return batchInsertEventRecords(ctx, execCfg.InternalExecutor,
+	return insertEventRecords(ctx, execCfg.InternalExecutor,
 		txn,
 		int32(execCfg.NodeID.SQLInstanceID()),
+		false,            /* skipExternalLog */
+		!writeToEventLog, /* onlyLog */
 		entries...,
 	)
 }
@@ -214,14 +213,13 @@ func LogEventForJobs(
 	m.Description = payload.Description
 
 	// Delegate the storing of the event to the regular event logic.
-	return InsertEventRecord(
+	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
-		0, /* targetID */
-		int32(execCfg.NodeID.SQLInstanceID()),
-		false, /* skipExternalLog */
-		event,
-		false, /* onlyLog */
+		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		false,                                 /* skipExternalLog */
+		false,                                 /* onlyLog */
+		eventLogEntry{event: event},
 	)
 }
 
@@ -234,18 +232,7 @@ var eventLogEnabled = settings.RegisterBoolSetting(
 // InsertEventRecord inserts a single event into the event log as part
 // of the provided transaction, using the provided internal executor.
 //
-// The caller is responsible for populating the timestamp field
-// in the event payload.
-//
-// If the skipExternalLog bool is set, this function does not call
-// log.StructuredEvent(). In that case, the caller is responsible for
-// calling log.StructuredEvent() directly.
-//
-// Note: the targetID and reportingID columns are deprecated and
-// should be removed after v21.1 is released.
-//
-// If onlyLog is set, this function guarantees that it returns no
-// error.
+// This converts to a call to insertEventRecords() with just 1 entry.
 func InsertEventRecord(
 	ctx context.Context,
 	ex *InternalExecutor,
@@ -255,29 +242,69 @@ func InsertEventRecord(
 	info eventpb.EventPayload,
 	onlyLog bool,
 ) error {
-	if onlyLog || !eventLogEnabled.Get(&ex.s.cfg.Settings.SV) {
-		return skipWritePath(ctx, txn, []eventLogEntry{{event: info}}, onlyLog)
-	}
-	return batchInsertEventRecords(
-		ctx, ex, txn,
-		reportingID,
-		eventLogEntry{
-			targetID: targetID,
-			event:    info,
-		})
+	return insertEventRecords(ctx, ex, txn, reportingID,
+		skipExternalLog, onlyLog,
+		eventLogEntry{targetID: targetID, event: info})
 }
 
-// batchInsertEventRecords is like InsertEventRecord except it takes
-// a slice of events to batch write. Any insert that calls this function
-// will always write to the event table (i.e. it won't only log them, and writing
-// to the event table will not be disabled).
-func batchInsertEventRecords(
+// insertEventRecords inserts one or more event into the event log as
+// part of the provided txn, using the provided internal executor.
+//
+// The caller is responsible for populating the timestamp field in the
+// event payload and all the other per-payload specific fields. This
+// function only takes care of populating the EventType field based on
+// the run-time type of the event payload.
+//
+// Note: the targetID and reportingID columns are deprecated and
+// should be removed after v21.1 is released.
+func insertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
 	txn *kv.Txn,
 	reportingID int32,
+	skipExternalLog bool,
+	onlyLog bool,
 	entries ...eventLogEntry,
 ) error {
+	// Finish populating the entries.
+	for i := range entries {
+		// Ensure the type field is populated.
+		event := entries[i].event
+		eventType := eventpb.GetEventTypeName(event)
+		event.CommonDetails().EventType = eventType
+
+		// The caller is responsible for the timestamp field.
+		if event.CommonDetails().Timestamp == 0 {
+			return errors.AssertionFailedf("programming error: timestamp field in event %d not populated: %T", i, event)
+		}
+	}
+
+	// If we only want to log externally and not write to the events table, early exit.
+	loggingToSystemTable := !onlyLog && eventLogEnabled.Get(&ex.s.cfg.Settings.SV)
+	if !loggingToSystemTable {
+		// Simply emit the events to their respective channels and call it a day.
+		if !skipExternalLog {
+			for i := range entries {
+				log.StructuredEvent(ctx, entries[i].event)
+			}
+		}
+		// Not writing to system table: shortcut.
+		return nil
+	}
+
+	// When logging to the system table, ensure that the external
+	// logging only sees the event when the transaction commits.
+	if !skipExternalLog {
+		txn.AddCommitTrigger(func(ctx context.Context) {
+			for i := range entries {
+				log.StructuredEvent(ctx, entries[i].event)
+			}
+		})
+	}
+
+	// The function below this point is specialized to write to the
+	// system table.
+
 	const colsPerEvent = 5
 	const baseQuery = `
 INSERT INTO system.eventlog (
@@ -285,147 +312,54 @@ INSERT INTO system.eventlog (
 )
 VALUES($1, $2, $3, $4, $5)`
 	args := make([]interface{}, 0, len(entries)*colsPerEvent)
-
-	// Prepare first row so we can take the fast path if we're only inserting one event log.
-	if err := prepareRow(
-		ctx, txn, &args, entries[0].event, entries[0].targetID, reportingID,
-	); err != nil {
-		return err
-	}
-	if len(entries) == 1 {
-		return execEventLogInsert(ctx, ex, txn, baseQuery, args, len(entries))
-	}
-
-	var additionalRows strings.Builder
-	for i := 1; i < len(entries); i++ {
-		var placeholderNum = 1 + (i * colsPerEvent)
-		if err := prepareRow(ctx, txn, &args, entries[i].event, entries[i].targetID, reportingID); err != nil {
+	constructArgs := func(reportingID int32, entry eventLogEntry) error {
+		event := entry.event
+		infoBytes, err := json.Marshal(event)
+		if err != nil {
 			return err
 		}
-		additionalRows.WriteString(fmt.Sprintf(", ($%d, $%d, $%d, $%d, $%d)",
-			placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3, placeholderNum+4))
+		eventType := eventpb.GetEventTypeName(event)
+		args = append(
+			args,
+			timeutil.Unix(0, event.CommonDetails().Timestamp),
+			eventType,
+			entry.targetID,
+			reportingID,
+			string(infoBytes),
+		)
+		return nil
 	}
 
-	rows, err := ex.Exec(ctx, "log-event", txn, baseQuery+additionalRows.String(), args...)
+	// In the common case where we have just 1 event, we want to skeep
+	// the extra heap allocation and buffer operations of the loop
+	// below. This is an optimization.
+	query := baseQuery
+	if err := constructArgs(reportingID, entries[0]); err != nil {
+		return err
+	}
+	if len(entries) > 1 {
+		// Extend the query with additional VALUES clauses for all the
+		// events after the first one.
+		var completeQuery strings.Builder
+		completeQuery.WriteString(baseQuery)
+
+		for _, extraEntry := range entries[1:] {
+			placeholderNum := 1 + len(args)
+			if err := constructArgs(reportingID, extraEntry); err != nil {
+				return err
+			}
+			fmt.Fprintf(&completeQuery, ", ($%d, $%d, $%d, $%d, $%d)",
+				placeholderNum, placeholderNum+1, placeholderNum+2, placeholderNum+3, placeholderNum+4)
+		}
+		query = completeQuery.String()
+	}
+
+	rows, err := ex.Exec(ctx, "log-event", txn, query, args...)
 	if err != nil {
 		return err
 	}
 	if rows != len(entries) {
 		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(entries))
-	}
-	return nil
-}
-
-// skipWritePath is used when either onlyLog is true, or writes to the event log
-// table are disabled. In these cases, we do not write to the event log table.
-func skipWritePath(ctx context.Context, txn *kv.Txn, entries []eventLogEntry, onlyLog bool) error {
-	for i := range entries {
-		if err := setupEventAndMaybeLog(
-			ctx, txn, entries[i].event, onlyLog,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// setupEventAndMaybeLog prepares the event log to be written. Also,
-// if onlyLog is true, it will log the event.
-func setupEventAndMaybeLog(
-	ctx context.Context, txn *kv.Txn, info eventpb.EventPayload, onlyLog bool,
-) error {
-	eventType := eventpb.GetEventTypeName(info)
-
-	// Ensure the type field is populated.
-	info.CommonDetails().EventType = eventType
-
-	// The caller is responsible for the timestamp field.
-	if info.CommonDetails().Timestamp == 0 {
-		return errors.AssertionFailedf("programming error: timestamp field in event not populated: %T", info)
-	}
-
-	// If we only want to log and not write to the events table, early exit.
-	if onlyLog {
-		log.StructuredEvent(ctx, info)
-		return nil
-	}
-
-	// Ensure that the external logging sees the event when the
-	// transaction commits.
-	txn.AddCommitTrigger(func(ctx context.Context) {
-		log.StructuredEvent(ctx, info)
-	})
-
-	return nil
-}
-
-// constructArgs constructs the values for a single event-log row insert.
-func constructArgs(
-	args *[]interface{},
-	event eventpb.EventPayload,
-	eventType string,
-	targetID int32,
-	reportingID int32,
-) error {
-	*args = append(
-		*args,
-		timeutil.Unix(0, event.CommonDetails().Timestamp),
-		eventType, targetID,
-		reportingID,
-	)
-	var info interface{}
-	if event != nil {
-		infoBytes, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
-		info = string(infoBytes)
-	}
-	*args = append(*args, info)
-	return nil
-}
-
-// execEventLogInsert executes the insert query to insert the new events
-// into the event log table.
-func execEventLogInsert(
-	ctx context.Context,
-	ex *InternalExecutor,
-	txn *kv.Txn,
-	query string,
-	args []interface{},
-	numEvents int,
-) error {
-	rows, err := ex.Exec(ctx, "log-event", txn, query, args...)
-	if err != nil {
-		return err
-	}
-	if rows != numEvents {
-		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, numEvents)
-	}
-	return nil
-}
-
-// prepareRow creates the values of an insert for a row. It populates the
-// event payload with additional info, and then adds the values of the row to args.
-func prepareRow(
-	ctx context.Context,
-	txn *kv.Txn,
-	args *[]interface{},
-	event eventpb.EventPayload,
-	targetID int32,
-	reportingID int32,
-) error {
-	// Setup event log.
-	eventType := eventpb.GetEventTypeName(event)
-	if err := setupEventAndMaybeLog(
-		ctx, txn, event, false, /* onlyLog */
-	); err != nil {
-		return err
-	}
-
-	// Construct the args for this row.
-	if err := constructArgs(args, event, eventType, targetID, reportingID); err != nil {
-		return err
 	}
 	return nil
 }
