@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -31,7 +30,6 @@ func (p *planner) addColumnImpl(
 	tn *tree.TableName,
 	desc *tabledesc.Mutable,
 	t *tree.AlterTableAddColumn,
-	sessionData *sessiondata.SessionData,
 ) error {
 	d := t.ColumnDef
 	version := params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx)
