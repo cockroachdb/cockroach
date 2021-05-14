@@ -1043,6 +1043,25 @@ var (
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaConflictingIntentsResolveRejected = metric.Metadata{
+		Name:        "intent_cleanup.resolve_conflicting.rejected",
+		Help:        "Number of conflicting intents resolutions rejected",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaGCIntentResolveFailed = metric.Metadata{
+		Name:        "intents_cleanup.gc.failed",
+		Help:        "Number of cleanup intent failures during GC",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaFinalizedTxnCleanupTimedOut = metric.Metadata{
+		Name:        "intent_cleanup.finalized_txns.timed_out",
+		Help:        "Number of finalized transaction resolution timeouts",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1242,6 +1261,11 @@ type StoreMetrics struct {
 	// Closed timestamp metrics.
 	ClosedTimestampMaxBehindNanos  *metric.Gauge
 	ClosedTimestampFailuresToClose *metric.Gauge
+
+	// Intent cleanup failures
+	ConflictingIntentResolveRejected *metric.Counter
+	FinalizedTxnCleanupTimedOut      *metric.Counter
+	GCIntentResolveFailed            *metric.Counter
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1623,6 +1647,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
+
+		// Intent leak metrics
+		ConflictingIntentResolveRejected: metric.NewCounter(metaConflictingIntentsResolveRejected),
+		FinalizedTxnCleanupTimedOut:      metric.NewCounter(metaFinalizedTxnCleanupTimedOut),
+		GCIntentResolveFailed:            metric.NewCounter(metaGCIntentResolveFailed),
 	}
 	storeRegistry.AddMetricStruct(sm)
 

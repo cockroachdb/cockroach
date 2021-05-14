@@ -557,6 +557,11 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	allowSyncProcessing bool,
 ) error {
 	for i := range endTxns {
+		onComplete := func(err error) {
+			if err != nil {
+				ir.Metrics.FinalizedTxnCleanupFailed.Inc(1)
+			}
+		}
 		et := &endTxns[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 			locked, release := ir.lockInFlightTxnCleanup(ctx, et.Txn.ID)
@@ -565,13 +570,14 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 			}
 			defer release()
 			if err := ir.cleanupFinishedTxnIntents(
-				ctx, rangeID, et.Txn, et.Poison, nil, /* onComplete */
+				ctx, rangeID, et.Txn, et.Poison, onComplete,
 			); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
 			}
 		}); err != nil {
+			ir.Metrics.FinalizedTxnCleanupFailed.Inc(int64(len(endTxns) - i))
 			return err
 		}
 	}
@@ -613,7 +619,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	now hlc.Timestamp,
 	onComplete func(pushed, succeeded bool),
 ) error {
-	return ir.stopper.RunLimitedAsyncTask(
+	if err := ir.stopper.RunLimitedAsyncTask(
 		// If we've successfully launched a background task,
 		// dissociate this work from our caller's context and
 		// timeout.
@@ -682,9 +688,14 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
 				}
+				ir.Metrics.GCTxnIntentsCleanupFailed.Inc(1)
 			}
 		},
-	)
+	); err != nil {
+		ir.Metrics.GCTxnIntentsCleanupFailed.Inc(1)
+		return err
+	}
+	return nil
 }
 
 func (ir *IntentResolver) gcTxnRecord(

@@ -471,6 +471,8 @@ func (gcq *gcQueue) process(
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
 			if err == nil {
 				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
+			} else {
+				gcq.store.metrics.GCIntentResolveFailed.Inc(1)
 			}
 			return err
 		},

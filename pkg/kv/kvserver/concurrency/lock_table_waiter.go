@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -106,6 +107,9 @@ type lockTableWaiterImpl struct {
 	// When set, called just before each ContentionEvent is emitted.
 	// Is allowed to mutate the event.
 	onContentionEvent func(ev *roachpb.ContentionEvent)
+
+	// Metric reporting intent resolution failures.
+	conflictingIntentCleanupRejections *metric.Counter
 }
 
 // IntentResolver is an interface used by lockTableWaiterImpl to push
@@ -477,7 +481,15 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// on whether we need to poison.
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
 	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntent(ctx, resolve, opts)
+	if err := w.ir.ResolveIntent(ctx, resolve, opts); err != nil {
+		// If pusheeTxn was finalized, then we record that cleanup was unsuccessful,
+		// otherwise transaction should be cleaning up intents by itself.
+		if pusheeTxn.Status.IsFinalized() {
+			w.conflictingIntentCleanupRejections.Inc(1)
+		}
+		return err
+	}
+	return nil
 }
 
 // pushRequestTxn pushes the owner of the provided request.
@@ -634,7 +646,11 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	}
 	// See pushLockTxn for an explanation of these options.
 	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
+	err := w.ir.ResolveIntents(ctx, deferredResolution, opts)
+	if err != nil {
+		w.conflictingIntentCleanupRejections.Inc(int64(len(deferredResolution)))
+	}
+	return err
 }
 
 // watchForNotifications selects on the provided channel and watches for any
