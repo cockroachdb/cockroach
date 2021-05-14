@@ -30,28 +30,39 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// eventLogEntry represents a SQL-level event to be sent to logging
+// outputs(s).
+type eventLogEntry struct {
+	// targetID is the main object affected by this event.
+	// For DDL statements, this is typically the ID of
+	// the affected descriptor.
+	targetID int32
+
+	// event is the main event payload.
+	event eventpb.EventPayload
+}
+
 // logEvent emits a cluster event in the context of a regular SQL
 // statement.
 func (p *planner) logEvent(
-	ctx context.Context, descID descpb.ID, events eventpb.EventPayload,
-) error {
-	return p.logEventsWithSystemEventLogOption(ctx, descpb.IDs{descID}, true /* writeToEventLog */, events)
-}
-
-// batchLogEvents is like logEvent, except it takes in slice of events
-// to batch write.
-func (p *planner) batchLogEvents(
-	ctx context.Context, descIDs descpb.IDs, events ...eventpb.EventPayload,
-) error {
-	return p.logEventsWithSystemEventLogOption(ctx, descIDs, true /* writeToEventLog */, events...)
-}
-
-func (p *planner) logEventOnlyExternally(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
-) {
+) error {
+	return p.logEventsWithSystemEventLogOption(ctx, true, /* writeToEventLog */
+		eventLogEntry{targetID: int32(descID), event: event})
+}
+
+// logEvents is like logEvent, except that it can write multiple
+// events simultaneously. This is advantageous for SQL statements
+// that produce multiple events, e.g. GRANT, as they will
+// processed using only one write batch (and thus lower latency).
+func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error {
+	return p.logEventsWithSystemEventLogOption(ctx, true /* writeToEventLog */, entries...)
+}
+
+func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
 	// The API contract for logEventWithSystemEventLogOption() is that it returns
 	// no error when system.eventlog is not written to.
-	_ = p.logEventsWithSystemEventLogOption(ctx, descpb.IDs{descID}, false /* writeToEventLog */, event)
+	_ = p.logEventsWithSystemEventLogOption(ctx, false /* writeToEventLog */, entries...)
 }
 
 // logEventsWithSystemEventLogOption is like logEvent() but it gives
@@ -61,14 +72,14 @@ func (p *planner) logEventOnlyExternally(
 // If writeToEventLog is false, this function guarantees that it
 // returns no error.
 func (p *planner) logEventsWithSystemEventLogOption(
-	ctx context.Context, descIDs descpb.IDs, writeToEventLog bool, events ...eventpb.EventPayload,
+	ctx context.Context, writeToEventLog bool, entries ...eventLogEntry,
 ) error {
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
 	stmtTag := p.stmt.AST.StatementTag()
 	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
 	appName := p.SessionData().ApplicationName
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, descIDs, user, appName, stmt, stmtTag, pl, writeToEventLog, events...)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, user, appName, stmt, stmtTag, pl, writeToEventLog, entries...)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -116,19 +127,18 @@ func logEventInternalForSQLStatements(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
-	descIDs descpb.IDs,
 	user security.SQLUsername,
 	appName string,
 	stmt string,
 	stmtTag string,
 	placeholders tree.QueryArguments,
 	writeToEventLog bool,
-	events ...eventpb.EventPayload,
+	entries ...eventLogEntry,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
-	for i := range events {
+	for i := range entries {
 		if err := injectCommonFields(
-			txn, descIDs[i], user, appName, stmt, stmtTag, placeholders, events[i],
+			txn, entries[i].targetID, user, appName, stmt, stmtTag, placeholders, entries[i].event,
 		); err != nil {
 			return err
 		}
@@ -136,21 +146,20 @@ func logEventInternalForSQLStatements(
 
 	// Delegate the storing of the event to the regular event logic.
 	if !writeToEventLog || !eventLogEnabled.Get(&execCfg.InternalExecutor.s.cfg.Settings.SV) {
-		return skipWritePath(ctx, txn, events, !writeToEventLog)
+		return skipWritePath(ctx, txn, entries, !writeToEventLog)
 	}
 
 	return batchInsertEventRecords(ctx, execCfg.InternalExecutor,
 		txn,
-		descIDs,
 		int32(execCfg.NodeID.SQLInstanceID()),
-		events...,
+		entries...,
 	)
 }
 
 // injectCommonFields injects the common fields into the event payload provided by the caller.
 func injectCommonFields(
 	txn *kv.Txn,
-	descID descpb.ID,
+	descID int32,
 	user security.SQLUsername,
 	appName string,
 	stmt string,
@@ -247,14 +256,15 @@ func InsertEventRecord(
 	onlyLog bool,
 ) error {
 	if onlyLog || !eventLogEnabled.Get(&ex.s.cfg.Settings.SV) {
-		return skipWritePath(ctx, txn, []eventpb.EventPayload{info}, onlyLog)
+		return skipWritePath(ctx, txn, []eventLogEntry{{event: info}}, onlyLog)
 	}
 	return batchInsertEventRecords(
 		ctx, ex, txn,
-		descpb.IDs{descpb.ID(targetID)},
 		reportingID,
-		info,
-	)
+		eventLogEntry{
+			targetID: targetID,
+			event:    info,
+		})
 }
 
 // batchInsertEventRecords is like InsertEventRecord except it takes
@@ -265,9 +275,8 @@ func batchInsertEventRecords(
 	ctx context.Context,
 	ex *InternalExecutor,
 	txn *kv.Txn,
-	descIDs descpb.IDs,
 	reportingID int32,
-	events ...eventpb.EventPayload,
+	entries ...eventLogEntry,
 ) error {
 	const colsPerEvent = 5
 	const baseQuery = `
@@ -275,22 +284,22 @@ INSERT INTO system.eventlog (
   timestamp, "eventType", "targetID", "reportingID", info
 )
 VALUES($1, $2, $3, $4, $5)`
-	args := make([]interface{}, 0, len(events)*colsPerEvent)
+	args := make([]interface{}, 0, len(entries)*colsPerEvent)
 
 	// Prepare first row so we can take the fast path if we're only inserting one event log.
 	if err := prepareRow(
-		ctx, txn, &args, events[0], descIDs[0], reportingID,
+		ctx, txn, &args, entries[0].event, entries[0].targetID, reportingID,
 	); err != nil {
 		return err
 	}
-	if len(events) == 1 {
-		return execEventLogInsert(ctx, ex, txn, baseQuery, args, len(events))
+	if len(entries) == 1 {
+		return execEventLogInsert(ctx, ex, txn, baseQuery, args, len(entries))
 	}
 
 	var additionalRows strings.Builder
-	for i := 1; i < len(events); i++ {
+	for i := 1; i < len(entries); i++ {
 		var placeholderNum = 1 + (i * colsPerEvent)
-		if err := prepareRow(ctx, txn, &args, events[i], descIDs[i], reportingID); err != nil {
+		if err := prepareRow(ctx, txn, &args, entries[i].event, entries[i].targetID, reportingID); err != nil {
 			return err
 		}
 		additionalRows.WriteString(fmt.Sprintf(", ($%d, $%d, $%d, $%d, $%d)",
@@ -301,20 +310,18 @@ VALUES($1, $2, $3, $4, $5)`
 	if err != nil {
 		return err
 	}
-	if rows != len(events) {
-		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(events))
+	if rows != len(entries) {
+		return errors.Errorf("%d rows affected by log insertion; expected %d rows affected.", rows, len(entries))
 	}
 	return nil
 }
 
 // skipWritePath is used when either onlyLog is true, or writes to the event log
 // table are disabled. In these cases, we do not write to the event log table.
-func skipWritePath(
-	ctx context.Context, txn *kv.Txn, events []eventpb.EventPayload, onlyLog bool,
-) error {
-	for i := range events {
+func skipWritePath(ctx context.Context, txn *kv.Txn, entries []eventLogEntry, onlyLog bool) error {
+	for i := range entries {
 		if err := setupEventAndMaybeLog(
-			ctx, txn, events[i], onlyLog,
+			ctx, txn, entries[i].event, onlyLog,
 		); err != nil {
 			return err
 		}
@@ -357,13 +364,13 @@ func constructArgs(
 	args *[]interface{},
 	event eventpb.EventPayload,
 	eventType string,
-	descID descpb.ID,
+	targetID int32,
 	reportingID int32,
 ) error {
 	*args = append(
 		*args,
 		timeutil.Unix(0, event.CommonDetails().Timestamp),
-		eventType, int32(descID),
+		eventType, targetID,
 		reportingID,
 	)
 	var info interface{}
@@ -405,7 +412,7 @@ func prepareRow(
 	txn *kv.Txn,
 	args *[]interface{},
 	event eventpb.EventPayload,
-	descID descpb.ID,
+	targetID int32,
 	reportingID int32,
 ) error {
 	// Setup event log.
@@ -417,7 +424,7 @@ func prepareRow(
 	}
 
 	// Construct the args for this row.
-	if err := constructArgs(args, event, eventType, descID, reportingID); err != nil {
+	if err := constructArgs(args, event, eventType, targetID, reportingID); err != nil {
 		return err
 	}
 	return nil
