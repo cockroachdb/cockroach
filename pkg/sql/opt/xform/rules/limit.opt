@@ -55,8 +55,8 @@
     $indexJoinPrivate
 )
 
-# SplitScanIntoUnionScans splits a non-inverted scan under a limit into a union
-# of limited scans. Example:
+# SplitScanIntoUnionScans splits a non-inverted scan under a limit into a
+# union-all of limited scans over disjoint intervals. Example:
 #
 #    CREATE TABLE tab (region STRING, data INT NOT NULL, INDEX (region, data));
 #
