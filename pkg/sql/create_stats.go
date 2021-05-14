@@ -586,8 +586,8 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			evalCtx.SessionData.ApplicationName,
 			details.Statement,
 			"CREATE STATISTICS",
-			nil,  /* no placeholders known at this point */
-			true, /* writeToEventLog */
+			nil, /* no placeholders known at this point */
+			eventLogOptions{dst: LogEverywhere},
 			eventLogEntry{
 				targetID: int32(details.Table.ID),
 				event: &eventpb.CreateStatistics{
