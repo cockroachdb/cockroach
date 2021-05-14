@@ -175,7 +175,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			var err error
 			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t, params.SessionData())
+				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
 			})
 			if err != nil {
 				return err
