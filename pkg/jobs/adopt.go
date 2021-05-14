@@ -248,8 +248,23 @@ func (r *Registry) runJob(
 	defer cleanup()
 	spanName := fmt.Sprintf(`%s-%d`, typ, job.ID())
 	var span *tracing.Span
-	ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
+
+	// Wrap the context with a root span that is tied to the execution of the
+	// current instance of `job`. Creating a root span allows us to track all the
+	// spans linked to this job using the traceID allotted to the root span.
+	//
+	// A new root span will be created on every resumption of the job.
+	ctx, span = r.settings.Tracer.StartSpanCtx(ctx, spanName,
+		tracing.WithForceRealSpan())
 	defer span.Finish()
+	if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
+		ju *JobUpdater) error {
+		md.Payload.TraceID = span.TraceID()
+		ju.UpdatePayload(md.Payload)
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	// Run the actual job.
 	err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)
