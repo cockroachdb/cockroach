@@ -59,12 +59,6 @@ func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error
 	return p.logEventsWithSystemEventLogOption(ctx, true /* writeToEventLog */, entries...)
 }
 
-func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
-	// The API contract for logEventWithSystemEventLogOption() is that it returns
-	// no error when system.eventlog is not written to.
-	_ = p.logEventsWithSystemEventLogOption(ctx, false /* writeToEventLog */, entries...)
-}
-
 // logEventsWithSystemEventLogOption is like logEvent() but it gives
 // control to the caller as to whether the entry is written into
 // system.eventlog.
