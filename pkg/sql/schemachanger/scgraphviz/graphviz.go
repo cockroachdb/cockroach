@@ -228,6 +228,9 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 		m, ok := v.(map[string]interface{})
 		return ok && len(m) == 0
 	},
+	"isStruct": func(v interface{}) bool {
+		return reflect.ValueOf(v).Kind() == reflect.Struct
+	},
 	"toMap": toMap,
 }).Parse(`
 {{- define "key" -}}
@@ -262,7 +265,17 @@ var objectTemplate = template.Must(template.New("obj").Funcs(template.FuncMap{
 {{- if not (emptyMap $v) -}}
 <tr>
 {{- template "key" $k -}}
-{{- template "val" $v -}}
+
+{{- if (isStruct $v) -}}
+<td>
+{{- typeOf . -}}
+</td>
+<td>
+{{- template "mapVal" (toMap $v) -}}
+</td>
+{{- else -}}
+-{{- template "val" $v -}}
+{{- end -}}
 </tr>
 {{- end -}}
 {{- end -}}
