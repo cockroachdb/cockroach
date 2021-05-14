@@ -37,6 +37,7 @@ WITH zone_configs AS (
 			) AS mr
 		FROM crdb_internal.zones
     WHERE database_name = %[1]s
+    AND schema_name = %[5]s
     AND table_name = %[2]s
     AND raw_config_yaml IS NOT NULL
     AND raw_config_sql IS NOT NULL
