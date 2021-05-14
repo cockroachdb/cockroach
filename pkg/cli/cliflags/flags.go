@@ -1597,4 +1597,46 @@ The bytekey format does not require table-key prefix.`,
 		Name:        "up-to",
 		Description: `Export revisions of data from a backup table up to a specific timestamp.`,
 	}
+
+	Recursive = FlagInfo{
+		Name:      "recursive",
+		Shorthand: "r",
+		Description: `
+When set, the entire subtree rooted at the source directory will be uploaded to
+the destination. Every file in the subtree will be uploaded to the corresponding
+path under the destination; i.e. the relative path will be maintained. À la
+rsync, a trailing slash in the source will avoid creating an additional
+directory level under the destination. The destination can be expressed one of
+four ways: empty (not specified), a relative path, a well-formed URI with no
+host, or a full well-formed URI.
+<PRE>
+
+</PRE>
+If a destination is not specified, the default URI scheme and host will be used,
+and the basename from the source will be used as the destination directory.
+For example: 'userfile://defaultdb.public.userfiles_root/yourdirectory' 
+<PRE>
+
+</PRE>
+If the destination is a relative path such as 'path/to/dir', the default
+userfile URI schema and host will be used
+('userfile://defaultdb.public.userfiles_$user/'), and the relative path will be
+appended to it.
+For example: 'userfile://defaultdb.public.userfiles_root/path/to/dir'
+<PRE>
+
+</PRE>
+If the destination is a well-formed URI with no host, such as
+'userfile:///path/to/dir/', the default userfile URI schema and host will be
+used ('userfile://defaultdb.public.userfiles_$user/').
+For example: 'userfile://defaultdb.public.userfiles_root/path/to/dir'
+<PRE>
+
+</PRE>
+If the destination is a full well-formed URI, such as
+'userfile://db.schema.tablename_prefix/path/to/dir', then it will be used
+verbatim.
+For example: 'userfile://foo.bar.baz_root/path/to/dir'
+`,
+	}
 )

@@ -111,12 +111,6 @@ func runImport(
 		return err
 	}
 
-	reader, err := openUserFile(source)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
 	connURL, err := url.Parse(conn.url)
 	if err != nil {
 		return err
@@ -139,7 +133,7 @@ func runImport(
 		_, _ = deleteUserFile(ctx, conn, unescapedUserfileURL)
 	}()
 
-	_, err = uploadUserFile(ctx, conn, reader, source, userfileDestinationURI)
+	_, err = uploadUserFile(ctx, conn, source, userfileDestinationURI)
 	if err != nil {
 		return errors.Wrap(err, "failed to upload file to userfile before importing")
 	}
