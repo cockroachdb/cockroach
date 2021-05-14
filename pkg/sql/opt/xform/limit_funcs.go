@@ -158,10 +158,10 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 	return idx.IsInverted()
 }
 
-// SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
-// that each scan over a single key from the original scan's constraints. This
-// is beneficial in cases where the original scan had to scan over many rows but
-// had relatively few keys to scan over.
+// SplitScanIntoUnionScans returns a UnionAll tree of Scan operators with hard
+// limits that each scan over a single key from the original Scan's constraints.
+// This is beneficial in cases where the original scan had to scan over many
+// rows but had relatively few keys to scan over.
 // TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
 	limitOrdering physical.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
@@ -235,7 +235,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	last := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(0))
 	for i, cnt := 1, newSpans.Count(); i < cnt; i++ {
 		newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, newSpans.Get(i))
-		last = c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
+		last = c.e.f.ConstructUnionAll(last, newScan, &memo.SetPrivate{
 			LeftCols:  opt.ColSetToList(last.Relational().OutputCols),
 			RightCols: opt.ColSetToList(newScan.Relational().OutputCols),
 			OutCols:   oldColList,
