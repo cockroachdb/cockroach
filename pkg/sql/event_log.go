@@ -47,7 +47,8 @@ type eventLogEntry struct {
 func (p *planner) logEvent(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 ) error {
-	return p.logEventsWithSystemEventLogOption(ctx, true, /* writeToEventLog */
+	return p.logEventsWithOptions(ctx,
+		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{targetID: int32(descID), event: event})
 }
 
@@ -56,24 +57,31 @@ func (p *planner) logEvent(
 // that produce multiple events, e.g. GRANT, as they will
 // processed using only one write batch (and thus lower latency).
 func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error {
-	return p.logEventsWithSystemEventLogOption(ctx, true /* writeToEventLog */, entries...)
+	return p.logEventsWithOptions(ctx,
+		eventLogOptions{dst: LogEverywhere},
+		entries...)
 }
 
-// logEventsWithSystemEventLogOption is like logEvent() but it gives
-// control to the caller as to whether the entry is written into
-// system.eventlog.
+// eventLogOptions
+type eventLogOptions struct {
+	// Where to emit the log event to.
+	dst LogEventDestination
+}
+
+// logEventsWithOptions is like logEvent() but it gives control to the
+// caller as to where the event is written to.
 //
-// If writeToEventLog is false, this function guarantees that it
-// returns no error.
-func (p *planner) logEventsWithSystemEventLogOption(
-	ctx context.Context, writeToEventLog bool, entries ...eventLogEntry,
+// If opts.dst does not include LogToSystemTable, this function is
+// guaranteed to not return an error.
+func (p *planner) logEventsWithOptions(
+	ctx context.Context, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
 	user := p.User()
 	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
 	stmtTag := p.stmt.AST.StatementTag()
 	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
 	appName := p.SessionData().ApplicationName
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, user, appName, stmt, stmtTag, pl, writeToEventLog, entries...)
+	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, user, appName, stmt, stmtTag, pl, opts, entries...)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -102,8 +110,7 @@ func logEventInternalForSchemaChanges(
 		ctx, execCfg.InternalExecutor,
 		txn,
 		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
-		false,                                 /* skipExternalLog */
-		false,                                 /* onlyLog */
+		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{
 			targetID: int32(descID),
 			event:    event,
@@ -128,7 +135,7 @@ func logEventInternalForSQLStatements(
 	stmt string,
 	stmtTag string,
 	placeholders tree.QueryArguments,
-	writeToEventLog bool,
+	opts eventLogOptions,
 	entries ...eventLogEntry,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
@@ -143,8 +150,7 @@ func logEventInternalForSQLStatements(
 	return insertEventRecords(ctx, execCfg.InternalExecutor,
 		txn,
 		int32(execCfg.NodeID.SQLInstanceID()),
-		false,            /* skipExternalLog */
-		!writeToEventLog, /* onlyLog */
+		opts,
 		entries...,
 	)
 }
@@ -211,8 +217,7 @@ func LogEventForJobs(
 		ctx, execCfg.InternalExecutor,
 		txn,
 		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
-		false,                                 /* skipExternalLog */
-		false,                                 /* onlyLog */
+		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{event: event},
 	)
 }
@@ -223,6 +228,27 @@ var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+// LogEventDestination indicates for InsertEventRecord where the
+// event should be directed to.
+type LogEventDestination int
+
+func (d LogEventDestination) hasFlag(f LogEventDestination) bool {
+	return d&f != 0
+}
+
+const (
+	// LogToSystemTable makes InsertEventRecord write one or more
+	// entries to the system eventlog table. (This behavior may be
+	// removed in a later version.)
+	LogToSystemTable LogEventDestination = 1 << iota
+	// LogExternally makes InsertEventRecord write the event(s) to the
+	// external logs.
+	LogExternally
+
+	// LogEverywhere logs to all the possible outputs.
+	LogEverywhere LogEventDestination = LogExternally | LogToSystemTable
+)
+
 // InsertEventRecord inserts a single event into the event log as part
 // of the provided transaction, using the provided internal executor.
 //
@@ -231,13 +257,13 @@ func InsertEventRecord(
 	ctx context.Context,
 	ex *InternalExecutor,
 	txn *kv.Txn,
-	targetID, reportingID int32,
-	skipExternalLog bool,
+	reportingID int32,
+	dst LogEventDestination,
+	targetID int32,
 	info eventpb.EventPayload,
-	onlyLog bool,
 ) error {
 	return insertEventRecords(ctx, ex, txn, reportingID,
-		skipExternalLog, onlyLog,
+		eventLogOptions{dst: dst},
 		eventLogEntry{targetID: targetID, event: info})
 }
 
@@ -256,8 +282,7 @@ func insertEventRecords(
 	ex *InternalExecutor,
 	txn *kv.Txn,
 	reportingID int32,
-	skipExternalLog bool,
-	onlyLog bool,
+	opts eventLogOptions,
 	entries ...eventLogEntry,
 ) error {
 	// Finish populating the entries.
@@ -274,10 +299,10 @@ func insertEventRecords(
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := !onlyLog && eventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
-		if !skipExternalLog {
+		if opts.dst.hasFlag(LogExternally) {
 			for i := range entries {
 				log.StructuredEvent(ctx, entries[i].event)
 			}
@@ -288,7 +313,7 @@ func insertEventRecords(
 
 	// When logging to the system table, ensure that the external
 	// logging only sees the event when the transaction commits.
-	if !skipExternalLog {
+	if opts.dst.hasFlag(LogExternally) {
 		txn.AddCommitTrigger(func(ctx context.Context) {
 			for i := range entries {
 				log.StructuredEvent(ctx, entries[i].event)
