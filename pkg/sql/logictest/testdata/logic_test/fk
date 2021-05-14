@@ -3680,24 +3680,23 @@ subtest reference_constraint_different_order
 
 statement ok
 CREATE TABLE reference_constraint_different_order_parent (
-	a
-		INT8 NOT NULL,
-	b
-		INT8 NOT NULL,
-	c
-		INT8 NOT NULL,
-	d
-		VARCHAR(10)
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  c INT8 NOT NULL,
+  d VARCHAR(10),
+  PRIMARY KEY (a, b, c)
 );
 CREATE TABLE reference_constraint_different_order_child (
-	id INT8, a INT8, b INT8, c INT8, e VARCHAR(10)
+  id INT8,
+  a INT8,
+  b INT8,
+  c INT8,
+  e VARCHAR(10)
 );
-ALTER TABLE reference_constraint_different_order_parent
-	ADD CONSTRAINT p_pk PRIMARY KEY (a, b, c);
 
 statement ok
 ALTER TABLE reference_constraint_different_order_child
-	ADD CONSTRAINT p_fk FOREIGN KEY (a, b, c) REFERENCES reference_constraint_different_order_parent (a, c, b);
+  ADD CONSTRAINT p_fk FOREIGN KEY (a, b, c) REFERENCES reference_constraint_different_order_parent (a, c, b);
 
 statement ok
 INSERT
