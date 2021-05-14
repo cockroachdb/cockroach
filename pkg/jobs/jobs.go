@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -86,10 +85,19 @@ type StartableJob struct {
 	resumer    Resumer
 	resumerCtx context.Context
 	cancel     context.CancelFunc
-	span       *tracing.Span
 	execDone   chan struct{}
 	execErr    error
 	starts     int64 // used to detect multiple calls to Start()
+}
+
+// TraceableJob is associated with a Job object, and can be used to configure
+// the root tracing span that will be tied to the jobs' execution.
+// By default, a job will create a `noop` root span that will discard all
+// recordings.
+type TraceableJob interface {
+	// ForceRealSpan forces the registry to create a real Span instead of a
+	// low-overhead non-recordable noop span.
+	ForceRealSpan() bool
 }
 
 func init() {
@@ -835,23 +843,14 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
 
-	finishSpan := func() {
-		if sj.span != nil {
-			sj.span.Finish()
-		}
-	}
-
 	if err := sj.started(ctx, nil /* txn */); err != nil {
-		finishSpan()
 		return err
 	}
 
 	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
 		sj.execErr = sj.registry.runJob(sj.resumerCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
 		close(sj.execDone)
-		finishSpan()
 	}); err != nil {
-		finishSpan()
 		return err
 	}
 
@@ -907,9 +906,6 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 	// Given that, proceed to clean up regardless.
 
 	sj.registry.unregister(sj.ID())
-	if sj.span != nil {
-		sj.span.Finish()
-	}
 	if sj.cancel != nil {
 		sj.cancel()
 	}
