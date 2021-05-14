@@ -1888,8 +1888,9 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			// If the index is named, ensure that the name is unique.
-			// Unnamed indexes will be given a unique auto-generated name later on.
+			// If the index is named, ensure that the name is unique. Unnamed
+			// indexes will be given a unique auto-generated name later on when
+			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
@@ -1995,8 +1996,9 @@ func NewTableDesc(
 				// We will add the unique constraint below.
 				break
 			}
-			// If the index is named, ensure that the name is unique.
-			// Unnamed indexes will be given a unique auto-generated name later on.
+			// If the index is named, ensure that the name is unique. Unnamed
+			// indexes will be given a unique auto-generated name later on when
+			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
