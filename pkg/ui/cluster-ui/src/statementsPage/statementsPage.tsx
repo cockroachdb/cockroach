@@ -104,8 +104,8 @@ export class StatementsPage extends React.Component<
     const defaultState = {
       sortSetting: {
         // Sort by Execution Count column as default option.
-        sortKey: 1,
         ascending: false,
+        columnTitle: "executionCount",
       },
       pagination: {
         pageSize: 20,
@@ -124,14 +124,14 @@ export class StatementsPage extends React.Component<
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const sortKey = searchParams.get("sortKey") || undefined;
     const ascending = searchParams.get("ascending") || undefined;
+    const columnTitle = searchParams.get("columnTitle") || undefined;
     const searchQuery = searchParams.get("q") || undefined;
 
     return {
       sortSetting: {
-        sortKey,
-        ascending: Boolean(ascending),
+        ascending: ascending === "true",
+        columnTitle,
       },
       search: searchQuery,
     };
@@ -159,8 +159,8 @@ export class StatementsPage extends React.Component<
     });
 
     this.syncHistory({
-      sortKey: ss.sortKey,
-      ascending: Boolean(ss.ascending).toString(),
+      ascending: ss.ascending.toString(),
+      columnTitle: ss.columnTitle,
     });
     if (this.props.onSortingChange) {
       this.props.onSortingChange("Statements", ss.columnTitle, ss.ascending);
