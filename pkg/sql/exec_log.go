@@ -325,14 +325,12 @@ func (p *planner) maybeLogStatementInternal(
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventsOnlyExternally(ctx,
-				eventLogEntry{event: &eventpb.SlowQuery{CommonSQLExecDetails: execDetails}})
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQuery{CommonSQLExecDetails: execDetails}})
 
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventsOnlyExternally(ctx,
-				eventLogEntry{event: &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails}})
+			p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails}})
 		}
 	}
 
@@ -342,9 +340,16 @@ func (p *planner) maybeLogStatementInternal(
 	}
 
 	if shouldLogToAdminAuditLog {
-		p.logEventsOnlyExternally(ctx,
-			eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
+		p.logEventsOnlyExternally(ctx, eventLogEntry{event: &eventpb.AdminQuery{CommonSQLExecDetails: execDetails}})
 	}
+}
+
+func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
+	// The API contract for logEventsWithSystemEventLogOption() is that it returns
+	// no error when system.eventlog is not written to.
+	_ = p.logEventsWithSystemEventLogOption(ctx,
+		false, /* writeToEventLog */
+		entries...)
 }
 
 // maybeAudit marks the current plan being constructed as flagged
