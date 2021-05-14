@@ -824,8 +824,8 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 				return sql.InsertEventRecord(ctx, n.sqlExec,
 					txn,
 					int32(n.Descriptor.NodeID), /* reporting ID: the node where the event is logged */
-					sql.LogToSystemTable,       /* LogEventDestination: we already call log.StructuredEvent above */
-					int32(n.Descriptor.NodeID), /* target ID: the node that is joining (ourselves) */
+					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* LogEventDestination: we already call log.StructuredEvent above */
+					int32(n.Descriptor.NodeID),                        /* target ID: the node that is joining (ourselves) */
 					event,
 				)
 			}); err != nil {
