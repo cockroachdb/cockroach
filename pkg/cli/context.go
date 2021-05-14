@@ -52,6 +52,7 @@ func initCLIDefaults() {
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
 	setImportContextDefaults()
+	setUserfileContextDefaults()
 
 	initPreFlagsDefaults()
 
@@ -613,6 +614,21 @@ func setImportContextDefaults() {
 	importCtx.ignoreUnsupported = false
 	importCtx.ignoreUnsupportedLog = ""
 	importCtx.rowLimit = 0
+}
+
+// userfileCtx captures the command-line parameters of the
+// `userfile` command.
+// See below for defaults.
+var userfileCtx struct {
+	// add comment here.
+	recursive bool
+}
+
+// setUserfileContextDefaults sets the default values in userfileCtx.
+// This function is called by initCLIDefaults() and thus re-called in
+// every test that exercises command-line parsing.
+func setUserfileContextDefaults() {
+	userfileCtx.recursive = false
 }
 
 // GetServerCfgStores provides direct public access to the StoreSpecList inside

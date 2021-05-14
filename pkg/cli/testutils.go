@@ -330,14 +330,16 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 		}
 		args = append(args, origArgs[1:]...)
 
-		// `nodelocal upload` CLI tests create test files in unique temp
-		// directories. Given that the expected output for such tests is defined as
-		// a static comment, it is not possible to match against the full file path.
-		// So, we trim the file path upto the sentinel prefix marker, and use only
-		// the file name for comparing against the expected output.
+		// `nodelocal upload` and `userfile upload -r` CLI tests create unique temp
+		// directories with random numbers in their names. Given that the expected
+		// output for such tests is defined as a static comment, it is not possible
+		// to match against the full path. So, we trim the paths as below.
 		if len(origArgs) >= 3 && strings.Contains(origArgs[2], testTempFilePrefix) {
 			splitFilePath := strings.Split(origArgs[2], testTempFilePrefix)
 			origArgs[2] = splitFilePath[1]
+		}
+		if len(origArgs) >= 4 && strings.Contains(origArgs[3], "Example_userfile_upload_recursive") {
+			origArgs[3] = filepath.Base(origArgs[3])
 		}
 
 		if !c.omitArgs {
