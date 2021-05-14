@@ -264,6 +264,11 @@ func runBackupProcessor(
 					ReturnSST:                           writeSSTsInProcessor,
 					OmitChecksum:                        true,
 				}
+				// If we're sending the SST back, don't encrypt it -- we'll encrypt it
+				// here instead.
+				if req.ReturnSST {
+					req.Encryption = nil
+				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,
 				// check to see if it is time to switch to priority.
@@ -362,9 +367,13 @@ func runBackupProcessor(
 
 				files := make([]BackupManifest_File, 0)
 				for _, file := range res.Files {
-					if writeSSTsInProcessor {
+					if len(file.SST) > 0 {
+						// TODO(dt): remove this when we add small-file returning.
+						if !writeSSTsInProcessor {
+							return errors.New("ExportRequest returned unexpected file payload")
+						}
 						file.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(flowCtx.EvalCtx.NodeID.SQLInstanceID()))
-						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV); err != nil {
+						if err := writeFile(ctx, file, defaultStore, storeByLocalityKV, spec.Encryption); err != nil {
 							return err
 						}
 					}
@@ -443,6 +452,7 @@ func writeFile(
 	file roachpb.ExportResponse_File,
 	defaultStore cloud.ExternalStorage,
 	storeByLocalityKV map[string]cloud.ExternalStorage,
+	enc *roachpb.FileEncryptionOptions,
 ) error {
 	if defaultStore == nil {
 		return errors.New("no default store created when writing SST")
@@ -454,6 +464,14 @@ func writeFile(
 	exportStore := defaultStore
 	if localitySpecificStore, ok := storeByLocalityKV[locality]; ok {
 		exportStore = localitySpecificStore
+	}
+
+	if enc != nil {
+		var err error
+		data, err = storageccl.EncryptFile(data, enc.Key)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := cloud.WriteFile(ctx, exportStore, file.Path, bytes.NewReader(data)); err != nil {
