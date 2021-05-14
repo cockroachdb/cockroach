@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -143,6 +144,27 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 		}
 	}
 	return true
+}
+
+// Equivalent returns true if the input list's elements are the same as this list's elements
+func (c ColumnIDs) Equivalent(input ColumnIDs) bool {
+	if len(input) != len(c) {
+		return false
+	}
+
+	columnsLookup := util.MakeFastIntSet()
+	for _, col := range c {
+		columnsLookup.Add(int(col))
+	}
+
+	for _, inputCol := range input {
+		if !columnsLookup.Contains(int(inputCol)) {
+			return false
+		}
+		columnsLookup.Remove(int(inputCol))
+	}
+
+	return columnsLookup.Len() <= 0
 }
 
 // Contains returns whether this list contains the input ID.
