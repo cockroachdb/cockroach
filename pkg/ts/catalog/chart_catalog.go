@@ -897,6 +897,16 @@ var charts = []sectionDescription{
 					"intents.resolve-attempts",
 				},
 			},
+			{
+				Title: "Leak Tracking",
+				Metrics: []string{
+					"queue.gc.info.transactionresolvefailed",
+					"queue.gc.info.resolvefailed",
+					"intentresolver.finalized_txns.failed",
+					"intents.resolve_conflicting.rejected",
+					"intents.finalized_txns.timed_out",
+				},
+			},
 		},
 	},
 	{
@@ -941,6 +951,13 @@ var charts = []sectionDescription{
 				Metrics: []string{"txn.aborts"},
 			},
 			{
+				Title: "Failed Aborts",
+				Metrics: []string{
+					"txn.rollbacks.failed",
+					"txn.rollbacks.async.failed",
+				},
+			},
+			{
 				Title:   "Successful refreshes",
 				Metrics: []string{"txn.refresh.success"},
 			},
@@ -969,6 +986,10 @@ var charts = []sectionDescription{
 					"txn.commit_waits",
 					"txn.commit_waits.before_commit_trigger",
 				},
+			},
+			{
+				Title:   "Failed Commits",
+				Metrics: []string{"txn.commits.failed"},
 			},
 			{
 				Title:   "Durations",
