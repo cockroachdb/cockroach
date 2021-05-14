@@ -2786,6 +2786,38 @@ SELECT getdatabaseencoding()
 ----
 UTF8
 
+subtest get_byte
+
+query I
+SELECT get_byte('Th\000omas'::BYTEA, 4)
+----
+109
+
+query error byte index 10 out of valid range
+SELECT get_byte('abc'::BYTEA, 10)
+
+query error byte index -10 out of valid range
+SELECT get_byte('abc'::BYTEA, -10)
+
+subtest set_byte
+
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 64)
+----
+Th@omas
+
+# A substitute value that's larger than 8 bit will be truncated.
+query T
+SELECT set_byte('Th\000omas'::BYTEA, 2, 16448)
+----
+Th@omas
+
+query error byte index 10 out of valid range
+SELECT set_byte('abc'::BYTEA, 10, 123)
+
+query error byte index -10 out of valid range
+SELECT set_byte('abc'::BYTEA, -10, 123)
+
 subtest get_bit
 
 query I rowsort

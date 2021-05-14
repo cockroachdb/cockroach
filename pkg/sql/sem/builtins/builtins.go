@@ -511,6 +511,25 @@ var builtins = map[string]builtinDefinition{
 		}),
 
 	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"get_byte": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"byte_string", types.Bytes}, {"index", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				byteString := []byte(*args[0].(*tree.DBytes))
+				index := int(tree.MustBeDInt(args[1]))
+				// Check whether index asked is inside ByteArray.
+				if index < 0 || index >= len(byteString) {
+					return nil, pgerror.Newf(pgcode.ArraySubscript,
+						"byte index %d out of valid range (0..%d)", index, len(byteString)-1)
+				}
+				return tree.NewDInt(tree.DInt(byteString[index])), nil
+			},
+			Info:       "Extracts a byte at the given index in the byte array.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
 	"set_bit": makeBuiltin(tree.FunctionProperties{Category: categoryString},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -569,6 +588,31 @@ var builtins = map[string]builtinDefinition{
 				return tree.NewDBytes(tree.DBytes(byteString)), nil
 			},
 			Info:       "Updates a bit at the given index in the byte array.",
+			Volatility: tree.VolatilityImmutable,
+		}),
+
+	// https://www.postgresql.org/docs/9.0/functions-binarystring.html#FUNCTIONS-BINARYSTRING-OTHER
+	"set_byte": makeBuiltin(tree.FunctionProperties{Category: categoryString},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"byte_string", types.Bytes},
+				{"index", types.Int},
+				{"to_set", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				byteString := []byte(*args[0].(*tree.DBytes))
+				index := int(tree.MustBeDInt(args[1]))
+				toSet := int(tree.MustBeDInt(args[2]))
+				// Check whether index asked is inside ByteArray.
+				if index < 0 || index >= len(byteString) {
+					return nil, pgerror.Newf(pgcode.ArraySubscript,
+						"byte index %d out of valid range (0..%d)", index, len(byteString)-1)
+				}
+				byteString[index] = byte(toSet)
+				return tree.NewDBytes(tree.DBytes(byteString)), nil
+			},
+			Info:       "Updates a byte at the given index in the byte array.",
 			Volatility: tree.VolatilityImmutable,
 		}),
 
