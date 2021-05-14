@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -530,18 +529,10 @@ func (r *Registry) CreateStartableJobWithTxn(
 
 	var resumerCtx context.Context
 	var cancel func()
-	var span *tracing.Span
 	var execDone chan struct{}
 	if !alreadyInitialized {
-		// Construct a context which contains a tracing span that follows from the
-		// span in the parent context. We don't directly use the parent span because
-		// we want independent lifetimes and cancellation. For the same reason, we
-		// don't use the Context returned by ForkSpan.
+		// Using a new context allows for independent lifetimes and cancellation.
 		resumerCtx, cancel = r.makeCtx()
-		_, span = tracing.ForkSpan(ctx, "job")
-		if span != nil {
-			resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
-		}
 
 		if r.startUsingSQLLivenessAdoption(ctx) {
 			r.mu.Lock()
@@ -565,7 +556,6 @@ func (r *Registry) CreateStartableJobWithTxn(
 		*sj = &StartableJob{}
 		(*sj).resumerCtx = resumerCtx
 		(*sj).cancel = cancel
-		(*sj).span = span
 		(*sj).execDone = execDone
 	}
 	(*sj).Job = j
