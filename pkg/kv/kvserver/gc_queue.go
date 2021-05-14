@@ -471,6 +471,8 @@ func (gcq *gcQueue) process(
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
 			if err == nil {
 				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
+			} else {
+				gcq.store.metrics.GCResolveFailed.Inc(int64(intentCount))
 			}
 			return err
 		},
@@ -483,6 +485,8 @@ func (gcq *gcQueue) process(
 						}
 						if succeeded {
 							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
+						} else {
+							gcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
 						}
 					})
 			if errors.Is(err, stop.ErrThrottled) {

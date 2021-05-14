@@ -897,6 +897,16 @@ var charts = []sectionDescription{
 					"intents.resolve-attempts",
 				},
 			},
+			{
+				Title: "Leak Tracking",
+				Metrics: []string{
+					"queue.gc.info.transactionresolvefailed",
+					"queue.gc.info.resolvefailed",
+					"intentresolver.finalized_txns.failed",
+					"intents.resolve_conflicting.rejected",
+					"intents.finalized_txns.timed_out",
+				},
+			},
 		},
 	},
 	{
