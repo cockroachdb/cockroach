@@ -552,7 +552,7 @@ var builtins = map[string]builtinDefinition{
 				// Value of bit can only be set to 1 or 0.
 				if toSet != 0 && toSet != 1 {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-						"new bit must be 0 or 1.")
+						"new bit must be 0 or 1")
 				}
 				// Check whether index asked is inside ByteArray.
 				if index < 0 || index >= 8*len(byteString) {
