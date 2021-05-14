@@ -76,12 +76,18 @@ type eventLogOptions struct {
 func (p *planner) logEventsWithOptions(
 	ctx context.Context, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
-	user := p.User()
-	stmt := tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations)
-	stmtTag := p.stmt.AST.StatementTag()
-	pl := p.extendedEvalCtx.EvalContext.Placeholders.Values
-	appName := p.SessionData().ApplicationName
-	return logEventInternalForSQLStatements(ctx, p.extendedEvalCtx.ExecCfg, p.txn, user, appName, stmt, stmtTag, pl, opts, entries...)
+	commonPayload := sqlEventCommonExecPayload{
+		user:         p.User(),
+		stmt:         tree.AsStringWithFQNames(p.stmt.AST, p.extendedEvalCtx.EvalContext.Annotations),
+		stmtTag:      p.stmt.AST.StatementTag(),
+		placeholders: p.extendedEvalCtx.EvalContext.Placeholders.Values,
+		appName:      p.SessionData().ApplicationName,
+	}
+	return logEventInternalForSQLStatements(ctx,
+		p.extendedEvalCtx.ExecCfg, p.txn,
+		opts,
+		commonPayload,
+		entries...)
 }
 
 // logEventInternalForSchemaChange emits a cluster event in the
@@ -118,6 +124,16 @@ func logEventInternalForSchemaChanges(
 	)
 }
 
+// sqlEventExecPayload contains the statement and session details
+// necessary to populate an eventpb.CommonSQLExecDetails.
+type sqlEventCommonExecPayload struct {
+	user         security.SQLUsername
+	stmt         string
+	stmtTag      string
+	placeholders tree.QueryArguments
+	appName      string
+}
+
 // logEventInternalForSQLStatements emits a cluster event on behalf of
 // a SQL statement, when the point where the event is emitted does not
 // have access to a (*planner) and the current statement metadata.
@@ -130,60 +146,45 @@ func logEventInternalForSQLStatements(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
-	user security.SQLUsername,
-	appName string,
-	stmt string,
-	stmtTag string,
-	placeholders tree.QueryArguments,
 	opts eventLogOptions,
+	commonPayload sqlEventCommonExecPayload,
 	entries ...eventLogEntry,
 ) error {
 	// Inject the common fields into the payload provided by the caller.
+	injectCommonFields := func(entry eventLogEntry) error {
+		event := entry.event
+		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
+		if !ok {
+			return errors.AssertionFailedf("unknown event type: %T", event)
+		}
+		m := sqlCommon.CommonSQLDetails()
+		m.Statement = commonPayload.stmt
+		m.Tag = commonPayload.stmtTag
+		m.ApplicationName = commonPayload.appName
+		m.User = commonPayload.user.Normalized()
+		m.DescriptorID = uint32(entry.targetID)
+		if pls := commonPayload.placeholders; len(pls) > 0 {
+			m.PlaceholderValues = make([]string, len(pls))
+			for idx, val := range pls {
+				m.PlaceholderValues[idx] = val.String()
+			}
+		}
+		return nil
+	}
+
 	for i := range entries {
-		if err := injectCommonFields(
-			txn, entries[i].targetID, user, appName, stmt, stmtTag, placeholders, entries[i].event,
-		); err != nil {
+		if err := injectCommonFields(entries[i]); err != nil {
 			return err
 		}
 	}
 
-	return insertEventRecords(ctx, execCfg.InternalExecutor,
-		txn,
-		int32(execCfg.NodeID.SQLInstanceID()),
-		opts,
-		entries...,
+	return insertEventRecords(ctx,
+		execCfg.InternalExecutor, txn,
+		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		opts,                                  /* eventLogOptions */
+		entries...,                            /* ...eventLogEntry */
 	)
-}
-
-// injectCommonFields injects the common fields into the event payload provided by the caller.
-func injectCommonFields(
-	txn *kv.Txn,
-	descID int32,
-	user security.SQLUsername,
-	appName string,
-	stmt string,
-	stmtTag string,
-	placeholders tree.QueryArguments,
-	event eventpb.EventPayload,
-) error {
-	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
-	sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
-	if !ok {
-		return errors.AssertionFailedf("unknown event type: %T", event)
-	}
-	m := sqlCommon.CommonSQLDetails()
-	m.Statement = stmt
-	m.Tag = stmtTag
-	m.ApplicationName = appName
-	m.User = user.Normalized()
-	m.DescriptorID = uint32(descID)
-	if len(placeholders) > 0 {
-		m.PlaceholderValues = make([]string, len(placeholders))
-		for idx, val := range placeholders {
-			m.PlaceholderValues[idx] = val.String()
-		}
-	}
-	return nil
 }
 
 // LogEventForJobs emits a cluster event in the context of a job.
