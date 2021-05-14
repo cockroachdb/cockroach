@@ -91,25 +91,24 @@ limit
  ├── internal-ordering: +2
  ├── cardinality: [0 - 5]
  ├── ordering: +2
- ├── union
+ ├── union-all
  │    ├── columns: e:2 f:3
  │    ├── left columns: e:7 f:8
  │    ├── right columns: e:12 f:13
  │    ├── cardinality: [0 - 10]
- │    ├── key: (2,3)
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
  │    ├── scan def@secondary
  │    │    ├── columns: e:7 f:8
  │    │    ├── constraint: /6/7/8/9: [/1 - /1]
  │    │    ├── limit: 5
- │    │    ├── ordering: +7,+8
+ │    │    ├── ordering: +7
  │    │    └── limit hint: 5.00
  │    └── scan def@secondary
  │         ├── columns: e:12 f:13
  │         ├── constraint: /11/12/13/14: [/3 - /3]
  │         ├── limit: 5
- │         ├── ordering: +12,+13
+ │         ├── ordering: +12
  │         └── limit hint: 5.00
  └── 5
 
