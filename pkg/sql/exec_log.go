@@ -345,10 +345,10 @@ func (p *planner) maybeLogStatementInternal(
 }
 
 func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventLogEntry) {
-	// The API contract for logEventsWithSystemEventLogOption() is that it returns
+	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
-	_ = p.logEventsWithSystemEventLogOption(ctx,
-		false, /* writeToEventLog */
+	_ = p.logEventsWithOptions(ctx,
+		eventLogOptions{dst: LogExternally},
 		entries...)
 }
 
