@@ -15,15 +15,6 @@ tc_end_block() {
   echo "##teamcity[blockClosed name='$1']"
 }
 
-log_into_gcloud() {
-  if [[ "${google_credentials}" ]]; then
-    echo "${google_credentials}" > .google-credentials.json
-    gcloud auth activate-service-account --key-file=.google-credentials.json
-  else
-    echo 'warning: `google_credentials` not set' >&2
-  fi
-}
-
 docker_login_with_google() {
   # https://cloud.google.com/container-registry/docs/advanced-authentication#json-key
   echo "${google_credentials}" | docker login -u _json_key --password-stdin "https://${gcr_hostname}"
