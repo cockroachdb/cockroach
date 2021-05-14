@@ -872,13 +872,13 @@ func (c *coster) computeIndexLookupJoinCost(
 		cost *= preferLookupJoinFactor
 	}
 
-	// If this lookup join is locality optimized, divide the cost by two in order to make
+	// If this lookup join is locality optimized, divide the cost by 2.5 in order to make
 	// the total cost of the two lookup joins in the locality optimized plan less than
 	// the cost of the single lookup join in the non-locality optimized plan.
 	// TODO(rytaft): This is hacky. We should really be making this determination
 	// based on the latency between regions.
 	if localityOptimized {
-		cost /= 2
+		cost /= 2.5
 	}
 	return cost
 }
