@@ -113,6 +113,10 @@ func (r *Replica) executeReadOnlyBatch(
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, allowSyncProcessing); err != nil {
 			log.Warningf(ctx, "%v", err)
+			// TODO(oleg): Cleanup encountered intents during read, we only account for
+			// scheduling failure, but this is not critical here because original transactions
+			// should clean it up.
+			r.store.intentResolver.Metrics().ConflictingIntentsCleanupFailed.Inc(int64(len(intents)))
 		}
 	}
 

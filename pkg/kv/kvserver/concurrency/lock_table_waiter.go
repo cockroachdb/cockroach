@@ -125,6 +125,10 @@ type IntentResolver interface {
 
 	// ResolveIntents synchronously resolves the provided batch of intents.
 	ResolveIntents(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+
+	// Metrics returns metrics struct for reporting overall intent resolution
+	// counters by source.
+	Metrics() intentresolver.Metrics
 }
 
 // WaitOn implements the lockTableWaiter interface.
@@ -477,7 +481,16 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// on whether we need to poison.
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
 	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntent(ctx, resolve, opts)
+	// TODO(oleg): Register intent failure for finalized txn if failed (not ours)
+	if err := w.ir.ResolveIntent(ctx, resolve, opts); err != nil {
+		// If pusheeTxn was finalized, then we record that cleanup was unsuccessful,
+		// otherwise transaction should be cleaning up intents by itself.
+		if pusheeTxn.Status.IsFinalized() {
+			w.ir.Metrics().ConflictingIntentsCleanupFailed.Inc(1)
+		}
+		return err
+	}
+	return nil
 }
 
 // pushRequestTxn pushes the owner of the provided request.
@@ -634,7 +647,13 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	}
 	// See pushLockTxn for an explanation of these options.
 	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
+	// TODO(oleg): We only have finalized transactions in deferredResolutions
+	// so we register them in failed conflicting intents.
+	err := w.ir.ResolveIntents(ctx, deferredResolution, opts)
+	if err != nil {
+		w.ir.Metrics().ConflictingIntentsCleanupFailed.Inc(int64(len(deferredResolution)))
+	}
+	return err
 }
 
 // watchForNotifications selects on the provided channel and watches for any

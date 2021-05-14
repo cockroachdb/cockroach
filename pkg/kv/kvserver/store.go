@@ -1419,7 +1419,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
 		RangeDescriptorCache: intentResolverRangeCache,
 	})
-	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
+	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics())
 
 	// Create the recovery manager.
 	s.recoveryMgr = txnrecovery.NewManager(

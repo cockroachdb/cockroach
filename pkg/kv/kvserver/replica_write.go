@@ -214,6 +214,7 @@ func (r *Replica) executeWriteBatch(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
 					log.Warningf(ctx, "transaction cleanup failed: %v", err)
+					// TODO(oleg): Failures are counted by intent resolver
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
@@ -221,6 +222,9 @@ func (r *Replica) executeWriteBatch(
 					ctx, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
 					log.Warningf(ctx, "intent cleanup failed: %v", err)
+					// TODO(oleg): Cleanup other intents after commit
+					r.store.intentResolver.Metrics().ConflictingIntentsCleanupFailed.Inc(
+						int64(len(propResult.EncounteredIntents)))
 				}
 			}
 			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
@@ -313,10 +317,14 @@ func (r *Replica) executeWriteBatch(
 								case <-shouldQuiesce:
 								case <-ctx.Done():
 								}
-								return nil
+								return ctx.Err()
 							})
 						if err != nil {
 							log.Warningf(ctx, "transaction cleanup failed: %v", err)
+							// TODO(oleg): Failure to schedule cleanup or get proposal result
+							// if we timeout we don't know how many transactions were unresolved since
+							// he have no proposal in case of cancel.
+							r.store.intentResolver.Metrics().FinalizedTxnCleanupTimedOut.Inc(1)
 						}
 					})
 			}

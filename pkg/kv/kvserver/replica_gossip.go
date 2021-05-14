@@ -236,6 +236,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 		// for too long and is a potential deadlock).
 		if err := r.store.intentResolver.CleanupIntentsAsync(ctx, intents, false /* allowSync */); err != nil {
 			log.Warningf(ctx, "%v", err)
+			// TODO(oleg): Initial intent cleanup metrics?
 		}
 		return nil, errSystemConfigIntent
 	}

@@ -130,7 +130,7 @@ type RangeCache interface {
 // IntentResolver manages the process of pushing transactions and
 // resolving intents.
 type IntentResolver struct {
-	Metrics Metrics
+	metrics Metrics
 
 	clock        *hlc.Clock
 	db           *kv.DB
@@ -199,7 +199,7 @@ func New(c Config) *IntentResolver {
 		stopper:      c.Stopper,
 		sem:          quotapool.NewIntPool("intent resolver", uint64(c.TaskLimit)),
 		every:        log.Every(time.Minute),
-		Metrics:      makeMetrics(),
+		metrics:      makeMetrics(),
 		rdc:          c.RangeDescriptorCache,
 		testingKnobs: c.TestingKnobs,
 	}
@@ -430,7 +430,7 @@ func (ir *IntentResolver) runAsyncTask(
 	)
 	if err != nil {
 		if errors.Is(err, stop.ErrThrottled) {
-			ir.Metrics.IntentResolverAsyncThrottled.Inc(1)
+			ir.metrics.IntentResolverAsyncThrottled.Inc(1)
 			if allowSyncProcessing {
 				// A limited task was not available. Rather than waiting for
 				// one, we reuse the current goroutine.
@@ -557,6 +557,12 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	allowSyncProcessing bool,
 ) error {
 	for i := range endTxns {
+		onComplete := func(err error) {
+			if err != nil {
+				// TODO(oleg): Async cleanup failed for txn
+				ir.metrics.FinalizedTxnCleanupFailed.Inc(1)
+			}
+		}
 		et := &endTxns[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
 			locked, release := ir.lockInFlightTxnCleanup(ctx, et.Txn.ID)
@@ -565,13 +571,16 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 			}
 			defer release()
 			if err := ir.cleanupFinishedTxnIntents(
-				ctx, rangeID, et.Txn, et.Poison, nil, /* onComplete */
+				ctx, rangeID, et.Txn, et.Poison, onComplete,
 			); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
 			}
 		}); err != nil {
+			// TODO(oleg): Can't schedule task so nothing was run, we also abandon other
+			// attempts to clean up if there's more than one.
+			ir.metrics.FinalizedTxnCleanupFailed.Inc(int64(len(endTxns) - i))
 			return err
 		}
 	}
@@ -682,6 +691,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
 				}
+				// TODO(oleg): Failed to GC intents from cleaned txn
+				ir.metrics.GCTxnIntentsCleanupFailed.Inc(1)
 			}
 		},
 	)
@@ -887,6 +898,12 @@ func (ir *IntentResolver) ResolveIntents(
 		}
 	}
 	return nil
+}
+
+// Metrics returns metrics struct for reporting overall intent resolution
+// counters by source.
+func (ir *IntentResolver) Metrics() Metrics {
+	return ir.metrics
 }
 
 // intentsByTxn implements sort.Interface to sort intents based on txnID.

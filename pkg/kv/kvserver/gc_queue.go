@@ -471,6 +471,9 @@ func (gcq *gcQueue) process(
 				CleanupIntents(ctx, intents, gcTimestamp, roachpb.PUSH_ABORT)
 			if err == nil {
 				gcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))
+			} else {
+				// TODO(oleg): Cleanup failed on found garbage intents
+				gcq.store.intentResolver.Metrics().GCIntentCleanupFailed.Inc(1)
 			}
 			return err
 		},
@@ -488,6 +491,10 @@ func (gcq *gcQueue) process(
 			if errors.Is(err, stop.ErrThrottled) {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil
+			}
+			if err != nil {
+				// TODO(oleg): Cleanup scheduling failed for txn (in local range) Add count?
+				gcq.store.intentResolver.Metrics().GCTxnIntentsCleanupFailed.Inc(1)
 			}
 			return err
 		})
