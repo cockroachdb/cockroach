@@ -223,7 +223,7 @@ func LogEventForJobs(
 	)
 }
 
-var eventLogEnabled = settings.RegisterBoolSetting(
+var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
 	"server.eventlog.enabled",
 	"if set, logged notable events are also stored in the table system.eventlog",
 	true,
@@ -280,7 +280,7 @@ func insertEventRecords(
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := !onlyLog && eventLogEnabled.Get(&ex.s.cfg.Settings.SV)
+	loggingToSystemTable := !onlyLog && eventLogSystemTableEnabled.Get(&ex.s.cfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if !skipExternalLog {
