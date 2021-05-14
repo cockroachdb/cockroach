@@ -583,6 +583,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return logEventInternalForSQLStatements(ctx,
 			evalCtx.ExecCfg, txn,
+			0, /* depth: use event_log=2 for vmodule filtering */
 			eventLogOptions{dst: LogEverywhere},
 			sqlEventCommonExecPayload{
 				user:         evalCtx.SessionData.User(),
