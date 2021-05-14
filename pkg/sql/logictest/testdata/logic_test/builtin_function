@@ -2851,7 +2851,7 @@ SELECT set_bit('000000'::varbit, 5, 1) UNION SELECT set_bit('111111'::varbit, 5,
 query error set_bit\(\): SetBitAtIndex: bit index 10 out of valid range \(0..6\)
 SELECT set_bit(B'1101010', 10, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(B'1001010', 0, 2)
 
 query error set_bit\(\): SetBitAtIndex: bit index 0 out of valid range \(0..-1\)
@@ -2879,7 +2879,7 @@ SELECT set_bit(b'ac', 16, 0)
 query error set_bit\(\): bit index 0 out of valid range \(0..-1\)
 SELECT set_bit(b'', 0, 1)
 
-query error set_bit\(\): new bit must be 0 or 1.
+query error set_bit\(\): new bit must be 0 or 1
 SELECT set_bit(b'\145\x6C\l', 0, 2)
 
 subtest num_nulls_test
