@@ -23,7 +23,7 @@ storiesOf("StatementsSortedTable", module)
       )}
       sortSetting={{
         ascending: false,
-        sortKey: 3,
+        columnTitle: "rowsRead",
       }}
       pagination={{
         pageSize: 20,

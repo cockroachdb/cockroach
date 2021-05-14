@@ -82,8 +82,9 @@ export class SessionsPage extends React.Component<
     super(props);
     const defaultState = {
       sortSetting: {
-        sortKey: 2, // Sort by Statement Age column as default option.
+        // Sort by Statement Age column as default option.
         ascending: false,
+        columnTitle: "statementAge",
       },
       pagination: {
         pageSize: 20,
@@ -100,13 +101,13 @@ export class SessionsPage extends React.Component<
   getStateFromHistory = (): Partial<SessionsPageState> => {
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const sortKey = searchParams.get("sortKey") || undefined;
     const ascending = searchParams.get("ascending") || undefined;
+    const columnTitle = searchParams.get("columnTitle") || undefined;
 
     return {
       sortSetting: {
-        sortKey: sortKey,
-        ascending: Boolean(ascending),
+        ascending: ascending === "true",
+        columnTitle: columnTitle,
       },
     };
   };
@@ -135,8 +136,8 @@ export class SessionsPage extends React.Component<
     });
 
     this.syncHistory({
-      sortKey: ss.sortKey,
-      ascending: Boolean(ss.ascending).toString(),
+      ascending: ss.ascending.toString(),
+      columnTitle: ss.columnTitle,
     });
   };
 

@@ -122,7 +122,7 @@ export interface SortableColumn {
   // Unique key that identifies this column from others, for the purpose of
   // indicating sort order. If not provided, the column is not considered
   // sortable.
-  sortKey?: any;
+  columnTitle?: any;
   // className is a classname to apply to the td elements
   className?: string;
   titleAlign?: "left" | "right" | "center";
@@ -132,12 +132,11 @@ export interface SortableColumn {
 
 /**
  * SortSetting is the structure that SortableTable uses to indicate its current
- * sort preference to higher-level components. It contains a sortKey (taken from
+ * sort preference to higher-level components. It contains a columnTitle (taken from
  * one of the currently displayed columns) and a boolean indicating that the
  * sort should be ascending, rather than descending.
  */
 export interface SortSetting {
-  sortKey: any;
   ascending: boolean;
   columnTitle?: string;
 }
@@ -171,8 +170,8 @@ export class SortedTable<T> extends React.Component<
     rowClass: (_obj: any) => "",
     columns: [],
     sortSetting: {
-      sortKey: null,
       ascending: false,
+      columnTitle: null,
     },
     onChangeSortSetting: _ss => {},
   };
@@ -205,7 +204,9 @@ export class SortedTable<T> extends React.Component<
       if (!sortSetting) {
         return this.paginatedData();
       }
-      const sortColumn = columns[sortSetting.sortKey];
+      const sortColumn = columns.filter(
+        c => c.name === sortSetting.columnTitle,
+      )[0];
       if (!sortColumn || !sortColumn.sort) {
         return this.paginatedData();
       }
@@ -240,7 +241,7 @@ export class SortedTable<T> extends React.Component<
             name: cd.name,
             title: cd.title,
             cell: index => cd.cell(sorted[index]),
-            sortKey: cd.sort ? ii : undefined,
+            columnTitle: cd.sort ? cd.name : undefined,
             rollup: rollups[ii],
             className: cd.className,
             titleAlign: cd.titleAlign,
