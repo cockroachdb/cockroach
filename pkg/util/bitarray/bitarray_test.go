@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestParseFormat(t *testing.T) {
+func TestParseFormatBinary(t *testing.T) {
 	testData := []struct {
 		str string
 		ba  BitArray
@@ -52,6 +52,47 @@ func TestParseFormat(t *testing.T) {
 			res := ba.String()
 			if res != test.str {
 				t.Fatalf("format expected %q, got %q", test.str, res)
+			}
+		})
+	}
+}
+
+func TestParseFormatHex(t *testing.T) {
+	testData := []struct {
+		str string
+		ba  BitArray
+	}{
+		{"x", BitArray{words: nil, lastBitsUsed: 0}},
+		{"x0", BitArray{words: []word{0}, lastBitsUsed: 4}},
+		{"x1", BitArray{words: []word{0x1000000000000000}, lastBitsUsed: 4}},
+		{"X0", BitArray{words: []word{0}, lastBitsUsed: 4}},
+		{"X1", BitArray{words: []word{0x1000000000000000}, lastBitsUsed: 4}},
+		{"xA", BitArray{words: []word{0xA000000000000000}, lastBitsUsed: 4}},
+		{"xF", BitArray{words: []word{0xF000000000000000}, lastBitsUsed: 4}},
+		{"xa", BitArray{words: []word{0xA000000000000000}, lastBitsUsed: 4}},
+		{"xf", BitArray{words: []word{0xF000000000000000}, lastBitsUsed: 4}},
+		{"Xa", BitArray{words: []word{0xA000000000000000}, lastBitsUsed: 4}},
+		{"Xf", BitArray{words: []word{0xF000000000000000}, lastBitsUsed: 4}},
+		{"x0000", BitArray{words: []word{0}, lastBitsUsed: 16}},
+		{"x1010", BitArray{words: []word{0x1010000000000000}, lastBitsUsed: 16}},
+		{"xBaBE", BitArray{words: []word{0xBABE000000000000}, lastBitsUsed: 16}},
+		{"xBaBEfAcE", BitArray{words: []word{0xBABEFACE00000000}, lastBitsUsed: 32}},
+		{"xBaBEEE", BitArray{words: []word{0xBABEEE0000000000}, lastBitsUsed: 24}},
+		{"XBABEFACECAFEBABE",
+			BitArray{words: []word{0xBABEFACECAFEBABE}, lastBitsUsed: 64}},
+		{"xBABEFACECAFEBABECADD1E",
+			BitArray{words: []word{0xBABEFACECAFEBABE, 0xCADD1E0000000000}, lastBitsUsed: 24}},
+	}
+
+	for _, test := range testData {
+		t.Run(test.str, func(t *testing.T) {
+			ba, err := Parse(test.str)
+			if err != nil {
+				t.Fatalf("error during parse: %v", err)
+			}
+
+			if !reflect.DeepEqual(ba, test.ba) {
+				t.Fatalf("expected %+v, got %+v", test.ba, ba)
 			}
 		})
 	}
