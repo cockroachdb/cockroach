@@ -27,6 +27,7 @@ package blobs
 
 import (
 	"context"
+	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/errors"
@@ -71,8 +72,16 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 	}
 	reader := newPutStreamReader(stream)
 	defer reader.Close()
-	err := s.localStorage.WriteFile(filename[0], reader)
-	return err
+	w, err := s.localStorage.Writer(filename[0])
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(w, reader); err != nil {
+		closeErr := w.CloseWithError(err)
+		return errors.CombineErrors(err, closeErr)
+	}
+	return w.Close()
 }
 
 // List implements the gRPC service.

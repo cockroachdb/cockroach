@@ -452,7 +452,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly
 	// have relevant partitioning columns prepended at the front.
 	if n.n.PartitionByIndex == nil &&
-		n.tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 &&
+		n.tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns() > 0 &&
 		!n.tableDesc.IsPartitionAllBy() {
 		params.p.BufferClientNotice(
 			params.ctx,
@@ -596,7 +596,7 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 		allowImplicitPartitioning := p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
 			tableDesc.IsLocalityRegionalByRow()
 		if partitionBy != nil {
-			if indexDesc, err = CreatePartitioning(
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				ctx,
 				p.ExecCfg().Settings,
 				p.EvalContext(),
@@ -605,9 +605,11 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 				partitionBy,
 				nil, /* allowedNewColumnNames */
 				allowImplicitPartitioning,
-			); err != nil {
+			)
+			if err != nil {
 				return indexDesc, err
 			}
+			tabledesc.UpdateIndexPartitioning(&indexDesc, newImplicitCols, newPartitioning)
 		}
 	}
 	return indexDesc, nil

@@ -842,18 +842,19 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if n.tableDesc.IsPartitionAllBy() {
 				return unimplemented.NewWithIssue(58736, "changing partition of table with PARTITION ALL BY not yet implemented")
 			}
-			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning()
-			if oldPartitioning.NumImplicitColumns > 0 {
+			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning().DeepCopy()
+			if oldPartitioning.NumImplicitColumns() > 0 {
 				return unimplemented.NewWithIssue(
 					58731,
 					"cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning",
 				)
 			}
-			newPrimaryIndex, err := CreatePartitioning(
+			newPrimaryIndexDesc := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				params.ctx, params.p.ExecCfg().Settings,
 				params.EvalContext(),
 				n.tableDesc,
-				*n.tableDesc.GetPrimaryIndex().IndexDesc(),
+				newPrimaryIndexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
 				params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||
@@ -862,27 +863,27 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if newPrimaryIndex.Partitioning.NumImplicitColumns > 0 {
+			if newPartitioning.NumImplicitColumns > 0 {
 				return unimplemented.NewWithIssue(
 					58731,
 					"cannot ALTER TABLE and change the partitioning to contain implicit columns",
 				)
 			}
-			descriptorChanged = descriptorChanged || !n.tableDesc.GetPrimaryIndex().IndexDesc().Equal(&newPrimaryIndex)
-			err = deleteRemovedPartitionZoneConfigs(
-				params.ctx,
-				params.p.txn,
-				n.tableDesc,
-				n.tableDesc.GetPrimaryIndexID(),
-				&oldPartitioning,
-				&newPrimaryIndex.Partitioning,
-				params.extendedEvalCtx.ExecCfg,
-			)
-			if err != nil {
-				return err
-			}
-			{
-				n.tableDesc.SetPrimaryIndex(newPrimaryIndex)
+			isIndexAltered := tabledesc.UpdateIndexPartitioning(&newPrimaryIndexDesc, newImplicitCols, newPartitioning)
+			if isIndexAltered {
+				n.tableDesc.SetPrimaryIndex(newPrimaryIndexDesc)
+				descriptorChanged = true
+				if err := deleteRemovedPartitionZoneConfigs(
+					params.ctx,
+					params.p.txn,
+					n.tableDesc,
+					n.tableDesc.GetPrimaryIndexID(),
+					oldPartitioning,
+					n.tableDesc.GetPrimaryIndex().GetPartitioning(),
+					params.extendedEvalCtx.ExecCfg,
+				); err != nil {
+					return err
+				}
 			}
 
 		case *tree.AlterTableSetAudit:

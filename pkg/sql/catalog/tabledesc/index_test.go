@@ -240,10 +240,6 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
 		require.Equal(t, descpb.IndexDescriptorVersion(0x2), idx.GetVersion(),
 			errMsgFmt, "GetVersion", idx.GetName())
-		require.Equal(t, descpb.PartitioningDescriptor{}, idx.GetPartitioning(),
-			errMsgFmt, "GetPartitioning", idx.GetName())
-		require.Equal(t, []string(nil), idx.PartitionNames(),
-			errMsgFmt, "PartitionNames", idx.GetName())
 		require.Equal(t, 0, idx.NumInterleaveAncestors(),
 			errMsgFmt, "NumInterleaveAncestors", idx.GetName())
 		require.Equal(t, 0, idx.NumInterleavedBy(),

@@ -155,7 +155,7 @@ func ShowCreateTable(
 			// Build the PARTITION BY clause.
 			var partitionBuf bytes.Buffer
 			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx, &idx.IndexDesc().Partitioning, &partitionBuf, 1 /* indent */, 0, /* colOffset */
+				a, p.ExecCfg().Codec, desc, idx, idx.GetPartitioning(), &partitionBuf, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -199,7 +199,7 @@ func ShowCreateTable(
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), &desc.GetPrimaryIndex().IndexDesc().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), desc.GetPrimaryIndex().GetPartitioning(), &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}
