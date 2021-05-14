@@ -493,7 +493,13 @@ func (expr *CastExpr) TypeCheck(
 		return nil, pgerror.Newf(pgcode.CannotCoerce, "invalid cast: %s -> %s", castFrom, exprType)
 	}
 	if err := semaCtx.checkVolatility(volatility); err != nil {
-		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
+		err = pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s::%s", castFrom, exprType)
+		// Special cases where we can provide useful hints.
+		if castFrom.Family() == types.StringFamily && exprType.Family() == types.TimestampFamily {
+			err = errors.WithHint(err, "string to timestamp casts are context-dependent because "+
+				"of relative timestamp strings like 'now'; use parse_timestamp() instead.")
+		}
+		return nil, err
 	}
 
 	telemetry.Inc(c)
