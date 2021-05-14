@@ -333,6 +333,9 @@ func ingestKvs(
 		MaxBufferSize:     maxBufferSize,
 		StepBufferSize:    stepSize,
 		SSTSize:           flushSize,
+		// TODO(adityamaru): Pass in a valid deadline timestamp once we have a
+		// deadline oracle.
+		Deadline: hlc.Timestamp{},
 	})
 	if err != nil {
 		return nil, err
@@ -349,6 +352,9 @@ func ingestKvs(
 		MaxBufferSize:     maxBufferSize,
 		StepBufferSize:    stepSize,
 		SSTSize:           flushSize,
+		// TODO(adityamaru): Pass in a valid deadline timestamp once we have a
+		// deadline oracle.
+		Deadline: hlc.Timestamp{},
 	})
 	if err != nil {
 		return nil, err

@@ -365,6 +365,12 @@ func NewProcessor(
 		}
 		return NewStreamIngestionFrontierProcessor(flowCtx, processorID, *core.StreamIngestionFrontier, inputs[0], post, outputs[0])
 	}
+	if core.RequestDeadline != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return NewRequestDeadlineProcessor(flowCtx, processorID, *core.RequestDeadline, post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -394,3 +400,6 @@ var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.Chang
 
 // NewStreamIngestionFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewStreamIngestionFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.StreamIngestionFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewRequestDeadlineProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewRequestDeadlineProcessor func(*execinfra.FlowCtx, int32, execinfrapb.RequestDeadlineSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

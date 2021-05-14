@@ -271,6 +271,7 @@ func (m mockSender) AddSSTable(
 	_ *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTS hlc.Timestamp,
+	deadline hlc.Timestamp,
 ) error {
 	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
 }
@@ -334,7 +335,8 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
 	if _, err := bulk.AddSSTable(
-		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(), hlc.Timestamp{},
+		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{},
+		cluster.MakeTestingClusterSettings(), hlc.Timestamp{}, hlc.Timestamp{}, 0, /* maxOffset */
 	); err != nil {
 		t.Fatal(err)
 	}

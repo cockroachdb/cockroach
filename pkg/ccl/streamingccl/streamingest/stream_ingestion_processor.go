@@ -176,8 +176,11 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
 	var err error
+	// TODO(adityamaru): Pass in a valid deadline timestamp once we have a
+	// deadline oracle.
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
+		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) }, hlc.Timestamp{},
+		sip.FlowCtx.Cfg.RPCContext.Clock.MaxOffset())
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
