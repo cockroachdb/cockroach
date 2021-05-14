@@ -107,7 +107,7 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique &&
 		!desc.IsPartial() &&
-		ColumnIDs(desc.KeyColumnIDs[desc.Partitioning.NumImplicitColumns:]).Equals(referencedColIDs)
+		ColumnIDs(desc.KeyColumnIDs[desc.Partitioning.NumImplicitColumns:]).PermutationOf(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
@@ -133,4 +133,12 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
+}
+
+// GetExplicitColumnIDs returns the columns of an index that do not implicitly
+// prefix a given index. An index has implicit prefix columns if a user
+// specifies a PARTITION BY with columns that are not a prefix of the given
+// index columns.
+func (desc *IndexDescriptor) GetExplicitColumnIDs() ColumnIDs {
+	return desc.KeyColumnIDs[desc.Partitioning.NumImplicitColumns:]
 }
