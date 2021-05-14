@@ -67,8 +67,8 @@ export class TransactionDetails extends React.Component<
   state: TState = {
     sortSetting: {
       // Sort by statement latency as default column.
-      sortKey: 4,
       ascending: false,
+      columnTitle: "statementTime",
     },
     pagination: {
       pageSize: 10,
