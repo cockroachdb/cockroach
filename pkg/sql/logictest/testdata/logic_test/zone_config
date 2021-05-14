@@ -173,9 +173,7 @@ ALTER TABLE test.public.a CONFIGURE ZONE USING
   gc.ttlseconds = 3600,
   num_replicas = 1,
   constraints = '[+region=test]',
-  lease_preferences = '[[+region=test]]';
-ALTER TABLE test.test.a CONFIGURE ZONE USING
-  gc.ttlseconds = 1234
+  lease_preferences = '[[+region=test]]'
 
 # Check that we can reset the configuration to defaults.
 
@@ -214,3 +212,29 @@ ORDER BY feature_name
 ----
 sql.schema.alter_range.configure_zone
 sql.schema.alter_table.configure_zone
+
+# Test tables in different schemas do not show the zone configs
+# of the other.
+
+statement ok
+CREATE TABLE same_table_name();
+ALTER TABLE same_table_name CONFIGURE ZONE USING gc.ttlseconds = 500;
+CREATE SCHEMA alternative_schema;
+CREATE TABLE alternative_schema.same_table_name();
+ALTER TABLE alternative_schema.same_table_name CONFIGURE ZONE USING gc.ttlseconds = 600
+
+query TT
+SHOW CREATE TABLE same_table_name
+----
+same_table_name  CREATE TABLE public.same_table_name (FAMILY "primary" (rowid)
+);
+ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
+  gc.ttlseconds = 500
+
+query TT
+SHOW CREATE TABLE alternative_schema.same_table_name
+----
+alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_name (FAMILY "primary" (rowid)
+);
+ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
+  gc.ttlseconds = 600
