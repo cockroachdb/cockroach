@@ -335,7 +335,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			tn,
 			n.tableDesc,
 			defaultColDef,
-			params.SessionData(),
 		); err != nil {
 			return err
 		}

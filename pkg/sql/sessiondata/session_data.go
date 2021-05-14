@@ -230,6 +230,10 @@ type LocalOnlySessionData struct {
 	// EnableSeqScan is a dummy setting for the enable_seqscan var.
 	EnableSeqScan bool
 
+	// EnableExpressionBasedIndexes indicates whether creating expression-based
+	// indexes is allowed.
+	EnableExpressionBasedIndexes bool
+
 	// EnableUniqueWithoutIndexConstraints indicates whether creating unique
 	// constraints without an index is allowed.
 	// TODO(rytaft): remove this once unique without index constraints are fully
