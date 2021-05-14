@@ -179,5 +179,36 @@ j  b
 statement ok
 SET experimental_use_new_schema_changer = 'on'
 
+statement error pq: cannot explain a non-schema change statement
+EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
+
 statement ok
 DROP TABLE foo, bar
+
+# Sequence sanity tests
+statement ok
+CREATE SEQUENCE SQ1;
+
+statement ok
+CREATE TABLE blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+statement ok
+CREATE TABLE blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('sq1'), title text);
+
+# Failure without cascade
+statement error pq: cannot drop sequence sq1 because other objects depend on it
+EXPLAIN (DDL) DROP SEQUENCE sq1;
+
+statement ok
+EXPLAIN (DDL) DROP SEQUENCE sq1 CASCADE;
+
+# Success with cascade
+statement ok
+DROP SEQUENCE IF EXISTS doesnotexist, sq1 CASCADE;
+
+# Tables should be safe to drop since references are fixed.
+statement ok
+DROP TABLE blog_posts;
+
+statement ok
+DROP TABLE blog_posts2;
