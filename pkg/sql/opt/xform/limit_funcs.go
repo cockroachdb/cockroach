@@ -169,11 +169,11 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 	return idx.IsInverted()
 }
 
-// SplitScanIntoUnionScans returns a Union of Scan operators with hard limits
-// that each scan over a single key from the original Scan's constraints. If no
-// such Union of Scans can be found, ok=false is returned. This is beneficial in
-// cases where the original Scan had to scan over many rows but had relatively
-// few keys to scan over.
+// SplitScanIntoUnionScans returns a UnionAll tree of Scan operators with hard
+// limits that each scan over a single key from the original Scan's constraints.
+// If no such UnionAll of Scans can be found, ok=false is returned. This is
+// beneficial in cases where the original Scan had to scan over many rows but
+// had relatively few keys to scan over.
 // TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) SplitScanIntoUnionScans(
 	limitOrdering props.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
@@ -259,10 +259,11 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 	newHardLimit := memo.MakeScanLimit(int64(limitVal), reverse)
 
-	// makeNewUnion extends the Union tree rooted at 'last' to include 'newScan'.
-	// The ColumnIDs of the original Scan are used by the resulting expression.
+	// makeNewUnion extends the UnionAll tree rooted at 'last' to include
+	// 'newScan'. The ColumnIDs of the original Scan are used by the resulting
+	// expression.
 	makeNewUnion := func(last, newScan memo.RelExpr, outCols opt.ColList) memo.RelExpr {
-		return c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
+		return c.e.f.ConstructUnionAll(last, newScan, &memo.SetPrivate{
 			LeftCols:  last.Relational().OutputCols.ToList(),
 			RightCols: newScan.Relational().OutputCols.ToList(),
 			OutCols:   outCols,
@@ -270,8 +271,9 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 
 	// Attempt to extract single-key spans and use them to construct limited
-	// Scans. Add these Scans to a Union tree. Any remaining spans will be used to
-	// construct a single unlimited Scan, which will also be added to the Unions.
+	// Scans. Add these Scans to a UnionAll tree. Any remaining spans will be used
+	// to construct a single unlimited Scan, which will also be added to the
+	// UnionAll tree.
 	var noLimitSpans constraint.Spans
 	var last memo.RelExpr
 	for i, n := 0, spans.Count(); i < n; i++ {
@@ -289,7 +291,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		}
 		for j, m := 0, singleKeySpans.Count(); j < m; j++ {
 			if last == nil {
-				// This is the first limited Scan, so no Union necessary.
+				// This is the first limited Scan, so no UnionAll necessary.
 				last = c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
 				continue
 			}
@@ -322,7 +324,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 
 	// If any spans could not be used to generate limited Scans, use them to
-	// construct an unlimited Scan and add it to the Union tree.
+	// construct an unlimited Scan and add it to the UnionAll tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
 		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
