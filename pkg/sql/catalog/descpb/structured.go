@@ -145,6 +145,28 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 	return true
 }
 
+// ElementWiseEquals returns true if the input list's elements are the same as this list's elements
+func (c ColumnIDs) ElementWiseEquals(input ColumnIDs) bool {
+	if len(input) != len(c) {
+		return false
+	}
+
+	columnsLookup := map[ColumnID]bool{}
+	for _, col := range c {
+		columnsLookup[col] = true
+	}
+
+	for _, inputCol := range input {
+		_, exists := columnsLookup[inputCol]
+		if !exists {
+			return false
+		}
+		delete(columnsLookup, inputCol)
+	}
+
+	return len(columnsLookup) <= 0
+}
+
 // Contains returns whether this list contains the input ID.
 func (c ColumnIDs) Contains(i ColumnID) bool {
 	for _, id := range c {

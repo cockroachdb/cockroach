@@ -40,7 +40,10 @@ go_library(
 go_test(
     name = "descpb_test",
     size = "small",
-    srcs = ["privilege_test.go"],
+    srcs = [
+        "privilege_test.go",
+        "structured_test.go",
+    ],
     embed = [":descpb"],
     deps = [
         "//pkg/keys",
