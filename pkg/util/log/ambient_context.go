@@ -158,7 +158,7 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 //
 // The caller is responsible for closing the span (via Span.Finish).
 func (ac *AmbientContext) AnnotateCtxWithSpan(
-	ctx context.Context, opName string,
+	ctx context.Context, opName string, os ...tracing.SpanOption,
 ) (context.Context, *tracing.Span) {
 	switch ctx {
 	case context.TODO(), context.Background():
@@ -173,5 +173,5 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		}
 	}
 
-	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName, os...)
 }
