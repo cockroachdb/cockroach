@@ -57,6 +57,7 @@ func TestCutoverBuiltin(t *testing.T) {
 		return registry.CreateStartableJobWithTxn(ctx, &job, id, txn, streamIngestJobRecord)
 	})
 	require.NoError(t, err)
+	defer job.FinishSpan()
 
 	// Check that sentinel is not set.
 	progress := job.Progress()

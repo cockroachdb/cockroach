@@ -835,23 +835,17 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
 
-	finishSpan := func() {
-		if sj.span != nil {
-			sj.span.Finish()
-		}
-	}
-
 	if err := sj.started(ctx, nil /* txn */); err != nil {
-		finishSpan()
+		sj.FinishSpan()
 		return err
 	}
 
 	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(ctx context.Context) {
 		sj.execErr = sj.registry.runJob(sj.resumerCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())
 		close(sj.execDone)
-		finishSpan()
+		sj.FinishSpan()
 	}); err != nil {
-		finishSpan()
+		sj.FinishSpan()
 		return err
 	}
 
@@ -907,9 +901,7 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 	// Given that, proceed to clean up regardless.
 
 	sj.registry.unregister(sj.ID())
-	if sj.span != nil {
-		sj.span.Finish()
-	}
+	sj.FinishSpan()
 	if sj.cancel != nil {
 		sj.cancel()
 	}
@@ -928,4 +920,11 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+// FinishSpan will mark the span linked to the StartableJob as Finish()'d.
+func (sj *StartableJob) FinishSpan() {
+	if sj.span != nil {
+		sj.span.Finish()
+	}
 }

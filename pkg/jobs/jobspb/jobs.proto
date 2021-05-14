@@ -699,6 +699,9 @@ message Payload {
     NewSchemaChangeDetails newSchemaChange = 24;
     MigrationDetails migration = 25;
   }
+  uint64 trace_id = 26;
+
+  // NEXT ID: 27.
 }
 
 message Progress {

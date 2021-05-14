@@ -530,15 +530,14 @@ func (r *Registry) CreateStartableJobWithTxn(
 	var span *tracing.Span
 	var execDone chan struct{}
 	if !alreadyInitialized {
-		// Construct a context which contains a tracing span that follows from the
-		// span in the parent context. We don't directly use the parent span because
-		// we want independent lifetimes and cancellation. For the same reason, we
-		// don't use the Context returned by ForkSpan.
+		// Construct a context which contains a root tracing span. This allows
+		// tracking all the spans associated with job execution using the trace_id
+		// of the newly constructed root span.
+		// Using a new context and span allow for independent lifetimes and
+		// cancellation.
 		resumerCtx, cancel = r.makeCtx()
-		_, span = tracing.ForkSpan(ctx, "job")
-		if span != nil {
-			resumerCtx = tracing.ContextWithSpan(resumerCtx, span)
-		}
+		resumerCtx, span = r.settings.Tracer.StartSpanCtx(resumerCtx, "job",
+			tracing.WithForceRealSpan())
 
 		if r.startUsingSQLLivenessAdoption(ctx) {
 			r.mu.Lock()
