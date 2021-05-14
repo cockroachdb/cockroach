@@ -940,6 +940,11 @@ func init() {
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
 
 	}
+
+	// userfile upload command.
+	{
+		boolFlag(userFileUploadCmd.Flags(), &userfileCtx.recursive, cliflags.Recursive)
+	}
 }
 
 type tenantIDWrapper struct {
