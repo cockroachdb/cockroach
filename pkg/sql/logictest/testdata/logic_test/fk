@@ -3671,3 +3671,17 @@ ALTER TABLE child_59582 ADD FOREIGN KEY (i) REFERENCES child_59582(rowid)
 
 statement ok
 DROP TABLE parent_59582, child_59582
+
+subtest reference_constraint_different_order
+
+# https://github.com/cockroachdb/cockroach/issues/63324
+# Referencing an existing constraint by fields in a different order.
+# Should still find existing constraint.
+
+statement ok
+create table reference_constraint_different_order_parent (a int not null, b int not null, c int not null, d varchar(10));
+create table reference_constraint_different_order_child (id int, a int, b int, c int, e varchar(10));
+alter table reference_constraint_different_order_parent add constraint p_pk primary key (a, b, c)
+
+statement ok
+alter table reference_constraint_different_order_child add constraint p_fk foreign key (a, b, c) references reference_constraint_different_order_parent (a, c, b)
