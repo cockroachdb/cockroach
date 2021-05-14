@@ -1812,3 +1812,25 @@ CREATE TABLE duplicate_index_test (k INT PRIMARY KEY, v INT, INDEX idx (v));
 
 statement error pgcode 42P07 duplicate index name: \"idx\"
 ALTER TABLE duplicate_index_test ADD CONSTRAINT idx UNIQUE (v)
+
+##
+subtest reference_constraint_different_order
+
+# https://github.com/cockroachdb/cockroach/issues/63324
+# Referencing an existing constraint by fields in a different order
+# - should still find existing constraint
+
+statement ok
+create table reference_constraint_different_order_parent (a int not null, b int not null, c int not null, d varchar(10));
+
+statement ok
+create table reference_constraint_different_order_child (id int, a int, b int, c int, e varchar(10));
+
+# create primary key on parent
+statement ok
+alter table reference_constraint_different_order_parent add constraint p_pk primary key (a, b, c);
+
+# referencing the same index, with fields in different order
+# should not fail
+statement ok
+alter table reference_constraint_different_order_child add constraint p_fk foreign key (a, b, c) references reference_constraint_different_order_parent (a, c, b);
