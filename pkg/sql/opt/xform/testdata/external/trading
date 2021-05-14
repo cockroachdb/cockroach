@@ -606,57 +606,53 @@ project
  │    │    ├── sort
  │    │    │    ├── columns: dealerid:8!null version:16!null
  │    │    │    ├── cardinality: [0 - 4]
- │    │    │    ├── stats: [rows=4, distinct(8,16)=4, null(8,16)=0]
- │    │    │    ├── key: (8,16)
+ │    │    │    ├── stats: [rows=4]
  │    │    │    ├── ordering: -16
  │    │    │    ├── limit hint: 1.00
- │    │    │    └── union
+ │    │    │    └── union-all
  │    │    │         ├── columns: dealerid:8!null version:16!null
  │    │    │         ├── left columns: dealerid:75 version:83
  │    │    │         ├── right columns: dealerid:85 version:93
  │    │    │         ├── cardinality: [0 - 4]
- │    │    │         ├── stats: [rows=4, distinct(8,16)=4, null(8,16)=0]
- │    │    │         ├── key: (8,16)
- │    │    │         ├── union
+ │    │    │         ├── stats: [rows=4]
+ │    │    │         ├── union-all
  │    │    │         │    ├── columns: dealerid:75!null version:83!null
  │    │    │         │    ├── left columns: dealerid:55 version:63
  │    │    │         │    ├── right columns: dealerid:65 version:73
  │    │    │         │    ├── cardinality: [0 - 3]
- │    │    │         │    ├── stats: [rows=3, distinct(75,83)=3, null(75,83)=0]
- │    │    │         │    ├── key: (75,83)
- │    │    │         │    ├── union
+ │    │    │         │    ├── stats: [rows=3]
+ │    │    │         │    ├── union-all
  │    │    │         │    │    ├── columns: dealerid:55!null version:63!null
  │    │    │         │    │    ├── left columns: dealerid:35 version:43
  │    │    │         │    │    ├── right columns: dealerid:45 version:53
  │    │    │         │    │    ├── cardinality: [0 - 2]
- │    │    │         │    │    ├── stats: [rows=2, distinct(55,63)=2, null(55,63)=0]
- │    │    │         │    │    ├── key: (55,63)
+ │    │    │         │    │    ├── stats: [rows=2]
  │    │    │         │    │    ├── scan cardsinfo@cardsinfoversionindex,rev
  │    │    │         │    │    │    ├── columns: dealerid:35!null version:43!null
  │    │    │         │    │    │    ├── constraint: /35/43: [/1 - /1]
  │    │    │         │    │    │    ├── limit: 1(rev)
- │    │    │         │    │    │    ├── stats: [rows=1, distinct(35)=1, null(35)=0, distinct(35,43)=1, null(35,43)=0]
+ │    │    │         │    │    │    ├── stats: [rows=1, distinct(35)=1, null(35)=0]
  │    │    │         │    │    │    ├── key: ()
  │    │    │         │    │    │    └── fd: ()-->(35,43)
  │    │    │         │    │    └── scan cardsinfo@cardsinfoversionindex,rev
  │    │    │         │    │         ├── columns: dealerid:45!null version:53!null
  │    │    │         │    │         ├── constraint: /45/53: [/2 - /2]
  │    │    │         │    │         ├── limit: 1(rev)
- │    │    │         │    │         ├── stats: [rows=1, distinct(45)=1, null(45)=0, distinct(45,53)=1, null(45,53)=0]
+ │    │    │         │    │         ├── stats: [rows=1, distinct(45)=1, null(45)=0]
  │    │    │         │    │         ├── key: ()
  │    │    │         │    │         └── fd: ()-->(45,53)
  │    │    │         │    └── scan cardsinfo@cardsinfoversionindex,rev
  │    │    │         │         ├── columns: dealerid:65!null version:73!null
  │    │    │         │         ├── constraint: /65/73: [/3 - /3]
  │    │    │         │         ├── limit: 1(rev)
- │    │    │         │         ├── stats: [rows=1, distinct(65)=1, null(65)=0, distinct(65,73)=1, null(65,73)=0]
+ │    │    │         │         ├── stats: [rows=1, distinct(65)=1, null(65)=0]
  │    │    │         │         ├── key: ()
  │    │    │         │         └── fd: ()-->(65,73)
  │    │    │         └── scan cardsinfo@cardsinfoversionindex,rev
  │    │    │              ├── columns: dealerid:85!null version:93!null
  │    │    │              ├── constraint: /85/93: [/4 - /4]
  │    │    │              ├── limit: 1(rev)
- │    │    │              ├── stats: [rows=1, distinct(85)=1, null(85)=0, distinct(85,93)=1, null(85,93)=0]
+ │    │    │              ├── stats: [rows=1, distinct(85)=1, null(85)=0]
  │    │    │              ├── key: ()
  │    │    │              └── fd: ()-->(85,93)
  │    │    └── 1
