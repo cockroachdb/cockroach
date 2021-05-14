@@ -599,7 +599,8 @@ type Store struct {
 	scheduler *raftScheduler
 
 	// livenessMap is a map from nodeID to a bool indicating
-	// liveness. It is updated periodically in raftTickLoop().
+	// liveness. It is updated periodically in raftTickLoop()
+	// and reactively nodeIsLiveCallback() on liveness updates.
 	livenessMap atomic.Value
 
 	// cachedCapacity caches information on store capacity to prevent
