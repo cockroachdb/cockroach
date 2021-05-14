@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -82,17 +83,18 @@ func init() {
 				write(filepath.Join(bnfDir, name+".bnf"), g)
 			}
 
-			for _, s := range specs {
+			stmtSpecs, err := getAllStmtSpecs(addr, bnfAPITimeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, s := range stmtSpecs {
 				if filterRE.MatchString(s.name) == invertMatch {
 					continue
 				}
 				if !quiet {
 					fmt.Println("processing", s.name)
 				}
-				if s.stmt == "" {
-					s.stmt = s.name
-				}
-				g, err := runParse(br(), s.inline, s.stmt, false, s.nosplit, s.match, s.exclude)
+				g, err := runParse(br(), s.inline, s.GetStatement(), false, s.nosplit, s.match, s.exclude)
 				if err != nil {
 					log.Fatalf("%s: %+v", s.name, err)
 				}
@@ -170,10 +172,14 @@ func init() {
 			}
 
 			specMap := make(map[string]stmtSpec)
-			for _, s := range specs {
+			stmtSpecs, err := getAllStmtSpecs(addr, bnfAPITimeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for _, s := range stmtSpecs {
 				specMap[s.name] = s
 			}
-			if len(specs) != len(specMap) {
+			if len(stmtSpecs) != len(specMap) {
 				log.Fatal("duplicate spec name")
 			}
 
@@ -279,6 +285,15 @@ type stmtSpec struct {
 	unlink         []string
 	relink         map[string]string
 	nosplit        bool
+}
+
+// GetStatement returns the sql statement of a stmtSpec.
+func (s stmtSpec) GetStatement() string {
+	if s.stmt == "" {
+		return s.name
+	}
+
+	return s.stmt
 }
 
 func runBNF(addr string, bnfAPITimeout time.Duration) ([]byte, error) {
@@ -468,8 +483,7 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
-		name: "begin_transaction",
-		stmt: "begin_stmt",
+		name: "begin_stmt",
 		inline: []string{
 			"opt_transaction",
 			"begin_transaction",
@@ -1524,6 +1538,68 @@ var specs = []stmtSpec{
 		name:   "opt_frame_clause",
 		inline: []string{"frame_extent"},
 	},
+}
+
+// getAllStmtSpecs returns a slice of stmtSpecs for all sql.y statements that
+// should have a diagram generated for.
+// getAllStmtSpecs appends to the "specs" slice any sql.y statements that do
+// not have an entry in specs but are not specified to be skipped.
+func getAllStmtSpecs(sqlGrammarFile string, bnfAPITimeout time.Duration) ([]stmtSpec, error) {
+	sqlStmts := make(map[string]struct{})
+	// Map all the sql stmts that are defined in specs.
+	for _, s := range specs {
+		sqlStmts[s.GetStatement()] = struct{}{}
+	}
+
+	file, err := os.Open(sqlGrammarFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	bnf, err := runBNF(sqlGrammarFile, bnfAPITimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	br := func() io.Reader {
+		return bytes.NewReader(bnf)
+	}
+
+	grammar, err := extract.ParseGrammar(br())
+	if err != nil {
+		return nil, err
+	}
+
+	scanner := bufio.NewScanner(file)
+	stmtRegex, err := regexp.Compile(`%type <tree.Statement>`)
+	if err != nil {
+		return nil, err
+	}
+	for scanner.Scan() {
+		text := scanner.Text()
+		if stmtRegex.MatchString(text) {
+			// Get just the statement name after the "%type <tree.Statement>".
+			stmt := strings.Split(text, "%type <tree.Statement> ")[1]
+
+			// If the statement does not appear in grammar, the statement
+			// has no branches that are required to be documented, we can
+			// skip it.
+			if _, ok := grammar[stmt]; !ok {
+				continue
+			}
+
+			// If the statement is not defined in specs, create an entry.
+			if _, found := sqlStmts[stmt]; !found {
+				specs = append(specs, stmtSpec{
+					name: stmt,
+				})
+				sqlStmts[stmt] = struct{}{}
+			}
+		}
+	}
+
+	return specs, nil
 }
 
 // regList is a common regex used when removing loops from alter and drop

@@ -1,0 +1,2 @@
+alter_database_add_region_stmt ::=
+	'ALTER' 'DATABASE' database_name 'ADD' 'REGION' region_name

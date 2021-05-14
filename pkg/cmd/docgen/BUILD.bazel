@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 go_library(
     name = "docgen_lib",
@@ -28,4 +28,14 @@ go_binary(
     name = "docgen",
     embed = [":docgen_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "docgen_test",
+    srcs = ["diagrams_test.go"],
+    embed = [":docgen_lib"],
+    deps = [
+        "//pkg/cmd/docgen/extract",
+        "@com_github_stretchr_testify//require",
+    ],
 )
