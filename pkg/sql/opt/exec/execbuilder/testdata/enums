@@ -95,3 +95,28 @@ scan checks@checks_x_y_idx
       ├── [/'howdy'/2 - /'howdy'/2]
       ├── [/'hi'/2 - /'hi'/2]
       └── [/'cheers'/2 - /'cheers'/2]
+
+# Test that a limited, ordered scan is efficient.
+statement ok
+CREATE TABLE composite_key (x greeting, y INT, PRIMARY KEY (x, y), FAMILY (x, y));
+
+query T
+EXPLAIN (opt) SELECT * FROM composite_key ORDER BY y LIMIT 5
+----
+limit
+ ├── union-all
+ │    ├── union-all
+ │    │    ├── union-all
+ │    │    │    ├── scan composite_key
+ │    │    │    │    ├── constraint: /6/7: [/'hello' - /'hello']
+ │    │    │    │    └── limit: 5
+ │    │    │    └── scan composite_key
+ │    │    │         ├── constraint: /10/11: [/'howdy' - /'howdy']
+ │    │    │         └── limit: 5
+ │    │    └── scan composite_key
+ │    │         ├── constraint: /18/19: [/'hi' - /'hi']
+ │    │         └── limit: 5
+ │    └── scan composite_key
+ │         ├── constraint: /26/27: [/'cheers' - /'cheers']
+ │         └── limit: 5
+ └── 5

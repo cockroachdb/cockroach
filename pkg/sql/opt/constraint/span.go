@@ -386,7 +386,7 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 	thisVal := startKey.Value(prefixLength - 1)
 	otherVal := endKey.Value(prefixLength - 1)
 
-	if thisVal.ResolvedType() != otherVal.ResolvedType() {
+	if !thisVal.ResolvedType().Equivalent(otherVal.ResolvedType()) {
 		// The datums at index [prefixLength-1] must be of the same type.
 		return 0, false
 	}
@@ -422,6 +422,20 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 			}
 			start = int64((*t).PGEpochDays())
 			end = int64(otherDDate.PGEpochDays())
+		}
+
+	case *tree.DEnum:
+		otherDEnum, otherOk := otherVal.(*tree.DEnum)
+		if otherOk {
+			startIdx, err := t.EnumTyp.EnumGetIdxOfPhysical(t.PhysicalRep)
+			if err != nil {
+				panic(err)
+			}
+			endIdx, err := t.EnumTyp.EnumGetIdxOfPhysical(otherDEnum.PhysicalRep)
+			if err != nil {
+				panic(err)
+			}
+			start, end = int64(startIdx), int64(endIdx)
 		}
 
 	default:
