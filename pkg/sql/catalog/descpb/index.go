@@ -146,7 +146,7 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique &&
 		!desc.IsPartial() &&
-		ColumnIDs(desc.ColumnIDs[desc.Partitioning.NumImplicitColumns:]).Equals(referencedColIDs)
+		ColumnIDs(desc.ColumnIDs[desc.Partitioning.NumImplicitColumns:]).ElementWiseEquals(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
