@@ -296,6 +296,10 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 	return w.desc.CompositeColumnIDs[compositeColumnOrdinal]
 }
 
+func (w index) GetColumnIDs() descpb.ColumnIDs {
+	return w.desc.ColumnIDs
+}
+
 // indexCache contains precomputed slices of catalog.Index interfaces.
 type indexCache struct {
 	primary              catalog.Index

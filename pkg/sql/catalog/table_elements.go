@@ -169,6 +169,8 @@ type Index interface {
 
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
+
+	GetColumnIDs() descpb.ColumnIDs
 }
 
 // Column is an interface around the index descriptor types.

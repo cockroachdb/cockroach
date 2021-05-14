@@ -146,7 +146,7 @@ func (desc *IndexDescriptor) IsValidOriginIndex(originColIDs ColumnIDs) bool {
 func (desc *IndexDescriptor) IsValidReferencedUniqueConstraint(referencedColIDs ColumnIDs) bool {
 	return desc.Unique &&
 		!desc.IsPartial() &&
-		ColumnIDs(desc.ColumnIDs[desc.Partitioning.NumImplicitColumns:]).Equals(referencedColIDs)
+		ColumnIDs(desc.ColumnIDs[desc.Partitioning.NumImplicitColumns:]).Equivalent(referencedColIDs)
 }
 
 // GetName is part of the UniqueConstraint interface.
@@ -178,4 +178,9 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.ColumnNames[len(desc.ColumnNames)-1]
+}
+
+// GetColumnIDs returns the index's column ids.
+func (desc *IndexDescriptor) GetColumnIDs() ColumnIDs {
+	return desc.ColumnIDs
 }

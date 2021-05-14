@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -143,6 +144,27 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 		}
 	}
 	return true
+}
+
+// Equivalent returns true if the input list's elements are the same as this list's elements
+func (c ColumnIDs) Equivalent(input ColumnIDs) bool {
+	if len(input) != len(c) {
+		return false
+	}
+
+	columnsLookup := util.MakeFastIntSet()
+	for _, col := range c {
+		columnsLookup.Add(int(col))
+	}
+
+	for _, inputCol := range input {
+		if !columnsLookup.Contains(int(inputCol)) {
+			return false
+		}
+		columnsLookup.Remove(int(inputCol))
+	}
+
+	return columnsLookup.Len() <= 0
 }
 
 // Contains returns whether this list contains the input ID.
@@ -362,6 +384,9 @@ type UniqueConstraint interface {
 
 	// GetName returns the constraint name.
 	GetName() string
+
+	// GetColumnIDs returns the constraint column IDs
+	GetColumnIDs() ColumnIDs
 }
 
 var _ UniqueConstraint = &UniqueWithoutIndexConstraint{}
@@ -379,7 +404,11 @@ func (u *UniqueWithoutIndexConstraint) GetName() string {
 	return u.Name
 }
 
-// IsPartial returns true if the constraint is a partial unique constraint.
+// GetColumnIDs returns the constraint's column ids.
 func (u *UniqueWithoutIndexConstraint) IsPartial() bool {
 	return u.Predicate != ""
+}
+
+func (u *UniqueWithoutIndexConstraint) GetColumnIDs() ColumnIDs {
+	return u.ColumnIDs
 }
