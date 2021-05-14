@@ -250,7 +250,7 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	// makeNewUnion extends the Union tree rooted at 'last' to include 'newScan'.
 	// The ColumnIDs of the original Scan are used by the resulting expression.
 	makeNewUnion := func(last, newScan memo.RelExpr, outCols opt.ColList) memo.RelExpr {
-		return c.e.f.ConstructUnion(last, newScan, &memo.SetPrivate{
+		return c.e.f.ConstructUnionAll(last, newScan, &memo.SetPrivate{
 			LeftCols:  last.Relational().OutputCols.ToList(),
 			RightCols: newScan.Relational().OutputCols.ToList(),
 			OutCols:   outCols,
