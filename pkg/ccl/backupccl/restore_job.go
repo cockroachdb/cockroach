@@ -254,9 +254,8 @@ rangeLoop:
 			case backupFile:
 				if len(ie.file.Path) > 0 {
 					files = append(files, execinfrapb.RestoreFileSpec{
-						Dir:    ie.dir,
-						Path:   ie.file.Path,
-						Sha512: ie.file.Sha512,
+						Dir:  ie.dir,
+						Path: ie.file.Path,
 					})
 				}
 			}

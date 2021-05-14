@@ -1371,11 +1371,6 @@ message ExportRequest {
 
   // Return the exported SST data in the response.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
-  // OmitChecksum, if true, will skip checksumming the sst and leave the
-  // `Sha512` field empty in the response. During a rolling upgrade to 2.1, it
-  // may still be set if the request is served by an old node, but since the
-  // caller has declare they're not going to use it, that's okay.
-  bool omit_checksum = 6;
 
   // EnableTimeBoundIteratorOptimization, if true, enables a performance
   // optimization that allows us to entirely skip over sstables in RocksDB that
@@ -1440,7 +1435,7 @@ message ExportResponse {
     string path = 2;
     reserved 3;
     reserved 4;
-    bytes sha512 = 5;
+    reserved 5;
 
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
 
