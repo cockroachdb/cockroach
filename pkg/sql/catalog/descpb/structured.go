@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
@@ -143,6 +144,38 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 		}
 	}
 	return true
+}
+
+// PermutationOf returns true if this list and the input list contain the same
+// set of column IDs in any order. Returns false if either list has a duplicate
+// which is not matched by the other list. For example:
+//
+//     ColumnIDs{2, 1, 3}.PermutationOf(ColumnIDs{3, 1, 2, 1})
+//       => false
+//
+//     ColumnIDs{1, 2, 1, 3}.PermutationOf(ColumnIDs{3, 2, 1})
+//       => false
+//
+//     However
+//     ColumnIDs{1, 2, 1, 3}.PermutationOf(ColumnIDs{3, 1, 2, 1})
+//     => true
+//
+func (c ColumnIDs) PermutationOf(input ColumnIDs) bool {
+	if len(input) != len(c) {
+		return false
+	}
+
+	ourColsSet := util.MakeFastIntSet()
+	for _, col := range c {
+		ourColsSet.Add(int(col))
+	}
+
+	inputColsSet := util.MakeFastIntSet()
+	for _, inputCol := range input {
+		inputColsSet.Add(int(inputCol))
+	}
+
+	return inputColsSet.Equals(ourColsSet)
 }
 
 // Contains returns whether this list contains the input ID.
@@ -362,6 +395,12 @@ type UniqueConstraint interface {
 
 	// GetName returns the constraint name.
 	GetName() string
+
+	// GetExplicitColumnIDs returns the columns of an index that do not
+	// implicitly prefix a given index. An index has implicit prefix columns if
+	// a user specifies a PARTITION BY with columns that are not a prefix of the
+	// given index columns.
+	GetExplicitColumnIDs() ColumnIDs
 }
 
 var _ UniqueConstraint = &UniqueWithoutIndexConstraint{}
@@ -382,4 +421,11 @@ func (u *UniqueWithoutIndexConstraint) GetName() string {
 // IsPartial returns true if the constraint is a partial unique constraint.
 func (u *UniqueWithoutIndexConstraint) IsPartial() bool {
 	return u.Predicate != ""
+}
+
+// GetExplicitColumnIDs returns the columns of an index that do not implicitly
+// prefix a given index. A UniqueWithoutIndexConstraint cannot have implicit
+// prefix columns, so all column IDs are returned.
+func (u *UniqueWithoutIndexConstraint) GetExplicitColumnIDs() ColumnIDs {
+	return u.ColumnIDs
 }

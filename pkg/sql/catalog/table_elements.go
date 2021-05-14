@@ -151,6 +151,7 @@ type Index interface {
 
 	NumColumns() int
 	GetColumnID(columnOrdinal int) descpb.ColumnID
+	GetExplicitColumnIDs() descpb.ColumnIDs
 	GetColumnName(columnOrdinal int) string
 	GetColumnDirection(columnOrdinal int) descpb.IndexDescriptor_Direction
 

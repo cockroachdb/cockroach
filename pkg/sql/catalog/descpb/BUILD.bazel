@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
@@ -40,7 +41,10 @@ go_library(
 go_test(
     name = "descpb_test",
     size = "small",
-    srcs = ["privilege_test.go"],
+    srcs = [
+        "privilege_test.go",
+        "structured_test.go",
+    ],
     embed = [":descpb"],
     deps = [
         "//pkg/keys",

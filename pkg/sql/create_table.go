@@ -1042,7 +1042,7 @@ func ResolveFK(
 	}
 
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
+	targetDesc, err := tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
 	if err != nil {
 		return err
 	}
@@ -1059,7 +1059,7 @@ func ResolveFK(
 	ref := descpb.ForeignKeyConstraint{
 		OriginTableID:       tbl.ID,
 		OriginColumnIDs:     originColumnIDs,
-		ReferencedColumnIDs: targetColIDs,
+		ReferencedColumnIDs: targetDesc.GetExplicitColumnIDs(),
 		ReferencedTableID:   target.ID,
 		Name:                constraintName,
 		Validity:            validity,
