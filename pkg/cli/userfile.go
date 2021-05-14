@@ -45,7 +45,8 @@ var userFileUploadCmd = &cobra.Command{
 	Use:   "upload <source> <destination>",
 	Short: "upload file from source to destination",
 	Long: `
-Uploads a file to the user scoped file storage using a SQL connection.
+Uploads a single file, or, with the -r flag, all the files in the subtree rooted
+at a directory, to the user-scoped file storage using a SQL connection.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: maybeShoutError(runUserFileUpload),
@@ -136,6 +137,51 @@ func runUserFileList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func uploadUserFileRecursive(conn *sqlConn, srcDir, dstDir string) error {
+	var err error
+	srcDir, err = filepath.Abs(srcDir)
+	if err != nil {
+		return err
+	}
+	// The user has not specified a destination URI/path. We use the last element
+	// of the (absolute) source path, i.e. the directory name, as the destination
+	// "directory".
+	if dstDir == "" {
+		dstDir = filepath.Base(srcDir)
+	}
+	dstDir = strings.TrimSuffix(dstDir, "/")
+
+	ctx := context.Background()
+
+	// TODO(nihalpednekar): Switch to the more efficient filepath.WalkDir in
+	// Go 1.16.
+	err = filepath.Walk(srcDir,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				relativePath := strings.TrimPrefix(path, srcDir+"/")
+				fmt.Printf("uploading: %s\n", relativePath)
+
+				uploadedFile, err := uploadUserFile(ctx, conn, path,
+					dstDir+"/"+relativePath)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("successfully uploaded to %s\n", uploadedFile)
+			}
+			return nil
+		})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("successfully uploaded all files in the subtree rooted at %s\n",
+		filepath.Base(srcDir))
+	return nil
+}
+
 func runUserFileUpload(cmd *cobra.Command, args []string) error {
 	conn, err := makeSQLClient("cockroach userfile", useDefaultDb)
 	if err != nil {
@@ -150,20 +196,20 @@ func runUserFileUpload(cmd *cobra.Command, args []string) error {
 		destination = args[1]
 	}
 
-	reader, err := openUserFile(source)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	var uploadedFile string
-	if uploadedFile, err = uploadUserFile(context.Background(), conn, reader, source,
-		destination); err != nil {
-		return err
+	if userfileCtx.recursive {
+		if err := uploadUserFileRecursive(conn, source, destination); err != nil {
+			return err
+		}
+	} else {
+		uploadedFile, err := uploadUserFile(context.Background(), conn, source,
+			destination)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("successfully uploaded to %s\n", uploadedFile)
 	}
 
 	telemetry.Count("userfile.command.upload")
-	fmt.Printf("successfully uploaded to %s\n", uploadedFile)
 	return nil
 }
 
@@ -514,8 +560,14 @@ func renameUserFile(
 // This method returns the complete userfile URI representation to which the
 // file is uploaded to.
 func uploadUserFile(
-	ctx context.Context, conn *sqlConn, reader io.Reader, source, destination string,
+	ctx context.Context, conn *sqlConn, source, destination string,
 ) (string, error) {
+	reader, err := openUserFile(source)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+
 	if err := conn.ensureConn(); err != nil {
 		return "", err
 	}
