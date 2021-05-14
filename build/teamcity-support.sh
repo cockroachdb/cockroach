@@ -2,6 +2,7 @@
 
 # root is the absolute path to the root directory of the repository.
 root=$(cd "$(dirname "$0")/.." && pwd)
+source "$root/build/teamcity-common-support.sh"
 
 # maybe_ccache turns on ccache to speed up compilation, but only for PR builds.
 # This speeds up the CI cycle for developers while preventing ccache from
