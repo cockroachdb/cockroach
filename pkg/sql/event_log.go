@@ -135,6 +135,7 @@ func (p *planner) logEvent(
 	ctx context.Context, descID descpb.ID, event eventpb.EventPayload,
 ) error {
 	return p.logEventsWithOptions(ctx,
+		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{targetID: int32(descID), event: event})
 }
@@ -145,6 +146,7 @@ func (p *planner) logEvent(
 // processed using only one write batch (and thus lower latency).
 func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error {
 	return p.logEventsWithOptions(ctx,
+		2, /* depth: use caller location */
 		eventLogOptions{dst: LogEverywhere},
 		entries...)
 }
@@ -153,6 +155,15 @@ func (p *planner) logEvents(ctx context.Context, entries ...eventLogEntry) error
 type eventLogOptions struct {
 	// Where to emit the log event to.
 	dst LogEventDestination
+
+	// By default, a copy of each structured event is sent to the DEV
+	// channel (in addition to its default, nominal channel) if the
+	// vmodule filter is set to 2 or higher for the source file where
+	// the event call originates.
+	//
+	// If verboseTraceLevel is non-zero, its value is used as value for
+	// the vmodule filter. See exec_log for an example use.
+	verboseTraceLevel log.Level
 }
 
 // logEventsWithOptions is like logEvent() but it gives control to the
@@ -161,7 +172,7 @@ type eventLogOptions struct {
 // If opts.dst does not include LogToSystemTable, this function is
 // guaranteed to not return an error.
 func (p *planner) logEventsWithOptions(
-	ctx context.Context, opts eventLogOptions, entries ...eventLogEntry,
+	ctx context.Context, depth int, opts eventLogOptions, entries ...eventLogEntry,
 ) error {
 	commonPayload := sqlEventCommonExecPayload{
 		user:         p.User(),
@@ -172,6 +183,7 @@ func (p *planner) logEventsWithOptions(
 	}
 	return logEventInternalForSQLStatements(ctx,
 		p.extendedEvalCtx.ExecCfg, p.txn,
+		1+depth,
 		opts,
 		commonPayload,
 		entries...)
@@ -199,10 +211,15 @@ func logEventInternalForSchemaChanges(
 	m.MutationID = uint32(mutationID)
 
 	// Delegate the storing of the event to the regular event logic.
+	//
+	// We use depth=1 because the caller of this function typically
+	// wraps the call in a db.Txn() callback, which confuses the vmodule
+	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
 		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		1,                                     /* depth: use this function as origin */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{
 			targetID: int32(descID),
@@ -233,6 +250,7 @@ func logEventInternalForSQLStatements(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
+	depth int,
 	opts eventLogOptions,
 	commonPayload sqlEventCommonExecPayload,
 	entries ...eventLogEntry,
@@ -269,6 +287,7 @@ func logEventInternalForSQLStatements(
 	return insertEventRecords(ctx,
 		execCfg.InternalExecutor, txn,
 		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		1+depth,                               /* depth */
 		opts,                                  /* eventLogOptions */
 		entries...,                            /* ...eventLogEntry */
 	)
@@ -301,10 +320,15 @@ func LogEventForJobs(
 	m.Description = payload.Description
 
 	// Delegate the storing of the event to the regular event logic.
+	//
+	// We use depth=1 because the caller of this function typically
+	// wraps the call in a db.Txn() callback, which confuses the vmodule
+	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(
 		ctx, execCfg.InternalExecutor,
 		txn,
 		int32(execCfg.NodeID.SQLInstanceID()), /* reporter ID */
+		1,                                     /* depth: use this function for vmodule filtering */
 		eventLogOptions{dst: LogEverywhere},
 		eventLogEntry{event: event},
 	)
@@ -332,9 +356,13 @@ const (
 	// LogExternally makes InsertEventRecord write the event(s) to the
 	// external logs.
 	LogExternally
+	// LogToDevChannelIfVerbose makes InsertEventRecord copy
+	// the structured event to the DEV logging channel
+	// if the vmodule filter for the log call is set high enough.
+	LogToDevChannelIfVerbose
 
 	// LogEverywhere logs to all the possible outputs.
-	LogEverywhere LogEventDestination = LogExternally | LogToSystemTable
+	LogEverywhere LogEventDestination = LogExternally | LogToSystemTable | LogToDevChannelIfVerbose
 )
 
 // InsertEventRecord inserts a single event into the event log as part
@@ -350,7 +378,11 @@ func InsertEventRecord(
 	targetID int32,
 	info eventpb.EventPayload,
 ) error {
+	// We use depth=1 because the caller of this function typically
+	// wraps the call in a db.Txn() callback, which confuses the vmodule
+	// filtering. Easiest is to pretend the event is sourced here.
 	return insertEventRecords(ctx, ex, txn, reportingID,
+		1, /* depth: use this function */
 		eventLogOptions{dst: dst},
 		eventLogEntry{targetID: targetID, event: info})
 }
@@ -370,6 +402,7 @@ func insertEventRecords(
 	ex *InternalExecutor,
 	txn *kv.Txn,
 	reportingID int32,
+	depth int,
 	opts eventLogOptions,
 	entries ...eventLogEntry,
 ) error {
@@ -383,6 +416,24 @@ func insertEventRecords(
 		// The caller is responsible for the timestamp field.
 		if event.CommonDetails().Timestamp == 0 {
 			return errors.AssertionFailedf("programming error: timestamp field in event %d not populated: %T", i, event)
+		}
+	}
+
+	if opts.dst.hasFlag(LogToDevChannelIfVerbose) {
+		// Emit a copy of the structured to the DEV channel when the
+		// vmodule setting matches.
+		level := log.Level(2)
+		if opts.verboseTraceLevel != 0 {
+			// Caller has overridden the level at which which log to the
+			// trace.
+			level = opts.verboseTraceLevel
+		}
+		if log.VDepth(level, depth) {
+			// The VDepth() call ensures that we are matching the vmodule
+			// setting to where the depth is equal to 1 in the caller stack.
+			for i := range entries {
+				log.InfofDepth(ctx, depth, "SQL event: target %d, payload %+v", entries[i].targetID, entries[i].event)
+			}
 		}
 	}
 

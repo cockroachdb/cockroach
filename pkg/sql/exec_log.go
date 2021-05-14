@@ -276,11 +276,6 @@ func (p *planner) maybeLogStatementInternal(
 		TxnCounter:    uint32(txnCounter),
 	}
 
-	if logV {
-		// Copy to the debug log / trace.
-		log.VEventf(ctx, execType.vLevel(), "%+v", execDetails)
-	}
-
 	if auditEventsDetected {
 		// TODO(knz): re-add the placeholders and age into the logging event.
 		entries := make([]eventLogEntry, len(p.curPlan.auditEvents))
@@ -334,8 +329,18 @@ func (p *planner) maybeLogStatementInternal(
 		}
 	}
 
-	if logExecuteEnabled {
-		p.logEventsOnlyExternally(ctx,
+	if logExecuteEnabled || logV {
+		// The API contract for logEventsWithOptions() is that it returns
+		// no error when system.eventlog is not written to.
+		_ = p.logEventsWithOptions(ctx,
+			1, /* depth */
+			eventLogOptions{
+				// We pass LogToDevChannelIfVerbose because we have a log.V
+				// request for this file, which means the operator wants to
+				// see a copy of the execution on the DEV Channel.
+				dst:               LogExternally | LogToDevChannelIfVerbose,
+				verboseTraceLevel: execType.vLevel(),
+			},
 			eventLogEntry{event: &eventpb.QueryExecute{CommonSQLExecDetails: execDetails}})
 	}
 
@@ -348,6 +353,7 @@ func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...eventL
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
 	_ = p.logEventsWithOptions(ctx,
+		2, /* depth: we want to use the caller location */
 		eventLogOptions{dst: LogExternally},
 		entries...)
 }
