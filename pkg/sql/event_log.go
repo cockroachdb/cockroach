@@ -30,6 +30,93 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// The logging functions in this file are the different stages of a
+// pipeline that add more and more information to logging events until
+// they are ready to be sent to either external sinks or to a system
+// table.
+//
+// The overall structure of this pipeline is as follows:
+//
+//  regular statement execution
+//  for "special" statements that
+//  have structured logging, e.g. CREATE, DROP etc
+//    |
+//  (produces pair(s) of descID (optional) and eventpb.EventPayload)
+//    |
+//  (pair(s) optionally packaged as an eventLogEntry{})
+//    |
+//    v
+//  logEvent(descID, payload) / logEvents(eventEntries...)
+//    |
+//    |           ,------- query logging in exec_log.go
+//    |          /         optionally via logEventOnlyExternally()
+//    |         /
+//    v        v
+// logEventsWithOptions()
+//    |
+//  (extracts SQL exec details
+//   from execution context - see sqlEventCommonExecPayload)
+//    |
+//    |                ,----------- async CREATE STATS
+//    |               /             goroutine
+//    |              /              on behalf of CREATE STATS stmt
+//    v             v
+// logEventInternalForSQLStatements()
+//    |          (SQL exec details struct
+//    |           and main event struct provided
+//    |           separately as arguments)
+//    |
+//  (writes the exec details
+//   inside the event struct)
+//    |
+//    |                      ,----- job execution, at end
+//    |                      |
+//    |                LogEventForJobs()
+//    |                      |
+//    |                (add job ID,
+//    |                 + fields from job metadata
+//    |                 timestamp initialized at job txn read ts)
+//    |                      |
+//    |    ,-----------------'
+//    |   /
+//    |  /                   ,------- async schema change
+//    |  |                   |        execution, at end
+//    |  |                   v
+//    |  |            logEventInternalForSchemaChanges()
+//    |  |                   |
+//    |  |             (add mutation ID,
+//    |  |              + fields from sc.change metadata
+//    |  |              timestamp initialized to txn read ts)
+//    |  |                   |
+//    |  |     ,-------------'
+//    |  |    /
+//    |  |   /
+//  (TargetID argument = ID of descriptor affected if DDL,
+//   otherwise zero)
+//    |  |   |
+//    |  |   |      ,-------- node-level events outside of SQL
+//    |  |   |     /          (e.g. cluster membership)
+//    |  |   |    /           TargetID = ID of node affected
+//    v  v   v   v
+//  (expectation: per-type event structs
+//   fully populated at this point.
+//   Timestamp field must be set too.)
+//     |
+//     v
+// InsertEventRecord() / insertEventRecords()
+//     |
+//  (finalize field EventType from struct type)
+//     |
+//   (route)
+//     |
+//     +--> system.eventlog if not disabled by setting
+//     |
+//     +--> DEV channel if requested by log.V
+//     |
+//     `--> external sinks (via logging package)
+//
+//
+
 // eventLogEntry represents a SQL-level event to be sent to logging
 // outputs(s).
 type eventLogEntry struct {
