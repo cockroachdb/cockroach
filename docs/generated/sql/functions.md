@@ -664,7 +664,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="radians"></a><code>radians(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Converts <code>val</code> as a degree value to a radians value.</p>
 </span></td></tr>
-<tr><td><a name="random"></a><code>random() &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random float between 0 and 1.</p>
+<tr><td><a name="random"></a><code>random() &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns a random floating-point number between 0 and 1. Note that the value contains at most 53 bits of randomness.</p>
 </span></td></tr>
 <tr><td><a name="round"></a><code>round(input: <a href="decimal.html">decimal</a>, decimal_accuracy: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Keeps <code>decimal_accuracy</code> number of figures to the right of the zero position in <code>input</code> using half away from zero rounding. If <code>decimal_accuracy</code> is not in the range -2^31…(2^31-1), the results are undefined.</p>
 </span></td></tr>
