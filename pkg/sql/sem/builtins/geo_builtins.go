@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geotransform"
+	"github.com/cockroachdb/cockroach/pkg/geo/twkb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -1516,6 +1517,90 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 			Info: infoBuilder{
 				info: "Returns the EWKB representation in hex of a given Geography. " +
 					"This variant has a second argument denoting the encoding - `xdr` for big endian and `ndr` for little endian.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_astwkb": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"precision_xy", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				t, err := tree.MustBeDGeometry(args[0]).AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := twkb.Marshal(
+					t,
+					twkb.MarshalOptionPrecisionXY(int64(tree.MustBeDInt(args[1]))),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the TWKB representation of a given geometry.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"precision_xy", types.Int},
+				{"precision_z", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				t, err := tree.MustBeDGeometry(args[0]).AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := twkb.Marshal(
+					t,
+					twkb.MarshalOptionPrecisionXY(int64(tree.MustBeDInt(args[1]))),
+					twkb.MarshalOptionPrecisionZ(int64(tree.MustBeDInt(args[2]))),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the TWKB representation of a given geometry.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"precision_xy", types.Int},
+				{"precision_z", types.Int},
+				{"precision_m", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				t, err := tree.MustBeDGeometry(args[0]).AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := twkb.Marshal(
+					t,
+					twkb.MarshalOptionPrecisionXY(int64(tree.MustBeDInt(args[1]))),
+					twkb.MarshalOptionPrecisionZ(int64(tree.MustBeDInt(args[2]))),
+					twkb.MarshalOptionPrecisionM(int64(tree.MustBeDInt(args[3]))),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the TWKB representation of a given geometry.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -4173,14 +4258,17 @@ The paths themselves are given in the direction of the first geometry.`,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				tolerance := float64(tree.MustBeDFloat(args[1]))
-				ret, err := geomfn.Simplify(g.Geometry, tolerance)
+				// TODO(#spatial): post v21.1, use the geomfn.Simplify we have implemented internally.
+				// GEOS currently preserves collapsed for linestrings and not for polygons.
+				ret, err := geomfn.SimplifyGEOS(g.Geometry, tolerance)
 				if err != nil {
 					return nil, err
 				}
 				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
-				info: `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
+				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm.`,
+				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -4192,7 +4280,17 @@ The paths themselves are given in the direction of the first geometry.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return nil, unimplemented.NewWithIssueDetail(49037, "st_simplify", "this version of st_simplify is not yet implemented")
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+				preserveCollapsed := bool(tree.MustBeDBool(args[2]))
+				ret, collapsed, err := geomfn.Simplify(g.Geometry, tolerance, preserveCollapsed)
+				if err != nil {
+					return nil, err
+				}
+				if collapsed {
+					return tree.DNull, nil
+				}
+				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
 				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.`,
@@ -4218,7 +4316,8 @@ The paths themselves are given in the direction of the first geometry.`,
 				return &tree.DGeometry{Geometry: ret}, nil
 			},
 			Info: infoBuilder{
-				info: `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
+				info:         `Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.`,
+				libraryUsage: usesGEOS,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -5337,6 +5436,24 @@ Bottom Left.`,
 			},
 			tree.VolatilityImmutable,
 		),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0]).CartesianBoundingBox
+				ret, err := geo.MakeGeometryFromGeomT(bbox.ToGeomT(0 /* SRID */))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a bounding geometry for the given box.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_flipcoordinates": makeBuiltin(
 		defProps(),
@@ -5790,6 +5907,66 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 				info: "Extends the bounding box represented by the geometry by delta_x units in the x dimension and delta_y units in the y dimension, returning a Polygon representing the new bounding box.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	//
+	// Table metadata
+	//
+
+	"st_estimatedextent": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySpatial,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"geocolumn_name", types.String},
+				{"parent_only", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(#64257): implement by looking at statistics.
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.
+
+The parent_only boolean is always ignored.`,
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"schema_name", types.String},
+				{"table_name", types.String},
+				{"geocolumn_name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(#64257): implement by looking at statistics.
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"table_name", types.String},
+				{"geocolumn_name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(#64257): implement by looking at statistics.
+				return tree.DNull, nil
+			},
+			Info: infoBuilder{
+				info: `Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.`,
+			}.String(),
+			Volatility: tree.VolatilityStable,
 		},
 	),
 
@@ -6475,7 +6652,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_asgml":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
 	"st_aslatlontext":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
 	"st_assvg":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
-	"st_astwkb":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48886}),
 	"st_boundingdiagonal":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
 	"st_buildarea":             makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
 	"st_chaikinsmoothing":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48894}),

@@ -1447,6 +1447,12 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <tr><td><a name="st_astext"></a><code>st_astext(geometry_str: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the WKT representation of a given Geometry. The max_decimal_digits parameter controls the maximum decimal digits to print after the <code>.</code>. Use -1 to print as many digits as required to rebuild the same number.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>, precision_z: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
+<tr><td><a name="st_astwkb"></a><code>st_astwkb(geometry: geometry, precision_xy: <a href="int.html">int</a>, precision_z: <a href="int.html">int</a>, precision_m: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the TWKB representation of a given geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geographies, or NULL if the two points are coincident. It is solved using the Inverse geodesic problem.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1696,6 +1702,8 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_endpoint"></a><code>st_endpoint(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the last point of a geometry which has shape LineString. Returns NULL if the geometry is not a LineString.</p>
 </span></td></tr>
+<tr><td><a name="st_envelope"></a><code>st_envelope(box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding geometry for the given box.</p>
+</span></td></tr>
 <tr><td><a name="st_envelope"></a><code>st_envelope(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a bounding envelope for the given geometry.</p>
 <p>For geometries which have a POINT or LINESTRING bounding box (i.e. is a single point
 or a horizontal or vertical line), a POINT or LINESTRING is returned. Otherwise, the
@@ -1705,6 +1713,13 @@ Bottom Left.</p>
 <tr><td><a name="st_equals"></a><code>st_equals(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is spatially equal to geometry_b, i.e. ST_Within(geometry_a, geometry_b) = ST_Within(geometry_b, geometry_a) = true.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(schema_name: <a href="string.html">string</a>, table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>, parent_only: <a href="bool.html">bool</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
+<p>The parent_only boolean is always ignored.</p>
+</span></td></tr>
+<tr><td><a name="st_estimatedextent"></a><code>st_estimatedextent(table_name: <a href="string.html">string</a>, geocolumn_name: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns the estimated extent of the geometries in the column of the given table. This currently always returns NULL.</p>
 </span></td></tr>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta units across all dimensions.</p>
 </span></td></tr>
@@ -2228,10 +2243,12 @@ The paths themselves are given in the direction of the first geometry.</p>
 <p>Note if geometries are the same, it will return the LineString with the minimum distance between the geometry’s vertexes. The function will return the shortest line that was discovered first when comparing minimum distances if more than one is found.</p>
 </span></td></tr>
 <tr><td><a name="st_simplify"></a><code>st_simplify(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_simplify"></a><code>st_simplify(geometry: geometry, tolerance: <a href="float.html">float</a>, preserve_collapsed: <a href="bool.html">bool</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, retaining objects that would be too small given the tolerance if preserve_collapsed is set to true.</p>
 </span></td></tr>
 <tr><td><a name="st_simplifypreservetopology"></a><code>st_simplifypreservetopology(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_snap"></a><code>st_snap(input: geometry, target: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snaps the vertices and segments of input geometry the target geometry’s vertices.
 Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
