@@ -1509,7 +1509,11 @@ func (r *Replica) withRaftGroup(
 }
 
 func shouldCampaignOnWake(
-	leaseStatus kvserverpb.LeaseStatus, storeID roachpb.StoreID, raftStatus raft.BasicStatus,
+	leaseStatus kvserverpb.LeaseStatus,
+	storeID roachpb.StoreID,
+	raftStatus raft.BasicStatus,
+	livenessMap liveness.IsLiveMap,
+	desc *roachpb.RangeDescriptor,
 ) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
@@ -1519,9 +1523,20 @@ func shouldCampaignOnWake(
 	// we should err on the side of campaigining here.
 	anotherOwnsLease := leaseStatus.IsValid() && !leaseStatus.OwnedBy(storeID)
 
+	// Determine if we think the leader is alive, if we don't have the leader
+	// in the descriptor we assume it is, since it could be an indication that this
+	// replica is behind.
+	leaderAlive := true
+	if raftStatus.Lead != raft.None {
+		replDesc, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
+		if ok {
+			leaderAlive = livenessMap[replDesc.NodeID].IsLive
+		}
+	}
 	// If we're already campaigning or know who the leader is, don't
-	// start a new term.
-	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
+	// start a new term unless we know the leader is not  alive, in which case we
+	// do want to start a campaign.
+	noLeader := raftStatus.RaftState == raft.StateFollower && (raftStatus.Lead == raft.None || !leaderAlive)
 	return !anotherOwnsLease && noLeader
 }
 
@@ -1538,7 +1553,8 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
-	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus) {
+	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked()) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
