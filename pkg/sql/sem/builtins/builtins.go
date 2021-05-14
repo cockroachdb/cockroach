@@ -506,7 +506,7 @@ var builtins = map[string]builtinDefinition{
 				}
 				return tree.NewDInt(tree.DInt(0)), nil
 			},
-			Info:       "Extracts a bit at given index in the byte array.",
+			Info:       "Extracts a bit at the given index in the byte array.",
 			Volatility: tree.VolatilityImmutable,
 		}),
 
@@ -568,7 +568,7 @@ var builtins = map[string]builtinDefinition{
 				byteString[index/8] |= byte(toSet) << (8 - 1 - byte(index)%8)
 				return tree.NewDBytes(tree.DBytes(byteString)), nil
 			},
-			Info:       "Updates a bit at given index in the byte array.",
+			Info:       "Updates a bit at the given index in the byte array.",
 			Volatility: tree.VolatilityImmutable,
 		}),
 
