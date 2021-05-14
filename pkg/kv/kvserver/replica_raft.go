@@ -1509,7 +1509,12 @@ func (r *Replica) withRaftGroup(
 }
 
 func shouldCampaignOnWake(
-	leaseStatus kvserverpb.LeaseStatus, storeID roachpb.StoreID, raftStatus raft.BasicStatus,
+	leaseStatus kvserverpb.LeaseStatus,
+	storeID roachpb.StoreID,
+	raftStatus raft.BasicStatus,
+	livenessMap liveness.IsLiveMap,
+	desc *roachpb.RangeDescriptor,
+	requiresExpiringLease bool,
 ) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
@@ -1517,12 +1522,36 @@ func shouldCampaignOnWake(
 	// time, with a lease pre-assigned to one of them). Note that
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
-	anotherOwnsLease := leaseStatus.IsValid() && !leaseStatus.OwnedBy(storeID)
-
-	// If we're already campaigning or know who the leader is, don't
-	// start a new term.
-	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
-	return !anotherOwnsLease && noLeader
+	if leaseStatus.IsValid() && !leaseStatus.OwnedBy(storeID) {
+		return false
+	}
+	// If we're already campaigning don's start a new term.
+	if raftStatus.RaftState != raft.StateFollower {
+		return false
+	}
+	// If we dont know who the leader is, then campaign.
+	if raftStatus.Lead == raft.None {
+		return true
+	}
+	// Avoid a circular dependency on liveness and skip the is leader alive check for
+	// expiration based leases.
+	if requiresExpiringLease {
+		return false
+	}
+	// Determine if we think the leader is alive, if we don't have the leader
+	// in the descriptor we assume it is, since it could be an indication that this
+	// replica is behind.
+	replDesc, ok := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
+	if !ok {
+		return false
+	}
+	// If we don't know about the leader in our liveness map, then we err on the side
+	// of caution and dont campaign.
+	livenessEntry, ok := livenessMap[replDesc.NodeID]
+	if !ok {
+		return false
+	}
+	return !livenessEntry.IsLive
 }
 
 // maybeCampaignOnWakeLocked is called when the range wakes from a
@@ -1538,7 +1567,8 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
-	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus) {
+	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpiringLeaseRLocked()) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
