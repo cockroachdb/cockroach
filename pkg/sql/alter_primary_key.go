@@ -366,7 +366,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	if partitionAllBy != nil {
-		*newPrimaryIndexDesc, err = CreatePartitioning(
+		newImplicitCols, newPartitioning, err := CreatePartitioning(
 			ctx,
 			p.ExecCfg().Settings,
 			p.EvalContext(),
@@ -379,6 +379,7 @@ func (p *planner) AlterPrimaryKey(
 		if err != nil {
 			return err
 		}
+		tabledesc.UpdateIndexPartitioning(newPrimaryIndexDesc, newImplicitCols, newPartitioning)
 	}
 
 	// Create a new index that indexes everything the old primary index
@@ -461,10 +462,7 @@ func (p *planner) AlterPrimaryKey(
 
 		// Drop any PARTITION ALL BY clause.
 		if dropPartitionAllBy {
-			newIndex.ColumnNames = newIndex.ColumnNames[newIndex.Partitioning.NumImplicitColumns:]
-			newIndex.ColumnIDs = newIndex.ColumnIDs[newIndex.Partitioning.NumImplicitColumns:]
-			newIndex.ColumnDirections = newIndex.ColumnDirections[newIndex.Partitioning.NumImplicitColumns:]
-			newIndex.Partitioning = descpb.PartitioningDescriptor{}
+			tabledesc.UpdateIndexPartitioning(&newIndex, nil /* newImplicitCols */, descpb.PartitioningDescriptor{})
 		}
 
 		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
@@ -482,7 +480,7 @@ func (p *planner) AlterPrimaryKey(
 		}
 		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
 		if isNewPartitionAllBy {
-			if newIndex, err = CreatePartitioning(
+			newImplicitCols, newPartitioning, err := CreatePartitioning(
 				ctx,
 				p.ExecCfg().Settings,
 				p.EvalContext(),
@@ -491,9 +489,11 @@ func (p *planner) AlterPrimaryKey(
 				partitionAllBy,
 				allowedNewColumnNames,
 				allowImplicitPartitioning,
-			); err != nil {
+			)
+			if err != nil {
 				return err
 			}
+			tabledesc.UpdateIndexPartitioning(&newIndex, newImplicitCols, newPartitioning)
 		}
 		oldIndexIDs = append(oldIndexIDs, idx.GetID())
 		newIndexIDs = append(newIndexIDs, newIndex.ID)

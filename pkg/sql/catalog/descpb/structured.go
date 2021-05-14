@@ -186,39 +186,6 @@ func (f ForeignKeyReference) IsSet() bool {
 	return f.Table != 0
 }
 
-// FindPartitionByName searches this partitioning descriptor for a partition
-// whose name is the input and returns it, or nil if no match is found.
-func (desc *PartitioningDescriptor) FindPartitionByName(name string) *PartitioningDescriptor {
-	for _, l := range desc.List {
-		if l.Name == name {
-			return desc
-		}
-		if s := l.Subpartitioning.FindPartitionByName(name); s != nil {
-			return s
-		}
-	}
-	for _, r := range desc.Range {
-		if r.Name == name {
-			return desc
-		}
-	}
-	return nil
-}
-
-// PartitionNames returns a slice containing the name of every partition and
-// subpartition in an arbitrary order.
-func (desc *PartitioningDescriptor) PartitionNames() []string {
-	var names []string
-	for _, l := range desc.List {
-		names = append(names, l.Name)
-		names = append(names, l.Subpartitioning.PartitionNames()...)
-	}
-	for _, r := range desc.Range {
-		names = append(names, r.Name)
-	}
-	return names
-}
-
 // Public implements the Descriptor interface.
 func (desc *TableDescriptor) Public() bool {
 	return desc.State == DescriptorState_PUBLIC

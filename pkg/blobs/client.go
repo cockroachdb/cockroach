@@ -22,6 +22,14 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// WriteCloserWithError extends WriteCloser with an extra CloseWithError func.
+type WriteCloserWithError interface {
+	io.WriteCloser
+	// CloseWithError closes the writer with an error, which may choose to abort
+	// rather than complete any write operations.
+	CloseWithError(error) error
+}
+
 // BlobClient provides an interface for file access on all nodes' local storage.
 // Given the nodeID of the node on which the operation should occur, the a blob
 // client should be able to find the correct node and call its blob service API.
@@ -31,10 +39,8 @@ type BlobClient interface {
 	// read the contents.
 	ReadFile(ctx context.Context, file string, offset int64) (io.ReadCloser, int64, error)
 
-	// WriteFile sends the named payload to the requested node.
-	// This method will read entire content of file and send
-	// it over to another node, based on the nodeID.
-	WriteFile(ctx context.Context, file string, content io.Reader) error
+	// Writer opens the named payload on the requested node for writing.
+	Writer(ctx context.Context, file string) (WriteCloserWithError, error)
 
 	// List lists the corresponding filenames from the requested node.
 	// The requested node can be the current node.
@@ -75,20 +81,52 @@ func (c *remoteClient) ReadFile(
 	return newGetStreamReader(stream), st.Filesize, errors.Wrap(err, "fetching file")
 }
 
-func (c *remoteClient) WriteFile(ctx context.Context, file string, content io.Reader) (err error) {
+type streamWriter struct {
+	s      blobspb.Blob_PutStreamClient
+	buf    blobspb.StreamChunk
+	cancel func()
+}
+
+func (w *streamWriter) Write(p []byte) (int, error) {
+	n := 0
+	for len(p) > 0 {
+		l := copy(w.buf.Payload[:cap(w.buf.Payload)], p)
+		w.buf.Payload = w.buf.Payload[:l]
+		p = p[l:]
+		if l > 0 {
+			if err := w.s.Send(&w.buf); err != nil {
+				return n, err
+			}
+		}
+		n += l
+	}
+	return n, nil
+}
+
+func (w *streamWriter) Close() error {
+	_, err := w.s.CloseAndRecv()
+	w.cancel()
+	return err
+}
+
+func (w *streamWriter) CloseWithError(err error) error {
+	if err == nil {
+		return w.Close()
+	}
+	w.cancel()
+	return nil
+}
+
+func (c *remoteClient) Writer(ctx context.Context, file string) (WriteCloserWithError, error) {
 	ctx = metadata.AppendToOutgoingContext(ctx, "filename", file)
+	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.blobClient.PutStream(ctx)
 	if err != nil {
-		return
+		cancel()
+		return nil, err
 	}
-	defer func() {
-		_, closeErr := stream.CloseAndRecv()
-		if err == nil {
-			err = closeErr
-		}
-	}()
-	err = streamContent(stream, content)
-	return
+	buf := make([]byte, 0, chunkSize)
+	return &streamWriter{s: stream, buf: blobspb.StreamChunk{Payload: buf}, cancel: cancel}, nil
 }
 
 func (c *remoteClient) List(ctx context.Context, pattern string) ([]string, error) {
@@ -141,8 +179,8 @@ func (c *localClient) ReadFile(
 	return c.localStorage.ReadFile(file, offset)
 }
 
-func (c *localClient) WriteFile(ctx context.Context, file string, content io.Reader) error {
-	return c.localStorage.WriteFile(file, content)
+func (c *localClient) Writer(ctx context.Context, file string) (WriteCloserWithError, error) {
+	return c.localStorage.Writer(file)
 }
 
 func (c *localClient) List(ctx context.Context, pattern string) ([]string, error) {

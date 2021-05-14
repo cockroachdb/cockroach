@@ -16,7 +16,6 @@ until crdb_only
 ErrorResponse
 ReadyForQuery
 ----
-{"Type":"CopyInResponse","ColumnFormatCodes":[0]}
 {"Type":"ErrorResponse","Code":"XXUUU"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 

@@ -154,6 +154,41 @@ func (desc *Mutable) SetPublicNonPrimaryIndex(indexOrdinal int, index descpb.Ind
 	desc.Indexes[indexOrdinal-1] = index
 }
 
+// UpdateIndexPartitioning applies the new partition and adjusts the column info
+// for the specified index descriptor. Returns false iff this was a no-op.
+func UpdateIndexPartitioning(
+	idx *descpb.IndexDescriptor,
+	newImplicitCols []catalog.Column,
+	newPartitioning descpb.PartitioningDescriptor,
+) bool {
+	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
+	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
+	numCols := len(idx.ColumnIDs)
+	newCap := numCols + len(newImplicitCols) - oldNumImplicitCols
+	newColumnIDs := make([]descpb.ColumnID, len(newImplicitCols), newCap)
+	newColumnNames := make([]string, len(newImplicitCols), newCap)
+	newColumnDirections := make([]descpb.IndexDescriptor_Direction, len(newImplicitCols), newCap)
+	for i, col := range newImplicitCols {
+		newColumnIDs[i] = col.GetID()
+		newColumnNames[i] = col.GetName()
+		newColumnDirections[i] = descpb.IndexDescriptor_ASC
+		if isNoOp &&
+			(idx.ColumnIDs[i] != newColumnIDs[i] ||
+				idx.ColumnNames[i] != newColumnNames[i] ||
+				idx.ColumnDirections[i] != newColumnDirections[i]) {
+			isNoOp = false
+		}
+	}
+	if isNoOp {
+		return false
+	}
+	idx.ColumnIDs = append(newColumnIDs, idx.ColumnIDs[oldNumImplicitCols:]...)
+	idx.ColumnNames = append(newColumnNames, idx.ColumnNames[oldNumImplicitCols:]...)
+	idx.ColumnDirections = append(newColumnDirections, idx.ColumnDirections[oldNumImplicitCols:]...)
+	idx.Partitioning = newPartitioning
+	return true
+}
+
 // GetPrimaryIndex returns the primary index in the form of a catalog.Index
 // interface.
 func (desc *wrapper) GetPrimaryIndex() catalog.Index {

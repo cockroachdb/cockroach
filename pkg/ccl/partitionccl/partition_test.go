@@ -1342,12 +1342,12 @@ func TestRepartitioning(t *testing.T) {
 				} else {
 					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.GetName())
 				}
-				if testIndex.GetPartitioning().NumColumns == 0 {
+				if testIndex.GetPartitioning().NumColumns() == 0 {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(
 						&rowenc.DatumAlloc{}, keys.SystemSQLCodec, test.new.parsed.tableDesc, testIndex,
-						&testIndex.IndexDesc().Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
+						testIndex.GetPartitioning(), &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)
 					}
@@ -1357,8 +1357,11 @@ func TestRepartitioning(t *testing.T) {
 				// Verify that repartitioning removes zone configs for partitions that
 				// have been removed.
 				newPartitionNames := map[string]struct{}{}
-				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
-					newPartitionNames[name] = struct{}{}
+				for _, index := range test.new.parsed.tableDesc.NonDropIndexes() {
+					_ = index.GetPartitioning().ForEachPartitionName(func(name string) error {
+						newPartitionNames[name] = struct{}{}
+						return nil
+					})
 				}
 				for _, row := range sqlDB.QueryStr(
 					t, "SELECT partition_name FROM crdb_internal.zones WHERE partition_name IS NOT NULL") {
