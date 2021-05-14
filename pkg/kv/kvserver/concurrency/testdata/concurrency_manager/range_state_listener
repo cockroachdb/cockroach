@@ -267,6 +267,7 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 [11] sequence req3: lock wait-queue event: done waiting
 [11] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on "k" for 1.23s
 [11] sequence req3: acquiring latches
+[11] sequence req3: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [11] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes2
@@ -431,6 +432,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [4] sequence req2: lock wait-queue event: done waiting
 [4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req2: acquiring latches
+[4] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes1
@@ -758,6 +760,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [4] sequence req2: lock wait-queue event: done waiting
 [4] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on "k" for 1.23s
 [4] sequence req2: acquiring latches
+[4] sequence req2: waiting to acquire write latch k@10.000000000,1, held by write latch k@10.000000000,1
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes1
