@@ -669,6 +669,53 @@ pk  pk2  a   b   j
 statement error cannot drop column crdb_region as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this table
 ALTER TABLE regional_by_row_table DROP COLUMN crdb_region
 
+# Test that a limited, ordered scan is efficient.
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT * FROM regional_by_row_table
+ORDER BY pk LIMIT 5] OFFSET 2
+----
+·
+• limit
+│ columns: (pk, pk2, a, b, j)
+│ estimated row count: 5 (missing stats)
+│ count: 5
+│
+└── • union all
+    │ columns: (pk, pk2, a, b, j)
+    │ ordering: +pk
+    │ estimated row count: 15 (missing stats)
+    │
+    ├── • union all
+    │   │ columns: (pk, pk2, a, b, j)
+    │   │ ordering: +pk
+    │   │ estimated row count: 10 (missing stats)
+    │   │
+    │   ├── • scan
+    │   │     columns: (pk, pk2, a, b, j)
+    │   │     ordering: +pk
+    │   │     estimated row count: 5 (missing stats)
+    │   │     table: regional_by_row_table@primary
+    │   │     spans: /"@"-/"@"/PrefixEnd
+    │   │     limit: 5
+    │   │
+    │   └── • scan
+    │         columns: (pk, pk2, a, b, j)
+    │         ordering: +pk
+    │         estimated row count: 5 (missing stats)
+    │         table: regional_by_row_table@primary
+    │         spans: /"\x80"-/"\x80"/PrefixEnd
+    │         limit: 5
+    │
+    └── • scan
+          columns: (pk, pk2, a, b, j)
+          ordering: +pk
+          estimated row count: 5 (missing stats)
+          table: regional_by_row_table@primary
+          spans: /"\xc0"-/"\xc0"/PrefixEnd
+          limit: 5
+
+# Tests for locality optimized search.
+
 statement ok
 SET locality_optimized_partitioned_index_scan = false
 
