@@ -305,12 +305,11 @@ index-join kuv
       ├── key: (4)
       ├── fd: (4)-->(1,2)
       ├── ordering: +2
-      ├── union
+      ├── union-all
       │    ├── columns: k:1!null u:2 rowid:4!null
       │    ├── left columns: k:6 u:7 rowid:9
       │    ├── right columns: k:11 u:12 rowid:14
       │    ├── cardinality: [0 - 10]
-      │    ├── key: (1,2,4)
       │    ├── ordering: +2
       │    ├── limit hint: 5.00
       │    ├── scan kuv@secondary
@@ -319,7 +318,7 @@ index-join kuv
       │    │    ├── limit: 5
       │    │    ├── key: (9)
       │    │    ├── fd: ()-->(6), (9)-->(7)
-      │    │    ├── ordering: +7,+9 opt(6) [actual: +7,+9]
+      │    │    ├── ordering: +7 opt(6) [actual: +7]
       │    │    └── limit hint: 5.00
       │    └── scan kuv@secondary
       │         ├── columns: k:11!null u:12 rowid:14!null
@@ -327,7 +326,7 @@ index-join kuv
       │         ├── limit: 5
       │         ├── key: (14)
       │         ├── fd: ()-->(11), (14)-->(12)
-      │         ├── ordering: +12,+14 opt(11) [actual: +12,+14]
+      │         ├── ordering: +12 opt(11) [actual: +12]
       │         └── limit hint: 5.00
       └── 5
 
@@ -834,21 +833,19 @@ limit
  ├── internal-ordering: +6
  ├── cardinality: [0 - 10]
  ├── ordering: +6
- ├── union
+ ├── union-all
  │    ├── columns: val:2!null data1:6!null
  │    ├── left columns: val:32 data1:36
  │    ├── right columns: val:42 data1:46
  │    ├── cardinality: [0 - 30]
- │    ├── key: (2,6)
  │    ├── ordering: +6
  │    ├── limit hint: 10.00
- │    ├── union
+ │    ├── union-all
  │    │    ├── columns: val:32!null data1:36!null
  │    │    ├── left columns: val:12 data1:16
  │    │    ├── right columns: val:22 data1:26
  │    │    ├── cardinality: [0 - 20]
- │    │    ├── key: (32,36)
- │    │    ├── ordering: +36,+32
+ │    │    ├── ordering: +36
  │    │    ├── limit hint: 10.00
  │    │    ├── scan index_tab@b
  │    │    │    ├── columns: val:12!null data1:16!null
@@ -888,12 +885,11 @@ scalar-group-by
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(3,6)
- │    ├── union
+ │    ├── union-all
  │    │    ├── columns: region:3!null data1:6!null
  │    │    ├── left columns: region:14 data1:17
  │    │    ├── right columns: region:24 data1:27
  │    │    ├── cardinality: [0 - 2]
- │    │    ├── key: (3,6)
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── scan index_tab@c,rev
@@ -932,12 +928,11 @@ scalar-group-by
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(4-6)
- │    ├── union
+ │    ├── union-all
  │    │    ├── columns: latitude:4!null longitude:5!null data1:6!null
  │    │    ├── left columns: latitude:15 longitude:16 data1:17
  │    │    ├── right columns: latitude:25 longitude:26 data1:27
  │    │    ├── cardinality: [0 - 2]
- │    │    ├── key: (4-6)
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── scan index_tab@d,rev
@@ -974,21 +969,19 @@ scalar-group-by
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(2,6)
- │    ├── union
+ │    ├── union-all
  │    │    ├── columns: val:2!null data1:6!null
  │    │    ├── left columns: val:33 data1:37
  │    │    ├── right columns: val:43 data1:47
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── key: (2,6)
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
- │    │    ├── union
+ │    │    ├── union-all
  │    │    │    ├── columns: val:33!null data1:37!null
  │    │    │    ├── left columns: val:13 data1:17
  │    │    │    ├── right columns: val:23 data1:27
  │    │    │    ├── cardinality: [0 - 2]
- │    │    │    ├── key: (33,37)
- │    │    │    ├── ordering: -37,+33
+ │    │    │    ├── ordering: -37
  │    │    │    ├── limit hint: 1.00
  │    │    │    ├── scan index_tab@b,rev
  │    │    │    │    ├── columns: val:13!null data1:17!null
@@ -1029,12 +1022,11 @@ limit
  ├── internal-ordering: +6,+7
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
- ├── union
+ ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── left columns: region:13 data1:16 data2:17
  │    ├── right columns: region:23 data1:26 data2:27
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
@@ -1067,12 +1059,11 @@ limit
  ├── internal-ordering: +6,+7
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
- ├── union
+ ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── left columns: region:13 data1:16 data2:17
  │    ├── right columns: region:23 data1:26 data2:27
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
@@ -1105,12 +1096,11 @@ limit
  ├── internal-ordering: +6,+7
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
- ├── union
+ ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── left columns: region:13 data1:16 data2:17
  │    ├── right columns: region:23 data1:26 data2:27
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
@@ -1144,12 +1134,11 @@ limit
  ├── internal-ordering: +6,+7
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
- ├── union
+ ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── left columns: region:13 data1:16 data2:17
  │    ├── right columns: region:23 data1:26 data2:27
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
@@ -1184,28 +1173,25 @@ limit
  ├── internal-ordering: +6,+7
  ├── cardinality: [0 - 10]
  ├── ordering: +6,+7
- ├── union
+ ├── union-all
  │    ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
  │    ├── left columns: latitude:74 longitude:75 data1:76 data2:77
  │    ├── right columns: latitude:84 longitude:85 data1:86 data2:87
- │    ├── key: (4-7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
- │    ├── union
+ │    ├── union-all
  │    │    ├── columns: latitude:74!null longitude:75!null data1:76!null data2:77!null
  │    │    ├── left columns: latitude:54 longitude:55 data1:56 data2:57
  │    │    ├── right columns: latitude:64 longitude:65 data1:66 data2:67
  │    │    ├── cardinality: [0 - 30]
- │    │    ├── key: (74-77)
- │    │    ├── ordering: +76,+77,+74,+75
+ │    │    ├── ordering: +76,+77
  │    │    ├── limit hint: 10.00
- │    │    ├── union
+ │    │    ├── union-all
  │    │    │    ├── columns: latitude:54!null longitude:55!null data1:56!null data2:57!null
  │    │    │    ├── left columns: latitude:34 longitude:35 data1:36 data2:37
  │    │    │    ├── right columns: latitude:44 longitude:45 data1:46 data2:47
  │    │    │    ├── cardinality: [0 - 20]
- │    │    │    ├── key: (54-57)
- │    │    │    ├── ordering: +56,+57,+54,+55
+ │    │    │    ├── ordering: +56,+57
  │    │    │    ├── limit hint: 10.00
  │    │    │    ├── scan index_tab@d
  │    │    │    │    ├── columns: latitude:34!null longitude:35!null data1:36!null data2:37!null
@@ -1230,7 +1216,7 @@ limit
  │    │         └── limit hint: 10.00
  │    └── sort
  │         ├── columns: latitude:84!null longitude:85 data1:86!null data2:87!null
- │         ├── ordering: +86,+87,+84,+85
+ │         ├── ordering: +86,+87
  │         ├── limit hint: 10.00
  │         └── scan index_tab@d
  │              ├── columns: latitude:84!null longitude:85 data1:86!null data2:87!null
@@ -1258,42 +1244,29 @@ index-join index_tab
       ├── key: (1)
       ├── fd: (1)-->(3,6,7)
       ├── ordering: +6
-      ├── union
+      ├── union-all
       │    ├── columns: id:1!null region:3!null data1:6!null data2:7!null
       │    ├── left columns: id:11 region:13 data1:16 data2:17
       │    ├── right columns: id:21 region:23 data1:26 data2:27
       │    ├── cardinality: [0 - 20]
-      │    ├── key: (1,3,6,7)
       │    ├── ordering: +6
       │    ├── limit hint: 10.00
-      │    ├── sort (segmented)
+      │    ├── scan index_tab@c
       │    │    ├── columns: id:11!null region:13!null data1:16!null data2:17!null
-      │    │    ├── cardinality: [0 - 10]
+      │    │    ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST']
+      │    │    ├── limit: 10
       │    │    ├── key: (11)
       │    │    ├── fd: ()-->(13), (11)-->(16,17)
-      │    │    ├── ordering: +16,+11 opt(13) [actual: +16,+11]
-      │    │    ├── limit hint: 10.00
-      │    │    └── scan index_tab@c
-      │    │         ├── columns: id:11!null region:13!null data1:16!null data2:17!null
-      │    │         ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST']
-      │    │         ├── limit: 10
-      │    │         ├── key: (11)
-      │    │         ├── fd: ()-->(13), (11)-->(16,17)
-      │    │         └── ordering: +16 opt(13) [actual: +16]
-      │    └── sort (segmented)
+      │    │    ├── ordering: +16 opt(13) [actual: +16]
+      │    │    └── limit hint: 10.00
+      │    └── scan index_tab@c
       │         ├── columns: id:21!null region:23!null data1:26!null data2:27!null
-      │         ├── cardinality: [0 - 10]
+      │         ├── constraint: /23/26/27/21: [/'US_WEST' - /'US_WEST']
+      │         ├── limit: 10
       │         ├── key: (21)
       │         ├── fd: ()-->(23), (21)-->(26,27)
-      │         ├── ordering: +26,+21 opt(23) [actual: +26,+21]
-      │         ├── limit hint: 10.00
-      │         └── scan index_tab@c
-      │              ├── columns: id:21!null region:23!null data1:26!null data2:27!null
-      │              ├── constraint: /23/26/27/21: [/'US_WEST' - /'US_WEST']
-      │              ├── limit: 10
-      │              ├── key: (21)
-      │              ├── fd: ()-->(23), (21)-->(26,27)
-      │              └── ordering: +26 opt(23) [actual: +26]
+      │         ├── ordering: +26 opt(23) [actual: +26]
+      │         └── limit hint: 10.00
       └── 10
 
 # Case where check constraints are used.
@@ -1307,21 +1280,19 @@ limit
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,4)
  ├── ordering: +2
- ├── union
+ ├── union-all
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
  │    ├── left columns: p:16 q:17 r:18 s:19
  │    ├── right columns: p:21 q:22 r:23 s:24
  │    ├── cardinality: [0 - 15]
- │    ├── key: (1-4)
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
- │    ├── union
+ │    ├── union-all
  │    │    ├── columns: p:16!null q:17!null r:18!null s:19!null
  │    │    ├── left columns: p:6 q:7 r:8 s:9
  │    │    ├── right columns: p:11 q:12 r:13 s:14
  │    │    ├── cardinality: [0 - 10]
- │    │    ├── key: (16-19)
- │    │    ├── ordering: +17,+16,+18,+19
+ │    │    ├── ordering: +17
  │    │    ├── limit hint: 5.00
  │    │    ├── scan pqrs
  │    │    │    ├── columns: p:6!null q:7!null r:8!null s:9!null
@@ -1361,12 +1332,11 @@ limit
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,4)
  ├── ordering: +4
- ├── union
+ ├── union-all
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
  │    ├── left columns: p:6 q:7 r:8 s:9
  │    ├── right columns: p:11 q:12 r:13 s:14
  │    ├── cardinality: [0 - 20]
- │    ├── key: (1-4)
  │    ├── ordering: +4
  │    ├── limit hint: 10.00
  │    ├── scan pqrs@secondary
@@ -1375,7 +1345,7 @@ limit
  │    │    ├── limit: 10
  │    │    ├── key: (6,7)
  │    │    ├── fd: ()-->(8), (6,7)-->(9)
- │    │    ├── ordering: +9,+6,+7 opt(8) [actual: +9,+6,+7]
+ │    │    ├── ordering: +9 opt(8) [actual: +9]
  │    │    └── limit hint: 10.00
  │    └── scan pqrs@secondary
  │         ├── columns: p:11!null q:12!null r:13!null s:14!null
@@ -1383,7 +1353,7 @@ limit
  │         ├── limit: 10
  │         ├── key: (11,12)
  │         ├── fd: ()-->(13), (11,12)-->(14)
- │         ├── ordering: +14,+11,+12 opt(13) [actual: +14,+11,+12]
+ │         ├── ordering: +14 opt(13) [actual: +14]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1399,12 +1369,11 @@ limit
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,4)
  ├── ordering: +2
- ├── union
+ ├── union-all
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
  │    ├── left columns: p:6 q:7 r:8 s:9
  │    ├── right columns: p:11 q:12 r:13 s:14
  │    ├── cardinality: [0 - 10]
- │    ├── key: (1-4)
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
  │    ├── scan pqrs
