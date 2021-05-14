@@ -1808,7 +1808,8 @@ var builtins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDFloat(tree.DFloat(rand.Float64())), nil
 			},
-			Info:       "Returns a random float between 0 and 1.",
+			Info: "Returns a random floating-point number between 0 (inclusive) and 1 (exclusive). " +
+				"Note that the value contains at most 53 bits of randomness.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
