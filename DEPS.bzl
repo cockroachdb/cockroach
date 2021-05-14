@@ -109,8 +109,8 @@ def go_deps():
         name = "com_github_antihax_optional",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/antihax/optional",
-        sum = "h1:uZuxRZCz65cG1o6K/xUqImNcYKtmk9ylqaH0itMSvzA=",
-        version = "v0.0.0-20180407024304-ca021399b1a6",
+        sum = "h1:xK2lYat7ZLaVVcIuj82J8kIro4V6kDe0AUDFboUCwcg=",
+        version = "v1.0.0",
     )
     go_repository(
         name = "com_github_aokoli_goutils",
@@ -1734,9 +1734,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_grpc_ecosystem_grpc_gateway.patch",
         ],
-        replace = "github.com/cockroachdb/grpc-gateway",
-        sum = "h1:pZuUpNtmLArGU2vCW+mNetvruw6jRcxDxwOnMT+XLWI=",
-        version = "v1.14.6-0.20200519165156-52697fc4a249",
+        sum = "h1:gmcG1KaJ57LophUzW0Hy8NmPhnMZb4M0+kPpLofRdBo=",
+        version = "v1.16.0",
     )
     go_repository(
         name = "com_github_grpc_ecosystem_grpc_opentracing",
@@ -4016,6 +4015,13 @@ def go_deps():
         sum = "h1:1Lc07Kr7qY4U2YPouBjpCLxpiyxIVoxqXgkXLknAOE8=",
         version = "v2.0.0",
     )
+    go_repository(
+        name = "in_gopkg_resty_v1",
+        build_file_proto_mode = "disable_global",
+        importpath = "gopkg.in/resty.v1",
+        sum = "h1:CuXP0Pjfw9rOuY6EP+UvtNvt5DSqHpIxILZKT/quCZI=",
+        version = "v1.12.0",
+    )
 
     go_repository(
         name = "in_gopkg_square_go_jose_v2",
@@ -4235,8 +4241,8 @@ def go_deps():
         name = "org_golang_google_grpc",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/grpc",
-        sum = "h1:T7P4R73V3SSDPhH7WW7ATbfViLtmamH0DKrP3f9AuDI=",
-        version = "v1.31.0",
+        sum = "h1:DGeFlSan2f+WEtCERJ4J9GJWk15TxUi8QGagfI87Xyc=",
+        version = "v1.33.1",
     )
     go_repository(
         name = "org_golang_google_grpc_examples",
