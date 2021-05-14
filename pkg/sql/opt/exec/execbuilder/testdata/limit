@@ -415,25 +415,25 @@ vectorized: true
     │ estimated row count: 40
     │ order: +date_should_be_completed
     │
-    └── • union
+    └── • union all
         │ estimated row count: 40
         │
-        ├── • union
+        ├── • union all
         │   │ estimated row count: 35
         │   │
-        │   ├── • union
+        │   ├── • union all
         │   │   │ estimated row count: 30
         │   │   │
-        │   │   ├── • union
+        │   │   ├── • union all
         │   │   │   │ estimated row count: 25
         │   │   │   │
-        │   │   │   ├── • union
+        │   │   │   ├── • union all
         │   │   │   │   │ estimated row count: 20
         │   │   │   │   │
-        │   │   │   │   ├── • union
+        │   │   │   │   ├── • union all
         │   │   │   │   │   │ estimated row count: 15
         │   │   │   │   │   │
-        │   │   │   │   │   ├── • union
+        │   │   │   │   │   ├── • union all
         │   │   │   │   │   │   │ estimated row count: 10
         │   │   │   │   │   │   │
         │   │   │   │   │   │   ├── • scan

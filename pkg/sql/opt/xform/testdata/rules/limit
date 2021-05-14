@@ -308,15 +308,13 @@ index-join kuv
       ├── sort
       │    ├── columns: k:1!null u:2 rowid:4!null
       │    ├── cardinality: [0 - 10]
-      │    ├── key: (1,2,4)
       │    ├── ordering: +2
       │    ├── limit hint: 5.00
-      │    └── union
+      │    └── union-all
       │         ├── columns: k:1!null u:2 rowid:4!null
       │         ├── left columns: k:6 u:7 rowid:9
       │         ├── right columns: k:11 u:12 rowid:14
       │         ├── cardinality: [0 - 10]
-      │         ├── key: (1,2,4)
       │         ├── scan kuv@secondary
       │         │    ├── columns: k:6!null u:7 rowid:9!null
       │         │    ├── constraint: /6/7/9: [/1 - /1]
@@ -837,21 +835,18 @@ limit
  ├── sort
  │    ├── columns: val:2!null data1:6!null
  │    ├── cardinality: [0 - 30]
- │    ├── key: (2,6)
  │    ├── ordering: +6
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: val:2!null data1:6!null
  │         ├── left columns: val:32 data1:36
  │         ├── right columns: val:42 data1:46
  │         ├── cardinality: [0 - 30]
- │         ├── key: (2,6)
- │         ├── union
+ │         ├── union-all
  │         │    ├── columns: val:32!null data1:36!null
  │         │    ├── left columns: val:12 data1:16
  │         │    ├── right columns: val:22 data1:26
  │         │    ├── cardinality: [0 - 20]
- │         │    ├── key: (32,36)
  │         │    ├── scan index_tab@b
  │         │    │    ├── columns: val:12!null data1:16!null
  │         │    │    ├── constraint: /12/16/17/11: [/1 - /1]
@@ -887,15 +882,13 @@ scalar-group-by
  │    ├── sort
  │    │    ├── columns: region:3!null data1:6!null
  │    │    ├── cardinality: [0 - 2]
- │    │    ├── key: (3,6)
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
- │    │    └── union
+ │    │    └── union-all
  │    │         ├── columns: region:3!null data1:6!null
  │    │         ├── left columns: region:14 data1:17
  │    │         ├── right columns: region:24 data1:27
  │    │         ├── cardinality: [0 - 2]
- │    │         ├── key: (3,6)
  │    │         ├── scan index_tab@c,rev
  │    │         │    ├── columns: region:14!null data1:17!null
  │    │         │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST']
@@ -933,15 +926,13 @@ scalar-group-by
  │    ├── sort
  │    │    ├── columns: latitude:4!null longitude:5!null data1:6!null
  │    │    ├── cardinality: [0 - 2]
- │    │    ├── key: (4-6)
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
- │    │    └── union
+ │    │    └── union-all
  │    │         ├── columns: latitude:4!null longitude:5!null data1:6!null
  │    │         ├── left columns: latitude:15 longitude:16 data1:17
  │    │         ├── right columns: latitude:25 longitude:26 data1:27
  │    │         ├── cardinality: [0 - 2]
- │    │         ├── key: (4-6)
  │    │         ├── scan index_tab@d,rev
  │    │         │    ├── columns: latitude:15!null longitude:16!null data1:17!null
  │    │         │    ├── constraint: /15/16/17/18/12: [/1/2 - /1/2]
@@ -977,21 +968,18 @@ scalar-group-by
  │    ├── sort
  │    │    ├── columns: val:2!null data1:6!null
  │    │    ├── cardinality: [0 - 3]
- │    │    ├── key: (2,6)
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
- │    │    └── union
+ │    │    └── union-all
  │    │         ├── columns: val:2!null data1:6!null
  │    │         ├── left columns: val:33 data1:37
  │    │         ├── right columns: val:43 data1:47
  │    │         ├── cardinality: [0 - 3]
- │    │         ├── key: (2,6)
- │    │         ├── union
+ │    │         ├── union-all
  │    │         │    ├── columns: val:33!null data1:37!null
  │    │         │    ├── left columns: val:13 data1:17
  │    │         │    ├── right columns: val:23 data1:27
  │    │         │    ├── cardinality: [0 - 2]
- │    │         │    ├── key: (33,37)
  │    │         │    ├── scan index_tab@b,rev
  │    │         │    │    ├── columns: val:13!null data1:17!null
  │    │         │    │    ├── constraint: /13/17/18/12: [/1 - /1]
@@ -1031,15 +1019,13 @@ limit
  ├── sort
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: region:3!null data1:6!null data2:7!null
  │         ├── left columns: region:13 data1:16 data2:17
  │         ├── right columns: region:23 data1:26 data2:27
  │         ├── cardinality: [0 - 20]
- │         ├── key: (3,6,7)
  │         ├── scan index_tab@c
  │         │    ├── columns: region:13!null data1:16!null data2:17!null
  │         │    ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST']
@@ -1069,15 +1055,13 @@ limit
  ├── sort
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: region:3!null data1:6!null data2:7!null
  │         ├── left columns: region:13 data1:16 data2:17
  │         ├── right columns: region:23 data1:26 data2:27
  │         ├── cardinality: [0 - 20]
- │         ├── key: (3,6,7)
  │         ├── scan index_tab@c
  │         │    ├── columns: region:13!null data1:16!null data2:17!null
  │         │    ├── constraint: /13/16/17/11: [/'US_EAST'/4 - /'US_EAST']
@@ -1107,15 +1091,13 @@ limit
  ├── sort
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: region:3!null data1:6!null data2:7!null
  │         ├── left columns: region:13 data1:16 data2:17
  │         ├── right columns: region:23 data1:26 data2:27
  │         ├── cardinality: [0 - 20]
- │         ├── key: (3,6,7)
  │         ├── scan index_tab@c
  │         │    ├── columns: region:13!null data1:16!null data2:17!null
  │         │    ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST'/2]
@@ -1146,15 +1128,13 @@ limit
  ├── sort
  │    ├── columns: region:3!null data1:6!null data2:7!null
  │    ├── cardinality: [0 - 20]
- │    ├── key: (3,6,7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: region:3!null data1:6!null data2:7!null
  │         ├── left columns: region:13 data1:16 data2:17
  │         ├── right columns: region:23 data1:26 data2:27
  │         ├── cardinality: [0 - 20]
- │         ├── key: (3,6,7)
  │         ├── scan index_tab@c
  │         │    ├── columns: region:13!null data1:16!null data2:17!null
  │         │    ├── constraint: /13/16/17/11: [/'US_EAST'/4 - /'US_EAST'/999]
@@ -1185,26 +1165,22 @@ limit
  ├── ordering: +6,+7
  ├── sort
  │    ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
- │    ├── key: (4-7)
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
  │         ├── left columns: latitude:74 longitude:75 data1:76 data2:77
  │         ├── right columns: latitude:84 longitude:85 data1:86 data2:87
- │         ├── key: (4-7)
- │         ├── union
+ │         ├── union-all
  │         │    ├── columns: latitude:74!null longitude:75!null data1:76!null data2:77!null
  │         │    ├── left columns: latitude:54 longitude:55 data1:56 data2:57
  │         │    ├── right columns: latitude:64 longitude:65 data1:66 data2:67
  │         │    ├── cardinality: [0 - 30]
- │         │    ├── key: (74-77)
- │         │    ├── union
+ │         │    ├── union-all
  │         │    │    ├── columns: latitude:54!null longitude:55!null data1:56!null data2:57!null
  │         │    │    ├── left columns: latitude:34 longitude:35 data1:36 data2:37
  │         │    │    ├── right columns: latitude:44 longitude:45 data1:46 data2:47
  │         │    │    ├── cardinality: [0 - 20]
- │         │    │    ├── key: (54-57)
  │         │    │    ├── scan index_tab@d
  │         │    │    │    ├── columns: latitude:34!null longitude:35!null data1:36!null data2:37!null
  │         │    │    │    ├── constraint: /34/35/36/37/31: [/10/11 - /10/11]
@@ -1249,15 +1225,13 @@ index-join index_tab
       ├── sort
       │    ├── columns: id:1!null region:3!null data1:6!null data2:7!null
       │    ├── cardinality: [0 - 20]
-      │    ├── key: (1,3,6,7)
       │    ├── ordering: +6
       │    ├── limit hint: 10.00
-      │    └── union
+      │    └── union-all
       │         ├── columns: id:1!null region:3!null data1:6!null data2:7!null
       │         ├── left columns: id:11 region:13 data1:16 data2:17
       │         ├── right columns: id:21 region:23 data1:26 data2:27
       │         ├── cardinality: [0 - 20]
-      │         ├── key: (1,3,6,7)
       │         ├── scan index_tab@c
       │         │    ├── columns: id:11!null region:13!null data1:16!null data2:17!null
       │         │    ├── constraint: /13/16/17/11: [/'US_EAST' - /'US_EAST']
@@ -1286,21 +1260,18 @@ limit
  ├── sort
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
  │    ├── cardinality: [0 - 15]
- │    ├── key: (1-4)
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
- │    └── union
+ │    └── union-all
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
  │         ├── left columns: p:16 q:17 r:18 s:19
  │         ├── right columns: p:21 q:22 r:23 s:24
  │         ├── cardinality: [0 - 15]
- │         ├── key: (1-4)
- │         ├── union
+ │         ├── union-all
  │         │    ├── columns: p:16!null q:17!null r:18!null s:19!null
  │         │    ├── left columns: p:6 q:7 r:8 s:9
  │         │    ├── right columns: p:11 q:12 r:13 s:14
  │         │    ├── cardinality: [0 - 10]
- │         │    ├── key: (16-19)
  │         │    ├── scan pqrs
  │         │    │    ├── columns: p:6!null q:7!null r:8!null s:9!null
  │         │    │    ├── constraint: /6/7: [/1 - /1]
@@ -1336,15 +1307,13 @@ limit
  ├── sort
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
  │    ├── cardinality: [0 - 20]
- │    ├── key: (1-4)
  │    ├── ordering: +4
  │    ├── limit hint: 10.00
- │    └── union
+ │    └── union-all
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
  │         ├── left columns: p:6 q:7 r:8 s:9
  │         ├── right columns: p:11 q:12 r:13 s:14
  │         ├── cardinality: [0 - 20]
- │         ├── key: (1-4)
  │         ├── scan pqrs@secondary
  │         │    ├── columns: p:6!null q:7!null r:8!null s:9!null
  │         │    ├── constraint: /8/9/6/7: [/1 - /1]
@@ -1374,15 +1343,13 @@ limit
  ├── sort
  │    ├── columns: p:1!null q:2!null r:3!null s:4!null
  │    ├── cardinality: [0 - 10]
- │    ├── key: (1-4)
  │    ├── ordering: +2
  │    ├── limit hint: 5.00
- │    └── union
+ │    └── union-all
  │         ├── columns: p:1!null q:2!null r:3!null s:4!null
  │         ├── left columns: p:6 q:7 r:8 s:9
  │         ├── right columns: p:11 q:12 r:13 s:14
  │         ├── cardinality: [0 - 10]
- │         ├── key: (1-4)
  │         ├── scan pqrs
  │         │    ├── columns: p:6!null q:7!null r:8!null s:9!null
  │         │    ├── constraint: /6/7: [/1 - /1]
