@@ -611,7 +611,125 @@ func (r *DistSQLReceiver) SetError(err error) {
 	}
 }
 
-// Push is part of the RowReceiver interface.
+// pushMeta takes in non-empty metadata object and pushes it to the result
+// writer. Possibly updated status is returned.
+func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra.ConsumerStatus {
+	if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
+		metaWriter.AddMeta(r.ctx, meta)
+	}
+	if meta.LeafTxnFinalState != nil {
+		if r.txn != nil {
+			if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
+				if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
+					r.SetError(err)
+				}
+			}
+		} else {
+			r.SetError(
+				errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
+		}
+	}
+	if meta.Err != nil {
+		// Check if the error we just received should take precedence over a
+		// previous error (if any).
+		if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
+			if r.txn != nil {
+				if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &retryErr) {
+					// Update the txn in response to remote errors. In the non-DistSQL
+					// world, the TxnCoordSender handles "unhandled" retryable errors,
+					// but this one is coming from a distributed SQL node, which has
+					// left the handling up to the root transaction.
+					meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
+					// Update the clock with information from the error. On non-DistSQL
+					// code paths, the DistSender does this.
+					// TODO(andrei): We don't propagate clock signals on success cases
+					// through DistSQL; we should. We also don't propagate them through
+					// non-retryable errors; we also should.
+					if r.clockUpdater != nil {
+						r.clockUpdater.Update(retryErr.PErr.Now)
+					}
+				}
+			}
+			r.SetError(meta.Err)
+		}
+	}
+	if len(meta.Ranges) > 0 {
+		r.rangeCache.Insert(r.ctx, meta.Ranges...)
+	}
+	if len(meta.TraceData) > 0 {
+		if span := tracing.SpanFromContext(r.ctx); span != nil {
+			span.ImportRemoteSpans(meta.TraceData)
+		}
+		var ev roachpb.ContentionEvent
+		for i := range meta.TraceData {
+			meta.TraceData[i].Structured(func(any *pbtypes.Any) {
+				if !pbtypes.Is(any, &ev) {
+					return
+				}
+				if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+					return
+				}
+				if r.contendedQueryMetric != nil {
+					// Increment the contended query metric at most once
+					// if the query sees at least one contention event.
+					r.contendedQueryMetric.Inc(1)
+					r.contendedQueryMetric = nil
+				}
+				r.contentionRegistry.AddContentionEvent(ev)
+			})
+		}
+	}
+	if meta.Metrics != nil {
+		r.stats.bytesRead += meta.Metrics.BytesRead
+		r.stats.rowsRead += meta.Metrics.RowsRead
+		if r.progressAtomic != nil && r.expectedRowsRead != 0 {
+			progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
+			atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
+		}
+		meta.Metrics.Release()
+	}
+	// Release the meta object. It is unsafe for use after this call.
+	meta.Release()
+	return r.status
+}
+
+// handleCommErr handles the communication error (the one returned when
+// attempting to add data to the result writer).
+func (r *DistSQLReceiver) handleCommErr(commErr error) {
+	// ErrLimitedResultClosed and errIEResultChannelClosed are not real
+	// errors, it is a signal to stop distsql and return success to the
+	// client (that's why we don't set the error on the resultWriter).
+	if errors.Is(commErr, ErrLimitedResultClosed) {
+		log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
+		r.status = execinfra.DrainRequested
+	} else if errors.Is(commErr, errIEResultChannelClosed) {
+		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
+		r.status = execinfra.DrainRequested
+	} else {
+		// Set the error on the resultWriter to notify the consumer about
+		// it. Most clients don't care to differentiate between
+		// communication errors and query execution errors, so they can
+		// simply inspect resultWriter.Err().
+		r.SetError(commErr)
+
+		// The only client that needs to know that a communication error and
+		// not a query execution error has occurred is
+		// connExecutor.execWithDistSQLEngine which will inspect r.commErr
+		// on its own and will shut down the connection.
+		//
+		// We don't need to shut down the connection if there's a
+		// portal-related error. This is definitely a layering violation,
+		// but is part of some accepted technical debt (see comments on
+		// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead of
+		// changing the signature of AddRow, we have a sentinel error that
+		// is handled specially here.
+		if !errors.Is(commErr, ErrLimitedResultNotSupported) {
+			r.commErr = commErr
+		}
+	}
+}
+
+// Push is part of the execinfra.RowReceiver interface.
 func (r *DistSQLReceiver) Push(
 	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
@@ -619,83 +737,7 @@ func (r *DistSQLReceiver) Push(
 		r.testingKnobs.pushCallback(row, meta)
 	}
 	if meta != nil {
-		if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
-			metaWriter.AddMeta(r.ctx, meta)
-		}
-		if meta.LeafTxnFinalState != nil {
-			if r.txn != nil {
-				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
-					if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
-						r.SetError(err)
-					}
-				}
-			} else {
-				r.SetError(
-					errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
-			}
-		}
-		if meta.Err != nil {
-			// Check if the error we just received should take precedence over a
-			// previous error (if any).
-			if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
-				if r.txn != nil {
-					if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &retryErr) {
-						// Update the txn in response to remote errors. In the non-DistSQL
-						// world, the TxnCoordSender handles "unhandled" retryable errors,
-						// but this one is coming from a distributed SQL node, which has
-						// left the handling up to the root transaction.
-						meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
-						// Update the clock with information from the error. On non-DistSQL
-						// code paths, the DistSender does this.
-						// TODO(andrei): We don't propagate clock signals on success cases
-						// through DistSQL; we should. We also don't propagate them through
-						// non-retryable errors; we also should.
-						if r.clockUpdater != nil {
-							r.clockUpdater.Update(retryErr.PErr.Now)
-						}
-					}
-				}
-				r.SetError(meta.Err)
-			}
-		}
-		if len(meta.Ranges) > 0 {
-			r.rangeCache.Insert(r.ctx, meta.Ranges...)
-		}
-		if len(meta.TraceData) > 0 {
-			if span := tracing.SpanFromContext(r.ctx); span != nil {
-				span.ImportRemoteSpans(meta.TraceData)
-			}
-			var ev roachpb.ContentionEvent
-			for i := range meta.TraceData {
-				meta.TraceData[i].Structured(func(any *pbtypes.Any) {
-					if !pbtypes.Is(any, &ev) {
-						return
-					}
-					if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
-						return
-					}
-					if r.contendedQueryMetric != nil {
-						// Increment the contended query metric at most once
-						// if the query sees at least one contention event.
-						r.contendedQueryMetric.Inc(1)
-						r.contendedQueryMetric = nil
-					}
-					r.contentionRegistry.AddContentionEvent(ev)
-				})
-			}
-		}
-		if meta.Metrics != nil {
-			r.stats.bytesRead += meta.Metrics.BytesRead
-			r.stats.rowsRead += meta.Metrics.RowsRead
-			if r.progressAtomic != nil && r.expectedRowsRead != 0 {
-				progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
-				atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
-			}
-			meta.Metrics.Release()
-		}
-		// Release the meta object. It is unsafe for use after this call.
-		meta.Release()
-		return r.status
+		return r.pushMeta(meta)
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
 		r.SetError(r.ctx.Err())
@@ -738,37 +780,7 @@ func (r *DistSQLReceiver) Push(
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		// ErrLimitedResultClosed and errIEResultChannelClosed are not real
-		// errors, it is a signal to stop distsql and return success to the
-		// client (that's why we don't set the error on the resultWriter).
-		if errors.Is(commErr, ErrLimitedResultClosed) {
-			log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
-			r.status = execinfra.DrainRequested
-		} else if errors.Is(commErr, errIEResultChannelClosed) {
-			log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
-			r.status = execinfra.DrainRequested
-		} else {
-			// Set the error on the resultWriter to notify the consumer about
-			// it. Most clients don't care to differentiate between
-			// communication errors and query execution errors, so they can
-			// simply inspect resultWriter.Err().
-			r.SetError(commErr)
-
-			// The only client that needs to know that a communication error and
-			// not a query execution error has occurred is
-			// connExecutor.execWithDistSQLEngine which will inspect r.commErr
-			// on its own and will shut down the connection.
-			//
-			// We don't need to shut down the connection if there's a
-			// portal-related error. This is definitely a layering violation,
-			// but is part of some accepted technical debt (see comments on
-			// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead of
-			// changing the signature of AddRow, we have a sentinel error that
-			// is handled specially here.
-			if !errors.Is(commErr, ErrLimitedResultNotSupported) {
-				r.commErr = commErr
-			}
-		}
+		r.handleCommErr(commErr)
 	}
 	return r.status
 }
