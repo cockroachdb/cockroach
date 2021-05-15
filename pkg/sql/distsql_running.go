@@ -782,7 +782,7 @@ var (
 	ErrLimitedResultClosed = errors.New("row count limit closed")
 )
 
-// ProducerDone is part of the RowReceiver interface.
+// ProducerDone is part of the execinfra.RowReceiver interface.
 func (r *DistSQLReceiver) ProducerDone() {
 	if r.closed {
 		panic("double close")
@@ -790,7 +790,7 @@ func (r *DistSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
-// Types is part of the RowReceiver interface.
+// Types is part of the execinfra.RowReceiver interface.
 func (r *DistSQLReceiver) Types() []*types.T {
 	return r.outputTypes
 }

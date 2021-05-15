@@ -64,9 +64,9 @@ func (c callbackCloser) Close(_ context.Context) error {
 	return c.closeCb()
 }
 
-// TestVectorizedFlowShutdown tests that closing the materializer correctly
+// TestVectorizedFlowShutdown tests that closing the FlowCoordinator correctly
 // closes all the infrastructure corresponding to the flow ending in that
-// materializer. Namely:
+// FlowCoordinator. Namely:
 // - on a remote node, it creates a colflow.HashRouter with 3 outputs (with a
 // corresponding to each colrpc.Outbox) as well as 3 standalone Outboxes;
 // - on a local node, it creates 6 colrpc.Inboxes that feed into an unordered
