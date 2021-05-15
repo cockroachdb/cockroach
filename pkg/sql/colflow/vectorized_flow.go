@@ -1009,7 +1009,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			pspec.ProcessorID,
 			input,
 			s.syncFlowConsumer,
-			s.getCancelFlowFn,
+			s.getCancelFlowFn(),
 		)
 		// The flow coordinator is a root of its operator chain.
 		s.opChains = append(s.opChains, f)
