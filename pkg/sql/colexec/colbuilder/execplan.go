@@ -82,17 +82,12 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			toWrapInput, err := colexec.NewMaterializer(
+			toWrapInput := colexec.NewMaterializer(
 				flowCtx,
 				processorID,
 				inputs[i],
 				inputTypes[i],
-				nil, /* output */
-				nil, /* cancelFlow */
 			)
-			if err != nil {
-				return nil, releasables, err
-			}
 			// We passed the ownership over the meta components to the
 			// materializer.
 			// TODO(yuzefovich): possibly set the length to 0 in order to be
@@ -118,15 +113,15 @@ func wrapRowSources(
 	}
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c, err = colexec.NewStreamingColumnarizer(
+		c = colexec.NewStreamingColumnarizer(
 			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
 		)
 	} else {
-		c, err = colexec.NewBufferingColumnarizer(
+		c = colexec.NewBufferingColumnarizer(
 			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
 		)
 	}
-	return c, releasables, err
+	return c, releasables, nil
 }
 
 type opResult struct {
@@ -597,14 +592,43 @@ func (r opResult) createAndWrapRowSource(
 	}
 	r.Root = c
 	r.Columnarizer = c
-	if args.TestingKnobs.PlanInvariantsCheckers {
+	if util.CrdbTestBuild {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
 	}
 	takeOverMetaInfo(&r.OpWithMetaInfo, inputs)
 	r.MetadataSources = append(r.MetadataSources, r.Root.(colexecop.MetadataSource))
-	r.ToClose = append(r.ToClose, c)
+	r.ToClose = append(r.ToClose, r.Root.(colexecop.Closer))
 	r.Releasables = append(r.Releasables, releasables...)
 	return nil
+}
+
+// MaybeRemoveRootColumnarizer examines whether r represents such a tree of
+// operators that has a columnarizer as its root with no responsibility over
+// other meta components. If that's the case, the input to the columnarizer is
+// returned and the columnarizer is marked as removed from the flow; otherwise,
+// nil is returned.
+func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSource {
+	root := r.Root
+	if util.CrdbTestBuild {
+		// We might have an invariants checker as the root right now, we gotta
+		// peek inside of it if so.
+		if i, ok := root.(*colexec.InvariantsChecker); ok {
+			root = i.Input
+		}
+	}
+	c, isColumnarizer := root.(*colexec.Columnarizer)
+	if !isColumnarizer {
+		return nil
+	}
+	// We have the columnarizer as the root, and it must be included into the
+	// MetadataSources and ToClose slices, so if we don't see any other objects,
+	// then the responsibility over other meta components has been claimed by
+	// the children of the columnarizer.
+	if len(r.StatsCollectors) != 0 || len(r.MetadataSources) != 1 || len(r.ToClose) != 1 {
+		return nil
+	}
+	c.MarkAsRemovedFromFlow()
+	return c.Input()
 }
 
 // NOTE: throughout this file we do not append an output type of a projecting
@@ -744,7 +768,7 @@ func NewColOperator(
 				log.Infof(ctx, "made op %T\n", scanOp)
 			}
 			result.Root = scanOp
-			if args.TestingKnobs.PlanInvariantsCheckers {
+			if util.CrdbTestBuild {
 				result.Root = colexec.NewInvariantsChecker(result.Root)
 			}
 			result.KVReader = scanOp
@@ -1352,14 +1376,17 @@ func NewColOperator(
 	if projection != nil {
 		r.Root, r.ColumnTypes = addProjection(r.Root, r.ColumnTypes, projection)
 	}
-	if args.TestingKnobs.PlanInvariantsCheckers {
-		// Plan an invariants checker if it isn't already the root of the tree.
-		if _, isInvariantsChecker := r.Root.(*colexec.InvariantsChecker); !isInvariantsChecker {
-			r.Root = colexec.NewInvariantsChecker(r.Root)
-		}
-	}
 	takeOverMetaInfo(&result.OpWithMetaInfo, inputs)
 	if util.CrdbTestBuild {
+		// TODO(yuzefovich): remove the testing knob.
+		if args.TestingKnobs.PlanInvariantsCheckers {
+			// Plan an invariants checker if it isn't already the root of the
+			// tree.
+			if _, isInvariantsChecker := r.Root.(*colexec.InvariantsChecker); !isInvariantsChecker {
+				r.Root = colexec.NewInvariantsChecker(r.Root)
+			}
+		}
+		// Also verify planning assumptions.
 		r.AssertInvariants()
 	}
 	return r, err

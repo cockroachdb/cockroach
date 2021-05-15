@@ -126,7 +126,7 @@ func newTableReader(
 		return nil, err
 	}
 
-	neededColumns := tr.Out.NeededColumns()
+	neededColumns := tr.OutputHelper.NeededColumns()
 
 	var fetcher row.Fetcher
 	if _, _, err := initRowFetcher(
@@ -301,7 +301,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVTime:         is.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(tr.Ctx)),
 		},
-		Output: tr.Out.Stats(),
+		Output: tr.OutputHelper.Stats(),
 	}
 }
 

@@ -51,10 +51,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 	c.Init(ctx)
 	foundRows := 0
 	for {
@@ -101,14 +98,13 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 			const errMsg = "artificial error"
 			rb := distsqlutils.NewRowBuffer([]*types.T{types.Int}, nil /* rows */, distsqlutils.RowBufferArgs{})
 			rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
-			c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, rb)
-			require.NoError(t, err)
+			c := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, rb)
 
 			c.Init(ctx)
 
 			// If the metadata is obtained through this Next call, the Columnarizer still
 			// returns it in DrainMeta.
-			err = colexecerror.CatchVectorizedRuntimeError(func() { c.Next() })
+			err := colexecerror.CatchVectorizedRuntimeError(func() { c.Next() })
 			require.True(t, testutils.IsError(err, errMsg), "unexpected error %v", err)
 
 			if tc.consumerClosed {
@@ -148,10 +144,7 @@ func BenchmarkColumnarize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 
-	c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
-	if err != nil {
-		b.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 	c.Init(ctx)
 	for i := 0; i < b.N; i++ {
 		foundRows := 0

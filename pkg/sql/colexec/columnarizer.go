@@ -48,9 +48,9 @@ type Columnarizer struct {
 	// Note that we consciously don't embed a colexecop.InitHelper here because
 	// we currently rely on the ProcessorBase to provide the same (and more)
 	// functionality.
-	// TODO(yuzefovich): consider whether embedding ProcessorBase into the
-	// columnarizers makes sense.
-	execinfra.ProcessorBase
+	// TODO(yuzefovich): consider whether embedding ProcessorBaseNoHelper into
+	// the columnarizers makes sense.
+	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
 	mode      columnarizerMode
@@ -80,7 +80,7 @@ func NewBufferingColumnarizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
-) (*Columnarizer, error) {
+) *Columnarizer {
 	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerBufferingMode)
 }
 
@@ -91,7 +91,7 @@ func NewStreamingColumnarizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
-) (*Columnarizer, error) {
+) *Columnarizer {
 	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerStreamingMode)
 }
 
@@ -102,12 +102,11 @@ func newColumnarizer(
 	processorID int32,
 	input execinfra.RowSource,
 	mode columnarizerMode,
-) (*Columnarizer, error) {
-	var err error
+) *Columnarizer {
 	switch mode {
 	case columnarizerBufferingMode, columnarizerStreamingMode:
 	default:
-		return nil, errors.AssertionFailedf("unexpected columnarizerMode %d", mode)
+		colexecerror.InternalError(errors.AssertionFailedf("unexpected columnarizerMode %d", mode))
 	}
 	c := &Columnarizer{
 		allocator:       allocator,
@@ -115,14 +114,12 @@ func newColumnarizer(
 		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx),
 		mode:            mode,
 	}
-	if err = c.ProcessorBase.Init(
-		nil,
-		&execinfrapb.PostProcessSpec{},
-		input.OutputTypes(),
+	c.ProcessorBaseNoHelper.Init(
+		nil, /* self */
 		flowCtx,
+		flowCtx.EvalCtx,
 		processorID,
 		nil, /* output */
-		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -135,11 +132,9 @@ func newColumnarizer(
 				}
 				return nil
 			}},
-	); err != nil {
-		return nil, err
-	}
-	c.typs = c.OutputTypes()
-	return c, nil
+	)
+	c.typs = c.input.OutputTypes()
+	return c
 }
 
 // Init is part of the Operator interface.
@@ -256,14 +251,6 @@ func (c *Columnarizer) Next() coldata.Batch {
 	}
 	c.batch.SetLength(nRows)
 	return c.batch
-}
-
-// Run is part of the execinfra.Processor interface.
-//
-// Columnarizers are not expected to be Run, so we prohibit calling this method
-// on them.
-func (c *Columnarizer) Run(context.Context) {
-	colexecerror.InternalError(errors.AssertionFailedf("Columnarizer should not be Run"))
 }
 
 var (

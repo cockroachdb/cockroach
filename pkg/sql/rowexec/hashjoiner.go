@@ -569,7 +569,7 @@ func (h *hashJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem:  optional.MakeUint(uint64(h.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(h.diskMonitor.MaximumBytes())),
 		},
-		Output: h.Out.Stats(),
+		Output: h.OutputHelper.Stats(),
 	}
 }
 

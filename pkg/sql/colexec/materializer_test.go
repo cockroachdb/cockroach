@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func TestColumnarizeMaterialize(t *testing.T) {
@@ -58,22 +57,14 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 
-	m, err := NewMaterializer(
+	m := NewMaterializer(
 		flowCtx,
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: c},
 		typs,
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	m.Start(ctx)
 
 	for i := 0; i < nRows; i++ {
@@ -145,17 +136,12 @@ func BenchmarkMaterializer(b *testing.B) {
 
 					b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 					for i := 0; i < b.N; i++ {
-						m, err := NewMaterializer(
+						m := NewMaterializer(
 							flowCtx,
 							0, /* processorID */
 							colexecargs.OpWithMetaInfo{Root: input},
 							typs,
-							nil, /* output */
-							nil, /* cancelFlow */
 						)
-						if err != nil {
-							b.Fatal(err)
-						}
 						m.Start(ctx)
 
 						foundRows := 0
@@ -197,7 +183,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 		EvalCtx: &evalCtx,
 	}
 
-	m, err := NewMaterializer(
+	m := NewMaterializer(
 		flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{
@@ -205,10 +191,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 			MetadataSources: colexecop.MetadataSources{metadataSource},
 		},
 		nil, /* typ */
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
-	require.NoError(t, err)
 
 	m.Start(ctx)
 	// Call ConsumerDone.
@@ -240,24 +223,16 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
-	c, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
-	if err != nil {
-		b.Fatal(err)
-	}
+	c := NewBufferingColumnarizer(testAllocator, flowCtx, 0, input)
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := NewMaterializer(
+		m := NewMaterializer(
 			flowCtx,
 			1, /* processorID */
 			colexecargs.OpWithMetaInfo{Root: c},
 			types,
-			nil, /* output */
-			nil, /* cancelFlow */
 		)
-		if err != nil {
-			b.Fatal(err)
-		}
 		m.Start(ctx)
 
 		foundRows := 0
