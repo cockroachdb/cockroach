@@ -364,7 +364,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					1, /* processorID */
 					materializer,
 					nil, /* output */
-					func() context.CancelFunc { return cancelLocal },
+					cancelLocal,
 				)
 				coordinator.Start(ctxLocal)
 
