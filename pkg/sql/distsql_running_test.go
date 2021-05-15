@@ -205,8 +205,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 
 	txn := kv.NewTxn(ctx, db, s.NodeID())
 
-	// We're going to use a rowResultWriter to which only errors will be passed.
-	rw := newCallbackResultWriter(nil /* fn */)
+	rw := &errOnlyResultWriter{}
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,

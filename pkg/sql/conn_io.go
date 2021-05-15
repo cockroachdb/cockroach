@@ -737,8 +737,8 @@ type DescribeResult interface {
 
 	// SetInferredTypes tells the client about the inferred placeholder types.
 	SetInferredTypes([]oid.Oid)
-	// SetNoDataDescription is used to tell the client that the prepared statement
-	// or portal produces no rows.
+	// SetNoDataRowDescription is used to tell the client that the prepared
+	// statement or portal produces no rows.
 	SetNoDataRowDescription()
 	// SetPrepStmtOutput tells the client about the results schema of a prepared
 	// statement.
