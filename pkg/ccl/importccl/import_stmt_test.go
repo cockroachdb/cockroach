@@ -7124,6 +7124,7 @@ func TestDetachedImport(t *testing.T) {
 
 func TestImportJobEventLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 65290, "flaky test")
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	defer jobs.TestingSetProgressThresholds()()
