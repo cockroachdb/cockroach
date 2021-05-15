@@ -114,7 +114,7 @@ func (f *filtererProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
-		Output: f.Out.Stats(),
+		Output: f.OutputHelper.Stats(),
 	}
 }
 

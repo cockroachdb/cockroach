@@ -358,8 +358,7 @@ func (ib *indexBackfiller) Run(ctx context.Context) {
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 
 	semaCtx := tree.MakeSemaContext()
-	if err := ib.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx(),
-		ib.output); err != nil {
+	if err := ib.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
 		ib.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}

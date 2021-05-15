@@ -203,7 +203,7 @@ func TestPostProcess(t *testing.T) {
 			semaCtx := tree.MakeSemaContext()
 			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			if err := out.Init(&tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx, outBuf); err != nil {
+			if err := out.Init(&tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
 				t.Fatal(err)
 			}
 
@@ -223,12 +223,12 @@ func TestPostProcess(t *testing.T) {
 			}
 			// Run the rows through the helper.
 			for i := range input {
-				status, err := out.EmitRow(context.Background(), input[i])
+				status, err := out.EmitRow(context.Background(), input[i], outBuf)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if status != execinfra.NeedMoreRows {
-					out.Close()
+					outBuf.ProducerDone()
 					break
 				}
 			}

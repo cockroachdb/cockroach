@@ -782,7 +782,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(ij.diskMonitor.MaximumBytes())),
 		},
-		Output: ij.Out.Stats(),
+		Output: ij.OutputHelper.Stats(),
 	}
 }
 

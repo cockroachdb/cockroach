@@ -119,15 +119,12 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	r, err = NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 
-	m, err := colexec.NewMaterializer(
+	m := colexec.NewMaterializer(
 		flowCtx,
 		0, /* processorID */
 		r.OpWithMetaInfo,
 		[]*types.T{types.Int},
-		nil, /* output */
-		nil, /* cancelFlow */
 	)
-	require.NoError(t, err)
 
 	m.Start(ctx)
 	var rowIdx int

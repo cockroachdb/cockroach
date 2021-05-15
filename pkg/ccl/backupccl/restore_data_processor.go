@@ -56,9 +56,10 @@ func newTestingRestoreDataProcessor(
 ) (*restoreDataProcessor, error) {
 	rd := &restoreDataProcessor{
 		ProcessorBase: execinfra.ProcessorBase{
-			Ctx:     ctx,
-			EvalCtx: evalCtx,
-		},
+			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
+				Ctx:     ctx,
+				EvalCtx: evalCtx,
+			}},
 		flowCtx: flowCtx,
 		spec:    spec,
 	}
