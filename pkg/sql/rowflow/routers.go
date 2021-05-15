@@ -414,10 +414,6 @@ func (rb *routerBase) ProducerDone() {
 	}
 }
 
-func (rb *routerBase) Types() []*types.T {
-	return rb.types
-}
-
 // updateStreamState updates the status of one stream and, if this was the last
 // open stream, it also updates rb.aggregatedStatus.
 func (rb *routerBase) updateStreamState(

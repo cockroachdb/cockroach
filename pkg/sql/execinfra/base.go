@@ -75,10 +75,6 @@ type RowReceiver interface {
 	// Implementations of Push() must be thread-safe.
 	Push(row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) ConsumerStatus
 
-	// Types returns the types of the EncDatumRow that this RowReceiver expects
-	// to be pushed.
-	Types() []*types.T
-
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
 	//
@@ -522,11 +518,6 @@ func (rc *RowChannel) ConsumerClosed() {
 		default:
 		}
 	}
-}
-
-// Types is part of the RowReceiver interface.
-func (rc *RowChannel) Types() []*types.T {
-	return rc.types
 }
 
 // DoesNotUseTxn implements the DoesNotUseTxn interface. Since the RowChannel's
