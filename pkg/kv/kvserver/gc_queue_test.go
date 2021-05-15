@@ -69,7 +69,7 @@ func TestGCQueueScoreString(t *testing.T) {
 			ExpMinGCByteAgeReduction: 256 * 1024,
 			GCByteAge:                512 * 1024,
 			GCBytes:                  1024 * 3,
-			LikelyLastGC:             5 * time.Second,
+			LastGC:                   5 * time.Second,
 		},
 			`queue=true with 4.31/fuzz(1.25)=3.45=valScaleScore(4.00)*deadFrac(0.25)+intentScore(0.45)
 likely last GC: 5s ago, 3.0 KiB non-live, curr. age 512 KiB*s, min exp. reduction: 256 KiB*s`},
@@ -109,7 +109,8 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 			GCBytesAge:      gcByteAge,
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
-		r := makeGCQueueScoreImpl(ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{})
+		r := makeGCQueueScoreImpl(
+			ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{})
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -147,7 +148,6 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	ms.SysBytes += largeAbortSpanBytesThreshold
 	ms.SysCount++
 
-	gcThresh := hlc.Timestamp{WallTime: 1}
 	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
 
 	// GC triggered if abort span should all be gc'able and it's large.
@@ -156,7 +156,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			gcThresh,
+			hlc.Timestamp{},
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
@@ -171,21 +171,57 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			gcThresh,
+			hlc.Timestamp{},
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
 	}
 
-	// Heuristic doesn't fire if likely last GC within TxnCleanupThreshold.
+	// Heuristic doesn't fire if last GC within TxnCleanupThreshold.
 	{
 		r := makeGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
 			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			gcThresh,
+			hlc.Timestamp{WallTime: expiration - 100},
 		)
 		require.False(t, r.ShouldQueue)
 		require.Zero(t, r.FinalScore)
+	}
+}
+
+func TestGCQueueMakeGCScoreCooldown(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const seed = 1
+	ctx := context.Background()
+	now := hlc.Timestamp{WallTime: 10000 * 1e9}
+	policy := zonepb.GCPolicy{TTLSeconds: 1}
+
+	testcases := map[string]struct {
+		lastGC   hlc.Timestamp
+		expectGC bool
+	}{
+		"never GCed":         {lastGC: hlc.Timestamp{}, expectGC: true},
+		"just GCed":          {lastGC: now.Add(-1, 0), expectGC: false},
+		"future GC":          {lastGC: now.Add(1, 0), expectGC: false},
+		"before GC cooldown": {lastGC: now.Add(-gcQueueCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
+		"at GC cooldown":     {lastGC: now.Add(-gcQueueCooldownDuration.Nanoseconds(), 0), expectGC: true},
+		"after GC cooldown":  {lastGC: now.Add(-gcQueueCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
+	}
+	for name, tc := range testcases {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			ms := enginepb.MVCCStats{
+				LiveBytes: 0,
+				ValBytes:  1e9,
+				KeyBytes:  1e9,
+			}
+
+			r := makeGCQueueScoreImpl(
+				ctx, seed, now, ms, policy, tc.lastGC)
+			require.Equal(t, tc.expectGC, r.ShouldQueue)
+		})
 	}
 }
 
