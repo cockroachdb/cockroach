@@ -620,7 +620,7 @@ CREATE TABLE crdb_internal.jobs (
 	high_water_timestamp	DECIMAL,
 	error              		STRING,
 	coordinator_id     		INT,
-  trace_id              INT
+	trace_id            	INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
