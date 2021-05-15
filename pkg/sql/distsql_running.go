@@ -802,11 +802,6 @@ func (r *DistSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
-// Types is part of the execinfra.RowReceiver interface.
-func (r *DistSQLReceiver) Types() []*types.T {
-	return r.outputTypes
-}
-
 // PlanAndRunSubqueries returns false if an error was encountered and sets that
 // error in the provided receiver. Note that if false is returned, then this
 // function will have closed all the subquery plans because it assumes that the
