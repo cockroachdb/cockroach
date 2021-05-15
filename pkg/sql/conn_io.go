@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -715,6 +716,12 @@ type RestrictedCommandResult interface {
 	// shallow copy if it needs to.
 	AddRow(ctx context.Context, row tree.Datums) error
 
+	// AddBatch accumulates a result batch.
+	//
+	// The implementation cannot hold on to the contents of the batch without
+	// deeply copying them.
+	AddBatch(ctx context.Context, batch coldata.Batch) error
+
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
 	IncrementRowsAffected(ctx context.Context, n int)
@@ -728,6 +735,12 @@ type RestrictedCommandResult interface {
 	// to this CommandResult, will be flushed immediately to the client.
 	// This is currently used for sinkless changefeeds.
 	DisableBuffering()
+}
+
+// LimitedCommandResult is used to differentiate between pgwire.commandResult
+// and pgwire.limitedCommandResult.
+type LimitedCommandResult interface {
+	Marker()
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -910,6 +923,12 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
 	return r.w.addResult(ctx, ieIteratorResult{row: rowCopy})
+}
+
+// AddBatch is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) AddBatch(context.Context, coldata.Batch) error {
+	// TODO(yuzefovich): implement this.
+	panic("unimplemented")
 }
 
 func (r *streamingCommandResult) DisableBuffering() {

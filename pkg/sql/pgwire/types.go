@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -255,6 +257,87 @@ func writeTextDatumNotNull(
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
+	}
+}
+
+// getInt64 returns an int64 from vectors of Int family.
+func getInt64(vec coldata.Vec, idx int) int64 {
+	switch vec.Type().Width() {
+	case 16:
+		return int64(vec.Int16().Get(idx))
+	case 32:
+		return int64(vec.Int32().Get(idx))
+	default:
+		return vec.Int64().Get(idx)
+	}
+}
+
+// writeTextColumnarElement is the same as writeTextDatum where the datum is
+// represented in a columnar element (at position idx in vec).
+func (b *writeBuffer) writeTextColumnarElement(
+	ctx context.Context,
+	vec coldata.Vec,
+	idx int,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
+) {
+	if log.V(2) {
+		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", vec.Type())
+	}
+	if vec.MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+		// NULL is encoded as -1; all other values have a length prefix.
+		b.putInt32(-1)
+		return
+	}
+	switch vec.Type().Family() {
+	case types.BoolFamily:
+		writeTextBool(b, vec.Bool().Get(idx))
+
+	case types.IntFamily:
+		writeTextInt64(b, getInt64(vec, idx))
+
+	case types.FloatFamily:
+		writeTextFloat64(b, vec.Float64().Get(idx), conv)
+
+	case types.DecimalFamily:
+		d := vec.Decimal().Get(idx)
+		// The logic here is the simplification of tree.DDecimal.Format given
+		// that we use tree.FmtSimple.
+		b.writeLengthPrefixedString(d.String())
+
+	case types.BytesFamily:
+		writeTextBytes(b, string(vec.Bytes().Get(idx)), conv)
+
+	case types.UuidFamily:
+		id, err := uuid.FromBytes(vec.Bytes().Get(idx))
+		if err != nil {
+			panic(errors.Wrap(err, "unexpectedly couldn't retrieve UUID object"))
+		}
+		writeTextUUID(b, id)
+
+	case types.StringFamily:
+		writeTextString(b, string(vec.Bytes().Get(idx)), vec.Type())
+
+	case types.DateFamily:
+		tree.FormatDate(pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)), b.textFormatter)
+		b.writeFromFmtCtx(b.textFormatter)
+
+	case types.TimestampFamily:
+		writeTextTimestamp(b, vec.Timestamp().Get(idx))
+
+	case types.TimestampTZFamily:
+		writeTextTimestampTZ(b, vec.Timestamp().Get(idx), sessionLoc)
+
+	case types.IntervalFamily:
+		tree.FormatDuration(vec.Interval().Get(idx), b.textFormatter)
+		b.writeFromFmtCtx(b.textFormatter)
+
+	case types.JsonFamily:
+		b.writeLengthPrefixedString(vec.JSON().Get(idx).String())
+
+	default:
+		// All other types are represented via the datum-backed vector.
+		writeTextDatumNotNull(b, vec.Datum().Get(idx).(*coldataext.Datum).Datum, conv, sessionLoc, vec.Type())
 	}
 }
 
@@ -631,6 +714,65 @@ func writeBinaryDatumNotNull(
 		b.putInt32(int32(v.DInt))
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
+	}
+}
+
+// writeBinaryColumnarElement is the same as writeBinaryDatum where the datum is
+// represented in a columnar element (at position idx in vec).
+func (b *writeBuffer) writeBinaryColumnarElement(
+	ctx context.Context, vec coldata.Vec, idx int, sessionLoc *time.Location,
+) {
+	if log.V(2) {
+		log.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", vec.Type())
+	}
+	if vec.MaybeHasNulls() && vec.Nulls().NullAt(idx) {
+		// NULL is encoded as -1; all other values have a length prefix.
+		b.putInt32(-1)
+		return
+	}
+	switch vec.Type().Family() {
+	case types.BoolFamily:
+		writeBinaryBool(b, vec.Bool().Get(idx))
+
+	case types.IntFamily:
+		writeBinaryInt(b, getInt64(vec, idx), vec.Type())
+
+	case types.FloatFamily:
+		writeBinaryFloat(b, vec.Float64().Get(idx), vec.Type())
+
+	case types.DecimalFamily:
+		v := vec.Decimal().Get(idx)
+		writeBinaryDecimal(b, &v)
+
+	case types.BytesFamily:
+		writeBinaryBytes(b, vec.Bytes().Get(idx))
+
+	case types.UuidFamily:
+		writeBinaryBytes(b, vec.Bytes().Get(idx))
+
+	case types.StringFamily:
+		writeBinaryString(b, string(vec.Bytes().Get(idx)), vec.Type())
+
+	case types.TimestampFamily:
+		b.putInt32(8)
+		b.putInt64(timeToPgBinary(vec.Timestamp().Get(idx), nil))
+
+	case types.TimestampTZFamily:
+		b.putInt32(8)
+		b.putInt64(timeToPgBinary(vec.Timestamp().Get(idx), sessionLoc))
+
+	case types.DateFamily:
+		writeBinaryDate(b, pgdate.MakeCompatibleDateFromDisk(vec.Int64().Get(idx)))
+
+	case types.IntervalFamily:
+		writeBinaryInterval(b, vec.Interval().Get(idx))
+
+	case types.JsonFamily:
+		writeBinaryJSON(b, vec.JSON().Get(idx))
+
+	default:
+		// All other types are represented via the datum-backed vector.
+		writeBinaryDatumNotNull(ctx, b, vec.Datum().Get(idx).(*coldataext.Datum).Datum, sessionLoc, vec.Type())
 	}
 }
 

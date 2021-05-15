@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -188,8 +189,9 @@ func (r *commandResult) SetError(err error) {
 	r.err = err
 }
 
-// AddRow is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+// addInternal is the skeleton of AddRow and AddBatch implementations.
+// bufferData should update rowsAffected and buffer the data accordingly.
+func (r *commandResult) addInternal(bufferData func()) error {
 	r.assertNotReleased()
 	if r.err != nil {
 		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
@@ -202,9 +204,9 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if r.err != nil {
 		panic("can't send row after error")
 	}
-	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
+	bufferData()
+
 	var err error
 	if r.bufferingDisabled {
 		err = r.conn.Flush(r.pos)
@@ -212,6 +214,22 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 		_ /* flushed */, err = r.conn.maybeFlush(r.pos)
 	}
 	return err
+}
+
+// AddRow is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	return r.addInternal(func() {
+		r.rowsAffected++
+		r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.location, r.types)
+	})
+}
+
+// AddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	return r.addInternal(func() {
+		r.rowsAffected += batch.Length()
+		r.conn.bufferBatch(ctx, batch, r.formatCodes, r.conv, r.location)
+	})
 }
 
 // DisableBuffering is part of the sql.RestrictedCommandResult interface.
@@ -388,6 +406,7 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 // post-execution stuff (like stats collection) to have it only execute once
 // per statement instead of once per portal.
 type limitedCommandResult struct {
+	sql.LimitedCommandResult
 	*commandResult
 	portalName  string
 	implicitTxn bool
@@ -421,6 +440,9 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 	}
 	return nil
 }
+
+// TODO(yuzefovich): implement limiting behavior for AddBatch and remove
+// sql.LimitedCommandResult marker.
 
 // moreResultsNeeded is a restricted connection handler that waits for more
 // requests for rows from the active portal, during the "execute portal" flow
