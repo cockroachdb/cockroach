@@ -333,16 +333,17 @@ func (m *MemBatch) String() string {
 	if m.Length() == 0 {
 		return "[zero-length batch]"
 	}
-	var builder strings.Builder
-	strs := make([]string, len(m.ColVecs()))
-	for i := 0; i < m.Length(); i++ {
-		builder.WriteString("\n[")
-		for colIdx, v := range m.ColVecs() {
-			strs[colIdx] = fmt.Sprintf("%v", GetValueAt(v, i))
-		}
-		builder.WriteString(strings.Join(strs, ", "))
-		builder.WriteString("]")
+	if VecsToStringWithRowPrefix == nil {
+		panic("need to inject the implementation from sql/colconv package")
 	}
-	builder.WriteString("\n")
-	return builder.String()
+	return strings.Join(VecsToStringWithRowPrefix(m.ColVecs(), m.Length(), m.Selection(), "" /* prefix */), "\n")
 }
+
+// VecsToStringWithRowPrefix returns a pretty representation of the vectors.
+// This method will convert all vectors to datums in order to print everything
+// in the same manner as the tree.Datum representation does. Each row is printed
+// in a separate string.
+//
+// The implementation lives in colconv package and is injected during the
+// initialization.
+var VecsToStringWithRowPrefix func(vecs []Vec, length int, sel []int, prefix string) []string
