@@ -1416,6 +1416,108 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 	}
 }
 
+func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	region := func(regionName string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: regionName},
+			},
+		}
+	}
+	twoOverfullStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1, Locality: region("a")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1200},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2, Locality: region("a")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1400},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3, Locality: region("b")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4, Locality: region("c")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 1000},
+		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 5, Locality: region("c")},
+			Capacity: roachpb.StoreCapacity{RangeCount: 1000, QueriesPerSecond: 800},
+		},
+	}
+
+	replicas := func(ids ...roachpb.StoreID) (repls []roachpb.ReplicaDescriptor) {
+		for _, id := range ids {
+			repls = append(
+				repls,
+				roachpb.ReplicaDescriptor{
+					NodeID:    roachpb.NodeID(id),
+					StoreID:   id,
+					ReplicaID: roachpb.ReplicaID(id),
+				},
+			)
+		}
+		return repls
+	}
+	type testCase struct {
+		testStores           []*roachpb.StoreDescriptor
+		existingRepls        []roachpb.ReplicaDescriptor
+		expectedRemoveTarget roachpb.StoreID
+	}
+	tests := []testCase{
+		{
+			// Expect store 1 to be removed since it is fielding the most QPS out of
+			// all the existing replicas.
+			testStores:           twoOverfullStores,
+			existingRepls:        replicas(1, 3, 4),
+			expectedRemoveTarget: roachpb.StoreID(1),
+		},
+		{
+			// Expect store 2 to be removed since it is serving more QPS than the only
+			// other store that's "comparable" to it (store 1).
+			testStores:           twoOverfullStores,
+			existingRepls:        replicas(1, 2, 3, 4, 5),
+			expectedRemoveTarget: roachpb.StoreID(2),
+		},
+		{
+			// Expect store 4 to be removed because it is serving more QPS than store
+			// 5, which is its only comparable store.
+			testStores:           twoOverfullStores,
+			existingRepls:        replicas(2, 3, 4, 5),
+			expectedRemoveTarget: roachpb.StoreID(4),
+		},
+	}
+
+	for _, subtest := range tests {
+		stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
+		defer stopper.Stop(context.Background())
+		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
+		ctx := context.Background()
+		options := scorerOptions{
+			qpsRebalanceThreshold: 0.1,
+		}
+		remove, _, err := a.RemoveVoter(
+			ctx,
+			zonepb.EmptyCompleteZoneConfig(),
+			subtest.existingRepls,
+			subtest.existingRepls,
+			nil,
+			options,
+		)
+		require.NoError(t, err)
+		require.Equal(t, subtest.expectedRemoveTarget, remove.StoreID)
+	}
+}
+
 // TestAllocatorRebalanceByCount verifies that rebalance targets are
 // chosen by range counts in the event that available capacities
 // exceed the maxAvailCapacityThreshold.
@@ -3470,12 +3572,12 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 
 		// Check behavior in a zone config where `voter_constraints` are empty.
 		checkFn := voterConstraintsCheckerForRemoval(analyzed, constraint.EmptyAnalyzedConstraints)
-		candidates := rankedCandidateListForRemoval(sl,
+		candidates := candidateListForRemoval(sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			a.scorerOptions())
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
-			t.Errorf("%d (with `constraints`): expected rankedCandidateListForRemoval(%v)"+
+			t.Errorf("%d (with `constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
 				candidates.worst(), candidates)
 		}
@@ -3483,12 +3585,12 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 		// Check that we'd see the same result if the same constraints were
 		// specified as `voter_constraints`.
 		checkFn = voterConstraintsCheckerForRemoval(constraint.EmptyAnalyzedConstraints, analyzed)
-		candidates = rankedCandidateListForRemoval(sl,
+		candidates = candidateListForRemoval(sl,
 			checkFn,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			a.scorerOptions())
 		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
-			t.Errorf("%d (with `voter_constraints`): expected rankedCandidateListForRemoval(%v)"+
+			t.Errorf("%d (with `voter_constraints`): expected candidateListForRemoval(%v)"+
 				" = %v, but got %v\n for candidates %v", testIdx, tc.existing, tc.expected,
 				candidates.worst(), candidates)
 		}
