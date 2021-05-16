@@ -495,16 +495,13 @@ func rankedCandidateListForRemoval(
 			continue
 		}
 		diversityScore := diversityRemovalScore(s.StoreID, existingStoreLocalities)
+		// If removing this candidate replica does not converge the store
+		// stats to their means, we make it less attractive for removal by
+		// adding 1 to the constraint score. Note that when selecting a
+		// candidate for removal the candidates with the lowest scores are
+		// more likely to be removed.
+		convergesScore := rebalanceFromConvergesScore(sl, s.Capacity)
 		balanceScore := balanceScore(sl, s.Capacity, options)
-		var convergesScore int
-		if !rebalanceFromConvergesOnMean(sl, s.Capacity) {
-			// If removing this candidate replica does not converge the store
-			// stats to their means, we make it less attractive for removal by
-			// adding 1 to the constraint score. Note that when selecting a
-			// candidate for removal the candidates with the lowest scores are
-			// more likely to be removed.
-			convergesScore = 1
-		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
@@ -740,13 +737,10 @@ func rankedCandidateListForRebalancing(
 				continue
 			}
 			balanceScore := balanceScore(comparable.sl, existing.store.Capacity, options)
-			var convergesScore int
-			if !rebalanceFromConvergesOnMean(comparable.sl, existing.store.Capacity) {
-				// Similarly to in rankedCandidateListForRemoval, any replica whose
-				// removal would not converge the range stats to their means is given a
-				// constraint score boost of 1 to make it less attractive for removal.
-				convergesScore = 1
-			}
+			// Similarly to in rankedCandidateListForRemoval, any replica whose
+			// removal would not converge the range stats to their means is given a
+			// constraint score boost of 1 to make it less attractive for removal.
+			convergesScore := rebalanceFromConvergesScore(comparable.sl, existing.store.Capacity)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
 			existing.rangeCount = int(existing.store.Capacity.RangeCount)
@@ -765,12 +759,8 @@ func rankedCandidateListForRebalancing(
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
 			cand.balanceScore = balanceScore(comparable.sl, s.Capacity, options)
-			if rebalanceToConvergesOnMean(comparable.sl, s.Capacity) {
-				// This is the counterpart of !rebalanceFromConvergesOnMean from
-				// the existing candidates. Candidates whose addition would
-				// converge towards the range count mean are promoted.
-				cand.convergesScore = 1
-			} else if !needRebalance {
+			cand.convergesScore = rebalanceToConvergesScore(comparable.sl, s.Capacity)
+			if !needRebalance && cand.convergesScore == 0 {
 				// Only consider this candidate if we must rebalance due to constraint,
 				// disk fullness, or diversity reasons.
 				log.VEventf(ctx, 3, "not considering %+v as a candidate for range %+v: score=%s storeList=%+v",
@@ -1361,12 +1351,26 @@ func underfullThreshold(mean float64, thresholdFraction float64) float64 {
 	return mean - math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
 }
 
-func rebalanceFromConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity) bool {
-	return rebalanceConvergesOnMean(sl, sc, sc.RangeCount-1)
+// rebalanceFromConvergesScore returns 1 if rebalancing a replica away from `sc`
+// will _not_ converge its range count towards the mean range count of stores in
+// `sl`. When we're considering whether to rebalance a replica away from a store
+// or not, we want to give it a "boost" (i.e. make it a less likely candidate
+// for removal) if it doesn't further our goal to converge range counts towards
+// the mean.
+func rebalanceFromConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int {
+	if rebalanceConvergesOnMean(sl, sc, sc.RangeCount-1) {
+		return 0
+	}
+	return 1
 }
 
-func rebalanceToConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity) bool {
-	return rebalanceConvergesOnMean(sl, sc, sc.RangeCount+1)
+// rebalanceToConvergesScore returns 1 if rebalancing a replica to `sc` will
+// converge its range count towards the mean of all the stores inside `sl`.
+func rebalanceToConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int {
+	if rebalanceConvergesOnMean(sl, sc, sc.RangeCount+1) {
+		return 1
+	}
+	return 0
 }
 
 func rebalanceConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity, newRangeCount int32) bool {

@@ -1556,23 +1556,23 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 	}{
 		{0, true, false},
 		{900, true, false},
-		{900, true, false},
 		{999, true, false},
 		{1000, false, false},
 		{1001, false, true},
 		{2000, false, true},
-		{900, true, false},
 	}
 
 	for i, tc := range testCases {
 		sc := roachpb.StoreCapacity{
 			RangeCount: tc.rangeCount,
 		}
-		if a, e := rebalanceToConvergesOnMean(storeList, sc), tc.toConverges; a != e {
-			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
+		if a, e := rebalanceToConvergesScore(storeList, sc) == 1, tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
-		if a, e := rebalanceFromConvergesOnMean(storeList, sc), tc.fromConverges; a != e {
-			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v) got %t; want %t", i, sc, a, e)
+		// NB: Any replica whose removal would not converge the range count to the
+		// mean is given a score of 1 to make it less attractive for removal.
+		if a, e := rebalanceFromConvergesScore(storeList, sc) == 0, tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesScore(storeList, %+v) got %t; want %t", i, sc, a, e)
 		}
 	}
 }
