@@ -254,6 +254,7 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
+			rq.allocator.scorerOptions(),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
@@ -267,6 +268,7 @@ func (rq *replicateQueue) shouldQueue(
 			nonVoterReplicas,
 			rangeUsageInfo,
 			storeFilterThrottled,
+			rq.allocator.scorerOptions(),
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
@@ -788,7 +790,14 @@ func (rq *replicateQueue) findRemoveVoter(
 			rangeRaftProgress(repl.RaftStatus(), existingVoters))}
 	}
 
-	return rq.allocator.RemoveVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
+	return rq.allocator.RemoveVoter(
+		ctx,
+		zone,
+		candidates,
+		existingVoters,
+		existingNonVoters,
+		rq.allocator.scorerOptions(),
+	)
 }
 
 // maybeTransferLeaseAway is called whenever a replica on a given store is
@@ -898,7 +907,9 @@ func (rq *replicateQueue) removeNonVoter(
 		ctx,
 		zone,
 		existingNonVoters,
-		existingVoters, existingNonVoters,
+		existingVoters,
+		existingNonVoters,
+		rq.allocator.scorerOptions(),
 	)
 	if err != nil {
 		return false, err
@@ -1081,6 +1092,7 @@ func (rq *replicateQueue) considerRebalance(
 			existingNonVoters,
 			rangeUsageInfo,
 			storeFilterThrottled,
+			rq.allocator.scorerOptions(),
 		)
 		if !ok {
 			// If there was nothing to do for the set of voting replicas on this
@@ -1094,6 +1106,7 @@ func (rq *replicateQueue) considerRebalance(
 				existingNonVoters,
 				rangeUsageInfo,
 				storeFilterThrottled,
+				rq.allocator.scorerOptions(),
 			)
 			rebalanceTargetType = nonVoterTarget
 		}
