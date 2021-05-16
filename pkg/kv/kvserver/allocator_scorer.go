@@ -480,24 +480,60 @@ func rankedCandidateListForRemoval(
 			continue
 		}
 		diversityScore := diversityRemovalScore(s.StoreID, existingStoreLocalities)
-		// If removing this candidate replica does not converge the store
-		// stats to their means, we make it less attractive for removal by
-		// adding 1 to the constraint score. Note that when selecting a
-		// candidate for removal the candidates with the lowest scores are
-		// more likely to be removed.
-		convergesScore := rebalanceFromConvergesScore(sl, s.Capacity, options)
-		balanceScore := balanceScore(sl, s.Capacity, options)
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
 			necessary:      necessary,
 			fullDisk:       !maxCapacityCheck(s),
 			diversityScore: diversityScore,
-			convergesScore: convergesScore,
-			balanceScore:   balanceScore,
-			rangeCount:     int(s.Capacity.RangeCount),
 		})
 	}
+	if options.deterministic {
+		sort.Sort(sort.Reverse(byScoreAndID(candidates)))
+	} else {
+		sort.Sort(sort.Reverse(byScore(candidates)))
+	}
+	// We compute the converges and balance scores only in relation to stores that
+	// are the top candidates for removal based on diversity (i.e. only among
+	// candidates that are non-diverse relative to the rest of the replicas).
+	//
+	// This is because, in the face of heterogeneously loaded localities,
+	// load-based scores (convergesScore, balanceScore) relative to the entire set
+	// of stores are going to be misleading / inaccurate. To see this, consider a
+	// situation with 4 replicas where 2 of the replicas are in the same locality:
+	//
+	// Region A: [1, 2]
+	// Region B: [3]
+	// Region C: [4]
+	//
+	// Here, it wouldn't make sense to compute load-based stats for replicas 1 & 2
+	// relative to the entire replica set, since Regions B and C could be
+	// explicitly configured to have vastly different load profiles. If Region A
+	// has more data constrained to it, both replicas 1 and 2 would be equally
+	// likely to be picked for removal, even if one of those is on a store that is
+	// better or worse than the other.
+	candidates = candidates.worst()
+	var removalCandidateStores []roachpb.StoreDescriptor
+	for _, cand := range candidates {
+		removalCandidateStores = append(removalCandidateStores, cand.store)
+	}
+	removalCandidateStoreList := makeStoreList(removalCandidateStores)
+	for i := range candidates {
+		// If removing this candidate replica does not converge the store
+		// stats to their means, we make it less attractive for removal by
+		// adding 1 to the constraint score. Note that when selecting a
+		// candidate for removal the candidates with the lowest scores are
+		// more likely to be removed.
+		candidates[i].convergesScore = rebalanceFromConvergesScore(
+			removalCandidateStoreList, candidates[i].store.Capacity, options,
+		)
+		candidates[i].balanceScore = balanceScore(
+			removalCandidateStoreList, candidates[i].store.Capacity, options,
+		)
+		candidates[i].rangeCount = int(candidates[i].store.Capacity.RangeCount)
+	}
+	// Re-sort to account for the ordering changes resulting from the addition of
+	// convergesScore, balanceScore, etc.
 	if options.deterministic {
 		sort.Sort(sort.Reverse(byScoreAndID(candidates)))
 	} else {
