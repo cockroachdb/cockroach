@@ -209,13 +209,12 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 func (sr *StoreRebalancer) rebalanceStore(
 	ctx context.Context, mode LBRebalancingMode, storeList StoreList,
 ) {
-	qpsThresholdFraction := qpsRebalanceThreshold.Get(&sr.st.SV)
-
 	// First check if we should transfer leases away to better balance QPS.
-	qpsMinThreshold := math.Min(storeList.candidateQueriesPerSecond.mean*(1-qpsThresholdFraction),
-		storeList.candidateQueriesPerSecond.mean-minQPSThresholdDifference)
-	qpsMaxThreshold := math.Max(storeList.candidateQueriesPerSecond.mean*(1+qpsThresholdFraction),
-		storeList.candidateQueriesPerSecond.mean+minQPSThresholdDifference)
+	options := scorerOptions{
+		qpsRebalanceThreshold: qpsRebalanceThreshold.Get(&sr.st.SV),
+	}
+	qpsMinThreshold := underfullQPSThreshold(options, storeList.candidateQueriesPerSecond.mean)
+	qpsMaxThreshold := overfullQPSThreshold(options, storeList.candidateQueriesPerSecond.mean)
 
 	var localDesc *roachpb.StoreDescriptor
 	for i := range storeList.stores {
