@@ -934,7 +934,7 @@ func (a Allocator) removeTarget(
 	}
 
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
-	rankedCandidates := rankedCandidateListForRemoval(
+	rankedCandidates := candidateListForRemoval(
 		candidateStoreList,
 		constraintsChecker,
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
