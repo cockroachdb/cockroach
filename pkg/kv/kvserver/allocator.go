@@ -839,7 +839,7 @@ func (a *Allocator) allocateTargetFromList(
 	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
 		log.VEventf(ctx, 3, "add target: %s", target)
-		details := decisionDetails{Target: target.compactString(options)}
+		details := decisionDetails{Target: target.compactString()}
 		detailsBytes, err := json.Marshal(details)
 		if err != nil {
 			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %+v", err)
@@ -859,6 +859,7 @@ func (a Allocator) simulateRemoveTarget(
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
 	targetType targetReplicaType,
+	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
@@ -875,7 +876,9 @@ func (a Allocator) simulateRemoveTarget(
 		)
 		log.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
+		return a.RemoveVoter(
+			ctx, zone, candidates, existingVoters, existingNonVoters, options,
+		)
 	case nonVoterTarget:
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
 		defer a.storePool.updateLocalStoreAfterRebalance(
@@ -885,7 +888,9 @@ func (a Allocator) simulateRemoveTarget(
 		)
 		log.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveNonVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
+		return a.RemoveNonVoter(
+			ctx, zone, candidates, existingVoters, existingNonVoters, options,
+		)
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", t))
 	}
@@ -898,6 +903,7 @@ func (a Allocator) removeTarget(
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	targetType targetReplicaType,
+	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one" +
@@ -915,7 +921,6 @@ func (a Allocator) removeTarget(
 		existingReplicas, *zone.NumReplicas, zone.Constraints)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, a.storePool.getStoreDescriptor,
 		existingVoters, zone.GetNumVoters(), zone.VoterConstraints)
-	options := a.scorerOptions()
 
 	var constraintsChecker constraintsCheckFn
 	switch t := targetType; t {
@@ -946,7 +951,7 @@ func (a Allocator) removeTarget(
 		for _, exist := range existingReplicas {
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
-				details := decisionDetails{Target: bad.compactString(options)}
+				details := decisionDetails{Target: bad.compactString()}
 				detailsBytes, err := json.Marshal(details)
 				if err != nil {
 					log.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
@@ -969,6 +974,7 @@ func (a Allocator) RemoveVoter(
 	voterCandidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
+	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	return a.removeTarget(
 		ctx,
@@ -977,6 +983,7 @@ func (a Allocator) RemoveVoter(
 		existingVoters,
 		existingNonVoters,
 		voterTarget,
+		options,
 	)
 }
 
@@ -991,6 +998,7 @@ func (a Allocator) RemoveNonVoter(
 	nonVoterCandidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
+	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	return a.removeTarget(
 		ctx,
@@ -999,6 +1007,7 @@ func (a Allocator) RemoveNonVoter(
 		existingVoters,
 		existingNonVoters,
 		nonVoterTarget,
+		options,
 	)
 }
 
@@ -1010,7 +1019,8 @@ func (a Allocator) rebalanceTarget(
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
 	targetType targetReplicaType,
-) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
+	options scorerOptions,
+) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	sl, _, _ := a.storePool.getStoreList(filter)
 	existingReplicas := append(existingVoters, existingNonVoters...)
 
@@ -1050,7 +1060,6 @@ func (a Allocator) rebalanceTarget(
 		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
 
-	options := a.scorerOptions()
 	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	results := rankedCandidateListForRebalancing(
 		ctx,
@@ -1117,6 +1126,7 @@ func (a Allocator) rebalanceTarget(
 			otherReplicaSet,
 			rangeUsageInfo,
 			targetType,
+			options,
 		)
 		if err != nil {
 			log.Warningf(ctx, "simulating removal of %s failed: %+v", targetType, err)
@@ -1135,7 +1145,7 @@ func (a Allocator) rebalanceTarget(
 	// Compile the details entry that will be persisted into system.rangelog for
 	// debugging/auditability purposes.
 	dDetails := decisionDetails{
-		Target:   target.compactString(options),
+		Target:   target.compactString(),
 		Existing: existingCandidates.compactString(options),
 	}
 	detailsBytes, err := json.Marshal(dDetails)
@@ -1186,7 +1196,8 @@ func (a Allocator) RebalanceVoter(
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
-) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
+	options scorerOptions,
+) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	return a.rebalanceTarget(
 		ctx,
 		zone,
@@ -1196,6 +1207,7 @@ func (a Allocator) RebalanceVoter(
 		rangeUsageInfo,
 		filter,
 		voterTarget,
+		options,
 	)
 }
 
@@ -1218,7 +1230,8 @@ func (a Allocator) RebalanceNonVoter(
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
-) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
+	options scorerOptions,
+) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	return a.rebalanceTarget(
 		ctx,
 		zone,
@@ -1228,6 +1241,7 @@ func (a Allocator) RebalanceNonVoter(
 		rangeUsageInfo,
 		filter,
 		nonVoterTarget,
+		options,
 	)
 }
 
