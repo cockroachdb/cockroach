@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
@@ -94,22 +93,6 @@ type scorerOptions struct {
 	qpsRebalanceThreshold   float64 // only considered if non-zero
 }
 
-type balanceDimensions struct {
-	ranges rangeCountStatus
-}
-
-func (bd *balanceDimensions) totalScore() float64 {
-	return float64(bd.ranges)
-}
-
-func (bd balanceDimensions) String() string {
-	return strconv.Itoa(int(bd.ranges))
-}
-
-func (bd balanceDimensions) compactString(options scorerOptions) string {
-	return fmt.Sprintf("%d", bd.ranges)
-}
-
 // candidate store for allocation.
 type candidate struct {
 	store          roachpb.StoreDescriptor
@@ -118,14 +101,14 @@ type candidate struct {
 	necessary      bool
 	diversityScore float64
 	convergesScore int
-	balanceScore   balanceDimensions
+	balanceScore   balanceStatus
 	rangeCount     int
 	details        string
 }
 
 func (c candidate) String() string {
 	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, converges:%d, "+
-		"balance:%s, rangeCount:%d, queriesPerSecond:%.2f",
+		"balance:%d, rangeCount:%d, queriesPerSecond:%.2f",
 		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.convergesScore,
 		c.balanceScore, c.rangeCount, c.store.Capacity.QueriesPerSecond)
 	if c.details != "" {
@@ -134,7 +117,7 @@ func (c candidate) String() string {
 	return str
 }
 
-func (c candidate) compactString(options scorerOptions) string {
+func (c candidate) compactString() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
 	if !c.valid {
@@ -149,8 +132,8 @@ func (c candidate) compactString(options scorerOptions) string {
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
 	}
-	fmt.Fprintf(&buf, ", converges:%d, balance:%s, rangeCount:%d",
-		c.convergesScore, c.balanceScore.compactString(options), c.rangeCount)
+	fmt.Fprintf(&buf, ", converges:%d, balance:%d, rangeCount:%d",
+		c.convergesScore, c.balanceScore, c.rangeCount)
 	if c.details != "" {
 		fmt.Fprintf(&buf, ", details:(%s)", c.details)
 	}
@@ -198,11 +181,11 @@ func (c candidate) compare(o candidate) float64 {
 		}
 		return -(2 + float64(o.convergesScore-c.convergesScore)/10.0)
 	}
-	if !scoresAlmostEqual(c.balanceScore.totalScore(), o.balanceScore.totalScore()) {
-		if c.balanceScore.totalScore() > o.balanceScore.totalScore() {
-			return 1 + (c.balanceScore.totalScore()-o.balanceScore.totalScore())/10.0
+	if !scoresAlmostEqual(float64(c.balanceScore), float64(o.balanceScore)) {
+		if float64(c.balanceScore) > float64(o.balanceScore) {
+			return 1 + (float64(c.balanceScore)-float64(o.balanceScore))/10.0
 		}
-		return -(1 + (o.balanceScore.totalScore()-c.balanceScore.totalScore())/10.0)
+		return -(1 + (float64(o.balanceScore)-float64(c.balanceScore))/10.0)
 	}
 	// Sometimes we compare partially-filled in candidates, e.g. those with
 	// diversity scores filled in but not balance scores or range counts. This
@@ -240,7 +223,7 @@ func (cl candidateList) compactString(options scorerOptions) string {
 	buffer.WriteRune('[')
 	for _, c := range cl {
 		buffer.WriteRune('\n')
-		buffer.WriteString(c.compactString(options))
+		buffer.WriteString(c.compactString())
 	}
 	buffer.WriteRune(']')
 	return buffer.String()
@@ -264,7 +247,7 @@ func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
 	if scoresAlmostEqual(c[i].diversityScore, c[j].diversityScore) &&
 		c[i].convergesScore == c[j].convergesScore &&
-		scoresAlmostEqual(c[i].balanceScore.totalScore(), c[j].balanceScore.totalScore()) &&
+		c[i].balanceScore == c[j].balanceScore &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
@@ -296,7 +279,8 @@ func (cl candidateList) best() candidateList {
 	for i := 1; i < len(cl); i++ {
 		if cl[i].necessary == cl[0].necessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) &&
-			cl[i].convergesScore == cl[0].convergesScore {
+			cl[i].convergesScore == cl[0].convergesScore &&
+			cl[i].balanceScore == cl[0].balanceScore {
 			continue
 		}
 		return cl[:i]
@@ -326,11 +310,12 @@ func (cl candidateList) worst() candidateList {
 			}
 		}
 	}
-	// Find the worst constraint/locality/converges values.
+	// Find the worst constraint/locality/converges/balanceScore values.
 	for i := len(cl) - 2; i >= 0; i-- {
 		if cl[i].necessary == cl[len(cl)-1].necessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[len(cl)-1].diversityScore) &&
-			cl[i].convergesScore == cl[len(cl)-1].convergesScore {
+			cl[i].convergesScore == cl[len(cl)-1].convergesScore &&
+			cl[i].balanceScore == cl[len(cl)-1].balanceScore {
 			continue
 		}
 		return cl[i+1:]
@@ -443,13 +428,13 @@ func rankedCandidateListForAllocation(
 		balanceScore := balanceScore(candidateStores, s.Capacity, options)
 		var convergesScore int
 		if options.qpsRebalanceThreshold > 0 {
-			if s.Capacity.QueriesPerSecond < underfullThreshold(
-				candidateStores.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
+			if s.Capacity.QueriesPerSecond < underfullQPSThreshold(
+				options, candidateStores.candidateQueriesPerSecond.mean) {
 				convergesScore = 1
 			} else if s.Capacity.QueriesPerSecond < candidateStores.candidateQueriesPerSecond.mean {
 				convergesScore = 0
-			} else if s.Capacity.QueriesPerSecond < overfullThreshold(
-				candidateStores.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
+			} else if s.Capacity.QueriesPerSecond < overfullQPSThreshold(
+				options, candidateStores.candidateQueriesPerSecond.mean) {
 				convergesScore = -1
 			} else {
 				convergesScore = -2
@@ -500,7 +485,7 @@ func rankedCandidateListForRemoval(
 		// adding 1 to the constraint score. Note that when selecting a
 		// candidate for removal the candidates with the lowest scores are
 		// more likely to be removed.
-		convergesScore := rebalanceFromConvergesScore(sl, s.Capacity)
+		convergesScore := rebalanceFromConvergesScore(sl, s.Capacity, options)
 		balanceScore := balanceScore(sl, s.Capacity, options)
 		candidates = append(candidates, candidate{
 			store:          s,
@@ -707,7 +692,7 @@ func rankedCandidateListForRebalancing(
 			//
 			// TODO(a-robinson): Some moderate refactoring could extract this logic
 			// out into the loop below, avoiding duplicate balanceScore calculations.
-			if shouldRebalanceBasedOnRangeCount(ctx, existing.store, sl, options) {
+			if shouldRebalanceBasedOnThresholds(ctx, existing.store, sl, options) {
 				shouldRebalanceCheck = true
 				break
 			}
@@ -740,7 +725,7 @@ func rankedCandidateListForRebalancing(
 			// Similarly to in rankedCandidateListForRemoval, any replica whose
 			// removal would not converge the range stats to their means is given a
 			// constraint score boost of 1 to make it less attractive for removal.
-			convergesScore := rebalanceFromConvergesScore(comparable.sl, existing.store.Capacity)
+			convergesScore := rebalanceFromConvergesScore(comparable.sl, existing.store.Capacity, options)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
 			existing.rangeCount = int(existing.store.Capacity.RangeCount)
@@ -759,14 +744,7 @@ func rankedCandidateListForRebalancing(
 			s := cand.store
 			cand.fullDisk = !rebalanceToMaxCapacityCheck(s)
 			cand.balanceScore = balanceScore(comparable.sl, s.Capacity, options)
-			cand.convergesScore = rebalanceToConvergesScore(comparable.sl, s.Capacity)
-			if !needRebalance && cand.convergesScore == 0 {
-				// Only consider this candidate if we must rebalance due to constraint,
-				// disk fullness, or diversity reasons.
-				log.VEventf(ctx, 3, "not considering %+v as a candidate for range %+v: score=%s storeList=%+v",
-					s, existingReplicasForType, cand.balanceScore, comparable.sl)
-				continue
-			}
+			cand.convergesScore = rebalanceToConvergesScore(comparable.sl, s.Capacity, options)
 			cand.rangeCount = int(s.Capacity.RangeCount)
 			candidates = append(candidates, cand)
 		}
@@ -862,12 +840,54 @@ func betterRebalanceTarget(target1, existing1, target2, existing2 *candidate) *c
 	return target1
 }
 
-// shouldRebalanceBasedOnRangeCount returns whether the specified store is a
+// shouldRebalanceBasedOnThresholds returns whether the specified store is a
 // candidate for having a replica removed from it given the candidate store
-// list.
-func shouldRebalanceBasedOnRangeCount(
+// list. This method returns true if there are any ranges that are on stores
+// that lie _outside of the [underfullThreshold, overfullThreshold] window_ for
+// the given signal (QPS or range count).
+//
+// NB: If the given `options` have `qpsRebalanceThreshold` set, this method
+// makes its determination based on QPS. Otherwise, we fall back on using range
+// count as a signal.
+func shouldRebalanceBasedOnThresholds(
 	ctx context.Context, store roachpb.StoreDescriptor, sl StoreList, options scorerOptions,
 ) bool {
+	if options.qpsRebalanceThreshold > 0 {
+		overfullThreshold := overfullQPSThreshold(options, sl.candidateQueriesPerSecond.mean)
+		if store.Capacity.QueriesPerSecond > overfullThreshold {
+			log.VEventf(
+				ctx,
+				2,
+				"s%d: should-rebalance(QPS-overfull): QPS=%.2f, mean=%.2f, overfull-threshold=%.2f",
+				store.StoreID,
+				store.Capacity.QueriesPerSecond,
+				sl.candidateQueriesPerSecond.mean,
+				overfullThreshold,
+			)
+			return true
+		}
+		if store.Capacity.QueriesPerSecond > sl.candidateQueriesPerSecond.mean {
+			underfullThreshold := underfullQPSThreshold(options, sl.candidateQueriesPerSecond.mean)
+			for _, desc := range sl.stores {
+				if desc.Capacity.QueriesPerSecond < underfullThreshold {
+					log.VEventf(
+						ctx,
+						2,
+						"s%d: should-rebalance(better-fit-QPS=s%d): QPS=%.2f, otherQPS=%.2f, mean=%.2f, underfull-threshold=%.2f",
+						store.StoreID,
+						desc.StoreID,
+						store.Capacity.QueriesPerSecond,
+						desc.Capacity.QueriesPerSecond,
+						sl.candidateQueriesPerSecond.mean,
+						underfullThreshold,
+					)
+					return true
+				}
+			}
+		}
+		return false
+	}
+
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(options, sl.candidateRanges.mean)))
 	if store.Capacity.RangeCount > overfullThreshold {
 		log.VEventf(ctx, 2,
@@ -875,7 +895,6 @@ func shouldRebalanceBasedOnRangeCount(
 			store.StoreID, store.Capacity.RangeCount, sl.candidateRanges.mean, overfullThreshold)
 		return true
 	}
-
 	if float64(store.Capacity.RangeCount) > sl.candidateRanges.mean {
 		underfullThreshold := int32(math.Floor(underfullRangeThreshold(options, sl.candidateRanges.mean)))
 		for _, desc := range sl.stores {
@@ -889,7 +908,6 @@ func shouldRebalanceBasedOnRangeCount(
 			}
 		}
 	}
-
 	// If we reached this point, we're happy with the range where it is.
 	return false
 }
@@ -1312,68 +1330,108 @@ func diversityRebalanceFromScore(
 	return sumScore / float64(numSamples)
 }
 
-type rangeCountStatus int
+type balanceStatus int
 
 const (
-	overfull  rangeCountStatus = -1
-	balanced  rangeCountStatus = 0
-	underfull rangeCountStatus = 1
+	overfull     balanceStatus = -2
+	moreThanMean balanceStatus = -1
+	lessThanMean balanceStatus = 0
+	underfull    balanceStatus = 1
 )
 
 // balanceScore returns an arbitrarily scaled score where higher scores are for
-// stores where the range is a better fit based on various balance factors
-// like range count, disk usage, and QPS.
-func balanceScore(sl StoreList, sc roachpb.StoreCapacity, options scorerOptions) balanceDimensions {
-	var dimensions balanceDimensions
-	if float64(sc.RangeCount) > overfullRangeThreshold(options, sl.candidateRanges.mean) {
-		dimensions.ranges = overfull
-	} else if float64(sc.RangeCount) < underfullRangeThreshold(options, sl.candidateRanges.mean) {
-		dimensions.ranges = underfull
-	} else {
-		dimensions.ranges = balanced
+// stores where the range is a better fit based on balance factors like range
+// count or QPS.
+//
+// If the given options have qpsRebalanceThreshold set, we use that for
+// computing the balanceScore.
+//
+// TODO(aayush): It would be nice to be able to compose the two dimensions of
+// balanceScore (QPS or RangeCount) and allow the `options` to simply specify an
+// order of precedence. Callers who care about the balancing out QPS across
+// stores (like the StoreRebalancer) could ask for QPS to take precedence over
+// RangeCount, and vice-versa.
+func balanceScore(sl StoreList, sc roachpb.StoreCapacity, options scorerOptions) balanceStatus {
+	if options.qpsRebalanceThreshold > 0 {
+		maxQPS := overfullQPSThreshold(options, sl.candidateQueriesPerSecond.mean)
+		minQPS := underfullQPSThreshold(options, sl.candidateQueriesPerSecond.mean)
+		curQPS := sc.QueriesPerSecond
+		if curQPS < minQPS {
+			return underfull
+		} else if curQPS < sl.candidateQueriesPerSecond.mean {
+			return lessThanMean
+		} else if curQPS < maxQPS {
+			return moreThanMean
+		} else {
+			return overfull
+		}
 	}
-	return dimensions
+	maxRangeCount := overfullRangeThreshold(options, sl.candidateRanges.mean)
+	minRangeCount := underfullRangeThreshold(options, sl.candidateRanges.mean)
+	curRangeCount := float64(sc.RangeCount)
+	if curRangeCount < minRangeCount {
+		return underfull
+	} else if curRangeCount < sl.candidateRanges.mean {
+		return lessThanMean
+	} else if curRangeCount < maxRangeCount {
+		return moreThanMean
+	} else {
+		return overfull
+	}
 }
 
 func overfullRangeThreshold(options scorerOptions, mean float64) float64 {
-	return overfullThreshold(mean, options.rangeRebalanceThreshold)
+	return mean + math.Max(mean*options.rangeRebalanceThreshold, minRangeRebalanceThreshold)
 }
 
 func underfullRangeThreshold(options scorerOptions, mean float64) float64 {
-	return underfullThreshold(mean, options.rangeRebalanceThreshold)
+	return mean - math.Max(mean*options.rangeRebalanceThreshold, minRangeRebalanceThreshold)
 }
 
-func overfullThreshold(mean float64, thresholdFraction float64) float64 {
-	return mean + math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
+func overfullQPSThreshold(options scorerOptions, mean float64) float64 {
+	return math.Max(mean*(1+options.qpsRebalanceThreshold), mean+minQPSThresholdDifference)
 }
 
-func underfullThreshold(mean float64, thresholdFraction float64) float64 {
-	return mean - math.Max(mean*thresholdFraction, minRangeRebalanceThreshold)
+func underfullQPSThreshold(options scorerOptions, mean float64) float64 {
+	return math.Min(mean*(1-options.qpsRebalanceThreshold), mean-minQPSThresholdDifference)
 }
 
-// rebalanceFromConvergesScore returns 1 if rebalancing a replica away from `sc`
-// will _not_ converge its range count towards the mean range count of stores in
-// `sl`. When we're considering whether to rebalance a replica away from a store
-// or not, we want to give it a "boost" (i.e. make it a less likely candidate
-// for removal) if it doesn't further our goal to converge range counts towards
-// the mean.
-func rebalanceFromConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int {
-	if rebalanceConvergesOnMean(sl, sc, sc.RangeCount-1) {
+// rebalanceFromConvergesScore returns a 1 iff rebalancing a replica away from
+// `sc` will _not_ converge its range count towards the mean of stores in `sl`.
+// When we're considering whether to rebalance a replica away from a store or
+// not, we want to give it a "boost" (i.e. make it a less likely candidate for
+// removal) if it doesn't further our goal to converge range count towards the
+// mean.
+func rebalanceFromConvergesScore(
+	sl StoreList, sc roachpb.StoreCapacity, options scorerOptions,
+) int {
+	if options.qpsRebalanceThreshold > 0 {
+		// if `qpsRebalanceThreshold` is set, we disable the `convergesScore`.
+		return 0
+	}
+	if rebalanceConvergesRangeCountOnMean(sl, sc, sc.RangeCount-1) {
 		return 0
 	}
 	return 1
 }
 
 // rebalanceToConvergesScore returns 1 if rebalancing a replica to `sc` will
-// converge its range count towards the mean of all the stores inside `sl`.
-func rebalanceToConvergesScore(sl StoreList, sc roachpb.StoreCapacity) int {
-	if rebalanceConvergesOnMean(sl, sc, sc.RangeCount+1) {
+// converge its range count towards the mean of all the stores inside
+// `sl`.
+func rebalanceToConvergesScore(sl StoreList, sc roachpb.StoreCapacity, options scorerOptions) int {
+	if options.qpsRebalanceThreshold > 0 {
+		// if `qpsRebalanceThreshold` is set, we disable the `convergesScore`.
+		return 0
+	}
+	if rebalanceConvergesRangeCountOnMean(sl, sc, sc.RangeCount+1) {
 		return 1
 	}
 	return 0
 }
 
-func rebalanceConvergesOnMean(sl StoreList, sc roachpb.StoreCapacity, newRangeCount int32) bool {
+func rebalanceConvergesRangeCountOnMean(
+	sl StoreList, sc roachpb.StoreCapacity, newRangeCount int32,
+) bool {
 	return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
 }
 
