@@ -518,15 +518,23 @@ func rankedCandidateListForRemoval(
 	return candidates
 }
 
+// rebalanceOptions contains two candidate lists:
+//
+// 1. a ranked list of existing replicas ordered from best to worst -- i.e.
+// least qualified for rebalancing to most qualified (see `candidateList.best()`
+// and `candidateList.worst()`)
+// 2. a corresponding list of comparable stores that could be legal replacements
+// for the aforementioned existing replicas -- also ordered from `best()` to
+// `worst()`.
 type rebalanceOptions struct {
 	existingCandidates candidateList
 	candidates         candidateList
 }
 
-// rankedCandidateListForRebalancing creates two candidate lists. The first
-// contains all existing replica's stores, ordered from least qualified for
-// rebalancing to most qualified. The second list is of all potential stores
-// that could be used as rebalancing receivers, ordered from best to worst.
+// rankedCandidateListForRebalancing returns a list of `rebalanceOptions`, i.e.
+// groups of candidate stores and the existing replicas that they could legally
+// replace in the range. See comment above `rebalanceOptions()` for more
+// details.
 func rankedCandidateListForRebalancing(
 	ctx context.Context,
 	allStores StoreList,
