@@ -337,7 +337,7 @@ func WriteDescriptors(
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			dKey := catalogkv.MakeDatabaseNameKey(ctx, settings, desc.GetName())
+			dKey := catalogkeys.NewDatabaseKey(desc.GetName())
 			b.CPut(dKey.Key(codec), desc.GetID(), nil)
 		}
 
@@ -418,13 +418,7 @@ func WriteDescriptors(
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			tkey := catalogkv.MakeObjectNameKey(
-				ctx,
-				settings,
-				table.GetParentID(),
-				table.GetParentSchemaID(),
-				table.GetName(),
-			)
+			tkey := catalogkv.MakeObjectNameKey(table.GetParentID(), table.GetParentSchemaID(), table.GetName())
 			b.CPut(tkey.Key(codec), table.GetID(), nil)
 		}
 
@@ -449,7 +443,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			tkey := catalogkv.MakeObjectNameKey(ctx, settings, typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
+			tkey := catalogkv.MakeObjectNameKey(typ.GetParentID(), typ.GetParentSchemaID(), typ.GetName())
 			b.CPut(tkey.Key(codec), typ.GetID(), nil)
 		}
 

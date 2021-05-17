@@ -483,8 +483,8 @@ func (p PrivilegeDescriptor) AnyPrivilege(user security.SQLUsername) bool {
 // other users must not exceed the specified privileges.
 var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.SystemDatabaseID:           privilege.ReadData,
-	keys.NamespaceTableID:           privilege.ReadData,
 	keys.DeprecatedNamespaceTableID: privilege.ReadData,
+	keys.NamespaceTableID:           privilege.ReadData,
 	keys.DescriptorTableID:          privilege.ReadData,
 	keys.UsersTableID:               privilege.ReadWriteData,
 	keys.RoleOptionsTableID:         privilege.ReadWriteData,

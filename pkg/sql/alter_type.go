@@ -289,13 +289,7 @@ func (p *planner) performRenameTypeDesc(
 		return err
 	}
 	// Construct the new namespace key.
-	key := catalogkv.MakeObjectNameKey(
-		ctx,
-		p.ExecCfg().Settings,
-		desc.ParentID,
-		desc.ParentSchemaID,
-		newName,
-	)
+	key := catalogkv.MakeObjectNameKey(desc.ParentID, desc.ParentSchemaID, newName)
 
 	return p.writeNameKey(ctx, key, desc.ID)
 }

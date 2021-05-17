@@ -47,7 +47,7 @@ type NamespaceTableRow struct {
 	ID int64
 }
 
-// NamespaceTable represents data read from `system.namespace2`.
+// NamespaceTable represents data read from `system.namespace`.
 type NamespaceTable []NamespaceTableRow
 
 // JobsTable represents data read from `system.jobs`.
@@ -282,7 +282,7 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	// Delete predefined user descriptor namespace entries.
 	fmt.Fprintf(out,
 		"SELECT crdb_internal.unsafe_delete_namespace_entry(\"parentID\", \"parentSchemaID\", name, id) "+
-			"FROM system.namespace2 WHERE id >= %d;\n",
+			"FROM system.namespace WHERE id >= %d;\n",
 		keys.MinUserDescID)
 	fmt.Fprintln(out, `COMMIT;`)
 	// Print second transaction, which inserts namespace and descriptor entries.

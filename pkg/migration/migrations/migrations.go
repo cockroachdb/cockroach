@@ -48,11 +48,6 @@ var migrations = []migration.Migration{
 		postTruncatedStateMigration,
 	),
 	migration.NewTenantMigration(
-		"copy all namespace entries to new namespace table",
-		toCV(clusterversion.NamespaceTableWithSchemasMigration),
-		namespaceMigration,
-	),
-	migration.NewTenantMigration(
 		"upgrade old foreign key representation",
 		toCV(clusterversion.ForeignKeyRepresentationMigration),
 		foreignKeyRepresentationUpgrade,

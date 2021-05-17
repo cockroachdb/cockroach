@@ -211,7 +211,6 @@ public       statement_bundle_chunks          table  NULL   0                   
 public       role_options                     table  NULL   0                    NULL
 public       protected_ts_records             table  NULL   0                    NULL
 public       protected_ts_meta                table  NULL   0                    NULL
-public       namespace2                       table  NULL   0                    NULL
 public       reports_meta                     table  NULL   0                    NULL
 public       replication_stats                table  NULL   0                    NULL
 public       replication_critical_localities  table  NULL   0                    NULL
@@ -247,7 +246,6 @@ public       statement_bundle_chunks          table  NULL   0                   
 public       role_options                     table  NULL   0                    NULL      ·
 public       protected_ts_records             table  NULL   0                    NULL      ·
 public       protected_ts_meta                table  NULL   0                    NULL      ·
-public       namespace2                       table  NULL   0                    NULL      ·
 public       reports_meta                     table  NULL   0                    NULL      ·
 public       replication_stats                table  NULL   0                    NULL      ·
 public       replication_critical_localities  table  NULL   0                    NULL      ·

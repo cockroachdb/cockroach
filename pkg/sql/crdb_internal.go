@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -2989,36 +2988,9 @@ func getAllNames(
 	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
 ) (map[descpb.ID]NamespaceKey, error) {
 	namespace := map[descpb.ID]NamespaceKey{}
-	if executor.s.cfg.Settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
-		it, err := executor.QueryIterator(
-			ctx, "get-all-names", txn,
-			`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
-		)
-		if err != nil {
-			return nil, err
-		}
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			r := it.Cur()
-			id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
-			namespace[descpb.ID(id)] = NamespaceKey{
-				ParentID:       descpb.ID(parentID),
-				ParentSchemaID: descpb.ID(parentSchemaID),
-				Name:           string(name),
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Also get all rows from namespace_deprecated, and add to the namespace map
-	// if it is not already there yet.
-	// If a row exists in both here and namespace, only use the one from namespace.
-	// TODO(sqlexec): In 20.2, this can be removed.
 	it, err := executor.QueryIterator(
-		ctx, "get-all-names-deprecated-namespace", txn,
-		fmt.Sprintf(`SELECT id, "parentID", name FROM [%d as namespace]`, keys.DeprecatedNamespaceTableID),
+		ctx, "get-all-names", txn,
+		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
 	)
 	if err != nil {
 		return nil, err
@@ -3026,12 +2998,11 @@ func getAllNames(
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		r := it.Cur()
-		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
-		if _, ok := namespace[descpb.ID(id)]; !ok {
-			namespace[descpb.ID(id)] = NamespaceKey{
-				ParentID: descpb.ID(parentID),
-				Name:     string(name),
-			}
+		id, parentID, parentSchemaID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDInt(r[2]), tree.MustBeDString(r[3])
+		namespace[descpb.ID(id)] = NamespaceKey{
+			ParentID:       descpb.ID(parentID),
+			ParentSchemaID: descpb.ID(parentSchemaID),
+			Name:           string(name),
 		}
 	}
 	if err != nil {
