@@ -46,7 +46,29 @@ Relocating the code from the UI repository (`cockroachdb/ui/packages/cluster-ui`
 
 ## Updating DB Console
 
-After the code is moved, dependencies have been resolved, and the build is successful the native code that references the `@cockroachlabs/cluster-ui` dependency should be updated to point to local code instead. There are currently around 35 references to the external dependency with most of them being utility components. There will most likely be some component duplication when moving the whole of Cluster UI back into the repository from whence it came. There will be an opportunity to remove identical duplicate components, but I think an evaluation of similar components should be postponed until both applications have been fully updated. 
+
+After the code is moved, dependencies have been resolved, and the build is successful the dependency that references the `@cockroachlabs/cluster-ui` dependency should be updated to point to local code instead. This will use npm syntax to reference a local directory without a version, making it possible to leave dependency references in place in code but achieve a better local development experience. It was originally expected to refactor DB Console code to reference Cluster ui as a local directory instead of an external dependency, but this turned out to create untenable build issues for DB Console. Continuing to reference cluster ui as an external dependency (when in reality it is a local directory) allow for better ergonomics when building both DB Console and the cluster ui package independently for publishing.
+
+*Code would continue to get referenced in DB Console in this way*
+```tsx
+import { StatementsPage, StatementDetails } from "@cockroachlabs/cluster-ui";
+```
+
+*Currently the dependency declaration on Cluster UI is*
+```json
+  "dependencies": {
+    ...
+    "@cockroachlabs/cluster-ui": "^0.2.38",
+    ...
+```
+
+*We are proposing a dependency declaration like this*
+```json
+ "dependencies": {
+    ...
+    "@cockroachlabs/cluster-ui": "link:./cluster-ui",
+    ...
+```
 
 Once the move and cleanup has happened on master, an update will need to be made to `release-20.2` as this version also depends on the an external `cluster-ui` as well. The version supporting 20.2 is on a separate branch in the UI repository (`cluster-ui-20.2`) and so while the code move on master could be referenced I'm not confident it can be duplicated. Depending on the state of the release, the work on CRDB master may need to be backported to `release-21.1` as well.
 
