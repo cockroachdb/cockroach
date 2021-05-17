@@ -582,7 +582,6 @@ func (tf *SchemaFeed) fetchDescriptorVersions(
 		StartTime:     startTS,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
-		OmitChecksum:  true,
 	}
 	res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {
