@@ -228,7 +228,10 @@ func unaryNegation(e tree.Expr) tree.Expr {
 	}
 
 	// Common case.
-	return &tree.UnaryExpr{Operator: tree.UnaryMinus, Expr: e}
+	return &tree.UnaryExpr{
+		Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
+		Expr:     e,
+	}
 }
 
 // Parse parses a sql statement string and returns a list of Statements.

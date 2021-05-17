@@ -207,8 +207,8 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op tree.UnaryOperator, expr tree.Expr) tree.Expr {
-		return &tree.UnaryExpr{Operator: op, Expr: expr}
+	unary := func(op tree.UnaryOperatorSymbol, expr tree.Expr) tree.Expr {
+		return &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(op), Expr: expr}
 	}
 	binary := func(op tree.BinaryOperator, left, right tree.Expr) tree.Expr {
 		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}

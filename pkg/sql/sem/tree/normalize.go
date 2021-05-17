@@ -84,7 +84,7 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		return val
 	}
 
-	switch expr.Operator {
+	switch expr.Operator.Symbol {
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
 		if val.ResolvedType().Family() != types.FloatFamily && v.isNumericZero(val) {
@@ -104,7 +104,7 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			}
 		// - (- a) -> a
 		case *UnaryExpr:
-			if b.Operator == UnaryMinus {
+			if b.Operator.Symbol == UnaryMinus {
 				return b.TypedInnerExpr()
 			}
 		}

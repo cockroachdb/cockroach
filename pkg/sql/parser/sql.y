@@ -93,6 +93,21 @@ func processUnaryQualOp(
   op tree.Operator,
   expr tree.Expr,
 ) (tree.Expr, int) {
+  e, code := processUnaryQualOpInternal(sqllex, op, expr)
+  if code != 0 {
+    return e, code
+  }
+  if e, ok := e.(*tree.UnaryExpr); ok {
+    e.Operator.IsOperator = true
+  }
+  return e, code
+}
+
+func processUnaryQualOpInternal(
+  sqllex sqlLexer,
+  op tree.Operator,
+  expr tree.Expr,
+) (tree.Expr, int) {
   switch op := op.(type) {
   case tree.UnaryOperator:
     return &tree.UnaryExpr{Operator: op, Expr: expr}, 0
@@ -108,7 +123,7 @@ func processUnaryQualOp(
   case tree.ComparisonOperator:
     switch op {
     case tree.RegMatch:
-      return &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: expr}, 0
+      return &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnaryComplement), Expr: expr}, 0
     }
   }
   sqllex.Error(fmt.Sprintf("unknown unary operator %s", op))
@@ -10299,15 +10314,15 @@ a_expr:
   }
 | '~' a_expr %prec UMINUS
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: $2.expr()}
+    $$.val = &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnaryComplement), Expr: $2.expr()}
   }
 | SQRT a_expr
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnarySqrt, Expr: $2.expr()}
+    $$.val = &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnarySqrt), Expr: $2.expr()}
   }
 | CBRT a_expr
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryCbrt, Expr: $2.expr()}
+    $$.val = &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnaryCbrt), Expr: $2.expr()}
   }
 | a_expr '+' a_expr
   {
@@ -10676,7 +10691,7 @@ b_expr:
   }
 | '~' b_expr %prec UMINUS
   {
-    $$.val = &tree.UnaryExpr{Operator: tree.UnaryComplement, Expr: $2.expr()}
+    $$.val = &tree.UnaryExpr{Operator: tree.MakeUnaryOperator(tree.UnaryComplement), Expr: $2.expr()}
   }
 | b_expr '+' b_expr
   {
@@ -11583,9 +11598,9 @@ all_op:
 | REGIMATCH { $$.val = tree.RegIMatch }
 | NOT_REGIMATCH { $$.val = tree.NotRegIMatch }
 | AND_AND { $$.val = tree.Overlaps }
-| '~' { $$.val = tree.UnaryComplement }
-| SQRT { $$.val = tree.UnarySqrt }
-| CBRT { $$.val = tree.UnaryCbrt }
+| '~' { $$.val = tree.MakeUnaryOperator(tree.UnaryComplement) }
+| SQRT { $$.val = tree.MakeUnaryOperator(tree.UnarySqrt) }
+| CBRT { $$.val = tree.MakeUnaryOperator(tree.UnaryCbrt) }
 
 operator_op:
   all_op

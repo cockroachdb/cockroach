@@ -1329,7 +1329,7 @@ func (expr *Subquery) TypeCheck(_ context.Context, sc *SemaContext, _ *types.T) 
 func (expr *UnaryExpr) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	ops := UnaryOps[expr.Operator]
+	ops := UnaryOps[expr.Operator.Symbol]
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, ops, false, expr.Expr)
 	if err != nil {
