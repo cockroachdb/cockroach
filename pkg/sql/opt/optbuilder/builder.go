@@ -426,14 +426,19 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 	}
 }
 
-func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
+func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) error {
 	if b.trackViewDeps {
 		if texpr.ResolvedType().UserDefined() {
-			for id := range typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()) {
+			children, err := typedesc.GetTypeDescriptorClosure(texpr.ResolvedType())
+			if err != nil {
+				return err
+			}
+			for id := range children {
 				b.viewTypeDeps.Add(int(id))
 			}
 		}
 	}
+	return nil
 }
 
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
