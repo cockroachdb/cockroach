@@ -252,7 +252,7 @@ func (c *CustomFuncs) SplitGroupByScanIntoUnionScans(
 	// GroupingPrivate (if no such UnionAll is possible this will return
 	// ok=false). We pass a limit of 0 since the scans are unlimited
 	// (splitScanIntoUnionScans is also used for another rule with limited scans).
-	return c.SplitScanIntoUnionScans(
+	return c.splitScanIntoUnionScans(
 		intraOrd, scan, sp, cons, 0 /* limit */, keyPrefixLength,
 	)
 }
