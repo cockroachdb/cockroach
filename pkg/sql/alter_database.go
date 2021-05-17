@@ -27,7 +27,7 @@ type alterDatabaseOwnerNode struct {
 func (p *planner) AlterDatabaseOwner(
 	ctx context.Context, n *tree.AlterDatabaseOwner,
 ) (planNode, error) {
-	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, n.Name.String(), true)
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true)
 	if err != nil {
 		return nil, err
 	}
