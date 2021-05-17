@@ -180,6 +180,9 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e
 
 replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
 
+// Temporary workaround for #65320.
+replace github.com/lib/pq => github.com/cockroachdb/pq v0.0.0-20210517091544-990dd3347596
+
 // At the time of writing (i.e. as of this version below) the `etcd` repo is in the process of properly introducing
 // modules, and as part of that uses an unsatisfiable version for this dependency (v3.0.0-00010101000000-000000000000).
 // We just force it to the same SHA as the `go.etcd.io/etcd/raft/v3` module (they live in the same VCS root).
