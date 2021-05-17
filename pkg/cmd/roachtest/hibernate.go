@@ -16,7 +16,7 @@ import (
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedHibernateTag = "5.4.20"
+var supportedHibernateTag = "5.4.30"
 
 // This test runs hibernate-core's full test suite against a single cockroach
 // node.
@@ -173,10 +173,11 @@ func registerHibernate(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		Name:    "hibernate",
-		Owner:   OwnerSQLExperience,
-		Cluster: makeClusterSpec(1),
-		Tags:    []string{`default`, `orm`},
+		Name:       "hibernate",
+		Owner:      OwnerSQLExperience,
+		MinVersion: "v20.2.0",
+		Cluster:    makeClusterSpec(1),
+		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runHibernate(ctx, t, c)
 		},
