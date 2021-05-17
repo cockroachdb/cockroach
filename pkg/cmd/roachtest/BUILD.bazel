@@ -125,6 +125,7 @@ go_library(
         "//pkg/cmd/internal/issues",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
+        "//pkg/internal/team",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",

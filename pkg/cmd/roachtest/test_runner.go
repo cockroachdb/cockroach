@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -637,7 +638,12 @@ func (r *testRunner) runTest(
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.DefaultOptionsFromEnv().CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				owner := roachtestOwners[t.spec.Owner]
+				teams, err := team.DefaultLoadTeams()
+				if err != nil {
+					t.Fatalf("could not load teams: %v", err)
+				}
+				alias := ownerToAlias(t.spec.Owner)
+				owner := teams[ownerToAlias(t.spec.Owner)]
 
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -657,7 +663,7 @@ func (r *testRunner) runTest(
 
 				req := issues.PostRequest{
 					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
-					Mention:         owner.Mention,
+					Mention:         []string{string(alias)},
 					ProjectColumnID: owner.TriageColumnID,
 					PackageName:     "roachtest",
 					TestName:        t.Name(),
