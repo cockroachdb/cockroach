@@ -73,9 +73,19 @@ type ExternalStorage interface {
 	// This can be leveraged for an existence check.
 	ReadFileAt(ctx context.Context, basename string, offset int64) (io.ReadCloser, int64, error)
 
-	// Writer returns a writer for the requested name. The returned writer must
-	// be closed by the caller to complete the write, or can be closed with an
-	// error which may, depending on the implementation, abort the write.
+	// Writer returns a writer for the requested name.
+	//
+	// A Writer *must* be closed via either Close or CloseWithError, and if
+	// closing returns a non-nil error, that error should be handled or reported
+	// to the user (likely using errors.CombineErrors(closeErr, reasonErr). This
+	// is because an implementation may wait or buffer written data until Close
+	// or a Write call may return io.EOF if the writer's stream is closed due to
+	// an error that will be reported by Close.
+	//
+	// The CloseWithError(err) alternative to Close(), if passed a non-nil error
+	// may elect to abort the operation, skip flushing any buffers or otherwise
+	// end the operation with the minimum additional work in the event the
+	// caller no longer wishes to complete it, e.g. due to some other error.
 	Writer(ctx context.Context, basename string) (WriteCloserWithError, error)
 
 	// ListFiles returns files that match a globs-style pattern. The returned
