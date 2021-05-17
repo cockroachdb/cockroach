@@ -324,6 +324,13 @@ func Parse(s string) (res BitArray, err error) {
 		return res, nil
 	}
 
+	if s[0] == 'x' || s[0] == 'X' {
+		return parseFromHex(s[1:])
+	}
+	return parseFromBinary(s)
+}
+
+func parseFromBinary(s string) (res BitArray, err error) {
 	words, lastBitsUsed := EncodingPartsForBitLen(uint(len(s)))
 
 	// Parse the bits.
@@ -341,6 +348,43 @@ func Parse(s string) (res BitArray, err error) {
 		}
 		curWord |= bitVal << (63 - bitIdx)
 		bitIdx = (bitIdx + 1) % numBitsPerWord
+		if bitIdx == 0 {
+			words[wordIdx] = curWord
+			curWord = 0
+			wordIdx++
+		}
+	}
+	if bitIdx > 0 {
+		// Ensure the last word is stored.
+		words[wordIdx] = curWord
+	}
+
+	return FromEncodingParts(words, lastBitsUsed)
+}
+
+func parseFromHex(s string) (res BitArray, err error) {
+	words, lastBitsUsed := EncodingPartsForBitLen(uint(len(s)) * 4)
+
+	// Parse the bits.
+	wordIdx := 0
+	bitIdx := uint(0)
+	curWord := word(0)
+	for _, c := range s {
+		var bitVal word
+		if c >= '0' && c <= '9' {
+			bitVal = word(c - '0')
+		} else if c >= 'a' && c <= 'f' {
+			bitVal = word(c-'a') + 10
+		} else if c >= 'A' && c <= 'F' {
+			bitVal = word(c-'A') + 10
+		} else {
+			// Note: the prefix "could not parse" is important as it is used
+			// to detect parsing errors in tests.
+			err := fmt.Errorf(`could not parse string as bit array: "%c" is not a valid hexadecimal digit`, c)
+			return res, pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
+		}
+		curWord |= bitVal << (60 - bitIdx)
+		bitIdx = (bitIdx + 4) % numBitsPerWord
 		if bitIdx == 0 {
 			words[wordIdx] = curWord
 			curWord = 0
