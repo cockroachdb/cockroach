@@ -12,13 +12,18 @@ package span
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -146,44 +151,44 @@ func TestSpanFrontier(t *testing.T) {
 		expectFrontier(4).
 		expectEntries(`{a-b}@5 {b-c}@4 {c-d}@5`)
 
-	// Catch BC up.
+	// Catch BC up: spans collapse.
 	forwardFrontier(spBC, 5).
 		expectedAdvanced(true).
 		expectFrontier(5).
-		expectEntries(`{a-b}@5 {b-c}@5 {c-d}@5`)
+		expectEntries(`{a-d}@5`)
 
-	// Forward them all at once (spans don't collapse for now, this is a TODO).
+	// Forward them all at once.
 	forwardFrontier(spAD, 6).
 		expectedAdvanced(true).
 		expectFrontier(6).
-		expectEntries(`{a-b}@6 {b-c}@6 {c-d}@6`)
+		expectEntries(`{a-d}@6`)
 
 	// Split AC with BD.
 	forwardFrontier(spCD, 7).
 		expectedAdvanced(false).
 		expectFrontier(6).
-		expectEntries(`{a-b}@6 {b-c}@6 {c-d}@7`)
+		expectEntries(`{a-c}@6 {c-d}@7`)
 
 	forwardFrontier(spBD, 8).
 		expectedAdvanced(false).
 		expectFrontier(6).
-		expectEntries(`{a-b}@6 {b-c}@8 {c-d}@8`)
+		expectEntries(`{a-b}@6 {b-d}@8`)
 
 	forwardFrontier(spAB, 8).
 		expectedAdvanced(true).
 		expectFrontier(8).
-		expectEntries(`{a-b}@8 {b-c}@8 {c-d}@8`)
+		expectEntries(`{a-d}@8`)
 
 	// Split BD with AC.
 	forwardFrontier(spAC, 9).
 		expectedAdvanced(false).
 		expectFrontier(8).
-		expectEntries(`{a-b}@9 {b-c}@9 {c-d}@8`)
+		expectEntries(`{a-c}@9 {c-d}@8`)
 
 	forwardFrontier(spCD, 9).
 		expectedAdvanced(true).
 		expectFrontier(9).
-		expectEntries(`{a-b}@9 {b-c}@9 {c-d}@9`)
+		expectEntries(`{a-d}@9`)
 }
 
 func TestSpanFrontierDisjointSpans(t *testing.T) {
@@ -289,4 +294,89 @@ func TestSequentialSpans(t *testing.T) {
 		expectedRanges = append(expectedRanges, fmt.Sprintf("%s@%d", span, i+1))
 	}
 	require.Equal(t, strings.Join(expectedRanges, " "), f.entriesStr())
+}
+
+// symbols that can make up spans.
+var spanSymbols = []byte("@$0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+type spanMaker struct {
+	rnd        *rand.Rand
+	numSymbols int
+	starts     []interval.Comparable
+}
+
+func newSpanMaker(numSymbols int, rnd *rand.Rand) (*spanMaker, roachpb.Span) {
+	m := &spanMaker{
+		rnd:        rnd,
+		numSymbols: numSymbols,
+	}
+	span := roachpb.Span{
+		Key:    roachpb.Key{'A'},
+		EndKey: roachpb.Key{'z'},
+	}
+	return m, span
+}
+
+func (m *spanMaker) rndKey() interval.Comparable {
+	var key []byte
+	for n := 1 + m.rnd.Intn(m.numSymbols); n > 0; n-- {
+		key = append(key, spanSymbols[m.rnd.Intn(len(spanSymbols))])
+	}
+	return key
+}
+
+func (m *spanMaker) rndSpan() roachpb.Span {
+	var startKey interval.Comparable
+
+	if len(m.starts) > 0 && m.rnd.Int()%17 == 0 {
+		// With some probability use previous starting point.
+		startKey = m.starts[m.rnd.Intn(len(m.starts))]
+		// Just for fun, nudge start a bit forward or back.
+		if dice := m.rnd.Intn(3) - 1; dice != 0 {
+			startKey[len(startKey)-1] += byte(dice)
+		}
+	} else {
+		// Generate a new start.
+		startKey = m.rndKey()
+		m.starts = append(m.starts, startKey)
+	}
+
+	endKey := m.rndKey()
+
+	if startKey.Equal(endKey) {
+		endKey = append(endKey, spanSymbols[m.rnd.Intn(len(spanSymbols))])
+	}
+
+	if endKey.Compare(startKey) < 0 {
+		startKey, endKey = endKey, startKey
+	}
+	if endKey.Equal(startKey) {
+		panic(roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)}.String())
+	}
+	return roachpb.Span{Key: roachpb.Key(startKey), EndKey: roachpb.Key(endKey)}
+}
+
+func BenchmarkFrontier(b *testing.B) {
+	var rndSeed = randutil.NewPseudoSeed()
+
+	rnd := rand.New(rand.NewSource(rndSeed))
+	spanMaker, span := newSpanMaker(4, rnd)
+
+	f, err := MakeFrontier(span)
+	require.NoError(b, err)
+	log.Infof(context.Background(), "N=%d TestSpan: %s (seed: %d) Entries: %s", b.N, span, rndSeed, f.entriesStr())
+	b.ReportAllocs()
+	var wall int64 = 10
+
+	for i := 0; i < b.N; i++ {
+		if i%10 == 0 {
+			wall += rnd.Int63n(10)
+		}
+
+		delta := rnd.Int63n(10) - rnd.Int63n(3)
+		rndSpan := spanMaker.rndSpan()
+		_, err := f.Forward(rndSpan, hlc.Timestamp{WallTime: wall + delta})
+		require.NoError(b, err)
+	}
+	log.Infof(context.Background(), "%d entries: %s", f.tree.Len(), f.entriesStr())
 }
