@@ -124,7 +124,8 @@ func runSampleAggregator(
 			SampleSize: childNumSamples, Sketches: sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
-			&flowCtx, 0 /* processorID */, spec, in, &execinfrapb.PostProcessSpec{}, outputs[i],
+			&flowCtx, 0 /* processorID */, spec, defaultMinSampleSize, in, &execinfrapb.PostProcessSpec{},
+			outputs[i],
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -157,7 +158,8 @@ func runSampleAggregator(
 	}
 
 	agg, err := newSampleAggregator(
-		&flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{}, finalOut,
+		&flowCtx, 0 /* processorID */, spec, defaultMinSampleSize, samplerResults,
+		&execinfrapb.PostProcessSpec{}, finalOut,
 	)
 	if err != nil {
 		t.Fatal(err)
