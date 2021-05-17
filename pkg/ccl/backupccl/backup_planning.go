@@ -638,42 +638,6 @@ func backupPlanHook(
 			}
 		}
 
-		mvccFilter := MVCCFilter_Latest
-		if backupStmt.Options.CaptureRevisionHistory {
-			if err := requireEnterprise("revision_history"); err != nil {
-				return err
-			}
-			mvccFilter = MVCCFilter_All
-		}
-
-		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
-		if err != nil {
-			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
-		}
-
-		// Check BACKUP privileges.
-		err = checkPrivilegesForBackup(ctx, backupStmt, p, targetDescs, to)
-		if err != nil {
-			return err
-		}
-
-		var tables []catalog.TableDescriptor
-		statsFiles := make(map[descpb.ID]string)
-		for _, desc := range targetDescs {
-			switch desc := desc.(type) {
-			case catalog.TableDescriptor:
-				tables = append(tables, desc)
-
-				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
-				// vs having each object in a separate file, or somewhere in between.
-				statsFiles[desc.GetID()] = backupStatisticsFileName
-			}
-		}
-
-		if err := ensureInterleavesIncluded(tables); err != nil {
-			return err
-		}
-
 		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
 		switch encryptionParams.encryptMode {
@@ -722,6 +686,85 @@ func backupPlanHook(
 			}
 		}
 
+		var startTime hlc.Timestamp
+		if len(prevBackups) > 0 {
+			if err := requireEnterprise("incremental"); err != nil {
+				return err
+			}
+			startTime = prevBackups[len(prevBackups)-1].EndTime
+		}
+
+		mvccFilter := MVCCFilter_Latest
+		if backupStmt.Options.CaptureRevisionHistory {
+			if err := requireEnterprise("revision_history"); err != nil {
+				return err
+			}
+			mvccFilter = MVCCFilter_All
+		}
+
+		var targetDescs []catalog.Descriptor
+		var completeDBs []descpb.ID
+
+		switch backupStmt.Coverage() {
+		case tree.RequestedDescriptors:
+			var err error
+			targetDescs, completeDBs, err = ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			if err != nil {
+				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
+			}
+		case tree.AllDescriptors:
+			// Cluster backups include all of the descriptors in the cluster.
+			var allDescs []catalog.Descriptor
+			var err error
+			switch mvccFilter {
+			case MVCCFilter_All:
+				// Usually, revision_history backups include all previous versions of the
+				// descriptors at exist as of end time since they have not been GC'ed yet.
+				// However, since database descriptors are deleted as soon as the database
+				// is deleted, cluster backups need to explicitly go looking for these
+				// dropped descriptors up front.
+				allDescs, err = loadAllDescsInInterval(ctx, p.ExecCfg().DB, startTime, endTime)
+			case MVCCFilter_Latest:
+				allDescs, err = loadAllDescs(ctx, p.ExecCfg().DB, endTime)
+			}
+			if err != nil {
+				return err
+			}
+
+			targetDescs, completeDBs, err = fullClusterTargetsBackup(allDescs)
+			if err != nil {
+				return err
+			}
+			if len(targetDescs) == 0 {
+				return errors.New("no descriptors available to backup at selected time")
+			}
+		default:
+			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
+		}
+
+		// Check BACKUP privileges.
+		err = checkPrivilegesForBackup(ctx, backupStmt, p, targetDescs, to)
+		if err != nil {
+			return err
+		}
+
+		var tables []catalog.TableDescriptor
+		statsFiles := make(map[descpb.ID]string)
+		for _, desc := range targetDescs {
+			switch desc := desc.(type) {
+			case catalog.TableDescriptor:
+				tables = append(tables, desc)
+
+				// TODO (anzo): look into the tradeoffs of having all objects in the array to be in the same file,
+				// vs having each object in a separate file, or somewhere in between.
+				statsFiles[desc.GetID()] = backupStatisticsFileName
+			}
+		}
+
+		if err := ensureInterleavesIncluded(tables); err != nil {
+			return err
+		}
+
 		clusterID := p.ExecCfg().ClusterID()
 		for i := range prevBackups {
 			// IDs are how we identify tables, and those are only meaningful in the
@@ -732,14 +775,7 @@ func backupPlanHook(
 			}
 		}
 
-		var startTime hlc.Timestamp
 		var newSpans roachpb.Spans
-		if len(prevBackups) > 0 {
-			if err := requireEnterprise("incremental"); err != nil {
-				return err
-			}
-			startTime = prevBackups[len(prevBackups)-1].EndTime
-		}
 
 		var priorIDs map[descpb.ID]descpb.ID
 

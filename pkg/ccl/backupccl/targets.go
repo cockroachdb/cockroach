@@ -662,6 +662,46 @@ func getAllDescChanges(
 	return res, nil
 }
 
+func loadAllDescsInInterval(
+	ctx context.Context, db *kv.DB, startTime, endTime hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	seen := make(map[descpb.ID]struct{})
+	allDescs := make([]catalog.Descriptor, 0)
+
+	currentDescs, err := loadAllDescs(ctx, db, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, desc := range currentDescs {
+		if _, wasSeen := seen[desc.GetID()]; wasSeen {
+			continue
+		}
+		seen[desc.GetID()] = struct{}{}
+		allDescs = append(allDescs, desc)
+	}
+
+	revs, err := getAllDescChanges(ctx, db, startTime, endTime, nil /* priorIDs */)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, rev := range revs {
+		if rev.Desc == nil {
+			// rev.Desc may be nil when the descriptor was deleted in this revision.
+			continue
+		}
+		desc := catalogkv.UnwrapDescriptorRaw(ctx, rev.Desc)
+		if _, wasSeen := seen[desc.GetID()]; wasSeen {
+			continue
+		}
+		seen[desc.GetID()] = struct{}{}
+		allDescs = append(allDescs, desc)
+	}
+
+	return allDescs, nil
+}
+
 func ensureInterleavesIncluded(tables []catalog.TableDescriptor) error {
 	inBackup := make(map[descpb.ID]bool, len(tables))
 	for _, t := range tables {
