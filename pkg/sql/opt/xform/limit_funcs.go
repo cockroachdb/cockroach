@@ -169,18 +169,15 @@ func (c *CustomFuncs) ScanIsInverted(sp *memo.ScanPrivate) bool {
 	return idx.IsInverted()
 }
 
-// SplitScanIntoUnionScans returns a UnionAll tree of Scan operators with hard
-// limits that each scan over a single key from the original Scan's constraints.
-// If no such UnionAll of Scans can be found, ok=false is returned. This is
-// beneficial in cases where the original Scan had to scan over many rows but
-// had relatively few keys to scan over.
+// SplitLimitedScanIntoUnionScans returns a UnionAll tree of Scan operators with
+// hard limits that each scan over a single key from the original Scan's
+// constraints. If no such UnionAll of Scans can be found, ok=false is returned.
+// This is beneficial in cases where the original Scan had to scan over many
+// rows but had relatively few keys to scan over.
 // TODO(drewk): handle inverted scans.
-func (c *CustomFuncs) SplitScanIntoUnionScans(
+func (c *CustomFuncs) SplitLimitedScanIntoUnionScans(
 	limitOrdering props.OrderingChoice, scan memo.RelExpr, sp *memo.ScanPrivate, limit tree.Datum,
 ) (_ memo.RelExpr, ok bool) {
-	const maxScanCount = 16
-	const threshold = 4
-
 	cons, ok := c.getKnownScanConstraint(sp)
 	if !ok {
 		// No valid constraint was found.
@@ -208,6 +205,28 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		// This case can be handled by GenerateLimitedScans.
 		return nil, false
 	}
+
+	limitVal := int(*limit.(*tree.DInt))
+	return c.SplitScanIntoUnionScans(limitOrdering, scan, sp, cons, limitVal, keyPrefixLength)
+}
+
+// SplitScanIntoUnionScans returns a UnionAll of Scan operators (with an
+// optional hard limit) that each scan over a single key from the original
+// Scan's constraints. If no such UnionAll of Scans can be found, ok=false is
+// returned. This is beneficial in cases where an ordering is required on a
+// suffix of the index columns, and constraining the first column(s) allows the
+// scan to provide that ordering.
+// TODO(drewk): handle inverted scans.
+func (c *CustomFuncs) SplitScanIntoUnionScans(
+	ordering props.OrderingChoice,
+	scan memo.RelExpr,
+	sp *memo.ScanPrivate,
+	cons *constraint.Constraint,
+	limit int,
+	keyPrefixLength int,
+) (_ memo.RelExpr, ok bool) {
+	const maxScanCount = 16
+	const threshold = 4
 
 	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
 	spans := cons.Spans
@@ -240,10 +259,8 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 		scanCount = maxScanCount
 	}
 
-	limitVal := int(*limit.(*tree.DInt))
-
 	if scan.Relational().Stats.Available &&
-		float64(scanCount*limitVal*threshold) >= scan.Relational().Stats.RowCount {
+		float64(scanCount*limit*threshold) >= scan.Relational().Stats.RowCount {
 		// Splitting the Scan may not be worth the overhead. Creating a sequence of
 		// Scans and Unions is expensive, so we only want to create the plan if it
 		// is likely to be used.
@@ -251,13 +268,13 @@ func (c *CustomFuncs) SplitScanIntoUnionScans(
 	}
 
 	// The index ordering must have a prefix of columns of length keyLength
-	// followed by the limitOrdering columns either in order or in reverse order.
+	// followed by the ordering columns either in order or in reverse order.
 	hasLimitOrderingSeq, reverse := indexHasOrderingSequence(
-		c.e.mem.Metadata(), scan, sp, limitOrdering, keyPrefixLength)
+		c.e.mem.Metadata(), scan, sp, ordering, keyPrefixLength)
 	if !hasLimitOrderingSeq {
 		return nil, false
 	}
-	newHardLimit := memo.MakeScanLimit(int64(limitVal), reverse)
+	newHardLimit := memo.MakeScanLimit(int64(limit), reverse)
 
 	// makeNewUnion extends the UnionAll tree rooted at 'last' to include
 	// 'newScan'. The ColumnIDs of the original Scan are used by the resulting
