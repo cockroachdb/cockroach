@@ -34,11 +34,11 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 			%[3]s AS table_name,
       concat(create_statement,
              CASE
+               WHEN (SELECT * FROM zone_configs) IS NOT NULL
+               THEN concat(e';\n', (SELECT * FROM zone_configs))
                WHEN NOT has_partitions
                THEN NULL
-               WHEN (SELECT * FROM zone_configs) IS NULL
-               THEN e'\n-- Warning: Partitioned table with no zone configurations.'
-               ELSE concat(e';\n', (SELECT * FROM zone_configs))
+               ELSE e'\n-- Warning: Partitioned table with no zone configurations.'
              END
 			) AS create_statement
 		FROM
