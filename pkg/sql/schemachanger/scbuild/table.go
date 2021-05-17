@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -570,4 +572,132 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool 
 		return true
 	}
 	return v.IsActive(minVersion)
+}
+
+func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
+
+	// FIXME: Inject secondary indexes
+	// FIXME: Inject constraints?
+	// Find the view first
+	for _, name := range n.Names {
+		table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
+			tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+				return
+			}
+			panic(err)
+		}
+		if table == nil {
+			panic(errors.AssertionFailedf("Unable to resolve table %s",
+				name.FQString()))
+		}
+
+		// Drop dependent views
+		err = table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+			dependentDesc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				panic(err)
+			}
+			err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
+			if err != nil {
+				panic(err)
+			}
+			b.maybeDropViewAndDependents(ctx, dependentDesc, n.DropBehavior)
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		// Loop through and update in bound and outbound
+		// foreign key references.
+		for _, fk := range table.GetInboundFKs() {
+			outFkNode := &scpb.OutboundForeignKey{
+				OriginID:         fk.OriginTableID,
+				OriginColumns:    fk.OriginColumnIDs,
+				ReferenceID:      fk.ReferencedTableID,
+				ReferenceColumns: fk.ReferencedColumnIDs,
+				Name:             fk.Name,
+			}
+			inFkNode := &scpb.InboundForeignKey{
+				OriginID:         fk.ReferencedTableID,
+				OriginColumns:    fk.ReferencedColumnIDs,
+				ReferenceID:      fk.OriginTableID,
+				ReferenceColumns: fk.OriginColumnIDs,
+				Name:             fk.Name,
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
+				b.addNode(scpb.Target_DROP,
+					outFkNode)
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
+				b.addNode(scpb.Target_DROP,
+					inFkNode)
+			}
+		}
+
+		for _, fk := range table.GetOutboundFKs() {
+			outFkNode := &scpb.OutboundForeignKey{
+				OriginID:         fk.OriginTableID,
+				OriginColumns:    fk.OriginColumnIDs,
+				ReferenceID:      fk.ReferencedTableID,
+				ReferenceColumns: fk.ReferencedColumnIDs,
+				Name:             fk.Name,
+			}
+			inFkNode := &scpb.InboundForeignKey{
+				OriginID:         fk.ReferencedTableID,
+				OriginColumns:    fk.ReferencedColumnIDs,
+				ReferenceID:      fk.OriginTableID,
+				ReferenceColumns: fk.OriginColumnIDs,
+				Name:             fk.Name,
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, outFkNode); !exists {
+				b.addNode(scpb.Target_DROP,
+					outFkNode)
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, inFkNode); !exists {
+				b.addNode(scpb.Target_DROP,
+					inFkNode)
+			}
+		}
+		// Setup nodes for dropping sequences
+		// and cleaning up default expressions.
+		for _, col := range table.PublicColumns() {
+			// Loop over owned sequences
+			for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
+				seqID := col.GetOwnsSequenceID(seqIdx)
+				table, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, seqID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc))
+				if err != nil {
+					panic(err)
+				}
+				b.dropSequenceDesc(ctx, table, tree.DropCascade)
+			}
+			// Setup logic to clean up the default expression,
+			// only if sequences are depending on it.
+			if col.NumUsesSequences() > 0 {
+				b.addNode(scpb.Target_DROP,
+					&scpb.DefaultExpression{
+						DefaultExpr:     col.GetDefaultExpr(),
+						TableID:         table.GetID(),
+						UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+						ColumnID:        col.GetID()})
+				// Drop the depends on within the sequence side.
+				for seqOrd := 0; seqOrd < col.NumUsesSequences(); seqOrd++ {
+					seqID := col.GetUsesSequenceID(seqOrd)
+					// Remove dependencies to this sequences.
+					dropDep := &scpb.RelationDependedOnBy{TableID: seqID,
+						DependedOnBy: table.GetID()}
+					if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, dropDep); !exists {
+						b.addNode(scpb.Target_DROP, dropDep)
+					}
+				}
+			}
+		}
+
+		// Clean up type back references
+		b.removeTypeBackRefDeps(ctx, table)
+		b.addNode(scpb.Target_DROP,
+			&scpb.Table{TableID: table.GetID()})
+	}
 }

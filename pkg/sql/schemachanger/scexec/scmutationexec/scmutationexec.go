@@ -138,6 +138,33 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	return nil
 }
 
+func (m *visitor) RemoveRelationDependedOnBy(
+	ctx context.Context, op scop.RemoveRelationDependedOnBy,
+) error {
+	// Remove the descriptors namespaces as the last stage
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	for depIdx, dependedOnBy := range tableDesc.DependedOnBy {
+		if dependedOnBy.ID == op.DependedOnBy {
+			tableDesc.DependedOnBy = append(tableDesc.DependedOnBy[:depIdx], tableDesc.DependedOnBy[depIdx+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+func (m *visitor) RemoveSequenceOwnedBy(ctx context.Context, op scop.RemoveSequenceOwnedBy) error {
+	mutDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	mutDesc.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
+	mutDesc.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
+	return nil
+}
+
 func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackRef) error {
 	mutDesc, err := m.descs.GetMutableTypeByID(ctx, op.TypeID)
 	if err != nil {
@@ -463,6 +490,33 @@ func (m *visitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) 
 	table.AddFamily(op.Family)
 	if op.Family.ID >= table.NextFamilyID {
 		table.NextFamilyID = op.Family.ID + 1
+	}
+	return nil
+}
+
+func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyRef) error {
+	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	fks := table.TableDesc().OutboundFKs
+	if !op.Outbound {
+		fks = table.TableDesc().InboundFKs
+	}
+	newFks := make([]descpb.ForeignKeyConstraint, 0, len(fks)-1)
+	for _, fk := range fks {
+		if op.Outbound && fk.OriginTableID != op.TableID ||
+			op.Name != fk.Name {
+			newFks = append(newFks, fk)
+		} else if fk.ReferencedTableID != op.TableID ||
+			op.Name != fk.Name {
+			newFks = append(newFks, fk)
+		}
+	}
+	if op.Outbound {
+		table.TableDesc().OutboundFKs = newFks
+	} else {
+		table.TableDesc().InboundFKs = newFks
 	}
 	return nil
 }
