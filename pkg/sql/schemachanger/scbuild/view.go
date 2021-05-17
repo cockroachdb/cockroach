@@ -12,6 +12,7 @@ package scbuild
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -39,10 +40,21 @@ func (b *buildContext) maybeDropViewAndDependents(
 	viewNode := &scpb.View{
 		TableID:      view.GetID(),
 		DependedOnBy: make([]descpb.ID, 0, len(view.GetDependedOnBy())),
+		DependsOn:    make([]descpb.ID, 0, len(view.TableDesc().DependsOn)),
 	}
+	// Add dependencies in a order manner for reliable
+	// unit testing.
 	for _, dep := range view.GetDependedOnBy() {
 		viewNode.DependedOnBy = append(viewNode.DependedOnBy, dep.ID)
 	}
+	viewNode.DependsOn = append(viewNode.DependsOn, view.TableDesc().DependsOn...)
+	sort.SliceStable(viewNode.DependsOn, func(i, j int) bool {
+		return viewNode.DependsOn[i] < viewNode.DependsOn[j]
+	})
+	sort.SliceStable(viewNode.DependedOnBy, func(i, j int) bool {
+		return viewNode.DependedOnBy[i] < viewNode.DependedOnBy[j]
+	})
+	// Only add the node if it wasn't added to avoid cycles.
 	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, viewNode); exists {
 		return
 	}

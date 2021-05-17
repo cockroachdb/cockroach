@@ -31,6 +31,7 @@ type MutationVisitor interface {
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
 	UpdateRelationDeps(context.Context, UpdateRelationDeps) error
 	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
+	RemoveRelationDependedOnBy(context.Context, RemoveRelationDependedOnBy) error
 	RemoveTypeBackRef(context.Context, RemoveTypeBackRef) error
 	MakeAddedColumnDeleteAndWriteOnly(context.Context, MakeAddedColumnDeleteAndWriteOnly) error
 	MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) error
@@ -43,6 +44,8 @@ type MutationVisitor interface {
 	MakeColumnAbsent(context.Context, MakeColumnAbsent) error
 	AddCheckConstraint(context.Context, AddCheckConstraint) error
 	AddColumnFamily(context.Context, AddColumnFamily) error
+	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
+	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -88,6 +91,11 @@ func (op UpdateRelationDeps) Visit(ctx context.Context, v MutationVisitor) error
 // Visit is part of the MutationOp interface.
 func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveColumnDefaultExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveRelationDependedOnBy) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveRelationDependedOnBy(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -148,4 +156,14 @@ func (op AddCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error
 // Visit is part of the MutationOp interface.
 func (op AddColumnFamily) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.AddColumnFamily(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DropForeignKeyRef(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveSequenceOwnedBy(ctx, op)
 }

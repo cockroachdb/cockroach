@@ -14,6 +14,8 @@ DROP VIEW defaultdb.v1
     elementProto:
       view:
         dependedOnBy: []
+        dependsOn:
+        - 52
         tableId: 53
   state: PUBLIC
 
@@ -47,6 +49,8 @@ DROP VIEW defaultdb.v1 CASCADE
         dependedOnBy:
         - 54
         - 55
+        dependsOn:
+        - 52
         tableId: 53
   state: PUBLIC
 - target:
@@ -56,6 +60,8 @@ DROP VIEW defaultdb.v1 CASCADE
         dependedOnBy:
         - 55
         - 56
+        dependsOn:
+        - 53
         tableId: 54
   state: PUBLIC
 - target:
@@ -63,6 +69,9 @@ DROP VIEW defaultdb.v1 CASCADE
     elementProto:
       view:
         dependedOnBy: []
+        dependsOn:
+        - 53
+        - 54
         tableId: 55
   state: PUBLIC
 - target:
@@ -71,6 +80,8 @@ DROP VIEW defaultdb.v1 CASCADE
       view:
         dependedOnBy:
         - 59
+        dependsOn:
+        - 54
         tableId: 56
   state: PUBLIC
 - target:
@@ -78,6 +89,8 @@ DROP VIEW defaultdb.v1 CASCADE
     elementProto:
       view:
         dependedOnBy: []
+        dependsOn:
+        - 56
         tableId: 59
   state: PUBLIC
 - target:
