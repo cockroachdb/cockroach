@@ -89,7 +89,9 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	})
 	// Add collected Oids to return set.
 	for oid := range visitor.OIDs {
-		ids.Add(typedesc.UserDefinedTypeOIDToID(oid))
+		// Assuming that the id converted from OID is valid
+		id, _ := typedesc.MaybeUserDefinedTypeOIDToID(oid)
+		ids.Add(id)
 	}
 	// Add view dependencies.
 	for _, id := range desc.GetDependsOn() {

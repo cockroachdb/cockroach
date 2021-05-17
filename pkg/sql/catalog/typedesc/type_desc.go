@@ -113,21 +113,36 @@ func TypeIDToOID(id descpb.ID) oid.Oid {
 	return oid.Oid(id) + oidext.CockroachPredefinedOIDMax
 }
 
-// UserDefinedTypeOIDToID converts a user defined type OID into a
-// descriptor ID.
-func UserDefinedTypeOIDToID(oid oid.Oid) descpb.ID {
-	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax
+// MaybeUserDefinedTypeOIDToID converts a user defined type OID into a
+// descriptor ID. OID of a user-defined type must be greater than
+// CockraochPredefinedOIDMax.
+func MaybeUserDefinedTypeOIDToID(oid oid.Oid) (descpb.ID, bool) {
+	if descpb.ID(oid) <= oidext.CockroachPredefinedOIDMax {
+		return 0, false
+	}
+	return descpb.ID(oid) - oidext.CockroachPredefinedOIDMax, true
+}
+
+// MakeOIDRangeError is a helper to create an error message for invalid user-defined OID conversion.
+func MakeOIDRangeError(oid oid.Oid) error {
+	return errors.Newf("user-defined OID %d is out of range. It must be greater than Max OID: %d.",
+		oid, oidext.CockroachPredefinedOIDMax)
 }
 
 // GetTypeDescID gets the type descriptor ID from a user defined type.
-func GetTypeDescID(t *types.T) descpb.ID {
-	return UserDefinedTypeOIDToID(t.Oid())
+func GetTypeDescID(t *types.T) (descpb.ID, bool) {
+	return MaybeUserDefinedTypeOIDToID(t.Oid())
 }
 
 // GetArrayTypeDescID gets the ID of the array type descriptor from a user
 // defined type.
-func GetArrayTypeDescID(t *types.T) descpb.ID {
-	return UserDefinedTypeOIDToID(t.UserDefinedArrayOID())
+func GetArrayTypeDescID(t *types.T) (descpb.ID, bool) {
+	return MaybeUserDefinedTypeOIDToID(t.UserDefinedArrayOID())
+}
+
+// MakeTypeIDRangeError is a helper to create an error message for invalid type ID conversion.
+func MakeTypeIDRangeError(t *types.T) error {
+	return MakeOIDRangeError(t.Oid())
 }
 
 // TypeDesc implements the Descriptor interface.
@@ -599,9 +614,12 @@ func (desc *immutable) ValidateCrossReferences(
 		}
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.GetAlias().UserDefined() {
-			aliasedID := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
+			aliasedID, isValid := MaybeUserDefinedTypeOIDToID(desc.GetAlias().Oid())
 			if _, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
 				vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
+			}
+			if !isValid {
+				vea.Report(errors.Wrapf(err, "aliased type %d is out of range", aliasedID))
 			}
 		}
 	}
@@ -724,7 +742,11 @@ func HydrateTypesInTableDescriptor(
 	hydrateCol := func(col *descpb.ColumnDescriptor) error {
 		if col.Type.UserDefined() {
 			// Look up its type descriptor.
-			name, typDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(col.Type))
+			td, ok := GetTypeDescID(col.Type)
+			if !ok {
+				return MakeTypeIDRangeError(col.Type)
+			}
+			name, typDesc, err := res.GetTypeDescriptor(ctx, td)
 			if err != nil {
 				return err
 			}
@@ -787,7 +809,11 @@ func (desc *immutable) HydrateTypeInfoWithName(
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, GetTypeDescID(elemType))
+				id, ok := GetTypeDescID(elemType)
+				if !ok {
+					return MakeTypeIDRangeError(elemType)
+				}
+				elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -925,9 +951,10 @@ func GetTypeDescriptorClosure(typ *types.T) map[descpb.ID]struct{} {
 	if !typ.UserDefined() {
 		return map[descpb.ID]struct{}{}
 	}
+	id, _ := GetTypeDescID(typ)
 	// Collect the type's descriptor ID.
 	ret := map[descpb.ID]struct{}{
-		GetTypeDescID(typ): {},
+		id: {},
 	}
 	if typ.Family() == types.ArrayFamily {
 		// If we have an array type, then collect all types in the contents.
@@ -937,7 +964,8 @@ func GetTypeDescriptorClosure(typ *types.T) map[descpb.ID]struct{} {
 		}
 	} else {
 		// Otherwise, take the array type ID.
-		ret[GetArrayTypeDescID(typ)] = struct{}{}
+		id, _ := GetArrayTypeDescID(typ)
+		ret[id] = struct{}{}
 	}
 	return ret
 }

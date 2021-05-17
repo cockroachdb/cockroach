@@ -169,8 +169,14 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		// the table descriptor with the new type metadata.
 		for i := range tableDesc.Columns {
 			col := &tableDesc.Columns[i]
-			if col.Type.UserDefined() && typedesc.UserDefinedTypeOIDToID(col.Type.Oid()) == r.typeID {
-				col.Type.TypeMeta = types.UserDefinedTypeMetadata{}
+			if col.Type.UserDefined() {
+				tid, ok := typedesc.MaybeUserDefinedTypeOIDToID(col.Type.Oid())
+				if !ok {
+					return typedesc.MakeOIDRangeError(col.Type.Oid())
+				}
+				if tid == r.typeID {
+					col.Type.TypeMeta = types.UserDefinedTypeMetadata{}
+				}
 			}
 		}
 		if err := typedesc.HydrateTypesInTableDescriptor(
