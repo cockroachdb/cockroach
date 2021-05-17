@@ -211,6 +211,64 @@ upsert                                   ·                      ·
 ·                                        row 2, expr 0          3
 ·                                        row 3, expr 0          4
 
+query TTT
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE)
+INSERT INTO indexed
+VALUES (1, 2, 3)
+ON CONFLICT (a)
+DO UPDATE SET b = 2, c = 3
+]
+----
+·                                            distribution         local
+·                                            vectorized           false
+upsert                                       ·                    ·
+ │                                           estimated row count  0 (missing stats)
+ │                                           into                 indexed(a, b, c, d)
+ │                                           auto commit          ·
+ │                                           arbiter indexes      primary
+ └── project                                 ·                    ·
+      └── render                             ·                    ·
+           │                                 estimated row count  1 (missing stats)
+           │                                 render 0             upsert_c > 0
+           │                                 render 1             column1
+           │                                 render 2             column2
+           │                                 render 3             column3
+           │                                 render 4             column10
+           │                                 render 5             a
+           │                                 render 6             b
+           │                                 render 7             c
+           │                                 render 8             d
+           │                                 render 9             upsert_b
+           │                                 render 10            upsert_c
+           │                                 render 11            upsert_d
+           └── render                        ·                    ·
+                │                            estimated row count  1 (missing stats)
+                │                            render 0             CASE WHEN a IS NULL THEN column2 ELSE 2 END
+                │                            render 1             CASE WHEN a IS NULL THEN column3 ELSE 3 END
+                │                            render 2             CASE WHEN a IS NULL THEN column10 ELSE a + 3 END
+                │                            render 3             column1
+                │                            render 4             column2
+                │                            render 5             column3
+                │                            render 6             column10
+                │                            render 7             a
+                │                            render 8             b
+                │                            render 9             c
+                │                            render 10            d
+                └── cross join (left outer)  ·                    ·
+                     │                       estimated row count  1 (missing stats)
+                     ├── values              ·                    ·
+                     │                       size                 4 columns, 1 row
+                     │                       row 0, expr 0        1
+                     │                       row 0, expr 1        2
+                     │                       row 0, expr 2        3
+                     │                       row 0, expr 3        4
+                     └── scan                ·                    ·
+·                                            estimated row count  1 (missing stats)
+·                                            table                indexed@primary
+·                                            spans                /1-/1/#
+·                                            locking strength     for update
+
 # Drop index and verify that existing values no longer need to be fetched.
 statement ok
 DROP INDEX indexed@secondary CASCADE
