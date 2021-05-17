@@ -418,6 +418,6 @@ func (a *orderedAggregator) Reset(ctx context.Context) {
 	}
 }
 
-func (a *orderedAggregator) Close(ctx context.Context) error {
-	return a.toClose.Close(ctx)
+func (a *orderedAggregator) Close() error {
+	return a.toClose.Close()
 }
