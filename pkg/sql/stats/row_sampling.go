@@ -193,8 +193,8 @@ func (sr *SampleReservoir) copyRow(
 		}
 
 		// Perform memory accounting.
-		if sr.memAcc != nil && afterSize > beforeSize {
-			if err := sr.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
+		if sr.memAcc != nil {
+			if err := sr.memAcc.Resize(ctx, int64(beforeSize), int64(afterSize)); err != nil {
 				return err
 			}
 		}
