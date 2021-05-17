@@ -333,8 +333,9 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 				switch a {
 				case spanset.SpanReadOnly:
 					// Wait for writes at equal or lower timestamps.
-					it := tr[spanset.SpanReadWrite].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreLater); err != nil {
+					a2 := spanset.SpanReadWrite
+					it := tr[a2].MakeIter()
+					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -344,13 +345,15 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// it is an unreleased latch so we prefer waiting on longer
 					// latches first. We expect writes to take longer than reads
 					// to release their latches, so we wait on them first.
-					it := tr[spanset.SpanReadWrite].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreNothing); err != nil {
+					a2 := spanset.SpanReadWrite
+					it := tr[a2].MakeIter()
+					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
-					it = tr[spanset.SpanReadOnly].MakeIter()
-					if err := m.iterAndWait(ctx, timer, &it, latch, ignoreEarlier); err != nil {
+					a2 = spanset.SpanReadOnly
+					it = tr[a2].MakeIter()
+					if err := m.iterAndWait(ctx, timer, &it, a, a2, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -366,7 +369,12 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 // with the search latch and which should not be ignored given their timestamp
 // and the supplied ignoreFn.
 func (m *Manager) iterAndWait(
-	ctx context.Context, t *timeutil.Timer, it *iterator, wait *latch, ignore ignoreFn,
+	ctx context.Context,
+	t *timeutil.Timer,
+	it *iterator,
+	waitType, heldType spanset.SpanAccess,
+	wait *latch,
+	ignore ignoreFn,
 ) error {
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
@@ -376,7 +384,7 @@ func (m *Manager) iterAndWait(
 		if ignore(wait.ts, held.ts) {
 			continue
 		}
-		if err := m.waitForSignal(ctx, t, wait, held); err != nil {
+		if err := m.waitForSignal(ctx, t, waitType, heldType, wait, held); err != nil {
 			return err
 		}
 	}
@@ -384,7 +392,10 @@ func (m *Manager) iterAndWait(
 }
 
 // waitForSignal waits for the latch that is currently held to be signaled.
-func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, held *latch) error {
+func (m *Manager) waitForSignal(
+	ctx context.Context, t *timeutil.Timer, waitType, heldType spanset.SpanAccess, wait, held *latch,
+) error {
+	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	for {
 		select {
 		case <-held.done.signalChan():
@@ -393,14 +404,15 @@ func (m *Manager) waitForSignal(ctx context.Context, t *timeutil.Timer, wait, he
 			t.Read = true
 			defer t.Reset(base.SlowRequestThreshold)
 
-			log.Warningf(ctx, "have been waiting %s to acquire latch %s, held by %s",
-				base.SlowRequestThreshold, wait, held)
+			log.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
+				base.SlowRequestThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
 				defer m.slowReqs.Dec(1)
 			}
 		case <-ctx.Done():
-			log.VEventf(ctx, 2, "%s while acquiring latch %s, held by %s", ctx.Err(), wait, held)
+			log.VEventf(ctx, 2, "%s while acquiring %s latch %s, held by %s latch %s",
+				ctx.Err(), waitType, wait, heldType, held)
 			return ctx.Err()
 		case <-m.stopper.ShouldQuiesce():
 			// While shutting down, requests may acquire

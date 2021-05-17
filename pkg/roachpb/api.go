@@ -1529,7 +1529,7 @@ func (r *JoinNodeResponse) CreateStoreIdent() (StoreIdent, error) {
 
 // SafeFormat implements redact.SafeFormatter.
 func (c *ContentionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("conflicted with %s on %s for %.2fs", c.TxnMeta.ID, c.Key, c.Duration.Seconds())
+	w.Printf("conflicted with %s on %s for %.3fs", c.TxnMeta.ID, c.Key, c.Duration.Seconds())
 }
 
 // String implements fmt.Stringer.
