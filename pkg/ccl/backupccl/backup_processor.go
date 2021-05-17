@@ -262,7 +262,6 @@ func runBackupProcessor(
 					Encryption:                          spec.Encryption,
 					TargetFileSize:                      targetFileSize,
 					ReturnSST:                           writeSSTsInProcessor,
-					OmitChecksum:                        true,
 				}
 
 				// If we're doing re-attempts but are not yet in the priority regime,
@@ -372,7 +371,6 @@ func runBackupProcessor(
 					f := BackupManifest_File{
 						Span:        file.Span,
 						Path:        file.Path,
-						Sha512:      file.Sha512,
 						EntryCounts: countRows(file.Exported, spec.PKIDs),
 						LocalityKV:  file.LocalityKV,
 					}
