@@ -42,6 +42,11 @@ type Element interface {
 	GetAttributes() Attributes
 }
 
+// ElementDescriptorSet represents all the descriptors touched by an element
+type ElementDescriptorSet interface {
+	DescriptorSet() []descpb.ID
+}
+
 // Element returns an Element from its wrapper for serialization.
 func (e *ElementProto) Element() Element {
 	return e.GetValue().(Element)
@@ -173,7 +178,7 @@ func (e *Sequence) GetAttributes() Attributes {
 // DescriptorID implements the Element interface.
 func (e *DefaultExpression) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
+// GetAttributes implements the Element interface.
 func (e *DefaultExpression) GetAttributes() Attributes {
 	return makeAttributes([]attributeValue{
 		{key: AttributeType, value: ElementType(e)},
@@ -185,7 +190,7 @@ func (e *DefaultExpression) GetAttributes() Attributes {
 // DescriptorID implements the Element interface.
 func (e *View) DescriptorID() descpb.ID { return e.TableID }
 
-// GetAttributes implements the Element interface
+// GetAttributes implements the Element interface.
 func (e *View) GetAttributes() Attributes {
 	return makeAttributes([]attributeValue{
 		{key: AttributeType, value: ElementType(e)},
@@ -193,10 +198,10 @@ func (e *View) GetAttributes() Attributes {
 	})
 }
 
-// DescriptorID implements the Element interface
+// DescriptorID implements the Element interface.
 func (e *TypeReference) DescriptorID() descpb.ID { return e.DescID }
 
-// GetAttributes implements the Element interface
+// GetAttributes implements the Element interface.
 func (e *TypeReference) GetAttributes() Attributes {
 	return makeAttributes([]attributeValue{
 		{key: AttributeType, value: ElementType(e)},
@@ -204,3 +209,38 @@ func (e *TypeReference) GetAttributes() Attributes {
 		{key: AttributeDepID, value: DescID(e.DescID)},
 	})
 }
+
+// DescriptorID implements the Element interface.
+func (e *Table) DescriptorID() descpb.ID { return e.TableID }
+
+// GetAttributes implements the Element interface
+func (e *Table) GetAttributes() Attributes {
+	return makeAttributes([]attributeValue{
+		{key: AttributeType, value: ElementType(e)},
+		{key: AttributeDescID, value: DescID(e.TableID)},
+	})
+}
+
+// DescriptorID implements the Element interface.
+func (e *ForeignKey) DescriptorID() descpb.ID { return descpb.InvalidID }
+
+// GetAttributes implements the Element interface
+func (e *ForeignKey) GetAttributes() Attributes {
+	if e.Outbound {
+		return makeAttributes([]attributeValue{
+			{key: AttributeType, value: ElementType(e)},
+			{key: AttributeDescID, value: DescID(e.OriginID)},
+			{key: AttributeDepID, value: DescID(e.ReferenceID)},
+			{key: AttributeElementName, value: ElementName(e.Name)},
+		})
+	}
+	return makeAttributes([]attributeValue{
+		{key: AttributeType, value: ElementType(e)},
+		{key: AttributeDescID, value: DescID(e.ReferenceID)},
+		{key: AttributeDepID, value: DescID(e.OriginID)},
+		{key: AttributeElementName, value: ElementName(e.Name)},
+	})
+}
+
+// DescriptorSet implements the Element interface.
+func (e *ForeignKey) DescriptorSet() []descpb.ID { return []descpb.ID{e.OriginID, e.ReferenceID} }

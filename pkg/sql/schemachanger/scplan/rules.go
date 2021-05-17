@@ -49,6 +49,28 @@ func thatViewDependsOnThisView(this *scpb.View, that *scpb.View) bool {
 	return false
 }
 
+func tableReferencesView(this *scpb.Table, that *scpb.View) bool {
+	for _, dep := range that.DependsOn {
+		if dep == this.TableID {
+			return true
+		}
+	}
+	return false
+}
+
+func tableReferencesType(this *scpb.Table, that *scpb.TypeReference) bool {
+	return this.TableID == that.DescID
+}
+
+func fkReferencesTable(this *scpb.Table, that *scpb.ForeignKey) bool {
+	return (this.TableID == that.ReferenceID && that.Outbound) ||
+		(this.TableID == that.OriginID && that.Outbound)
+}
+
+func indexReferencesTable(this *scpb.Table, that *scpb.SecondaryIndex) bool {
+	return that.TableID == this.TableID
+}
+
 func defaultExprReferencesColumn(this *scpb.Sequence, that *scpb.DefaultExpression) bool {
 	for _, seq := range that.UsesSequenceIDs {
 		if seq == this.TableID {
@@ -246,6 +268,122 @@ var rules = map[scpb.Element]targetRules{
 				},
 			},
 		},
+		forward: nil,
+	},
+	(*scpb.ForeignKey)(nil): {
+		deps: nil,
+		backwards: targetOpRules{
+			scpb.State_PUBLIC: {
+				{
+					predicate: func(this *scpb.ForeignKey, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.OriginID)
+					},
+				},
+				{
+					nextState: scpb.State_ABSENT,
+					op: func(this *scpb.ForeignKey) []scop.Op {
+						if this.Outbound {
+							return []scop.Op{
+								&scop.DropForeignKeyRef{
+									TableID:  this.ReferenceID,
+									Name:     this.Name,
+									Outbound: false,
+								},
+								&scop.DropForeignKeyRef{
+									TableID:  this.OriginID,
+									Name:     this.Name,
+									Outbound: true,
+								},
+							}
+						} else {
+							return []scop.Op{
+								&scop.DropForeignKeyRef{
+									TableID:  this.ReferenceID,
+									Name:     this.Name,
+									Outbound: true,
+								},
+								&scop.DropForeignKeyRef{
+									TableID:  this.OriginID,
+									Name:     this.Name,
+									Outbound: false,
+								},
+							}
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Table)(nil): {
+		deps: targetDepRules{
+			scpb.State_ABSENT: {
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    indexReferencesTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    fkReferencesTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    tableReferencesView,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    tableReferencesType,
+				},
+			},
+		},
+
+		backwards: targetOpRules{
+			scpb.State_PUBLIC: {
+				{
+					predicate: func(this *scpb.Table, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextState: scpb.State_DELETE_ONLY,
+					op: func(this *scpb.Table) []scop.Op {
+						ops := []scop.Op{
+							&scop.MarkDescriptorAsDropped{
+								TableID: this.TableID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+			scpb.State_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.Table, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextState: scpb.State_ABSENT,
+					op: func(this *scpb.Table) []scop.Op {
+						ops := []scop.Op{
+							&scop.DrainDescriptorName{TableID: this.TableID},
+							&scop.CreateGcJobForDescriptor{
+								DescID: this.TableID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+		},
+
 		forward: nil,
 	},
 	(*scpb.Column)(nil): {

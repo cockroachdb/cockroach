@@ -17,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -570,4 +572,78 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool 
 		return true
 	}
 	return v.IsActive(minVersion)
+}
+
+func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
+
+	// FIXME: Inject secondary indexes
+	// FIXME: Inject constraints?
+	// Find the view first
+	for _, name := range n.Names {
+		table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
+			tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+				return
+			}
+			panic(err)
+		}
+		if table == nil {
+			panic(errors.AssertionFailedf("Unable to resolve table %s",
+				name.FQString()))
+		}
+
+		// Drop dependent views
+		err = table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+			dependentDesc, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				panic(err)
+			}
+			err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
+			if err != nil {
+				panic(err)
+			}
+			b.maybeDropViewAndDependents(ctx, dependentDesc, n.DropBehavior)
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		// Loop through and add all constraints
+		// Loop over the outbound foreign keys
+		for _, fk := range table.GetInboundFKs() {
+			fkNode := &scpb.ForeignKey{
+				OriginID:         fk.OriginTableID,
+				OriginColumns:    fk.OriginColumnIDs,
+				ReferenceID:      fk.ReferencedTableID,
+				ReferenceColumns: fk.ReferencedColumnIDs,
+				Name:             fk.Name,
+				Outbound:         false,
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, fkNode); exists {
+				b.addNode(scpb.Target_DROP,
+					fkNode)
+			}
+		}
+
+		for _, fk := range table.GetOutboundFKs() {
+			fkNode := &scpb.ForeignKey{
+				OriginID:         fk.OriginTableID,
+				OriginColumns:    fk.OriginColumnIDs,
+				ReferenceID:      fk.ReferencedTableID,
+				ReferenceColumns: fk.ReferencedColumnIDs,
+				Name:             fk.Name,
+				Outbound:         true,
+			}
+			if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, fkNode); exists {
+				b.addNode(scpb.Target_DROP,
+					fkNode)
+			}
+		}
+		// Clean up type back references
+		b.removeTypeBackRefDeps(ctx, table)
+		b.addNode(scpb.Target_DROP,
+			&scpb.Table{TableID: table.GetID()})
+	}
 }
