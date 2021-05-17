@@ -765,7 +765,7 @@ func (b *Builder) constructBinary(
 func (b *Builder) constructUnary(
 	un tree.UnaryOperator, input opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
-	switch un {
+	switch un.Symbol {
 	case tree.UnaryMinus:
 		return b.factory.ConstructUnaryMinus(input)
 	case tree.UnaryComplement:
