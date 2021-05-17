@@ -1071,7 +1071,7 @@ func benchmarkAggregateFunction(
 				// Exhaust aggregator until all batches have been read.
 				for b := a.Next(); b.Length() != 0; b = a.Next() {
 				}
-				if err = a.(colexecop.Closer).Close(ctx); err != nil {
+				if err = a.(colexecop.Closer).Close(); err != nil {
 					b.Fatal(err)
 				}
 				source.Reset(ctx)

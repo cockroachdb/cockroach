@@ -176,9 +176,9 @@ func (a *defaultHashAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *defaultHashAggAlloc) Close(ctx context.Context) error {
+func (a *defaultHashAggAlloc) Close() error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(ctx)
+		fn.fn.Close(fn.ctx)
 	}
 	a.returnedFns = nil
 	return nil

@@ -79,7 +79,8 @@ var _ colexecop.ClosableOperator = &crossJoiner{}
 var _ colexecop.ResettableOperator = &crossJoiner{}
 
 func (c *crossJoiner) Init(ctx context.Context) {
-	c.init(ctx)
+	c.joinHelper.init(ctx)
+	c.crossJoinerBase.init(c.Ctx)
 }
 
 func (c *crossJoiner) Next() coldata.Batch {
@@ -88,7 +89,7 @@ func (c *crossJoiner) Next() coldata.Batch {
 		c.setupForBuilding()
 	}
 	if c.numTotalOutputTuples == c.numAlreadyEmitted {
-		if err := c.Close(c.Ctx); err != nil {
+		if err := c.Close(); err != nil {
 			colexecerror.InternalError(err)
 		}
 		return coldata.ZeroBatch
@@ -300,6 +301,7 @@ func newCrossJoinerBase(
 }
 
 type crossJoinerBase struct {
+	initHelper   colexecop.InitHelper
 	joinType     descpb.JoinType
 	left, right  cjState
 	builderState struct {
@@ -310,6 +312,10 @@ type crossJoinerBase struct {
 		rightColOffset int
 	}
 	output coldata.Batch
+}
+
+func (b *crossJoinerBase) init(ctx context.Context) {
+	b.initHelper.Init(ctx)
 }
 
 func (b *crossJoinerBase) setupBuilder() {
@@ -428,7 +434,8 @@ func (b *crossJoinerBase) Reset(ctx context.Context) {
 	b.builderState.right.reset()
 }
 
-func (b *crossJoinerBase) Close(ctx context.Context) error {
+func (b *crossJoinerBase) Close() error {
+	ctx := b.initHelper.GetNonNilCtx()
 	var lastErr error
 	if b.left.tuples != nil {
 		lastErr = b.left.tuples.Close(ctx)

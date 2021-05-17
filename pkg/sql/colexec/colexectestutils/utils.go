@@ -397,8 +397,8 @@ func RunTestsWithTyps(
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
 		}
-		closeIfCloser(ctx, t, originalOp)
-		closeIfCloser(ctx, t, opWithNulls)
+		closeIfCloser(t, originalOp)
+		closeIfCloser(t, opWithNulls)
 	}
 }
 
@@ -407,9 +407,9 @@ func RunTestsWithTyps(
 //
 // RunTests harness needs to do that once it is done with op. In non-test
 // setting, the closing happens at the end of the query execution.
-func closeIfCloser(ctx context.Context, t *testing.T, op colexecop.Operator) {
+func closeIfCloser(t *testing.T, op colexecop.Operator) {
 	if c, ok := op.(colexecop.Closer); ok {
-		if err := c.Close(ctx); err != nil {
+		if err := c.Close(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -469,7 +469,7 @@ func RunTestsWithoutAllNullsInjection(
 				t.Fatal(err)
 			}
 		}
-		closeIfCloser(ctx, t, op)
+		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
@@ -501,7 +501,7 @@ func RunTestsWithoutAllNullsInjection(
 				t.Fatal(err)
 			}
 			// We might short-circuit, so defer the closing of the operator.
-			defer closeIfCloser(ctx, t, op)
+			defer closeIfCloser(t, op)
 			op.Init(ctx)
 			b := op.Next()
 			if b.Length() == 0 {
@@ -566,7 +566,7 @@ func RunTestsWithoutAllNullsInjection(
 		op.Init(ctx)
 		for b := op.Next(); b.Length() > 0; b = op.Next() {
 		}
-		closeIfCloser(ctx, t, op)
+		closeIfCloser(t, op)
 	}
 }
 
