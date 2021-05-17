@@ -122,16 +122,21 @@ func (SequenceDependency_Type) EnumDescriptor() ([]byte, []int) {
 }
 
 type ElementProto struct {
-	Column             *Column             `protobuf:"bytes,1,opt,name=column,proto3" json:"column,omitempty"`
-	PrimaryIndex       *PrimaryIndex       `protobuf:"bytes,2,opt,name=primary_index,json=primaryIndex,proto3" json:"primary_index,omitempty"`
-	SecondaryIndex     *SecondaryIndex     `protobuf:"bytes,3,opt,name=secondary_index,json=secondaryIndex,proto3" json:"secondary_index,omitempty"`
-	SequenceDependency *SequenceDependency `protobuf:"bytes,4,opt,name=sequence_dependency,json=sequenceDependency,proto3" json:"sequence_dependency,omitempty"`
-	UniqueConstraint   *UniqueConstraint   `protobuf:"bytes,5,opt,name=unique_constraint,json=uniqueConstraint,proto3" json:"unique_constraint,omitempty"`
-	CheckConstraint    *CheckConstraint    `protobuf:"bytes,6,opt,name=check_constraint,json=checkConstraint,proto3" json:"check_constraint,omitempty"`
-	Table              *Sequence           `protobuf:"bytes,7,opt,name=table,proto3" json:"table,omitempty"`
-	DefaultExpression  *DefaultExpression  `protobuf:"bytes,8,opt,name=default_expression,json=defaultExpression,proto3" json:"default_expression,omitempty"`
-	View               *View               `protobuf:"bytes,9,opt,name=view,proto3" json:"view,omitempty"`
-	TypeRef            *TypeReference      `protobuf:"bytes,10,opt,name=typeRef,proto3" json:"typeRef,omitempty"`
+	Column               *Column               `protobuf:"bytes,1,opt,name=column,proto3" json:"column,omitempty"`
+	PrimaryIndex         *PrimaryIndex         `protobuf:"bytes,2,opt,name=primary_index,json=primaryIndex,proto3" json:"primary_index,omitempty"`
+	SecondaryIndex       *SecondaryIndex       `protobuf:"bytes,3,opt,name=secondary_index,json=secondaryIndex,proto3" json:"secondary_index,omitempty"`
+	SequenceDependency   *SequenceDependency   `protobuf:"bytes,4,opt,name=sequence_dependency,json=sequenceDependency,proto3" json:"sequence_dependency,omitempty"`
+	UniqueConstraint     *UniqueConstraint     `protobuf:"bytes,5,opt,name=unique_constraint,json=uniqueConstraint,proto3" json:"unique_constraint,omitempty"`
+	CheckConstraint      *CheckConstraint      `protobuf:"bytes,6,opt,name=check_constraint,json=checkConstraint,proto3" json:"check_constraint,omitempty"`
+	Sequence             *Sequence             `protobuf:"bytes,7,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	DefaultExpression    *DefaultExpression    `protobuf:"bytes,8,opt,name=default_expression,json=defaultExpression,proto3" json:"default_expression,omitempty"`
+	View                 *View                 `protobuf:"bytes,9,opt,name=view,proto3" json:"view,omitempty"`
+	TypeRef              *TypeReference        `protobuf:"bytes,10,opt,name=typeRef,proto3" json:"typeRef,omitempty"`
+	Table                *Table                `protobuf:"bytes,11,opt,name=table,proto3" json:"table,omitempty"`
+	OutForeignKey        *OutboundForeignKey   `protobuf:"bytes,12,opt,name=outForeignKey,proto3" json:"outForeignKey,omitempty"`
+	InForeignKey         *InboundForeignKey    `protobuf:"bytes,13,opt,name=inForeignKey,proto3" json:"inForeignKey,omitempty"`
+	RelationDependedOnBy *RelationDependedOnBy `protobuf:"bytes,14,opt,name=relationDependedOnBy,proto3" json:"relationDependedOnBy,omitempty"`
+	SequenceOwner        *SequenceOwnedBy      `protobuf:"bytes,15,opt,name=sequenceOwner,proto3" json:"sequenceOwner,omitempty"`
 }
 
 func (m *ElementProto) Reset()         { *m = ElementProto{} }
@@ -490,6 +495,7 @@ var xxx_messageInfo_DefaultExpression proto.InternalMessageInfo
 type View struct {
 	TableID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID   `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
 	DependedOnBy []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,2,rep,packed,name=dependedOnBy,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"dependedOnBy,omitempty"`
+	DependsOn    []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,3,rep,packed,name=dependsOn,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"dependsOn,omitempty"`
 }
 
 func (m *View) Reset()         { *m = View{} }
@@ -521,6 +527,40 @@ func (m *View) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_View proto.InternalMessageInfo
 
+type Table struct {
+	TableID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID   `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
+	DependedOnBy []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,2,rep,packed,name=dependedOnBy,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"dependedOnBy,omitempty"`
+}
+
+func (m *Table) Reset()         { *m = Table{} }
+func (m *Table) String() string { return proto.CompactTextString(m) }
+func (*Table) ProtoMessage()    {}
+func (*Table) Descriptor() ([]byte, []int) {
+	return fileDescriptor_5413c88842564e28, []int{11}
+}
+func (m *Table) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Table) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *Table) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Table.Merge(m, src)
+}
+func (m *Table) XXX_Size() int {
+	return m.Size()
+}
+func (m *Table) XXX_DiscardUnknown() {
+	xxx_messageInfo_Table.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Table proto.InternalMessageInfo
+
 type TypeReference struct {
 	TypeID github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,1,opt,name=type_id,json=typeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"type_id,omitempty"`
 	DescID github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,2,opt,name=descriptor_id,json=descriptorId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"descriptor_id,omitempty"`
@@ -530,7 +570,7 @@ func (m *TypeReference) Reset()         { *m = TypeReference{} }
 func (m *TypeReference) String() string { return proto.CompactTextString(m) }
 func (*TypeReference) ProtoMessage()    {}
 func (*TypeReference) Descriptor() ([]byte, []int) {
-	return fileDescriptor_5413c88842564e28, []int{11}
+	return fileDescriptor_5413c88842564e28, []int{12}
 }
 func (m *TypeReference) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -555,6 +595,148 @@ func (m *TypeReference) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_TypeReference proto.InternalMessageInfo
 
+type OutboundForeignKey struct {
+	OriginID         github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,1,opt,name=origin_id,json=originId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"origin_id,omitempty"`
+	OriginColumns    []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,3,rep,packed,name=origin_columns,json=originColumns,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"origin_columns,omitempty"`
+	ReferenceID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,4,opt,name=reference_id,json=referenceId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"reference_id,omitempty"`
+	ReferenceColumns []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,5,rep,packed,name=reference_columns,json=referenceColumns,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"reference_columns,omitempty"`
+	Name             string                                                             `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (m *OutboundForeignKey) Reset()         { *m = OutboundForeignKey{} }
+func (m *OutboundForeignKey) String() string { return proto.CompactTextString(m) }
+func (*OutboundForeignKey) ProtoMessage()    {}
+func (*OutboundForeignKey) Descriptor() ([]byte, []int) {
+	return fileDescriptor_5413c88842564e28, []int{13}
+}
+func (m *OutboundForeignKey) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *OutboundForeignKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *OutboundForeignKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutboundForeignKey.Merge(m, src)
+}
+func (m *OutboundForeignKey) XXX_Size() int {
+	return m.Size()
+}
+func (m *OutboundForeignKey) XXX_DiscardUnknown() {
+	xxx_messageInfo_OutboundForeignKey.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_OutboundForeignKey proto.InternalMessageInfo
+
+type InboundForeignKey struct {
+	OriginID         github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,1,opt,name=origin_id,json=originId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"origin_id,omitempty"`
+	OriginColumns    []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,3,rep,packed,name=origin_columns,json=originColumns,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"origin_columns,omitempty"`
+	ReferenceID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID         `protobuf:"varint,4,opt,name=reference_id,json=referenceId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"reference_id,omitempty"`
+	ReferenceColumns []github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID `protobuf:"varint,5,rep,packed,name=reference_columns,json=referenceColumns,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID" json:"reference_columns,omitempty"`
+	Name             string                                                             `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (m *InboundForeignKey) Reset()         { *m = InboundForeignKey{} }
+func (m *InboundForeignKey) String() string { return proto.CompactTextString(m) }
+func (*InboundForeignKey) ProtoMessage()    {}
+func (*InboundForeignKey) Descriptor() ([]byte, []int) {
+	return fileDescriptor_5413c88842564e28, []int{14}
+}
+func (m *InboundForeignKey) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *InboundForeignKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *InboundForeignKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_InboundForeignKey.Merge(m, src)
+}
+func (m *InboundForeignKey) XXX_Size() int {
+	return m.Size()
+}
+func (m *InboundForeignKey) XXX_DiscardUnknown() {
+	xxx_messageInfo_InboundForeignKey.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_InboundForeignKey proto.InternalMessageInfo
+
+type SequenceOwnedBy struct {
+	TableID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
+	OwnerTableID github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,2,opt,name=owner_table_id,json=ownerTableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"owner_table_id,omitempty"`
+}
+
+func (m *SequenceOwnedBy) Reset()         { *m = SequenceOwnedBy{} }
+func (m *SequenceOwnedBy) String() string { return proto.CompactTextString(m) }
+func (*SequenceOwnedBy) ProtoMessage()    {}
+func (*SequenceOwnedBy) Descriptor() ([]byte, []int) {
+	return fileDescriptor_5413c88842564e28, []int{15}
+}
+func (m *SequenceOwnedBy) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SequenceOwnedBy) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *SequenceOwnedBy) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SequenceOwnedBy.Merge(m, src)
+}
+func (m *SequenceOwnedBy) XXX_Size() int {
+	return m.Size()
+}
+func (m *SequenceOwnedBy) XXX_DiscardUnknown() {
+	xxx_messageInfo_SequenceOwnedBy.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SequenceOwnedBy proto.InternalMessageInfo
+
+type RelationDependedOnBy struct {
+	TableID      github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"table_id,omitempty"`
+	DependedOnBy github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID `protobuf:"varint,2,opt,name=dependedOn,proto3,casttype=github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID" json:"dependedOn,omitempty"`
+}
+
+func (m *RelationDependedOnBy) Reset()         { *m = RelationDependedOnBy{} }
+func (m *RelationDependedOnBy) String() string { return proto.CompactTextString(m) }
+func (*RelationDependedOnBy) ProtoMessage()    {}
+func (*RelationDependedOnBy) Descriptor() ([]byte, []int) {
+	return fileDescriptor_5413c88842564e28, []int{16}
+}
+func (m *RelationDependedOnBy) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RelationDependedOnBy) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalToSizedBuffer(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (m *RelationDependedOnBy) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RelationDependedOnBy.Merge(m, src)
+}
+func (m *RelationDependedOnBy) XXX_Size() int {
+	return m.Size()
+}
+func (m *RelationDependedOnBy) XXX_DiscardUnknown() {
+	xxx_messageInfo_RelationDependedOnBy.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RelationDependedOnBy proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterEnum("cockroach.sql.schemachanger.scpb.State", State_name, State_value)
 	proto.RegisterEnum("cockroach.sql.schemachanger.scpb.Target_Direction", Target_Direction_name, Target_Direction_value)
@@ -570,96 +752,121 @@ func init() {
 	proto.RegisterType((*Sequence)(nil), "cockroach.sql.schemachanger.scpb.Sequence")
 	proto.RegisterType((*DefaultExpression)(nil), "cockroach.sql.schemachanger.scpb.DefaultExpression")
 	proto.RegisterType((*View)(nil), "cockroach.sql.schemachanger.scpb.View")
+	proto.RegisterType((*Table)(nil), "cockroach.sql.schemachanger.scpb.Table")
 	proto.RegisterType((*TypeReference)(nil), "cockroach.sql.schemachanger.scpb.TypeReference")
+	proto.RegisterType((*OutboundForeignKey)(nil), "cockroach.sql.schemachanger.scpb.OutboundForeignKey")
+	proto.RegisterType((*InboundForeignKey)(nil), "cockroach.sql.schemachanger.scpb.InboundForeignKey")
+	proto.RegisterType((*SequenceOwnedBy)(nil), "cockroach.sql.schemachanger.scpb.SequenceOwnedBy")
+	proto.RegisterType((*RelationDependedOnBy)(nil), "cockroach.sql.schemachanger.scpb.RelationDependedOnBy")
 }
 
 func init() { proto.RegisterFile("sql/schemachanger/scpb/scpb.proto", fileDescriptor_5413c88842564e28) }
 
 var fileDescriptor_5413c88842564e28 = []byte{
-	// 1314 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x57, 0x41, 0x8f, 0xdb, 0x54,
-	0x10, 0x5e, 0x27, 0x4e, 0xe2, 0xcc, 0x26, 0x59, 0xf7, 0xb5, 0xa0, 0x50, 0x41, 0xbc, 0x5d, 0xa4,
-	0x76, 0x55, 0xa4, 0x04, 0x5a, 0x2e, 0xec, 0x85, 0xae, 0xd7, 0xa9, 0xb0, 0x1a, 0x92, 0xe0, 0x64,
-	0x5b, 0xb5, 0x02, 0x45, 0x8e, 0xfd, 0x9a, 0x58, 0x4d, 0xec, 0xac, 0xed, 0xb4, 0x8d, 0xb8, 0xf0,
-	0x0b, 0x80, 0x1b, 0x57, 0xce, 0xdc, 0xf9, 0x0f, 0x2b, 0x71, 0xe9, 0xb1, 0x08, 0xc9, 0x02, 0x57,
-	0x2a, 0xfc, 0x01, 0x2e, 0x9c, 0xd0, 0x7b, 0xb6, 0x13, 0x27, 0x11, 0xca, 0x6a, 0xb3, 0x44, 0x82,
-	0x4b, 0xf4, 0x32, 0x7e, 0xf3, 0xcd, 0x9b, 0x79, 0x33, 0xdf, 0xcc, 0x83, 0x6b, 0xce, 0xc9, 0xa0,
-	0xe2, 0x68, 0x7d, 0x3c, 0x54, 0xb5, 0xbe, 0x6a, 0xf6, 0xb0, 0x5d, 0x71, 0xb4, 0x51, 0x97, 0xfe,
-	0x94, 0x47, 0xb6, 0xe5, 0x5a, 0x68, 0x57, 0xb3, 0xb4, 0x27, 0xb6, 0xa5, 0x6a, 0xfd, 0xb2, 0x73,
-	0x32, 0x28, 0xcf, 0x6d, 0x2e, 0x93, 0x7d, 0x57, 0xdf, 0x25, 0x20, 0x9a, 0xea, 0xaa, 0x03, 0xab,
-	0x57, 0xd1, 0x71, 0x00, 0xe0, 0xda, 0x63, 0xcd, 0x1d, 0xdb, 0x58, 0x0f, 0x60, 0xae, 0x5e, 0xe9,
-	0x59, 0x3d, 0x8b, 0x2e, 0x2b, 0x64, 0x15, 0x48, 0xf7, 0x7e, 0x4e, 0x43, 0xae, 0x3a, 0xc0, 0x43,
-	0x6c, 0xba, 0x4d, 0x6a, 0xed, 0x0e, 0xa4, 0x35, 0x6b, 0x30, 0x1e, 0x9a, 0x45, 0x66, 0x97, 0xd9,
-	0xdf, 0xbe, 0xb5, 0x5f, 0x5e, 0x65, 0xbe, 0x7c, 0x44, 0xf7, 0x2b, 0xa1, 0x1e, 0x6a, 0x41, 0x7e,
-	0x64, 0x1b, 0x43, 0xd5, 0x9e, 0x74, 0x0c, 0x53, 0xc7, 0xcf, 0x8b, 0x09, 0x0a, 0x54, 0x5e, 0x0d,
-	0xd4, 0x0c, 0xd4, 0x64, 0xa2, 0xa5, 0xe4, 0x46, 0xb1, 0x7f, 0xe8, 0x21, 0xec, 0x38, 0x58, 0xb3,
-	0x4c, 0x7d, 0x06, 0x9b, 0xa4, 0xb0, 0xef, 0xaf, 0x86, 0x6d, 0x45, 0x8a, 0x01, 0x70, 0xc1, 0x99,
-	0xfb, 0x8f, 0x30, 0x5c, 0x76, 0xf0, 0xc9, 0x18, 0x9b, 0x1a, 0xee, 0xe8, 0x78, 0x84, 0x4d, 0x1d,
-	0x9b, 0xda, 0xa4, 0xc8, 0x52, 0xf8, 0x0f, 0xcf, 0x02, 0x1f, 0x28, 0x4b, 0x53, 0x5d, 0x05, 0x39,
-	0x4b, 0x32, 0xd4, 0x81, 0x4b, 0x63, 0xd3, 0x38, 0x19, 0xe3, 0x8e, 0x66, 0x99, 0x8e, 0x6b, 0xab,
-	0x86, 0xe9, 0x16, 0x53, 0xd4, 0xc8, 0xad, 0xd5, 0x46, 0x8e, 0xa9, 0xea, 0xd1, 0x54, 0x53, 0xe1,
-	0xc7, 0x0b, 0x12, 0xf4, 0x39, 0xf0, 0x5a, 0x1f, 0x6b, 0x4f, 0xe2, 0xf8, 0x69, 0x8a, 0xff, 0xc1,
-	0x19, 0xee, 0x90, 0x68, 0xc6, 0xe0, 0x77, 0xb4, 0x79, 0x01, 0xba, 0x03, 0x29, 0x57, 0xed, 0x0e,
-	0x70, 0x31, 0x43, 0x21, 0x6f, 0x9e, 0x3d, 0x2e, 0x4a, 0xa0, 0x88, 0xba, 0x80, 0x74, 0xfc, 0x58,
-	0x1d, 0x0f, 0xdc, 0x0e, 0x7e, 0x3e, 0xb2, 0xb1, 0xe3, 0x18, 0x96, 0x59, 0xe4, 0x28, 0xdc, 0xed,
-	0xd5, 0x70, 0x52, 0xa0, 0x5b, 0x9d, 0xaa, 0x2a, 0x97, 0xf4, 0x45, 0x11, 0x3a, 0x00, 0xf6, 0xa9,
-	0x81, 0x9f, 0x15, 0xb3, 0x14, 0xf5, 0xfa, 0x6a, 0xd4, 0xfb, 0x06, 0x7e, 0xa6, 0x50, 0x1d, 0x24,
-	0x43, 0xc6, 0x9d, 0x8c, 0xb0, 0x82, 0x1f, 0x17, 0x81, 0xaa, 0x57, 0x56, 0xab, 0xb7, 0x03, 0x05,
-	0x6c, 0x53, 0x47, 0x23, 0xfd, 0x03, 0xf6, 0xf4, 0x7b, 0x81, 0xd9, 0x7b, 0xcd, 0x40, 0xba, 0xad,
-	0xda, 0x3d, 0xec, 0xa2, 0x2f, 0x20, 0x8f, 0x83, 0x2a, 0xeb, 0xd0, 0xba, 0x0b, 0x8b, 0xeb, 0x0c,
-	0x35, 0x11, 0x2f, 0x4e, 0x91, 0x3b, 0xf5, 0x84, 0xad, 0x17, 0x9e, 0xc0, 0x28, 0x39, 0x1c, 0x2f,
-	0xda, 0x26, 0x64, 0x75, 0xc3, 0xc6, 0x9a, 0x4b, 0x22, 0x4a, 0xca, 0xad, 0x70, 0x96, 0x9c, 0x0a,
-	0xce, 0x56, 0x96, 0x22, 0x4d, 0x65, 0x06, 0xb2, 0xf7, 0x1e, 0x64, 0xa7, 0x72, 0xb4, 0x0d, 0x99,
-	0xe3, 0xfa, 0xbd, 0x7a, 0xe3, 0x41, 0x9d, 0xdf, 0x42, 0x19, 0x48, 0x1e, 0x4a, 0x12, 0xcf, 0x20,
-	0x0e, 0x58, 0x49, 0x69, 0x34, 0xf9, 0xc4, 0xde, 0x4f, 0x09, 0x48, 0x07, 0x24, 0x80, 0x74, 0xe0,
-	0xe8, 0x6d, 0x77, 0x0c, 0x9d, 0xfa, 0x98, 0x17, 0x65, 0xdf, 0x13, 0x32, 0x6d, 0x22, 0x93, 0xa5,
-	0xbf, 0x3c, 0xe1, 0xa0, 0x67, 0xb8, 0xfd, 0x71, 0xb7, 0xac, 0x59, 0xc3, 0xca, 0xf4, 0x84, 0x7a,
-	0x77, 0xb6, 0xae, 0x8c, 0x9e, 0xf4, 0x2a, 0xcb, 0x84, 0x56, 0x96, 0x25, 0x25, 0x43, 0xa1, 0x65,
-	0x1d, 0x0d, 0x21, 0xfb, 0x58, 0x1d, 0x1a, 0x83, 0x09, 0x31, 0x93, 0xa0, 0x66, 0x9a, 0xbe, 0x27,
-	0x70, 0x77, 0xa9, 0x90, 0xda, 0xb9, 0x73, 0x5e, 0x3b, 0x11, 0x86, 0xc2, 0x05, 0x26, 0x64, 0x1d,
-	0x09, 0xb0, 0x1d, 0x9a, 0x33, 0xd5, 0x21, 0xa6, 0xc4, 0x93, 0x55, 0x20, 0x10, 0xd5, 0xd5, 0x21,
-	0x46, 0xd5, 0x29, 0x69, 0x06, 0xac, 0x71, 0x63, 0x31, 0xf8, 0x27, 0x83, 0xae, 0xea, 0xe0, 0x90,
-	0x29, 0x25, 0xec, 0x68, 0xb6, 0x31, 0x72, 0x2d, 0x5b, 0x64, 0xc9, 0x85, 0x46, 0xcc, 0x79, 0xc0,
-	0xfe, 0x41, 0xd2, 0xe6, 0x3b, 0x16, 0x72, 0x71, 0x26, 0xdc, 0x50, 0x4c, 0x45, 0x48, 0xc5, 0xe9,
-	0xfa, 0xfa, 0x3f, 0xb8, 0x40, 0x8f, 0xb4, 0xe4, 0x41, 0xa0, 0x8a, 0xbe, 0x61, 0xe0, 0x4d, 0xcb,
-	0xed, 0x63, 0xbb, 0x33, 0xd7, 0x01, 0xc8, 0xc1, 0x93, 0xf4, 0xe0, 0x8f, 0x7c, 0x4f, 0xb8, 0xdc,
-	0x20, 0x3b, 0xe2, 0x1e, 0x52, 0x27, 0x3e, 0x3e, 0xb7, 0x13, 0x01, 0x84, 0x72, 0xd9, 0x5a, 0xc2,
-	0xd5, 0xd1, 0x57, 0x0c, 0xf0, 0x8e, 0x6b, 0xd9, 0x84, 0x75, 0x49, 0x8c, 0x3b, 0x86, 0xee, 0x14,
-	0xd9, 0xdd, 0xe4, 0x7e, 0x5e, 0xbc, 0xef, 0x7b, 0x42, 0xa1, 0x45, 0xbe, 0x05, 0xd7, 0x22, 0x4b,
-	0xce, 0x3a, 0x79, 0x13, 0x81, 0x28, 0x05, 0x27, 0x86, 0xa9, 0x3b, 0x48, 0x04, 0x34, 0x77, 0x02,
-	0x92, 0x43, 0x4e, 0x31, 0xb5, 0x9b, 0xdc, 0xcf, 0x8a, 0x57, 0x7c, 0x4f, 0xe0, 0x63, 0x67, 0x20,
-	0xd9, 0xe4, 0x28, 0xbc, 0xb3, 0x20, 0x09, 0x33, 0xe3, 0x87, 0x04, 0x14, 0xe6, 0x9b, 0xd9, 0x7f,
-	0x28, 0x37, 0xfa, 0x8b, 0x63, 0x41, 0x90, 0x11, 0x47, 0x17, 0x71, 0xf5, 0x73, 0xb3, 0x42, 0x18,
-	0xac, 0x3f, 0x93, 0x80, 0x96, 0x5b, 0xf3, 0xe6, 0x08, 0x6a, 0x9a, 0x6f, 0x71, 0x82, 0x8a, 0x92,
-	0xe4, 0x42, 0x12, 0x8d, 0xd3, 0xc2, 0x1c, 0x43, 0x43, 0xd8, 0x9e, 0x8e, 0x30, 0xd3, 0x5a, 0xab,
-	0xf9, 0x9e, 0x00, 0x51, 0x04, 0xd6, 0x76, 0x0d, 0x22, 0x03, 0xb2, 0x8e, 0x3e, 0x05, 0x96, 0x74,
-	0x3a, 0x4a, 0x76, 0x85, 0x5b, 0x1f, 0x9d, 0x67, 0x44, 0x0a, 0x3a, 0x27, 0x85, 0x41, 0xef, 0x40,
-	0xaa, 0x4b, 0x99, 0x9c, 0x4c, 0x43, 0x9c, 0xc8, 0xf9, 0x9e, 0xc0, 0x8a, 0x84, 0x81, 0xd9, 0xee,
-	0x44, 0xd6, 0xf7, 0x6e, 0x00, 0x4b, 0x36, 0xcf, 0x77, 0x21, 0x0e, 0xd8, 0xe3, 0x56, 0xb5, 0x15,
-	0xb4, 0xa1, 0xc6, 0x83, 0x7a, 0x8b, 0x4f, 0x84, 0xf7, 0xfe, 0x4b, 0x02, 0xf8, 0xc5, 0x69, 0x69,
-	0x43, 0xb7, 0x6e, 0x00, 0x37, 0xe5, 0xbb, 0xe0, 0xd2, 0xeb, 0xc4, 0xca, 0x05, 0x72, 0x5c, 0xc6,
-	0x08, 0x79, 0x6d, 0x04, 0x10, 0x23, 0xb4, 0x24, 0x25, 0xb4, 0xcf, 0x7c, 0x4f, 0xc8, 0x5e, 0x2c,
-	0x97, 0x65, 0xa3, 0x14, 0x8b, 0x28, 0xe8, 0xc7, 0x04, 0xec, 0x2c, 0xcc, 0x8a, 0x1b, 0x0a, 0x2e,
-	0x02, 0x96, 0x76, 0xdf, 0x04, 0xed, 0xbe, 0x74, 0x4d, 0x64, 0x64, 0x94, 0x0c, 0x3b, 0x32, 0x5d,
-	0x2f, 0x44, 0x86, 0xfd, 0xf7, 0x23, 0x83, 0xde, 0x86, 0xec, 0x53, 0x75, 0x60, 0xe8, 0xaa, 0x8b,
-	0xc3, 0x1c, 0x56, 0x66, 0x82, 0x30, 0x6e, 0x4f, 0x81, 0x8b, 0x8a, 0x60, 0x33, 0xf1, 0x0a, 0xed,
-	0x7e, 0x9d, 0x84, 0x4b, 0x4b, 0x93, 0xf3, 0xff, 0x93, 0x04, 0xbf, 0x84, 0x9d, 0xb1, 0x83, 0x9d,
-	0x19, 0xe3, 0xc5, 0xeb, 0x62, 0xe7, 0x78, 0xfe, 0xd3, 0x9a, 0x3e, 0x2e, 0x5a, 0x42, 0xd7, 0x20,
-	0x17, 0x7f, 0xdc, 0x50, 0x6a, 0xcc, 0x2a, 0xdb, 0xb1, 0x17, 0x4a, 0x78, 0x21, 0xaf, 0x19, 0x60,
-	0xc9, 0xa3, 0x63, 0x43, 0x77, 0x60, 0x93, 0x73, 0x51, 0xd2, 0xd5, 0x1b, 0xa6, 0x38, 0x29, 0x26,
-	0x68, 0x44, 0x08, 0x2d, 0xe5, 0xa4, 0x98, 0x7c, 0x4d, 0x73, 0x73, 0x36, 0x42, 0x47, 0x7f, 0x67,
-	0x20, 0x3f, 0xf7, 0x3c, 0x42, 0x6a, 0xf0, 0xc0, 0x9a, 0x39, 0xfc, 0x89, 0xef, 0x09, 0x69, 0xb2,
-	0x67, 0x6d, 0x7f, 0xd3, 0x04, 0x98, 0xa6, 0x5c, 0x5e, 0x9f, 0xce, 0x1f, 0xb3, 0xb4, 0xa3, 0x86,
-	0xc8, 0x60, 0xb2, 0xb6, 0xa1, 0xdc, 0x0c, 0x3e, 0xaa, 0xb1, 0x9b, 0xcf, 0x20, 0xd5, 0x72, 0x55,
-	0x77, 0xa1, 0x43, 0x01, 0xa4, 0x0f, 0xc5, 0x56, 0xb5, 0xde, 0xe6, 0x19, 0xb4, 0x03, 0xdb, 0x52,
-	0xb5, 0x56, 0x6d, 0x57, 0x3b, 0x8d, 0x7a, 0xed, 0x21, 0x9f, 0x40, 0x6f, 0xc1, 0x1b, 0xa1, 0xe0,
-	0xb0, 0x2e, 0x75, 0x1e, 0x28, 0x72, 0xf4, 0x29, 0x89, 0x0a, 0x00, 0xe2, 0xe1, 0xd1, 0xbd, 0xbb,
-	0x72, 0xad, 0x56, 0x95, 0x78, 0x16, 0xe5, 0x21, 0x7b, 0xff, 0xb0, 0x26, 0x4b, 0x87, 0xed, 0xaa,
-	0xc4, 0xa7, 0x08, 0x6c, 0xf3, 0x58, 0xac, 0xc9, 0x47, 0x7c, 0x5a, 0xbc, 0x7e, 0xfa, 0x5b, 0x69,
-	0xeb, 0xd4, 0x2f, 0x31, 0x2f, 0xfc, 0x12, 0xf3, 0xd2, 0x2f, 0x31, 0xbf, 0xfa, 0x25, 0xe6, 0xdb,
-	0x57, 0xa5, 0xad, 0x17, 0xaf, 0x4a, 0x5b, 0x2f, 0x5f, 0x95, 0xb6, 0x1e, 0xb1, 0xe4, 0xdc, 0xdd,
-	0x34, 0x7d, 0x73, 0xde, 0xfe, 0x3b, 0x00, 0x00, 0xff, 0xff, 0x2e, 0xdb, 0xa2, 0x15, 0x6d, 0x12,
-	0x00, 0x00,
+	// 1636 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x58, 0xcf, 0x6f, 0xdb, 0x46,
+	0x16, 0x36, 0x25, 0x4a, 0x96, 0x9e, 0x7e, 0xd1, 0x13, 0xef, 0x42, 0x1b, 0xec, 0x8a, 0x8e, 0x17,
+	0x48, 0x8c, 0x2c, 0x20, 0xed, 0x26, 0x8b, 0x05, 0xd6, 0xc0, 0x62, 0x63, 0x99, 0x32, 0x96, 0x6b,
+	0x47, 0x72, 0x29, 0x3b, 0x6e, 0x82, 0x16, 0x02, 0x45, 0x4e, 0x64, 0x36, 0x12, 0x29, 0x93, 0x54,
+	0x1c, 0xa1, 0x3d, 0xf4, 0xd2, 0x6b, 0xd3, 0x5b, 0x7b, 0xec, 0xb9, 0xf7, 0xfe, 0x0f, 0x06, 0x7a,
+	0x49, 0x6f, 0x01, 0x0a, 0x08, 0xad, 0x02, 0xb4, 0xbd, 0xf4, 0x52, 0xa0, 0x97, 0x9e, 0x8a, 0x19,
+	0xfe, 0x94, 0xe4, 0x42, 0x42, 0xa4, 0x0a, 0x68, 0xda, 0x8b, 0x41, 0x3f, 0xf1, 0x7d, 0xdf, 0xbc,
+	0x37, 0x8f, 0xdf, 0x7b, 0x33, 0x70, 0xcd, 0x3a, 0x6b, 0x97, 0x2c, 0xe5, 0x14, 0x77, 0x64, 0xe5,
+	0x54, 0xd6, 0x5b, 0xd8, 0x2c, 0x59, 0x4a, 0xb7, 0x49, 0xff, 0x14, 0xbb, 0xa6, 0x61, 0x1b, 0x68,
+	0x43, 0x31, 0x94, 0x47, 0xa6, 0x21, 0x2b, 0xa7, 0x45, 0xeb, 0xac, 0x5d, 0x1c, 0x79, 0xb9, 0x48,
+	0xde, 0xbb, 0xfa, 0x57, 0x02, 0xa2, 0xc8, 0xb6, 0xdc, 0x36, 0x5a, 0x25, 0x15, 0x3b, 0x00, 0xb6,
+	0xd9, 0x53, 0xec, 0x9e, 0x89, 0x55, 0x07, 0xe6, 0xea, 0x7a, 0xcb, 0x68, 0x19, 0xf4, 0xb1, 0x44,
+	0x9e, 0x1c, 0xeb, 0xe6, 0x47, 0x00, 0xe9, 0x4a, 0x1b, 0x77, 0xb0, 0x6e, 0x1f, 0x52, 0xb6, 0x3b,
+	0x10, 0x57, 0x8c, 0x76, 0xaf, 0xa3, 0xe7, 0x99, 0x0d, 0x66, 0x2b, 0x75, 0x6b, 0xab, 0x38, 0x8d,
+	0xbe, 0xb8, 0x4b, 0xdf, 0x97, 0x5c, 0x3f, 0x54, 0x87, 0x4c, 0xd7, 0xd4, 0x3a, 0xb2, 0xd9, 0x6f,
+	0x68, 0xba, 0x8a, 0x9f, 0xe4, 0x23, 0x14, 0xa8, 0x38, 0x1d, 0xe8, 0xd0, 0x71, 0x13, 0x89, 0x97,
+	0x94, 0xee, 0x86, 0xfe, 0x43, 0xf7, 0x21, 0x67, 0x61, 0xc5, 0xd0, 0xd5, 0x00, 0x36, 0x4a, 0x61,
+	0xff, 0x3e, 0x1d, 0xb6, 0xee, 0x39, 0x3a, 0xc0, 0x59, 0x6b, 0xe4, 0x7f, 0x84, 0xe1, 0x8a, 0x85,
+	0xcf, 0x7a, 0x58, 0x57, 0x70, 0x43, 0xc5, 0x5d, 0xac, 0xab, 0x58, 0x57, 0xfa, 0x79, 0x96, 0xc2,
+	0xff, 0x73, 0x16, 0x78, 0xc7, 0x59, 0xf0, 0x7d, 0x25, 0x64, 0x4d, 0xd8, 0x50, 0x03, 0xd6, 0x7a,
+	0xba, 0x76, 0xd6, 0xc3, 0x0d, 0xc5, 0xd0, 0x2d, 0xdb, 0x94, 0x35, 0xdd, 0xce, 0xc7, 0x28, 0xc9,
+	0xad, 0xe9, 0x24, 0xc7, 0xd4, 0x75, 0xd7, 0xf7, 0x94, 0xb8, 0xde, 0x98, 0x05, 0xbd, 0x01, 0x9c,
+	0x72, 0x8a, 0x95, 0x47, 0x61, 0xfc, 0x38, 0xc5, 0xff, 0xc7, 0x0c, 0x7b, 0x48, 0x3c, 0x43, 0xf0,
+	0x39, 0x65, 0xd4, 0x80, 0xf6, 0x20, 0xe1, 0x05, 0x95, 0x5f, 0xa5, 0xa8, 0x37, 0x67, 0x4f, 0x8d,
+	0xe4, 0xfb, 0xa2, 0x26, 0x20, 0x15, 0x3f, 0x94, 0x7b, 0x6d, 0xbb, 0x81, 0x9f, 0x74, 0x4d, 0x6c,
+	0x59, 0x9a, 0xa1, 0xe7, 0x13, 0x14, 0xf1, 0xf6, 0x74, 0x44, 0xc1, 0xf1, 0xad, 0xf8, 0xae, 0xd2,
+	0x9a, 0x3a, 0x6e, 0x42, 0xdb, 0xc0, 0x3e, 0xd6, 0xf0, 0x79, 0x3e, 0x49, 0x51, 0xaf, 0x4f, 0x47,
+	0xbd, 0xa7, 0xe1, 0x73, 0x89, 0xfa, 0x20, 0x11, 0x56, 0xed, 0x7e, 0x17, 0x4b, 0xf8, 0x61, 0x1e,
+	0xa8, 0x7b, 0x69, 0xba, 0xfb, 0x91, 0xe3, 0x80, 0x4d, 0x1a, 0xab, 0xe7, 0x8f, 0xfe, 0x03, 0x31,
+	0x5b, 0x6e, 0xb6, 0x71, 0x3e, 0x45, 0x81, 0x6e, 0xcc, 0x00, 0x44, 0x5e, 0x97, 0x1c, 0x2f, 0xf4,
+	0x00, 0x32, 0x46, 0xcf, 0xde, 0x33, 0x4c, 0xac, 0xb5, 0xf4, 0x7d, 0xdc, 0xcf, 0xa7, 0x67, 0xad,
+	0xc8, 0x5a, 0xcf, 0x6e, 0x1a, 0x3d, 0x5d, 0x0d, 0x7c, 0xa5, 0x51, 0x28, 0x74, 0x02, 0x69, 0x4d,
+	0x0f, 0x41, 0x67, 0x66, 0xcd, 0xbf, 0xa8, 0x8f, 0x23, 0x8f, 0x00, 0xa1, 0xb7, 0x60, 0xdd, 0xc4,
+	0x6d, 0xd9, 0xd6, 0x0c, 0xdd, 0xad, 0x7d, 0xb5, 0xa6, 0x97, 0xfb, 0xf9, 0x2c, 0x25, 0xf8, 0xd7,
+	0x74, 0x02, 0xe9, 0x12, 0x6f, 0xe9, 0x52, 0x4c, 0x74, 0x02, 0x19, 0xaf, 0xac, 0x6a, 0xe7, 0x3a,
+	0x36, 0xf3, 0xb9, 0x59, 0xab, 0xbd, 0x1e, 0x72, 0x53, 0xcb, 0x7d, 0x69, 0x14, 0x67, 0x9b, 0xbd,
+	0xf8, 0x98, 0x67, 0x36, 0xbf, 0x66, 0x20, 0x7e, 0x24, 0x9b, 0x2d, 0x6c, 0xa3, 0x37, 0x21, 0x83,
+	0x1d, 0x91, 0x6c, 0x50, 0xd9, 0x74, 0xb5, 0x71, 0x06, 0x49, 0x0b, 0x6b, 0x6b, 0x39, 0x71, 0x31,
+	0xe0, 0x57, 0x9e, 0x0d, 0x78, 0x46, 0x4a, 0xe3, 0xb0, 0xe6, 0x1e, 0x42, 0x52, 0xd5, 0x4c, 0xac,
+	0x90, 0x08, 0xa9, 0x5a, 0x66, 0x67, 0x91, 0x04, 0x67, 0x6d, 0x45, 0xc1, 0xf3, 0x94, 0x02, 0x90,
+	0xcd, 0xbf, 0x41, 0xd2, 0xb7, 0xa3, 0x14, 0xac, 0x1e, 0x57, 0xf7, 0xab, 0xb5, 0x93, 0x2a, 0xb7,
+	0x82, 0x56, 0x21, 0xba, 0x23, 0x08, 0x1c, 0x83, 0x12, 0xc0, 0x0a, 0x52, 0xed, 0x90, 0x8b, 0x6c,
+	0x7e, 0x16, 0x81, 0xb8, 0xa3, 0xe1, 0x48, 0x85, 0x04, 0x2d, 0xbe, 0x86, 0xa6, 0xd2, 0x18, 0x33,
+	0x65, 0x71, 0x38, 0xe0, 0x57, 0x69, 0x5d, 0x8a, 0xc2, 0x8f, 0x03, 0x7e, 0xbb, 0xa5, 0xd9, 0xa7,
+	0xbd, 0x66, 0x51, 0x31, 0x3a, 0x25, 0x7f, 0x85, 0x6a, 0x33, 0x78, 0x2e, 0x75, 0x1f, 0xb5, 0x4a,
+	0x93, 0xfd, 0xa8, 0x28, 0x0a, 0xd2, 0x2a, 0x85, 0x16, 0x55, 0xd4, 0x81, 0xe4, 0x43, 0xb9, 0xa3,
+	0xb5, 0xfb, 0x84, 0x26, 0x42, 0x69, 0x0e, 0x87, 0x03, 0x3e, 0xb1, 0x47, 0x8d, 0x94, 0xe7, 0xce,
+	0xcb, 0xf2, 0x78, 0x18, 0x52, 0xc2, 0xa1, 0x10, 0x55, 0xc4, 0x43, 0xca, 0xa5, 0xd3, 0xe5, 0x0e,
+	0xa6, 0x7d, 0x23, 0x29, 0x81, 0x63, 0xaa, 0xca, 0x1d, 0x8c, 0x2a, 0x7e, 0xcf, 0x63, 0x2f, 0xff,
+	0x52, 0xcf, 0xda, 0x4d, 0xd9, 0xc2, 0x6e, 0xa3, 0x13, 0xb0, 0xa5, 0x98, 0x5a, 0xd7, 0x36, 0xcc,
+	0x32, 0x4b, 0x36, 0xd4, 0x6b, 0x7c, 0xdb, 0xec, 0xb7, 0xa4, 0x6c, 0x3e, 0x64, 0x21, 0x1d, 0x6e,
+	0x64, 0x4b, 0xca, 0x69, 0x19, 0x62, 0xe1, 0x6e, 0x7b, 0xfd, 0x67, 0x42, 0xa0, 0x4b, 0x9a, 0x88,
+	0xc0, 0x71, 0x45, 0x4f, 0x19, 0xf8, 0xa3, 0x61, 0x9f, 0x62, 0xb3, 0x31, 0xd2, 0xc0, 0xc9, 0xc2,
+	0xa3, 0x74, 0xe1, 0x0f, 0x86, 0x03, 0xfe, 0x4a, 0x8d, 0xbc, 0x11, 0x8e, 0x90, 0x06, 0xf1, 0xdf,
+	0x97, 0x0e, 0xc2, 0x81, 0x90, 0xae, 0x18, 0x13, 0xb8, 0x2a, 0x7a, 0x97, 0x01, 0xce, 0xb2, 0x0d,
+	0x93, 0x34, 0x4d, 0x92, 0xe3, 0x86, 0xa6, 0x5a, 0x79, 0x76, 0x23, 0xba, 0x95, 0x29, 0xdf, 0x1b,
+	0x0e, 0xf8, 0x6c, 0x9d, 0xfc, 0xe6, 0x6c, 0x8b, 0x28, 0x58, 0xf3, 0xd4, 0x8d, 0x07, 0x22, 0x65,
+	0xad, 0x10, 0xa6, 0x6a, 0xa1, 0x32, 0xa0, 0x91, 0x15, 0x90, 0x1a, 0xb2, 0xf2, 0xb1, 0x8d, 0xe8,
+	0x56, 0xb2, 0xbc, 0x3e, 0x1c, 0xf0, 0x5c, 0x68, 0x0d, 0xa4, 0x9a, 0x2c, 0x89, 0xb3, 0xc6, 0x2c,
+	0x6e, 0x65, 0x7c, 0x12, 0x81, 0xec, 0xe8, 0x2c, 0xf2, 0x2b, 0xaa, 0x8d, 0xd3, 0xf1, 0xa9, 0xce,
+	0xa9, 0x88, 0xdd, 0x45, 0x6c, 0xfd, 0xc8, 0xa8, 0xe7, 0x26, 0xeb, 0x87, 0x28, 0xa0, 0xc9, 0xc9,
+	0x6a, 0x79, 0x02, 0xe5, 0xd7, 0x5b, 0x58, 0xa0, 0xbc, 0x22, 0x59, 0x48, 0xa1, 0x25, 0x14, 0xb7,
+	0xc6, 0x50, 0x07, 0x52, 0xfe, 0x04, 0xea, 0x7f, 0x6b, 0x07, 0xc3, 0x01, 0x0f, 0x5e, 0x06, 0xe6,
+	0x0e, 0x0d, 0x3c, 0x02, 0x51, 0x45, 0x77, 0x81, 0x25, 0x23, 0x0a, 0x15, 0xbb, 0xec, 0xad, 0x7f,
+	0xbf, 0xcc, 0x84, 0xeb, 0x8c, 0x3c, 0x14, 0x06, 0xfd, 0x05, 0x62, 0x4d, 0xaa, 0xe4, 0x64, 0x98,
+	0x4d, 0x94, 0x13, 0xc3, 0x01, 0xcf, 0x96, 0x89, 0x02, 0xb3, 0xcd, 0xbe, 0xa8, 0x6e, 0xde, 0x00,
+	0x96, 0xbc, 0x3c, 0xda, 0x85, 0x12, 0xc0, 0x1e, 0xd7, 0x2b, 0x75, 0xa7, 0x0d, 0xd5, 0x4e, 0xaa,
+	0x75, 0x2e, 0xe2, 0xee, 0xfb, 0x17, 0x11, 0xe0, 0xc6, 0x87, 0xdd, 0x25, 0xed, 0xba, 0x06, 0x09,
+	0x5f, 0xef, 0x9c, 0x4d, 0xaf, 0x12, 0x96, 0x05, 0x6a, 0xdc, 0xaa, 0xe6, 0xea, 0x5a, 0x17, 0x20,
+	0x24, 0x68, 0x51, 0x2a, 0x68, 0xaf, 0x0d, 0x07, 0x7c, 0x72, 0xb1, 0x5a, 0x96, 0xf4, 0x4a, 0xcc,
+	0x93, 0xa0, 0x4f, 0x23, 0x90, 0x1b, 0x1b, 0xf5, 0x97, 0x94, 0x5c, 0x04, 0x2c, 0xed, 0xbe, 0x11,
+	0xda, 0x7d, 0xe9, 0x33, 0xb1, 0x91, 0x33, 0x80, 0xdb, 0x91, 0xe9, 0xf3, 0x58, 0x66, 0xd8, 0x5f,
+	0x3e, 0x33, 0xe8, 0xcf, 0x90, 0x7c, 0x2c, 0xb7, 0x35, 0x55, 0xb6, 0xb1, 0x5b, 0xc3, 0x52, 0x60,
+	0x70, 0xf3, 0xf6, 0x18, 0x12, 0xde, 0x47, 0xb0, 0x9c, 0x7c, 0xb9, 0xbc, 0xef, 0x47, 0x61, 0x6d,
+	0xe2, 0xc8, 0xf3, 0x6a, 0x8a, 0xe0, 0xdb, 0x90, 0xeb, 0x59, 0xd8, 0x0a, 0x14, 0x2f, 0xfc, 0x5d,
+	0xe4, 0x8e, 0x47, 0x7f, 0x9a, 0x33, 0xc6, 0x71, 0x26, 0x74, 0x0d, 0xd2, 0xe1, 0x53, 0x29, 0x95,
+	0xc6, 0xa4, 0x94, 0x0a, 0x1d, 0x2d, 0xdd, 0x0d, 0xf9, 0x3c, 0x02, 0x2c, 0x39, 0x2d, 0x2e, 0x69,
+	0x0f, 0x4c, 0xb2, 0xae, 0xd0, 0x31, 0x2a, 0x42, 0x33, 0x42, 0x64, 0x29, 0x1d, 0x3e, 0x0a, 0xcd,
+	0x49, 0x37, 0xc2, 0x81, 0x34, 0x48, 0x3a, 0xff, 0x5b, 0x35, 0xdd, 0xdd, 0x82, 0x7d, 0xf2, 0x01,
+	0x0a, 0x9e, 0x71, 0x4e, 0xb6, 0x00, 0xdd, 0xcd, 0xe9, 0x37, 0x0c, 0xc4, 0x68, 0xde, 0x5e, 0xdd,
+	0xa4, 0x06, 0x91, 0x66, 0x46, 0x2e, 0x0b, 0x90, 0xec, 0x5c, 0x37, 0x04, 0x01, 0xff, 0x6f, 0x38,
+	0xe0, 0xe3, 0xe4, 0x9d, 0xb9, 0xe3, 0x8d, 0x13, 0x60, 0xfa, 0x1d, 0x67, 0x54, 0x7f, 0xa8, 0x0b,
+	0xbe, 0x65, 0x4a, 0x44, 0xa6, 0xbd, 0xb9, 0x89, 0xd2, 0x01, 0xbc, 0x2f, 0x5c, 0x4f, 0x59, 0x40,
+	0x93, 0xd7, 0x10, 0xa8, 0x05, 0x49, 0xc3, 0xd4, 0x5a, 0x9a, 0x1e, 0x04, 0xfc, 0x7f, 0xa2, 0x29,
+	0x35, 0x6a, 0x9c, 0x7b, 0x25, 0x09, 0x07, 0x5c, 0x54, 0xd1, 0x3b, 0x90, 0x75, 0x89, 0x1c, 0x81,
+	0xf1, 0xc4, 0xe4, 0x78, 0x38, 0xe0, 0x33, 0x0e, 0x9b, 0xa3, 0x41, 0x8b, 0x69, 0x27, 0x19, 0x23,
+	0x0c, 0x89, 0xba, 0x90, 0x36, 0xbd, 0x2d, 0x26, 0x91, 0xb2, 0x34, 0xd2, 0xbb, 0xc3, 0x01, 0x9f,
+	0xf2, 0xb7, 0x7e, 0xee, 0x60, 0x53, 0x3e, 0x85, 0xa8, 0xa2, 0xf7, 0x18, 0x58, 0x0b, 0x28, 0xbd,
+	0x98, 0x63, 0x34, 0xe6, 0xd7, 0xc9, 0x29, 0xc5, 0xe7, 0x5d, 0x64, 0xd8, 0x9c, 0x39, 0x86, 0xea,
+	0xb7, 0xf9, 0x78, 0xd0, 0xe6, 0xbd, 0x56, 0xc6, 0xc2, 0xda, 0xc4, 0xed, 0xd1, 0xef, 0x05, 0xf1,
+	0xdb, 0x2d, 0x88, 0xef, 0x18, 0xc8, 0x8d, 0x5d, 0xc4, 0x2d, 0xa9, 0x01, 0xd8, 0x90, 0x35, 0xce,
+	0x75, 0x6c, 0x36, 0x7c, 0xae, 0x60, 0xdc, 0x4f, 0xd3, 0x2b, 0xc0, 0xc5, 0x10, 0xa6, 0x8d, 0x00,
+	0x4b, 0xdd, 0xfc, 0x9e, 0x81, 0xf5, 0xcb, 0x6e, 0x37, 0x97, 0x14, 0xb4, 0x0e, 0x10, 0x74, 0xa4,
+	0x70, 0xc0, 0x0b, 0xec, 0x79, 0x21, 0x06, 0x67, 0x93, 0x6f, 0x9e, 0x43, 0xac, 0x6e, 0xcb, 0xf6,
+	0xd8, 0xf1, 0x0f, 0x20, 0xbe, 0x53, 0xae, 0x57, 0xaa, 0x47, 0x1c, 0x83, 0x72, 0x90, 0x12, 0x2a,
+	0x07, 0x95, 0xa3, 0x4a, 0xa3, 0x56, 0x3d, 0xb8, 0xcf, 0x45, 0xd0, 0x9f, 0xe0, 0x0f, 0xae, 0x61,
+	0xa7, 0x2a, 0x34, 0x4e, 0x24, 0xd1, 0xfb, 0x29, 0x8a, 0xb2, 0x00, 0xe5, 0x9d, 0xdd, 0xfd, 0x3d,
+	0xf1, 0xe0, 0xa0, 0x22, 0x70, 0x2c, 0xca, 0x40, 0xf2, 0xde, 0xce, 0x81, 0x28, 0xec, 0x1c, 0x55,
+	0x04, 0x2e, 0x46, 0x60, 0x0f, 0x8f, 0xcb, 0x07, 0xe2, 0x2e, 0x17, 0x2f, 0x5f, 0xbf, 0xf8, 0xaa,
+	0xb0, 0x72, 0x31, 0x2c, 0x30, 0xcf, 0x86, 0x05, 0xe6, 0xf9, 0xb0, 0xc0, 0x7c, 0x39, 0x2c, 0x30,
+	0x1f, 0xbc, 0x28, 0xac, 0x3c, 0x7b, 0x51, 0x58, 0x79, 0xfe, 0xa2, 0xb0, 0xf2, 0x80, 0x25, 0xab,
+	0x6e, 0xc6, 0xe9, 0x85, 0xee, 0xed, 0x9f, 0x02, 0x00, 0x00, 0xff, 0xff, 0x06, 0xe2, 0x3b, 0xbf,
+	0x89, 0x1b, 0x00, 0x00,
 }
 
 func (this *Column) Equal(that interface{}) bool {
@@ -975,6 +1182,46 @@ func (this *View) Equal(that interface{}) bool {
 			return false
 		}
 	}
+	if len(this.DependsOn) != len(that1.DependsOn) {
+		return false
+	}
+	for i := range this.DependsOn {
+		if this.DependsOn[i] != that1.DependsOn[i] {
+			return false
+		}
+	}
+	return true
+}
+func (this *Table) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Table)
+	if !ok {
+		that2, ok := that.(Table)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.TableID != that1.TableID {
+		return false
+	}
+	if len(this.DependedOnBy) != len(that1.DependedOnBy) {
+		return false
+	}
+	for i := range this.DependedOnBy {
+		if this.DependedOnBy[i] != that1.DependedOnBy[i] {
+			return false
+		}
+	}
 	return true
 }
 func (this *TypeReference) Equal(that interface{}) bool {
@@ -1004,6 +1251,125 @@ func (this *TypeReference) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *OutboundForeignKey) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*OutboundForeignKey)
+	if !ok {
+		that2, ok := that.(OutboundForeignKey)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.OriginID != that1.OriginID {
+		return false
+	}
+	if len(this.OriginColumns) != len(that1.OriginColumns) {
+		return false
+	}
+	for i := range this.OriginColumns {
+		if this.OriginColumns[i] != that1.OriginColumns[i] {
+			return false
+		}
+	}
+	if this.ReferenceID != that1.ReferenceID {
+		return false
+	}
+	if len(this.ReferenceColumns) != len(that1.ReferenceColumns) {
+		return false
+	}
+	for i := range this.ReferenceColumns {
+		if this.ReferenceColumns[i] != that1.ReferenceColumns[i] {
+			return false
+		}
+	}
+	if this.Name != that1.Name {
+		return false
+	}
+	return true
+}
+func (this *InboundForeignKey) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*InboundForeignKey)
+	if !ok {
+		that2, ok := that.(InboundForeignKey)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.OriginID != that1.OriginID {
+		return false
+	}
+	if len(this.OriginColumns) != len(that1.OriginColumns) {
+		return false
+	}
+	for i := range this.OriginColumns {
+		if this.OriginColumns[i] != that1.OriginColumns[i] {
+			return false
+		}
+	}
+	if this.ReferenceID != that1.ReferenceID {
+		return false
+	}
+	if len(this.ReferenceColumns) != len(that1.ReferenceColumns) {
+		return false
+	}
+	for i := range this.ReferenceColumns {
+		if this.ReferenceColumns[i] != that1.ReferenceColumns[i] {
+			return false
+		}
+	}
+	if this.Name != that1.Name {
+		return false
+	}
+	return true
+}
+func (this *RelationDependedOnBy) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*RelationDependedOnBy)
+	if !ok {
+		that2, ok := that.(RelationDependedOnBy)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.TableID != that1.TableID {
+		return false
+	}
+	if this.DependedOnBy != that1.DependedOnBy {
+		return false
+	}
+	return true
+}
 func (m *ElementProto) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1024,6 +1390,66 @@ func (m *ElementProto) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.SequenceOwner != nil {
+		{
+			size, err := m.SequenceOwner.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintScpb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x7a
+	}
+	if m.RelationDependedOnBy != nil {
+		{
+			size, err := m.RelationDependedOnBy.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintScpb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x72
+	}
+	if m.InForeignKey != nil {
+		{
+			size, err := m.InForeignKey.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintScpb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x6a
+	}
+	if m.OutForeignKey != nil {
+		{
+			size, err := m.OutForeignKey.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintScpb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x62
+	}
+	if m.Table != nil {
+		{
+			size, err := m.Table.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintScpb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x5a
+	}
 	if m.TypeRef != nil {
 		{
 			size, err := m.TypeRef.MarshalToSizedBuffer(dAtA[:i])
@@ -1060,9 +1486,9 @@ func (m *ElementProto) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x42
 	}
-	if m.Table != nil {
+	if m.Sequence != nil {
 		{
-			size, err := m.Table.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.Sequence.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -1265,20 +1691,20 @@ func (m *PrimaryIndex) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		}
 	}
 	if len(m.StoreColumnIDs) > 0 {
-		dAtA14 := make([]byte, len(m.StoreColumnIDs)*10)
-		var j13 int
+		dAtA19 := make([]byte, len(m.StoreColumnIDs)*10)
+		var j18 int
 		for _, num := range m.StoreColumnIDs {
 			for num >= 1<<7 {
-				dAtA14[j13] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA19[j18] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j13++
+				j18++
 			}
-			dAtA14[j13] = uint8(num)
-			j13++
+			dAtA19[j18] = uint8(num)
+			j18++
 		}
-		i -= j13
-		copy(dAtA[i:], dAtA14[:j13])
-		i = encodeVarintScpb(dAtA, i, uint64(j13))
+		i -= j18
+		copy(dAtA[i:], dAtA19[:j18])
+		i = encodeVarintScpb(dAtA, i, uint64(j18))
 		i--
 		dAtA[i] = 0x22
 	}
@@ -1422,20 +1848,20 @@ func (m *UniqueConstraint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.ColumnIDs) > 0 {
-		dAtA18 := make([]byte, len(m.ColumnIDs)*10)
-		var j17 int
+		dAtA23 := make([]byte, len(m.ColumnIDs)*10)
+		var j22 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA18[j17] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA23[j22] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j17++
+				j22++
 			}
-			dAtA18[j17] = uint8(num)
-			j17++
+			dAtA23[j22] = uint8(num)
+			j22++
 		}
-		i -= j17
-		copy(dAtA[i:], dAtA18[:j17])
-		i = encodeVarintScpb(dAtA, i, uint64(j17))
+		i -= j22
+		copy(dAtA[i:], dAtA23[:j22])
+		i = encodeVarintScpb(dAtA, i, uint64(j22))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -1483,20 +1909,20 @@ func (m *CheckConstraint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x28
 	}
 	if len(m.ColumnIDs) > 0 {
-		dAtA20 := make([]byte, len(m.ColumnIDs)*10)
-		var j19 int
+		dAtA25 := make([]byte, len(m.ColumnIDs)*10)
+		var j24 int
 		for _, num := range m.ColumnIDs {
 			for num >= 1<<7 {
-				dAtA20[j19] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA25[j24] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j19++
+				j24++
 			}
-			dAtA20[j19] = uint8(num)
-			j19++
+			dAtA25[j24] = uint8(num)
+			j24++
 		}
-		i -= j19
-		copy(dAtA[i:], dAtA20[:j19])
-		i = encodeVarintScpb(dAtA, i, uint64(j19))
+		i -= j24
+		copy(dAtA[i:], dAtA25[:j24])
+		i = encodeVarintScpb(dAtA, i, uint64(j24))
 		i--
 		dAtA[i] = 0x22
 	}
@@ -1578,20 +2004,20 @@ func (m *DefaultExpression) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 	}
 	if len(m.UsesSequenceIDs) > 0 {
-		dAtA22 := make([]byte, len(m.UsesSequenceIDs)*10)
-		var j21 int
+		dAtA27 := make([]byte, len(m.UsesSequenceIDs)*10)
+		var j26 int
 		for _, num := range m.UsesSequenceIDs {
 			for num >= 1<<7 {
-				dAtA22[j21] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA27[j26] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j21++
+				j26++
 			}
-			dAtA22[j21] = uint8(num)
-			j21++
+			dAtA27[j26] = uint8(num)
+			j26++
 		}
-		i -= j21
-		copy(dAtA[i:], dAtA22[:j21])
-		i = encodeVarintScpb(dAtA, i, uint64(j21))
+		i -= j26
+		copy(dAtA[i:], dAtA27[:j26])
+		i = encodeVarintScpb(dAtA, i, uint64(j26))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -1628,21 +2054,85 @@ func (m *View) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.DependsOn) > 0 {
+		dAtA29 := make([]byte, len(m.DependsOn)*10)
+		var j28 int
+		for _, num := range m.DependsOn {
+			for num >= 1<<7 {
+				dAtA29[j28] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j28++
+			}
+			dAtA29[j28] = uint8(num)
+			j28++
+		}
+		i -= j28
+		copy(dAtA[i:], dAtA29[:j28])
+		i = encodeVarintScpb(dAtA, i, uint64(j28))
+		i--
+		dAtA[i] = 0x1a
+	}
 	if len(m.DependedOnBy) > 0 {
-		dAtA24 := make([]byte, len(m.DependedOnBy)*10)
-		var j23 int
+		dAtA31 := make([]byte, len(m.DependedOnBy)*10)
+		var j30 int
 		for _, num := range m.DependedOnBy {
 			for num >= 1<<7 {
-				dAtA24[j23] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA31[j30] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j23++
+				j30++
 			}
-			dAtA24[j23] = uint8(num)
-			j23++
+			dAtA31[j30] = uint8(num)
+			j30++
 		}
-		i -= j23
-		copy(dAtA[i:], dAtA24[:j23])
-		i = encodeVarintScpb(dAtA, i, uint64(j23))
+		i -= j30
+		copy(dAtA[i:], dAtA31[:j30])
+		i = encodeVarintScpb(dAtA, i, uint64(j30))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.TableID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.TableID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Table) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Table) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Table) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.DependedOnBy) > 0 {
+		dAtA33 := make([]byte, len(m.DependedOnBy)*10)
+		var j32 int
+		for _, num := range m.DependedOnBy {
+			for num >= 1<<7 {
+				dAtA33[j32] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j32++
+			}
+			dAtA33[j32] = uint8(num)
+			j32++
+		}
+		i -= j32
+		copy(dAtA[i:], dAtA33[:j32])
+		i = encodeVarintScpb(dAtA, i, uint64(j32))
 		i--
 		dAtA[i] = 0x12
 	}
@@ -1681,6 +2171,224 @@ func (m *TypeReference) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	if m.TypeID != 0 {
 		i = encodeVarintScpb(dAtA, i, uint64(m.TypeID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *OutboundForeignKey) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *OutboundForeignKey) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *OutboundForeignKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintScpb(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.ReferenceColumns) > 0 {
+		dAtA35 := make([]byte, len(m.ReferenceColumns)*10)
+		var j34 int
+		for _, num := range m.ReferenceColumns {
+			for num >= 1<<7 {
+				dAtA35[j34] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j34++
+			}
+			dAtA35[j34] = uint8(num)
+			j34++
+		}
+		i -= j34
+		copy(dAtA[i:], dAtA35[:j34])
+		i = encodeVarintScpb(dAtA, i, uint64(j34))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.ReferenceID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.ReferenceID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.OriginColumns) > 0 {
+		dAtA37 := make([]byte, len(m.OriginColumns)*10)
+		var j36 int
+		for _, num := range m.OriginColumns {
+			for num >= 1<<7 {
+				dAtA37[j36] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j36++
+			}
+			dAtA37[j36] = uint8(num)
+			j36++
+		}
+		i -= j36
+		copy(dAtA[i:], dAtA37[:j36])
+		i = encodeVarintScpb(dAtA, i, uint64(j36))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.OriginID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.OriginID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *InboundForeignKey) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *InboundForeignKey) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *InboundForeignKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintScpb(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.ReferenceColumns) > 0 {
+		dAtA39 := make([]byte, len(m.ReferenceColumns)*10)
+		var j38 int
+		for _, num := range m.ReferenceColumns {
+			for num >= 1<<7 {
+				dAtA39[j38] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j38++
+			}
+			dAtA39[j38] = uint8(num)
+			j38++
+		}
+		i -= j38
+		copy(dAtA[i:], dAtA39[:j38])
+		i = encodeVarintScpb(dAtA, i, uint64(j38))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.ReferenceID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.ReferenceID))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.OriginColumns) > 0 {
+		dAtA41 := make([]byte, len(m.OriginColumns)*10)
+		var j40 int
+		for _, num := range m.OriginColumns {
+			for num >= 1<<7 {
+				dAtA41[j40] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j40++
+			}
+			dAtA41[j40] = uint8(num)
+			j40++
+		}
+		i -= j40
+		copy(dAtA[i:], dAtA41[:j40])
+		i = encodeVarintScpb(dAtA, i, uint64(j40))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.OriginID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.OriginID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SequenceOwnedBy) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SequenceOwnedBy) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SequenceOwnedBy) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.OwnerTableID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.OwnerTableID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TableID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.TableID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RelationDependedOnBy) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RelationDependedOnBy) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RelationDependedOnBy) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.DependedOnBy != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.DependedOnBy))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TableID != 0 {
+		i = encodeVarintScpb(dAtA, i, uint64(m.TableID))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -1728,8 +2436,8 @@ func (m *ElementProto) Size() (n int) {
 		l = m.CheckConstraint.Size()
 		n += 1 + l + sovScpb(uint64(l))
 	}
-	if m.Table != nil {
-		l = m.Table.Size()
+	if m.Sequence != nil {
+		l = m.Sequence.Size()
 		n += 1 + l + sovScpb(uint64(l))
 	}
 	if m.DefaultExpression != nil {
@@ -1742,6 +2450,26 @@ func (m *ElementProto) Size() (n int) {
 	}
 	if m.TypeRef != nil {
 		l = m.TypeRef.Size()
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	if m.Table != nil {
+		l = m.Table.Size()
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	if m.OutForeignKey != nil {
+		l = m.OutForeignKey.Size()
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	if m.InForeignKey != nil {
+		l = m.InForeignKey.Size()
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	if m.RelationDependedOnBy != nil {
+		l = m.RelationDependedOnBy.Size()
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	if m.SequenceOwner != nil {
+		l = m.SequenceOwner.Size()
 		n += 1 + l + sovScpb(uint64(l))
 	}
 	return n
@@ -1959,6 +2687,32 @@ func (m *View) Size() (n int) {
 		}
 		n += 1 + sovScpb(uint64(l)) + l
 	}
+	if len(m.DependsOn) > 0 {
+		l = 0
+		for _, e := range m.DependsOn {
+			l += sovScpb(uint64(e))
+		}
+		n += 1 + sovScpb(uint64(l)) + l
+	}
+	return n
+}
+
+func (m *Table) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		n += 1 + sovScpb(uint64(m.TableID))
+	}
+	if len(m.DependedOnBy) > 0 {
+		l = 0
+		for _, e := range m.DependedOnBy {
+			l += sovScpb(uint64(e))
+		}
+		n += 1 + sovScpb(uint64(l)) + l
+	}
 	return n
 }
 
@@ -1973,6 +2727,102 @@ func (m *TypeReference) Size() (n int) {
 	}
 	if m.DescID != 0 {
 		n += 1 + sovScpb(uint64(m.DescID))
+	}
+	return n
+}
+
+func (m *OutboundForeignKey) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.OriginID != 0 {
+		n += 1 + sovScpb(uint64(m.OriginID))
+	}
+	if len(m.OriginColumns) > 0 {
+		l = 0
+		for _, e := range m.OriginColumns {
+			l += sovScpb(uint64(e))
+		}
+		n += 1 + sovScpb(uint64(l)) + l
+	}
+	if m.ReferenceID != 0 {
+		n += 1 + sovScpb(uint64(m.ReferenceID))
+	}
+	if len(m.ReferenceColumns) > 0 {
+		l = 0
+		for _, e := range m.ReferenceColumns {
+			l += sovScpb(uint64(e))
+		}
+		n += 1 + sovScpb(uint64(l)) + l
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	return n
+}
+
+func (m *InboundForeignKey) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.OriginID != 0 {
+		n += 1 + sovScpb(uint64(m.OriginID))
+	}
+	if len(m.OriginColumns) > 0 {
+		l = 0
+		for _, e := range m.OriginColumns {
+			l += sovScpb(uint64(e))
+		}
+		n += 1 + sovScpb(uint64(l)) + l
+	}
+	if m.ReferenceID != 0 {
+		n += 1 + sovScpb(uint64(m.ReferenceID))
+	}
+	if len(m.ReferenceColumns) > 0 {
+		l = 0
+		for _, e := range m.ReferenceColumns {
+			l += sovScpb(uint64(e))
+		}
+		n += 1 + sovScpb(uint64(l)) + l
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovScpb(uint64(l))
+	}
+	return n
+}
+
+func (m *SequenceOwnedBy) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		n += 1 + sovScpb(uint64(m.TableID))
+	}
+	if m.OwnerTableID != 0 {
+		n += 1 + sovScpb(uint64(m.OwnerTableID))
+	}
+	return n
+}
+
+func (m *RelationDependedOnBy) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TableID != 0 {
+		n += 1 + sovScpb(uint64(m.TableID))
+	}
+	if m.DependedOnBy != 0 {
+		n += 1 + sovScpb(uint64(m.DependedOnBy))
 	}
 	return n
 }
@@ -2002,8 +2852,8 @@ func (this *ElementProto) GetValue() interface{} {
 	if this.CheckConstraint != nil {
 		return this.CheckConstraint
 	}
-	if this.Table != nil {
-		return this.Table
+	if this.Sequence != nil {
+		return this.Sequence
 	}
 	if this.DefaultExpression != nil {
 		return this.DefaultExpression
@@ -2013,6 +2863,21 @@ func (this *ElementProto) GetValue() interface{} {
 	}
 	if this.TypeRef != nil {
 		return this.TypeRef
+	}
+	if this.Table != nil {
+		return this.Table
+	}
+	if this.OutForeignKey != nil {
+		return this.OutForeignKey
+	}
+	if this.InForeignKey != nil {
+		return this.InForeignKey
+	}
+	if this.RelationDependedOnBy != nil {
+		return this.RelationDependedOnBy
+	}
+	if this.SequenceOwner != nil {
+		return this.SequenceOwner
 	}
 	return nil
 }
@@ -2032,13 +2897,23 @@ func (this *ElementProto) SetValue(value interface{}) bool {
 	case *CheckConstraint:
 		this.CheckConstraint = vt
 	case *Sequence:
-		this.Table = vt
+		this.Sequence = vt
 	case *DefaultExpression:
 		this.DefaultExpression = vt
 	case *View:
 		this.View = vt
 	case *TypeReference:
 		this.TypeRef = vt
+	case *Table:
+		this.Table = vt
+	case *OutboundForeignKey:
+		this.OutForeignKey = vt
+	case *InboundForeignKey:
+		this.InForeignKey = vt
+	case *RelationDependedOnBy:
+		this.RelationDependedOnBy = vt
+	case *SequenceOwnedBy:
+		this.SequenceOwner = vt
 	default:
 		return false
 	}
@@ -2291,7 +3166,7 @@ func (m *ElementProto) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 7:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Table", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Sequence", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -2318,10 +3193,10 @@ func (m *ElementProto) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Table == nil {
-				m.Table = &Sequence{}
+			if m.Sequence == nil {
+				m.Sequence = &Sequence{}
 			}
-			if err := m.Table.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Sequence.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2430,6 +3305,186 @@ func (m *ElementProto) Unmarshal(dAtA []byte) error {
 				m.TypeRef = &TypeReference{}
 			}
 			if err := m.TypeRef.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Table", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Table == nil {
+				m.Table = &Table{}
+			}
+			if err := m.Table.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 12:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OutForeignKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.OutForeignKey == nil {
+				m.OutForeignKey = &OutboundForeignKey{}
+			}
+			if err := m.OutForeignKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InForeignKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.InForeignKey == nil {
+				m.InForeignKey = &InboundForeignKey{}
+			}
+			if err := m.InForeignKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 14:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RelationDependedOnBy", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.RelationDependedOnBy == nil {
+				m.RelationDependedOnBy = &RelationDependedOnBy{}
+			}
+			if err := m.RelationDependedOnBy.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SequenceOwner", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SequenceOwner == nil {
+				m.SequenceOwner = &SequenceOwnedBy{}
+			}
+			if err := m.SequenceOwner.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3987,6 +5042,227 @@ func (m *View) Unmarshal(dAtA []byte) error {
 			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field DependedOnBy", wireType)
 			}
+		case 3:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.DependsOn = append(m.DependsOn, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthScpb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthScpb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.DependsOn) == 0 {
+					m.DependsOn = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowScpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.DependsOn = append(m.DependsOn, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field DependsOn", wireType)
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipScpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Table) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowScpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Table: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Table: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.DependedOnBy = append(m.DependedOnBy, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthScpb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthScpb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.DependedOnBy) == 0 {
+					m.DependedOnBy = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowScpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.DependedOnBy = append(m.DependedOnBy, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field DependedOnBy", wireType)
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipScpb(dAtA[iNdEx:])
@@ -4071,6 +5347,726 @@ func (m *TypeReference) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.DescID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipScpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *OutboundForeignKey) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowScpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: OutboundForeignKey: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: OutboundForeignKey: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginID", wireType)
+			}
+			m.OriginID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OriginID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.OriginColumns = append(m.OriginColumns, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthScpb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthScpb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.OriginColumns) == 0 {
+					m.OriginColumns = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowScpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.OriginColumns = append(m.OriginColumns, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginColumns", wireType)
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceID", wireType)
+			}
+			m.ReferenceID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReferenceID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.ReferenceColumns = append(m.ReferenceColumns, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthScpb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthScpb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ReferenceColumns) == 0 {
+					m.ReferenceColumns = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowScpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.ReferenceColumns = append(m.ReferenceColumns, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceColumns", wireType)
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipScpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *InboundForeignKey) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowScpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InboundForeignKey: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InboundForeignKey: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginID", wireType)
+			}
+			m.OriginID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OriginID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.OriginColumns = append(m.OriginColumns, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthScpb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthScpb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.OriginColumns) == 0 {
+					m.OriginColumns = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowScpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.OriginColumns = append(m.OriginColumns, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field OriginColumns", wireType)
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceID", wireType)
+			}
+			m.ReferenceID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReferenceID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType == 0 {
+				var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.ReferenceColumns = append(m.ReferenceColumns, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowScpb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthScpb
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthScpb
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.ReferenceColumns) == 0 {
+					m.ReferenceColumns = make([]github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowScpb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ColumnID(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.ReferenceColumns = append(m.ReferenceColumns, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReferenceColumns", wireType)
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthScpb
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipScpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SequenceOwnedBy) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowScpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SequenceOwnedBy: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SequenceOwnedBy: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OwnerTableID", wireType)
+			}
+			m.OwnerTableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OwnerTableID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipScpb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthScpb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RelationDependedOnBy) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowScpb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RelationDependedOnBy: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RelationDependedOnBy: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TableID", wireType)
+			}
+			m.TableID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TableID |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DependedOnBy", wireType)
+			}
+			m.DependedOnBy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScpb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DependedOnBy |= github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb.ID(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

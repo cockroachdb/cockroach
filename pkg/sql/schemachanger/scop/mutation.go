@@ -102,6 +102,13 @@ type RemoveColumnDefaultExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// RemoveRelationDependedOnBy removes a depended on by reference from a given relation.
+type RemoveRelationDependedOnBy struct {
+	mutationOp
+	TableID      descpb.ID
+	DependedOnBy descpb.ID
+}
+
 // RemoveTypeBackRef removes type back references from a relation.
 type RemoveTypeBackRef struct {
 	mutationOp
@@ -200,4 +207,16 @@ type AddColumnFamily struct {
 	mutationOp
 	TableID descpb.ID
 	Family  descpb.ColumnFamilyDescriptor
+}
+
+type DropForeignKeyRef struct {
+	mutationOp
+	TableID  descpb.ID
+	Name     string
+	Outbound bool
+}
+
+type RemoveSequenceOwnedBy struct {
+	mutationOp
+	TableID descpb.ID
 }
