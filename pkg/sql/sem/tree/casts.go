@@ -1304,7 +1304,7 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 			ret.name = typ.PGName()
 		} else if typ, err := ctx.Planner.ResolveTypeByOID(ctx.Context, oid.Oid(v)); err == nil {
 			ret.name = typ.PGName()
-		}
+		} // It seems that the error above is not checked and returned intentionally.
 		return ret, nil
 
 	case oid.T_regproc, oid.T_regprocedure:

@@ -500,7 +500,11 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	// collect the closure of ID's referenced.
 	ids := make(map[descpb.ID]struct{})
 	for id := range visitor.OIDs {
-		typDesc, err := getType(typedesc.UserDefinedTypeOIDToID(id))
+		uid, err := typedesc.UserDefinedTypeOIDToID(id)
+		if err != nil {
+			return nil, err
+		}
+		typDesc, err := getType(uid)
 		if err != nil {
 			return nil, err
 		}
