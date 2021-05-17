@@ -52,7 +52,7 @@ func ExampleULID() {
 }
 
 func TestNew(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	t.Run("ULID", testULID(func(ms uint64, e io.Reader) ulid.ULID {
 		id, err := ulid.New(ms, e)
@@ -78,7 +78,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestMustNew(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	t.Run("ULID", testULID(ulid.MustNew))
 
@@ -93,7 +93,7 @@ func TestMustNew(t *testing.T) {
 }
 
 func TestMustParse(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	for _, tc := range []struct {
 		name string
@@ -130,7 +130,7 @@ func testULID(mk func(uint64, io.Reader) ulid.ULID) func(*testing.T) {
 }
 
 func TestRoundTrips(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	prop := func(id ulid.ULID) bool {
 		bin, err := id.MarshalBinary()
@@ -165,7 +165,7 @@ func TestRoundTrips(t *testing.T) {
 }
 
 func TestMarshalingErrors(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	var id ulid.ULID
 	for _, tc := range []struct {
@@ -189,7 +189,7 @@ func TestMarshalingErrors(t *testing.T) {
 }
 
 func TestParseStrictInvalidCharacters(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	type testCase struct {
 		name  string
@@ -220,7 +220,7 @@ func TestParseStrictInvalidCharacters(t *testing.T) {
 }
 
 func TestAlizainCompatibility(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	ts := uint64(1469918176385)
 	got := ulid.MustNew(ts, bytes.NewReader(make([]byte, 16)))
@@ -231,7 +231,7 @@ func TestAlizainCompatibility(t *testing.T) {
 }
 
 func TestEncoding(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	enc := make(map[rune]bool, len(ulid.Encoding))
 	for _, r := range ulid.Encoding {
@@ -253,7 +253,7 @@ func TestEncoding(t *testing.T) {
 }
 
 func TestLexicographicalOrder(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	prop := func(a, b ulid.ULID) bool {
 		t1, t2 := a.Time(), b.Time()
@@ -282,7 +282,7 @@ func TestLexicographicalOrder(t *testing.T) {
 }
 
 func TestCaseInsensitivity(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	upper := func(id ulid.ULID) (out ulid.ULID) {
 		return ulid.MustParse(strings.ToUpper(id.String()))
@@ -299,7 +299,7 @@ func TestCaseInsensitivity(t *testing.T) {
 }
 
 func TestParseRobustness(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	cases := [][]byte{
 		{0x1, 0xc0, 0x73, 0x62, 0x4a, 0xaf, 0x39, 0x78, 0x51, 0x4e, 0xf8, 0x44, 0x3b,
@@ -341,7 +341,7 @@ func TestParseRobustness(t *testing.T) {
 }
 
 func TestNow(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	before := ulid.Now()
 	after := ulid.Timestamp(timeutil.Now().UTC().Add(time.Millisecond))
@@ -352,7 +352,7 @@ func TestNow(t *testing.T) {
 }
 
 func TestTimestamp(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	tm := timeutil.Unix(1, 1000) // will be truncated
 	if got, want := ulid.Timestamp(tm), uint64(1000); got != want {
@@ -368,7 +368,7 @@ func TestTimestamp(t *testing.T) {
 }
 
 func TestTime(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	original := timeutil.Now()
 	diff := original.Sub(ulid.Time(ulid.Timestamp(original)))
@@ -380,7 +380,7 @@ func TestTime(t *testing.T) {
 }
 
 func TestTimestampRoundTrips(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	prop := func(ts uint64) bool {
 		return ts == ulid.Timestamp(ulid.Time(ts))
@@ -393,7 +393,7 @@ func TestTimestampRoundTrips(t *testing.T) {
 }
 
 func TestULIDTime(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	maxTime := ulid.MaxTime()
 
@@ -419,7 +419,7 @@ func TestULIDTime(t *testing.T) {
 }
 
 func TestEntropy(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	var id ulid.ULID
 	got, want := id.SetEntropy([]byte{}), ulid.ErrDataSize
@@ -448,7 +448,7 @@ func TestEntropy(t *testing.T) {
 }
 
 func TestEntropyRead(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	prop := func(e [10]byte) bool {
 		flakyReader := iotest.HalfReader(bytes.NewReader(e[:]))
@@ -473,7 +473,7 @@ func TestEntropyRead(t *testing.T) {
 }
 
 func TestCompare(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	a := func(a, b ulid.ULID) int {
 		return strings.Compare(a.String(), b.String())
@@ -490,7 +490,7 @@ func TestCompare(t *testing.T) {
 }
 
 func TestOverflowHandling(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	for s, want := range map[string]error{
 		"00000000000000000000000000": nil,
@@ -523,7 +523,7 @@ func TestScan(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+			t.Parallel()
 
 			var out ulid.ULID
 			err := out.Scan(tc.in)
@@ -559,7 +559,7 @@ func TestMonotonic(t *testing.T) {
 			entropy := ulid.Monotonic(e.mk(), inc)
 
 			t.Run(fmt.Sprintf("entropy=%s/inc=%d", e.name, inc), func(t *testing.T) {
-				t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+				t.Parallel()
 
 				var prev ulid.ULID
 				for i := 0; i < 10000; i++ {
@@ -581,7 +581,7 @@ func TestMonotonic(t *testing.T) {
 }
 
 func TestMonotonicOverflow(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	entropy := ulid.Monotonic(
 		io.MultiReader(
@@ -605,7 +605,7 @@ func TestMonotonicOverflow(t *testing.T) {
 }
 
 func TestMonotonicSafe(t *testing.T) {
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
+	t.Parallel()
 
 	var (
 		src       = rand.NewSource(timeutil.Now().UnixNano())

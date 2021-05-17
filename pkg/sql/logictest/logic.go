@@ -3313,7 +3313,7 @@ func RunLogicTestWithDefaultConfig(
 						//
 						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
 						if filepath.Base(path) != "select_index_span_ranges" {
-							t.Parallel() // SAFE FOR TESTING (this comments satisfies the linter)
+							t.Parallel()
 						}
 					}
 					rng, _ := randutil.NewPseudoRand()
