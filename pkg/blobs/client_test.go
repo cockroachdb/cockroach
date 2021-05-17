@@ -258,7 +258,7 @@ func TestBlobClientWriteFile(t *testing.T) {
 					return err
 				}
 				if _, err := io.Copy(w, bytes.NewReader(byteContent)); err != nil {
-					return errors.CombineErrors(err, w.CloseWithError(err))
+					return errors.CombineErrors(w.CloseWithError(err), err)
 				}
 				return w.Close()
 			}()
