@@ -234,7 +234,9 @@ func (b *Builder) finishBuildScalar(
 	texpr tree.TypedExpr, scalar opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
 	b.maybeTrackRegclassDependenciesForViews(texpr)
-	b.maybeTrackUserDefinedTypeDepsForViews(texpr)
+	if err := b.maybeTrackUserDefinedTypeDepsForViews(texpr); err != nil {
+		panic(err)
+	}
 
 	if outScope == nil {
 		return scalar
