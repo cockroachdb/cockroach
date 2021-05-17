@@ -47,7 +47,8 @@ type encodeRow struct {
 	datums rowenc.EncDatumRow
 	// updated is the mvcc timestamp corresponding to the latest update in
 	// `datums`.
-	updated hlc.Timestamp
+	updated           hlc.Timestamp
+	nonLogicalUpdated hlc.Timestamp
 	// deleted is true if row is a deletion. In this case, only the primary
 	// key columns are guaranteed to be set in `datums`.
 	deleted bool
@@ -101,7 +102,7 @@ func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encod
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, beforeField, wrapped, keyOnly, keyInValue bool
+	updatedField, nonLogicalUpdatedField, beforeField, wrapped, keyOnly, keyInValue bool
 
 	alloc rowenc.DatumAlloc
 	buf   bytes.Buffer
@@ -115,6 +116,7 @@ func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 		wrapped: changefeedbase.EnvelopeType(opts[changefeedbase.OptEnvelope]) == changefeedbase.OptEnvelopeWrapped,
 	}
 	_, e.updatedField = opts[changefeedbase.OptUpdatedTimestamps]
+	_, e.nonLogicalUpdatedField = opts[changefeedbase.OptNonLogicalTimestamps]
 	_, e.beforeField = opts[changefeedbase.OptDiff]
 	if e.beforeField && !e.wrapped {
 		return nil, errors.Errorf(`%s is only usable with %s=%s`,
@@ -232,7 +234,7 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 		jsonEntries = after
 	}
 
-	if e.updatedField {
+	if e.updatedField || e.nonLogicalUpdatedField {
 		var meta map[string]interface{}
 		if e.wrapped {
 			meta = jsonEntries
@@ -240,7 +242,12 @@ func (e *jsonEncoder) EncodeValue(_ context.Context, row encodeRow) ([]byte, err
 			meta = make(map[string]interface{}, 1)
 			jsonEntries[jsonMetaSentinel] = meta
 		}
-		meta[`updated`] = row.updated.AsOfSystemTime()
+		if e.updatedField {
+			meta[`updated`] = row.updated.AsOfSystemTime()
+		}
+		if e.nonLogicalUpdatedField {
+			meta[`non_logical_updated`] = row.nonLogicalUpdated.AsOfSystemTime()
+		}
 	}
 
 	j, err := json.MakeJSON(jsonEntries)
