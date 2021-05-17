@@ -107,24 +107,31 @@ type Frontier struct {
 	idAlloc int64
 }
 
+func spanCopy(s roachpb.Span) (res roachpb.Span) {
+	res.Key = append(res.Key, s.Key...)
+	res.EndKey = append(res.EndKey, s.EndKey...)
+	return
+}
+
 // MakeFrontier returns a Frontier that tracks the given set of spans.
 func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
-	s := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
-	for _, span := range spans {
+	f := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+	for _, s := range spans {
+		span := spanCopy(s)
 		e := &frontierEntry{
-			id:   s.idAlloc,
+			id:   f.idAlloc,
 			keys: span.AsRange(),
 			span: span,
 			ts:   hlc.Timestamp{},
 		}
-		s.idAlloc++
-		if err := s.tree.Insert(e, true /* fast */); err != nil {
+		f.idAlloc++
+		if err := f.tree.Insert(e, true /* fast */); err != nil {
 			return nil, err
 		}
-		heap.Push(&s.minHeap, e)
+		heap.Push(&f.minHeap, e)
 	}
-	s.tree.AdjustRanges()
-	return s, nil
+	f.tree.AdjustRanges()
+	return f, nil
 }
 
 // Frontier returns the minimum timestamp being tracked.
@@ -159,7 +166,8 @@ func (f *Frontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
 	return prevFrontier.Less(f.Frontier()), nil
 }
 
-func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) error {
+func (f *Frontier) insert(s roachpb.Span, ts hlc.Timestamp) error {
+	span := spanCopy(s)
 	entryKeys := span.AsRange()
 	overlapping := f.tree.Get(entryKeys)
 
