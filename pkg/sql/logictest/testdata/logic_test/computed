@@ -310,6 +310,13 @@ CREATE TABLE y (
   b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
 )
 
+# Make sure the error has a hint that mentions parse_timestamp().
+statement error context-dependent operators are not allowed in computed column.*\nHINT:.*use parse_timestamp
+CREATE TABLE y (
+  a STRING,
+  b TIMESTAMP AS (a::TIMESTAMP) STORED
+)
+
 statement error context-dependent operators are not allowed in computed column
 CREATE TABLE y (
   a TIMESTAMPTZ,
