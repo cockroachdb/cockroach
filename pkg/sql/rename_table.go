@@ -243,8 +243,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	newTbKey := catalogkv.MakeObjectNameKey(ctx, params.ExecCfg().Settings,
-		targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
+	newTbKey := catalogkv.MakeObjectNameKey(targetDbDesc.GetID(), tableDesc.GetParentSchemaID(), newTn.Table())
 
 	if err := p.writeNameKey(ctx, newTbKey, descID); err != nil {
 		return err
