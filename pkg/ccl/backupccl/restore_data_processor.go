@@ -48,30 +48,6 @@ var _ execinfra.RowSource = &restoreDataProcessor{}
 
 const restoreDataProcName = "restoreDataProcessor"
 
-func newTestingRestoreDataProcessor(
-	ctx context.Context,
-	evalCtx *tree.EvalContext,
-	flowCtx *execinfra.FlowCtx,
-	spec execinfrapb.RestoreDataSpec,
-) (*restoreDataProcessor, error) {
-	rd := &restoreDataProcessor{
-		ProcessorBase: execinfra.ProcessorBase{
-			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
-				Ctx:     ctx,
-				EvalCtx: evalCtx,
-			}},
-		flowCtx: flowCtx,
-		spec:    spec,
-	}
-	var err error
-	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
-	if err != nil {
-		return nil, err
-	}
-
-	return rd, nil
-}
-
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -149,14 +125,8 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		return nil, rd.DrainHelper()
 	}
 
-	newSpanKey, err := rewriteBackupSpanKey(rd.flowCtx.Codec(), rd.kr, entry.Span.Key)
-	if err != nil {
-		rd.MoveToDraining(errors.Wrap(err, "re-writing span key to import"))
-		return nil, rd.DrainHelper()
-	}
-
-	log.VEventf(rd.Ctx, 1 /* level */, "importing span %v", entry.Span)
-	summary, err := rd.processRestoreSpanEntry(entry, newSpanKey)
+	log.VEventf(rd.Ctx, 1 /* level */, "ingesting span [%s-%s)", entry.Span.Key, entry.Span.EndKey)
+	summary, err := rd.processRestoreSpanEntry(entry)
 	if err != nil {
 		rd.MoveToDraining(err)
 		return nil, rd.DrainHelper()
@@ -181,7 +151,7 @@ func init() {
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	entry execinfrapb.RestoreSpanEntry, newSpanKey roachpb.Key,
+	entry execinfrapb.RestoreSpanEntry,
 ) (roachpb.BulkOpSummary, error) {
 	db := rd.flowCtx.Cfg.DB
 	ctx := rd.Ctx
@@ -193,7 +163,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	var iters []storage.SimpleMVCCIterator
 
 	for _, file := range entry.Files {
-		log.VEventf(ctx, 2, "import file %s %s", file.Path, newSpanKey)
+		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
 
 		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
@@ -265,7 +235,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		if !ok {
 			// If the key rewriter didn't match this key, it's not data for the
 			// table(s) we're interested in.
-			if log.V(3) {
+			if log.V(5) {
 				log.Infof(ctx, "skipping %s %s", key.Key, value.PrettyPrint())
 			}
 			continue
@@ -275,7 +245,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		value.ClearChecksum()
 		value.InitChecksum(key.Key)
 
-		if log.V(3) {
+		if log.V(5) {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
 		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
@@ -286,7 +256,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	if err := batcher.Flush(ctx); err != nil {
 		return summary, err
 	}
-	log.Event(ctx, "done")
 
 	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
