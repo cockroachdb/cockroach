@@ -336,6 +336,9 @@ const (
 	SerializeViewUDTs
 	// ExpressionBasedIndexes is when expression-based indexes are supported.
 	ExpressionBasedIndexes
+	// SQLStatsTable adds the system tables for storing persisted SQL statistics
+	// for statements and transactions.
+	SQLStatsTable
 
 	// Step (1): Add new versions here.
 )
@@ -565,7 +568,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     ExpressionBasedIndexes,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 10},
 	},
-
+	{
+		Key:     SQLStatsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 12},
+	},
 	// Step (2): Add new versions here.
 })
 

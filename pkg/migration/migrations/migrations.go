@@ -67,6 +67,16 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.JoinTokensTable),
 		joinTokensTableMigration,
 	),
+	migration.NewTenantMigration(
+		"add the system.sql_statement_stats table",
+		toCV(clusterversion.SQLStatsTable),
+		sqlStatementStatsTableMigration,
+	),
+	migration.NewTenantMigration(
+		"add the system.sql_transaction_stats table",
+		toCV(clusterversion.SQLStatsTable),
+		sqlTransactionStatsTableMigration,
+	),
 }
 
 func init() {
