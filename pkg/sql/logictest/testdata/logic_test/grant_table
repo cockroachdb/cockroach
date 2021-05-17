@@ -814,6 +814,14 @@ system         public        join_tokens                      root       GRANT
 system         public        join_tokens                      root       INSERT
 system         public        join_tokens                      root       SELECT
 system         public        join_tokens                      root       UPDATE
+system         public        sql_statement_stats              admin      GRANT
+system         public        sql_statement_stats              admin      SELECT
+system         public        sql_statement_stats              root       GRANT
+system         public        sql_statement_stats              root       SELECT
+system         public        sql_transaction_stats            admin      GRANT
+system         public        sql_transaction_stats            admin      SELECT
+system         public        sql_transaction_stats            root       GRANT
+system         public        sql_transaction_stats            root       SELECT
 a              pg_extension  NULL                             admin      ALL
 a              pg_extension  NULL                             readwrite  ALL
 a              pg_extension  NULL                             root       ALL
@@ -1265,6 +1273,10 @@ system         public              settings                         root     GRA
 system         public              settings                         root     INSERT
 system         public              settings                         root     SELECT
 system         public              settings                         root     UPDATE
+system         public              sql_statement_stats              root     GRANT
+system         public              sql_statement_stats              root     SELECT
+system         public              sql_transaction_stats            root     GRANT
+system         public              sql_transaction_stats            root     SELECT
 system         public              sqlliveness                      root     DELETE
 system         public              sqlliveness                      root     GRANT
 system         public              sqlliveness                      root     INSERT

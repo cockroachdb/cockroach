@@ -32,6 +32,7 @@ func CreateTestTableDescriptor(
 	parentID, id descpb.ID,
 	schema string,
 	privileges *descpb.PrivilegeDescriptor,
+	sessionDataOverride *sessiondata.SessionData,
 ) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
@@ -40,6 +41,17 @@ func CreateTestTableDescriptor(
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
+
+	sessionData := &sessiondata.SessionData{
+		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			EnableUniqueWithoutIndexConstraints: true,
+		},
+	}
+
+	if sessionDataOverride != nil {
+		sessionData = sessionDataOverride
+	}
+
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
 		desc, err := NewTableDesc(
@@ -57,11 +69,7 @@ func CreateTestTableDescriptor(
 			nil, /* affected */
 			&semaCtx,
 			&evalCtx,
-			&sessiondata.SessionData{
-				LocalOnlySessionData: sessiondata.LocalOnlySessionData{
-					EnableUniqueWithoutIndexConstraints: true,
-				},
-			}, /* sessionData */
+			sessionData,
 			tree.PersistencePermanent,
 		)
 		return desc, err

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,6 +67,7 @@ func TestInitialKeys(t *testing.T) {
 			keys.MaxReservedDescID,
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
 			descpb.NewDefaultPrivilegeDescriptor(security.NodeUserName()),
+			nil, /* sessionDataOverride */
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -164,6 +166,13 @@ func TestSystemTableLiterals(t *testing.T) {
 		pkg    catalog.TableDescriptor
 	}
 
+	sessionData := &sessiondata.SessionData{
+		LocalOnlySessionData: sessiondata.LocalOnlySessionData{
+			EnableUniqueWithoutIndexConstraints: true,
+			HashShardedIndexesEnabled:           true,
+		},
+	}
+
 	for _, test := range []testcase{
 		{keys.NamespaceTableID, systemschema.NamespaceTableSchema, systemschema.NamespaceTable},
 		{keys.DescriptorTableID, systemschema.DescriptorTableSchema, systemschema.DescriptorTable},
@@ -192,6 +201,8 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.SqllivenessID, systemschema.SqllivenessTableSchema, systemschema.SqllivenessTable},
 		{keys.MigrationsID, systemschema.MigrationsTableSchema, systemschema.MigrationsTable},
 		{keys.JoinTokensTableID, systemschema.JoinTokensTableSchema, systemschema.JoinTokensTable},
+		{keys.SQLStatementStatsTableID, systemschema.SQLStatementStatsTableSchema, systemschema.SQLStatementStatsTable},
+		{keys.SQLTransactionStatsTableID, systemschema.SQLTransactionStatsTableSchema, systemschema.SQLTransactionStatsTable},
 	} {
 		privs := *test.pkg.GetPrivileges()
 		gen, err := sql.CreateTestTableDescriptor(
@@ -200,6 +211,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			test.id,
 			test.schema,
 			&privs,
+			sessionData,
 		)
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)

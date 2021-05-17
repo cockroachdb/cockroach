@@ -244,6 +244,7 @@ func (m *randomStreamClient) getDescriptorAndNamespaceKVForTableID(
 		tableID,
 		fmt.Sprintf(RandomStreamSchemaPlaceholder, tableName),
 		descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+		nil, /* sessionDataOverride */
 	)
 	if err != nil {
 		return nil, nil, err

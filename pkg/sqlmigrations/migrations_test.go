@@ -841,6 +841,7 @@ CREATE TABLE system.jobs (
 		keys.JobsTableID,
 		oldJobsTableSchema,
 		systemschema.JobsTable.GetPrivileges(),
+		nil, /* sessionDataOverride */
 	)
 	require.NoError(t, err)
 
@@ -926,6 +927,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 		keys.JobsTableID,
 		oldJobsTableSchema,
 		systemschema.JobsTable.GetPrivileges(),
+		nil, /* sessionDataOverride */
 	)
 	require.NoError(t, err)
 

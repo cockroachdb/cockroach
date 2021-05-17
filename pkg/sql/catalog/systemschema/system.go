@@ -365,6 +365,75 @@ CREATE TABLE system.join_tokens (
     expiration   TIMESTAMPTZ NOT NULL,
     FAMILY "primary" (id, secret, expiration)
 )`
+
+	// TODO(azhng): Currently we choose number of bucket for hash-sharding to be
+	//  8 for both statement statistics table and transaction statistics table.
+	//  This is an arbitrary choice for now. After persisted SQL Stats is fully
+	//  implemented, we need to revisit this choice and retune the configuration.
+	SQLStatementStatsTableSchema = `
+CREATE TABLE system.sql_statement_stats (
+    aggregated_ts  TIMESTAMPTZ NOT NULL,
+    fingerprint_id BYTES NOT NULL,
+    plan_hash      INT NOT NULL,
+    app_name       STRING NOT NULL,
+    node_id        INT NOT NULL,
+
+    count        INT NOT NULL,
+    agg_interval INTERVAL NOT NULL,
+
+    metadata   JSONB NOT NULL,
+    statistics JSONB NOT NULL,
+
+    plan BYTES NOT NULL,
+
+    PRIMARY KEY (aggregated_ts, fingerprint_id, plan_hash, app_name, node_id)
+      USING HASH WITH BUCKET_COUNT = 8,
+    INDEX "fingerprint_stats_idx" (fingerprint_id, aggregated_ts, plan_hash, app_name, node_id),
+		FAMILY "primary" (
+			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8,
+			aggregated_ts,
+			fingerprint_id,
+			plan_hash,
+			app_name,
+			node_id,
+			count,
+			agg_interval,
+			metadata,
+			statistics,
+			plan
+		)
+)
+`
+
+	SQLTransactionStatsTableSchema = `
+CREATE TABLE system.sql_transaction_stats (
+    aggregated_ts  TIMESTAMPTZ NOT NULL,
+    fingerprint_id BYTES NOT NULL,
+    app_name       STRING NOT NULL,
+    node_id        INT NOT NULL,
+
+    count        INT NOT NULL,
+    agg_interval INTERVAL NOT NULL,
+
+    metadata   JSONB NOT NULL,
+    statistics JSONB NOT NULL,
+
+    PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
+      USING HASH WITH BUCKET_COUNT = 8,
+    INDEX "fingerprint_stats_idx" (fingerprint_id, aggregated_ts, app_name, node_id),
+		FAMILY "primary" (
+			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
+			aggregated_ts,
+			fingerprint_id,
+			app_name,
+			node_id,
+			count,
+			agg_interval,
+			metadata,
+			statistics
+		)
+);
+`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -381,8 +450,10 @@ func pk(name string) descpb.IndexDescriptor {
 
 // Helpers used to make some of the descpb.TableDescriptor literals below more concise.
 var (
-	singleASC = []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}
-	singleID1 = []descpb.ColumnID{1}
+	singleASC              = []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}
+	singleID1              = []descpb.ColumnID{1}
+	sqlStmtHashComputeExpr = "mod(fnv32(COALESCE(CAST(aggregated_ts AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(app_name AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(fingerprint_id AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(node_id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(plan_hash AS STRING), '':::STRING))))), 8:::INT8)"
+	sqlTxnHashComputeExpr  = "mod(fnv32(COALESCE(CAST(aggregated_ts AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(app_name AS STRING), '':::STRING)) + (fnv32(COALESCE(CAST(fingerprint_id AS STRING), '':::STRING)) + fnv32(COALESCE(CAST(node_id AS STRING), '':::STRING)))), 8:::INT8)"
 )
 
 // SystemDatabaseName is the name of the system database.
@@ -1804,6 +1875,237 @@ var (
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.JoinTokensTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// SQLStatementStatsTable is the descriptor for the SQL statement stats table.
+	// It stores statistics for statement fingerprints.
+	SQLStatementStatsTable = makeTable(descpb.TableDescriptor{
+		Name:                    "sql_statement_stats",
+		ID:                      keys.SQLStatementStatsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
+			{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
+			{Name: "plan_hash", ID: 3, Type: types.Int, Nullable: false},
+			{Name: "app_name", ID: 4, Type: types.String, Nullable: false},
+			{Name: "node_id", ID: 5, Type: types.Int, Nullable: false},
+			{Name: "count", ID: 6, Type: types.Int, Nullable: false},
+			{Name: "agg_interval", ID: 7, Type: types.Interval, Nullable: false},
+			{Name: "metadata", ID: 8, Type: types.Jsonb, Nullable: false},
+			{Name: "statistics", ID: 9, Type: types.Jsonb, Nullable: false},
+			{Name: "plan", ID: 10, Type: types.Bytes, Nullable: false},
+			{
+				Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+				ID:          11,
+				Type:        types.Int4,
+				Nullable:    false,
+				ComputeExpr: &sqlStmtHashComputeExpr,
+				Hidden:      true,
+			},
+		},
+		NextColumnID: 12,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name: "primary",
+				ID:   0,
+				ColumnNames: []string{
+					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+					"aggregated_ts", "fingerprint_id", "plan_hash", "app_name", "node_id",
+					"count", "agg_interval", "metadata", "statistics", "plan",
+				},
+				ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:   tabledesc.PrimaryKeyIndexName,
+			ID:     1,
+			Unique: true,
+			ColumnNames: []string{
+				"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+				"aggregated_ts",
+				"fingerprint_id",
+				"plan_hash",
+				"app_name",
+				"node_id",
+			},
+			ColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+			},
+			ColumnIDs: []descpb.ColumnID{11, 1, 2, 3, 4, 5},
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
+			Sharded: descpb.ShardedDescriptor{
+				IsSharded:    true,
+				Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+				ShardBuckets: 8,
+				ColumnNames: []string{
+					"aggregated_ts",
+					"app_name",
+					"fingerprint_id",
+					"node_id",
+					"plan_hash",
+				},
+			},
+		},
+		Checks: []*descpb.TableDescriptor_CheckConstraint{
+			{
+				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_shard_8",
+				Validity:            descpb.ConstraintValidity_Validated,
+				ColumnIDs:           []descpb.ColumnID{11},
+				IsNonNullConstraint: false,
+				Hidden:              true,
+			},
+		},
+		Indexes: []descpb.IndexDescriptor{
+			{
+				Name:   "fingerprint_stats_idx",
+				ID:     2,
+				Unique: false,
+				ColumnNames: []string{
+					"fingerprint_id",
+					"aggregated_ts",
+					"plan_hash",
+					"app_name",
+					"node_id",
+				},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				ColumnIDs:      []descpb.ColumnID{2, 1, 3, 4, 5},
+				ExtraColumnIDs: []descpb.ColumnID{11},
+				Version:        descpb.EmptyArraysInInvertedIndexesVersion,
+			},
+		},
+		NextIndexID: 3,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SQLStatementStatsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// SQLTransactionStatsTable is the descriptor for the SQL transaction stats
+	// table. It stores statistics for transaction fingerprints.
+	SQLTransactionStatsTable = makeTable(descpb.TableDescriptor{
+		Name:                    "sql_transaction_stats",
+		ID:                      keys.SQLTransactionStatsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},
+			{Name: "fingerprint_id", ID: 2, Type: types.Bytes, Nullable: false},
+			{Name: "app_name", ID: 3, Type: types.String, Nullable: false},
+			{Name: "node_id", ID: 4, Type: types.Int, Nullable: false},
+			{Name: "count", ID: 5, Type: types.Int, Nullable: false},
+			{Name: "agg_interval", ID: 6, Type: types.Interval, Nullable: false},
+			{Name: "metadata", ID: 7, Type: types.Jsonb, Nullable: false},
+			{Name: "statistics", ID: 8, Type: types.Jsonb, Nullable: false},
+			{
+				Name:        "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+				ID:          9,
+				Type:        types.Int4,
+				Nullable:    false,
+				ComputeExpr: &sqlTxnHashComputeExpr,
+				Hidden:      true,
+			},
+		},
+		NextColumnID: 10,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name: "primary",
+				ID:   0,
+				ColumnNames: []string{
+					"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+					"aggregated_ts", "fingerprint_id", "app_name", "node_id",
+					"count", "agg_interval", "metadata", "statistics",
+				},
+				ColumnIDs:       []descpb.ColumnID{9, 1, 2, 3, 4, 5, 6, 7, 8},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:   tabledesc.PrimaryKeyIndexName,
+			ID:     1,
+			Unique: true,
+			ColumnNames: []string{
+				"crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+				"aggregated_ts",
+				"fingerprint_id",
+				"app_name",
+				"node_id",
+			},
+			ColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+				descpb.IndexDescriptor_ASC,
+			},
+			ColumnIDs: []descpb.ColumnID{9, 1, 2, 3, 4},
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
+			Sharded: descpb.ShardedDescriptor{
+				IsSharded:    true,
+				Name:         "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+				ShardBuckets: 8,
+				ColumnNames: []string{
+					"aggregated_ts",
+					"app_name",
+					"fingerprint_id",
+					"node_id",
+				},
+			},
+		},
+		Checks: []*descpb.TableDescriptor_CheckConstraint{
+			{
+				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+				Validity:            descpb.ConstraintValidity_Validated,
+				ColumnIDs:           []descpb.ColumnID{9},
+				IsNonNullConstraint: false,
+				Hidden:              true,
+			},
+		},
+		Indexes: []descpb.IndexDescriptor{
+			{
+				Name:   "fingerprint_stats_idx",
+				ID:     2,
+				Unique: false,
+				ColumnNames: []string{
+					"fingerprint_id",
+					"aggregated_ts",
+					"app_name",
+					"node_id",
+				},
+				ColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				ColumnIDs:      []descpb.ColumnID{2, 1, 3, 4},
+				ExtraColumnIDs: []descpb.ColumnID{9},
+				Version:        descpb.EmptyArraysInInvertedIndexesVersion,
+			},
+		},
+		NextIndexID: 3,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.SQLTransactionStatsTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
