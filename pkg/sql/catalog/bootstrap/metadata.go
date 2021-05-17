@@ -322,6 +322,11 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Tables introduced in 21.1.
 
 	target.AddDescriptor(keys.SystemDatabaseID, systemschema.JoinTokensTable)
+
+	// Tables introduced in 21.2.
+
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.StatementStatisticsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, systemschema.TransactionStatisticsTable)
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

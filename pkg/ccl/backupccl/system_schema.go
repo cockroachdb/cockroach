@@ -326,6 +326,12 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.JoinTokensTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.StatementStatisticsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.TransactionStatisticsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that
