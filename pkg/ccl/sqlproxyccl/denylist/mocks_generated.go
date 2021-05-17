@@ -34,16 +34,16 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // Denied mocks base method.
-func (m *MockService) Denied(id string) (*Entry, error) {
+func (m *MockService) Denied(entity DenyEntity) (*Entry, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Denied", id)
+	ret := m.ctrl.Call(m, "Denied", entity)
 	ret0, _ := ret[0].(*Entry)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Denied indicates an expected call of Denied.
-func (mr *MockServiceMockRecorder) Denied(id interface{}) *gomock.Call {
+func (mr *MockServiceMockRecorder) Denied(entity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Denied", reflect.TypeOf((*MockService)(nil).Denied), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Denied", reflect.TypeOf((*MockService)(nil).Denied), entity)
 }
