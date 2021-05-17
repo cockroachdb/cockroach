@@ -38,8 +38,6 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	validator := schemaexpr.MakeIndexPredicateValidator(ctx, tn, desc, &semaCtx)
-
 	testData := []struct {
 		expr          string
 		expectedValid bool
@@ -91,7 +89,9 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 				t.Fatalf("%s: unexpected error: %s", d.expr, err)
 			}
 
-			deqExpr, err := validator.Validate(expr)
+			deqExpr, err := schemaexpr.ValidatePartialIndexPredicate(
+				ctx, desc, expr, &tn, &semaCtx,
+			)
 
 			if !d.expectedValid {
 				if err == nil {
