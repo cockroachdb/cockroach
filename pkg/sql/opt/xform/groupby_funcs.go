@@ -244,7 +244,7 @@ func (c *CustomFuncs) SplitGroupByScanIntoUnionScans(
 		return nil, false
 	}
 
-	return c.SplitScanIntoUnionScans(
+	return c.splitScanIntoUnionScans(
 		intraOrd, scan, sp, cons, 0 /* limit */, keyPrefixLength,
 	)
 }
