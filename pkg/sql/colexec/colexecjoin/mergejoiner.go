@@ -521,6 +521,7 @@ func (o *mergeJoinBase) Init(ctx context.Context) {
 		o.unlimitedAllocator, o.joinType, o.left.sourceTypes, o.right.sourceTypes,
 		o.memoryLimit, o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
 	)
+	o.bufferedGroup.helper.init(o.Ctx)
 
 	o.builderState.lGroups = make([]group, 1)
 	o.builderState.rGroups = make([]group, 1)
@@ -766,20 +767,20 @@ func (o *mergeJoinBase) finishProbe() {
 	)
 }
 
-func (o *mergeJoinBase) Close(ctx context.Context) error {
+func (o *mergeJoinBase) Close() error {
 	if !o.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
 	for _, op := range []colexecop.Operator{o.left.source, o.right.source} {
 		if c, ok := op.(colexecop.Closer); ok {
-			if err := c.Close(ctx); err != nil {
+			if err := c.Close(); err != nil {
 				lastErr = err
 			}
 		}
 	}
 	if h := o.bufferedGroup.helper; h != nil {
-		if err := h.Close(ctx); err != nil {
+		if err := h.Close(); err != nil {
 			lastErr = err
 		}
 	}

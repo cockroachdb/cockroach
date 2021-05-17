@@ -212,7 +212,7 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 	// closure occurred as expected.
 	closed := false
 	firstInput := &colexecop.CallbackOperator{
-		CloseCb: func(context.Context) error {
+		CloseCb: func() error {
 			closed = true
 			return nil
 		},
@@ -237,7 +237,7 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 	// In the production setting, the user of the synchronizer is still expected
 	// to close it, even if a panic is encountered in Init, so we do the same
 	// thing here and verify that the first input is properly closed.
-	require.NoError(t, s.Close(ctx))
+	require.NoError(t, s.Close())
 	require.True(t, closed)
 }
 

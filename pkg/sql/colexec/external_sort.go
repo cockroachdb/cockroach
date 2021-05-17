@@ -419,7 +419,7 @@ func (s *externalSorter) Next() coldata.Batch {
 			return b
 
 		case externalSorterFinished:
-			if err := s.Close(s.Ctx); err != nil {
+			if err := s.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -511,7 +511,7 @@ func (s *externalSorter) Reset(ctx context.Context) {
 		r.Reset(ctx)
 	}
 	s.state = externalSorterNewPartition
-	if err := s.Close(ctx); err != nil {
+	if err := s.Close(); err != nil {
 		colexecerror.InternalError(err)
 	}
 	// Reset the CloserHelper so that the sorter may be closed again.
@@ -523,17 +523,18 @@ func (s *externalSorter) Reset(ctx context.Context) {
 	// are keeping the memory used for dequeueing batches.
 }
 
-func (s *externalSorter) Close(ctx context.Context) error {
+func (s *externalSorter) Close() error {
 	if !s.CloserHelper.Close() {
 		return nil
 	}
+	ctx := s.EnsureCtx()
 	log.VEvent(ctx, 1, "external sorter is closed")
 	var lastErr error
 	if s.partitioner != nil {
 		lastErr = s.partitioner.Close(ctx)
 		s.partitioner = nil
 	}
-	if err := s.inMemSorterInput.Close(ctx); err != nil {
+	if err := s.inMemSorterInput.Close(); err != nil {
 		lastErr = err
 	}
 	if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil && s.fdState.acquiredFDs > 0 {
@@ -647,6 +648,7 @@ type inputPartitioningOperator struct {
 }
 
 var _ colexecop.ResettableOperator = &inputPartitioningOperator{}
+var _ colexecop.ClosableOperator = &inputPartitioningOperator{}
 
 func (o *inputPartitioningOperator) Next() coldata.Batch {
 	if o.alreadyUsedMemory >= o.memoryLimit {
@@ -676,7 +678,7 @@ func (o *inputPartitioningOperator) Reset(ctx context.Context) {
 	o.alreadyUsedMemory = 0
 }
 
-func (o *inputPartitioningOperator) Close(context.Context) error {
+func (o *inputPartitioningOperator) Close() error {
 	o.alreadyUsedMemory = 0
 	return nil
 }
