@@ -492,3 +492,27 @@ query T
 SET TIME ZONE 'AuStralIA/SyDNEY'; SELECT '2000-05-15 00:00:00'::timestamptz
 ----
 2000-05-15 00:00:00 +1000 AEST
+
+query T
+SET TIME ZONE 'Europe/Bucharest';
+SELECT t FROM (VALUES
+  ('2020-10-25 03:00+3'::TIMESTAMPTZ + '0 hour'::interval),
+  ('2020-10-25 03:00+3'::TIMESTAMPTZ + '1 hour'::interval),
+  ('2020-10-25 03:00+2'::TIMESTAMPTZ + '0 hour'::interval),
+  ('2020-10-25 03:00+2'::TIMESTAMPTZ + '1 hour'::interval)
+) interval_math_regression_64772(t)
+----
+2020-10-25 03:00:00 +0300 EEST
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 03:00:00 +0200 EET
+2020-10-25 04:00:00 +0200 EET
+
+query TT
+SET TIME ZONE 'Europe/Bucharest';
+SELECT date_trunc('day', t), date_trunc('hour', t) FROM (VALUES
+  ('2020-10-25 03:00+03:00'::timestamptz),
+  ('2020-10-25 03:00+02:00'::timestamptz)
+) date_trunc_regression_64772(t)
+----
+2020-10-25 00:00:00 +0300 EEST  2020-10-25 03:00:00 +0300 EEST
+2020-10-25 00:00:00 +0300 EEST  2020-10-25 03:00:00 +0200 EET
