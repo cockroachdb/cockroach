@@ -267,3 +267,26 @@ func TestSpanFrontierHeap(t *testing.T) {
 	require.Equal(t, eBC1, heap.Pop(&fh))
 	require.Equal(t, eAB2, heap.Pop(&fh))
 }
+
+func TestSequentialSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var abc = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	startKey, endKey := []byte{abc[0]}, []byte{abc[len(abc)-1]}
+	mkspan := func() roachpb.Span {
+		return roachpb.Span{Key: startKey, EndKey: endKey}
+	}
+
+	f, err := MakeFrontier(mkspan())
+	require.NoError(t, err)
+
+	var expectedRanges []string
+	for i := 0; i < len(abc)-1; i++ {
+		startKey[0] = abc[i]
+		endKey[0] = abc[i+1]
+		span := mkspan()
+		_, err := f.Forward(span, hlc.Timestamp{WallTime: int64(i) + 1})
+		require.NoError(t, err)
+		expectedRanges = append(expectedRanges, fmt.Sprintf("%s@%d", span, i+1))
+	}
+	require.Equal(t, strings.Join(expectedRanges, " "), f.entriesStr())
+}
