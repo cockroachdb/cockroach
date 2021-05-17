@@ -15,6 +15,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -1134,6 +1135,11 @@ func formatVal(
 		if colType == "FLOAT4" {
 			width = 32
 		}
+		if math.IsInf(t, 1) {
+			return "Infinity"
+		} else if math.IsInf(t, -1) {
+			return "-Infinity"
+		}
 		return strconv.FormatFloat(t, 'g', -1, width)
 
 	case string:
@@ -1178,6 +1184,13 @@ func formatVal(
 			// Some unknown/new time-like format.
 			tfmt = timeutil.FullTimeFormat
 		}
+		if tfmt == timeutil.TimestampWithTZFormat || tfmt == timeutil.TimeWithTZFormat {
+			if _, offsetSeconds := t.Zone(); offsetSeconds%60 != 0 {
+				tfmt += ":00:00"
+			} else if offsetSeconds%3600 != 0 {
+				tfmt += ":00"
+			}
+		}
 		return t.Format(tfmt)
 	}
 
@@ -1186,7 +1199,7 @@ func formatVal(
 
 var timeOutputFormats = map[string]string{
 	"TIMESTAMP":   timeutil.TimestampWithoutTZFormat,
-	"TIMESTAMPTZ": timeutil.FullTimeFormat,
+	"TIMESTAMPTZ": timeutil.TimestampWithTZFormat,
 	"TIME":        timeutil.TimeWithoutTZFormat,
 	"TIMETZ":      timeutil.TimeWithTZFormat,
 	"DATE":        timeutil.DateFormat,
