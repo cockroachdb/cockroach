@@ -359,15 +359,19 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 		// empty keys.
 		return 0, false
 	}
-	if sp.startBoundary == ExcludeBoundary || sp.endBoundary == ExcludeBoundary {
-		// Bounds must be inclusive.
-		return 0, false
-	}
 
 	startKey := sp.start
 	endKey := sp.end
 	if startKey.Length() < prefixLength || endKey.Length() < prefixLength {
 		// Both keys must have at least 'prefixLength' values.
+		return 0, false
+	}
+	if sp.startBoundary == ExcludeBoundary && startKey.Length() == prefixLength {
+		// Bounds must be inclusive if the prefix length equals the key length.
+		return 0, false
+	}
+	if sp.endBoundary == ExcludeBoundary && endKey.Length() == prefixLength {
+		// Bounds must be inclusive if the prefix length equals the key length.
 		return 0, false
 	}
 
@@ -504,19 +508,23 @@ func (sp *Span) Split(keyCtx *KeyContext, prefixLength int) (spans *Spans, ok bo
 		}
 		start := currKey
 		end := currKey
+		startBoundary := IncludeBoundary
+		endBoundary := IncludeBoundary
 		if i == 0 {
 			// Start key of the first span.
 			start = currKey.Concat(startPostFix)
+			startBoundary = sp.startBoundary
 		}
 		if i == int(keyCount-1) {
 			// End key of the last span.
 			end = currKey.Concat(endPostFix)
+			endBoundary = sp.endBoundary
 		}
 		spans.Append(&Span{
 			start:         start,
 			end:           end,
-			startBoundary: IncludeBoundary,
-			endBoundary:   IncludeBoundary,
+			startBoundary: startBoundary,
+			endBoundary:   endBoundary,
 		})
 		currKey, ok = currKey.Next(keyCtx)
 	}
