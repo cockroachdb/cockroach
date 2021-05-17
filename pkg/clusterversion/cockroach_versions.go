@@ -334,6 +334,9 @@ const (
 	// SerializeViewUDTs serializes user defined types used in views to allow
 	// for renaming of the referenced types.
 	SerializeViewUDTs
+	// SQLStatsTable adds the system tables for storing persisted SQL statistics
+	// for statements and transactions.
+	SQLStatsTable
 
 	// Step (1): Add new versions here.
 )
@@ -559,6 +562,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     SerializeViewUDTs,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
+	},
+	{
+		Key:     SQLStatsTable,
+		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 10},
 	},
 	// Step (2): Add new versions here.
 })
