@@ -2188,6 +2188,7 @@ vectorized: true
 │                     estimated row count: 10 (missing stats)
 │                     table: uniq_enum@primary
 │                     spans: /"\xc0"-/"\xc0"/PrefixEnd
+│                     locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -3393,6 +3394,7 @@ vectorized: true
 │                       │ table: uniq_enum@primary
 │                       │ equality: (column1, column3) = (r,i)
 │                       │ equality cols are key
+│                       │ locking strength: for update
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -3543,6 +3545,7 @@ vectorized: true
 │                       │ table: uniq_enum@uniq_enum_r_s_j_key
 │                       │ equality cols are key
 │                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
+│                       │ locking strength: for update
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -4071,6 +4074,7 @@ vectorized: true
 │                       │ table: uniq_partial_enum@primary
 │                       │ equality: (column1, column2) = (r,a)
 │                       │ equality cols are key
+│                       │ locking strength: for update
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
