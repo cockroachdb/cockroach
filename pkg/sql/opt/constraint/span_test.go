@@ -835,6 +835,28 @@ func TestSpan_KeyCount(t *testing.T) {
 			},
 			expected: "3",
 		},
+		{ // 19
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/US_WEST/post - /US_WEST]"),
+			expected: "1",
+		},
+		{ // 20
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/1 - /2/fix)"),
+			expected: "2",
+		},
+		{ // 21
+			// Fails since the key is the same length as the prefix and the boundary
+			// is exclusive.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/US_WEST - /US_WEST/fix]"),
+			expected: "FAIL",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -989,6 +1011,28 @@ func TestSpan_SplitSpan(t *testing.T) {
 				endBoundary:   IncludeBoundary,
 			},
 			expected: "[/'hello' - /'hello'] [/'hey' - /'hey'] [/'hi' - /'hi']",
+		},
+		{ // 15
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/1/post - /2]"),
+			expected: "(/1/'post' - /1] [/2 - /2]",
+		},
+		{ // 16
+			// Allow exclusive boundaries if the key is longer than the prefix.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/1 - /2/fix)"),
+			expected: "[/1 - /1] [/2 - /2/'fix')",
+		},
+		{ // 17
+			// Fails since the key is the same length as the prefix and the boundary
+			// is exclusive.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "(/US_WEST - /US_WEST/fix]"),
+			expected: "FAIL",
 		},
 	}
 
