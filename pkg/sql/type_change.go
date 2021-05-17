@@ -658,8 +658,8 @@ func findUsagesOfEnumValue(
 			if !ok {
 				return true, expr, nil
 			}
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
-			if id != typeID {
+			id, ok := typedesc.MaybeUserDefinedTypeOIDToID(typeOid.OID)
+			if !ok || id != typeID {
 				return true, expr, nil
 			}
 
@@ -680,9 +680,10 @@ func findUsagesOfEnumValue(
 			if !ok {
 				return true, expr, nil
 			}
+			id, ok := typedesc.MaybeUserDefinedTypeOIDToID(typeOid.OID)
 			// -1 since the type of this CastExpr is the array type.
-			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID) - 1
-			if id != typeID {
+			id = id - 1
+			if !ok || id != typeID {
 				return true, expr, nil
 			}
 
@@ -726,8 +727,8 @@ func findUsagesOfEnumValueInViewQuery(
 		if !ok {
 			return true, expr, nil
 		}
-		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
-		if id != typeID {
+		id, ok := typedesc.MaybeUserDefinedTypeOIDToID(typeOid.OID)
+		if !ok || id != typeID {
 			return true, expr, nil
 		}
 
@@ -816,7 +817,8 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				}
 			}
 
-			if typeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
+			id, _ := typedesc.GetTypeDescID(col.GetType())
+			if typeDesc.ID == id {
 				if !firstClause {
 					query.WriteString(" OR")
 				}
@@ -923,7 +925,8 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		//	) WHERE unnest = 'enum_value'
 		firstClause := true
 		for _, col := range desc.PublicColumns() {
-			if arrayTypeDesc.GetID() == typedesc.GetTypeDescID(col.GetType()) {
+			id, _ := typedesc.GetTypeDescID(col.GetType())
+			if arrayTypeDesc.GetID() == id {
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}

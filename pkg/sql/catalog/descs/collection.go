@@ -2180,7 +2180,11 @@ func (dt DistSQLTypeResolver) ResolveType(
 
 // ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (dt DistSQLTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
+	id, ok := typedesc.MaybeUserDefinedTypeOIDToID(oid)
+	if !ok {
+		return nil, typedesc.MakeOIDRangeError(oid)
+	}
+	name, desc, err := dt.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2213,7 +2217,11 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 func (dt DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.GetTypeDescID(t))
+			id, ok := typedesc.GetTypeDescID(t)
+			if !ok {
+				return typedesc.MakeTypeIDRangeError(t)
+			}
+			name, desc, err := dt.GetTypeDescriptor(ctx, id)
 			if err != nil {
 				return err
 			}

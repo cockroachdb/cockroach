@@ -116,14 +116,23 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	ctx := tree.NewFmtCtx(tree.FmtSerializable)
 	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 		newRef := ref
-		if rw, ok := rewrites[typedesc.UserDefinedTypeOIDToID(ref.OID)]; ok {
+		id, ok := typedesc.MaybeUserDefinedTypeOIDToID(ref.OID)
+		if !ok {
+			err = typedesc.MakeOIDRangeError(ref.OID)
+			return
+		}
+		if rw, ok := rewrites[id]; ok {
 			newRef = &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(rw.ID)}
 		}
 		ctx.WriteString(newRef.SQLString())
 	})
+	if err != nil {
+		return "", err
+	}
 	ctx.FormatNode(parsed)
 	return ctx.CloseAndGetString(), nil
 }
@@ -348,11 +357,15 @@ func allocateDescriptorRewrites(
 			// Ensure that all referenced types are present.
 			if col.Type.UserDefined() {
 				// TODO (rohany): This can be turned into an option later.
-				if _, ok := typesByID[typedesc.GetTypeDescID(col.Type)]; !ok {
+				id, isValid := typedesc.GetTypeDescID(col.Type)
+				if !isValid {
+					return nil, typedesc.MakeTypeIDRangeError(col.Type)
+				}
+				if _, ok := typesByID[id]; !ok {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced type %d",
 						table.Name,
-						typedesc.GetTypeDescID(col.Type),
+						id,
 					)
 				}
 			}
@@ -1029,13 +1042,21 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 	if !typ.UserDefined() {
 		return
 	}
+	tid, ok := typedesc.GetTypeDescID(typ)
+	if !ok {
+		log.Fatalf(context.TODO(), "%v", typedesc.MakeTypeIDRangeError(typ))
+	}
 	// Collect potential new OID values.
 	var newOID, newArrayOID oid.Oid
-	if rw, ok := descriptorRewrites[typedesc.GetTypeDescID(typ)]; ok {
+	if rw, ok := descriptorRewrites[tid]; ok {
 		newOID = typedesc.TypeIDToOID(rw.ID)
 	}
 	if typ.Family() != types.ArrayFamily {
-		if rw, ok := descriptorRewrites[typedesc.GetArrayTypeDescID(typ)]; ok {
+		tid, ok = typedesc.GetArrayTypeDescID(typ)
+		if !ok {
+			log.Fatalf(context.TODO(), "%v", typedesc.MakeTypeIDRangeError(typ))
+		}
+		if rw, ok := descriptorRewrites[tid]; ok {
 			newArrayOID = typedesc.TypeIDToOID(rw.ID)
 		}
 	}

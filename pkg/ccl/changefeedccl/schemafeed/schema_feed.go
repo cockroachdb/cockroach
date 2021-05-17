@@ -180,13 +180,19 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 
 func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
 	for _, col := range tbl.UserDefinedTypeColumns() {
-		t.removeDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
+		id, ok := typedesc.MaybeUserDefinedTypeOIDToID(col.GetType().Oid())
+		if !ok {
+			log.Fatalf(context.TODO(), "%v", typedesc.MakeOIDRangeError(col.GetType().Oid()))
+		}
+		t.removeDependency(id, tbl.GetID())
 	}
 }
 
 func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
 	for _, col := range tbl.UserDefinedTypeColumns() {
-		t.addDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
+		// Not validating the type as the columns are supposed to have a valid id
+		id, _ := typedesc.MaybeUserDefinedTypeOIDToID(col.GetType().Oid())
+		t.addDependency(id, tbl.GetID())
 	}
 }
 
