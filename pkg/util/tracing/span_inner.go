@@ -176,7 +176,9 @@ func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetOperationName(operationName)
 	}
-	s.crdb.operation = operationName
+	s.crdb.mu.Lock()
+	s.crdb.mu.operation = operationName
+	s.crdb.mu.Unlock()
 	return s
 }
 
