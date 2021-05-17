@@ -178,16 +178,27 @@ func (t *typeDependencyTracker) removeDependency(typeID, tableID descpb.ID) {
 	}
 }
 
-func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) {
+func (t *typeDependencyTracker) purgeTable(tbl catalog.TableDescriptor) error {
 	for _, col := range tbl.UserDefinedTypeColumns() {
-		t.removeDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
+		id, err := typedesc.UserDefinedTypeOIDToID(col.GetType().Oid())
+		if err != nil {
+			return err
+		}
+		t.removeDependency(id, tbl.GetID())
 	}
+
+	return nil
 }
 
-func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) {
+func (t *typeDependencyTracker) ingestTable(tbl catalog.TableDescriptor) error {
 	for _, col := range tbl.UserDefinedTypeColumns() {
-		t.addDependency(typedesc.UserDefinedTypeOIDToID(col.GetType().Oid()), tbl.GetID())
+		id, err := typedesc.UserDefinedTypeOIDToID(col.GetType().Oid())
+		if err != nil {
+			return err
+		}
+		t.addDependency(id, tbl.GetID())
 	}
+	return nil
 }
 
 func (t *typeDependencyTracker) containsType(id descpb.ID) bool {
@@ -289,7 +300,10 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	// Register all types used by the initial set of tables.
 	for _, desc := range initialDescs {
 		tbl := desc.(catalog.TableDescriptor)
-		tf.mu.typeDeps.ingestTable(tbl)
+		if err := tf.mu.typeDeps.ingestTable(tbl); err != nil {
+			tf.mu.Unlock()
+			return err
+		}
 	}
 	tf.mu.Unlock()
 
@@ -533,7 +547,9 @@ func (tf *SchemaFeed) validateDescriptor(
 			}
 
 			// Purge the old version of the table from the type mapping.
-			tf.mu.typeDeps.purgeTable(lastVersion)
+			if err := tf.mu.typeDeps.purgeTable(lastVersion); err != nil {
+				return err
+			}
 
 			e := TableEvent{
 				Before: lastVersion,
@@ -559,7 +575,9 @@ func (tf *SchemaFeed) validateDescriptor(
 			}
 		}
 		// Add the types used by the table into the dependency tracker.
-		tf.mu.typeDeps.ingestTable(desc)
+		if err := tf.mu.typeDeps.ingestTable(desc); err != nil {
+			return err
+		}
 		tf.mu.previousTableVersion[desc.GetID()] = desc
 		return nil
 	default:

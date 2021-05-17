@@ -437,9 +437,14 @@ type collectorState struct {
 }
 
 // addDirectReferences adds all immediate neighbors of desc to the state.
-func (cs *collectorState) addDirectReferences(desc Descriptor) {
+func (cs *collectorState) addDirectReferences(desc Descriptor) error {
 	cs.vdg.Descriptors[desc.GetID()] = desc
-	desc.GetReferencedDescIDs().ForEach(cs.referencedBy.Add)
+	idSet, err := desc.GetReferencedDescIDs()
+	if err != nil {
+		return err
+	}
+	idSet.ForEach(cs.referencedBy.Add)
+	return nil
 }
 
 // getMissingDescs fetches the descriptors which have corresponding IDs in the
@@ -491,7 +496,9 @@ func collectDescriptorsForValidation(
 		referencedBy: MakeDescriptorIDSet(),
 	}
 	for _, desc := range descriptors {
-		cs.addDirectReferences(desc)
+		if err := cs.addDirectReferences(desc); err != nil {
+			return nil, err
+		}
 	}
 	newDescs, err := cs.getMissingDescs(ctx, maybeBatchDescGetter)
 	if err != nil {
@@ -503,7 +510,9 @@ func collectDescriptorsForValidation(
 		}
 		switch newDesc.(type) {
 		case DatabaseDescriptor, TypeDescriptor:
-			cs.addDirectReferences(newDesc)
+			if err := cs.addDirectReferences(newDesc); err != nil {
+				return nil, err
+			}
 		}
 	}
 	_, err = cs.getMissingDescs(ctx, maybeBatchDescGetter)

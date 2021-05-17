@@ -146,8 +146,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
-	return catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
+func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+	return catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID()), nil
 }
 
 // ValidateCrossReferences implements the catalog.Descriptor interface.
