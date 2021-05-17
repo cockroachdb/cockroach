@@ -21,35 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// IndexPredicateValidator validates that an expression is a valid partial index
-// predicate. See Validate for more details.
-type IndexPredicateValidator struct {
-	ctx       context.Context
-	tableName tree.TableName
-	desc      catalog.TableDescriptor
-	semaCtx   *tree.SemaContext
-}
-
-// MakeIndexPredicateValidator returns an IndexPredicateValidator struct that
-// can be used to validate partial index predicates. See Validate for more
-// details.
-func MakeIndexPredicateValidator(
-	ctx context.Context,
-	tableName tree.TableName,
-	desc catalog.TableDescriptor,
-	semaCtx *tree.SemaContext,
-) IndexPredicateValidator {
-	return IndexPredicateValidator{
-		ctx:       ctx,
-		tableName: tableName,
-		desc:      desc,
-		semaCtx:   semaCtx,
-	}
-}
-
-// Validate verifies that an expression is a valid partial index predicate. If
-// the expression is valid, it returns the serialized expression with the
-// columns dequalified.
+// ValidatePartialIndexPredicate verifies that an expression is a valid partial
+// index predicate. If the expression is valid, it returns the serialized
+// expression with the columns dequalified.
 //
 // A predicate expression is valid if all of the following are true:
 //
@@ -59,16 +33,22 @@ func MakeIndexPredicateValidator(
 //   - It does not include non-immutable, aggregate, window, or set returning
 //     functions.
 //
-func (v *IndexPredicateValidator) Validate(e tree.Expr) (string, error) {
+func ValidatePartialIndexPredicate(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	e tree.Expr,
+	tn *tree.TableName,
+	semaCtx *tree.SemaContext,
+) (string, error) {
 	expr, _, err := DequalifyAndValidateExpr(
-		v.ctx,
-		v.desc,
+		ctx,
+		desc,
 		e,
 		types.Bool,
 		"index predicate",
-		v.semaCtx,
+		semaCtx,
 		tree.VolatilityImmutable,
-		&v.tableName,
+		tn,
 	)
 	if err != nil {
 		return "", err

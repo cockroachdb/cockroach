@@ -242,8 +242,9 @@ func MakeIndexDescriptor(
 	}
 
 	if n.Predicate != nil {
-		idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
-		expr, err := idxValidator.Validate(n.Predicate)
+		expr, err := schemaexpr.ValidatePartialIndexPredicate(
+			params.ctx, tableDesc, n.Predicate, &n.Table, params.p.SemaCtx(),
+		)
 		if err != nil {
 			return nil, err
 		}

@@ -104,6 +104,11 @@ func MakeColumnDefDescs(
 	}
 
 	if d.IsComputed() {
+		// Note: We do not validate the computed column expression here because
+		// it may reference columns that have not yet been added to a table
+		// descriptor. Callers must validate the expression with
+		// schemaexpr.ValidateComputedColumnExpression once all possible
+		// reference columns are part of the table descriptor.
 		s := tree.Serialize(d.Computed.Expr)
 		col.ComputeExpr = &s
 	}

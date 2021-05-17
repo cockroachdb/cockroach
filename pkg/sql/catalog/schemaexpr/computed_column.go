@@ -26,29 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ComputedColumnValidator validates that an expression is a valid computed
-// column. See Validate for more details.
-type ComputedColumnValidator struct {
-	ctx       context.Context
-	desc      catalog.TableDescriptor
-	semaCtx   *tree.SemaContext
-	tableName *tree.TableName
-}
-
-// MakeComputedColumnValidator returns an ComputedColumnValidator struct that
-// can be used to validate computed columns. See Validate for more details.
-func MakeComputedColumnValidator(
-	ctx context.Context, desc catalog.TableDescriptor, semaCtx *tree.SemaContext, tn *tree.TableName,
-) ComputedColumnValidator {
-	return ComputedColumnValidator{
-		ctx:       ctx,
-		desc:      desc,
-		semaCtx:   semaCtx,
-		tableName: tn,
-	}
-}
-
-// Validate verifies that an expression is a valid computed column expression.
+// ValidateComputedColumnExpression verifies that an expression is a valid computed column expression.
 // It returns the serialized expression if valid, and an error otherwise.
 //
 // A computed column expression is valid if all of the following are true:
@@ -57,8 +35,12 @@ func MakeComputedColumnValidator(
 //   - It does not reference other computed columns.
 //
 // TODO(mgartner): Add unit tests for Validate.
-func (v *ComputedColumnValidator) Validate(
+func ValidateComputedColumnExpression(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
 	d *tree.ColumnTableDef,
+	tn *tree.TableName,
+	semaCtx *tree.SemaContext,
 ) (serializedExpr string, _ error) {
 	if d.HasDefaultExpr() {
 		return "", pgerror.New(
@@ -69,7 +51,7 @@ func (v *ComputedColumnValidator) Validate(
 
 	var depColIDs catalog.TableColSet
 	// First, check that no column in the expression is a computed column.
-	err := iterColDescriptors(v.desc, d.Computed.Expr, func(c catalog.Column) error {
+	err := iterColDescriptors(desc, d.Computed.Expr, func(c catalog.Column) error {
 		if c.IsComputed() {
 			return pgerror.New(pgcode.InvalidTableDefinition,
 				"computed columns cannot reference other computed columns")
@@ -85,7 +67,7 @@ func (v *ComputedColumnValidator) Validate(
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
-	if err := v.desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+	if err := desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		for _, id := range fk.OriginColumnIDs {
 			if !depColIDs.Contains(id) {
 				// We don't depend on this column.
@@ -110,7 +92,7 @@ func (v *ComputedColumnValidator) Validate(
 	}
 
 	// Resolve the type of the computed column expression.
-	defType, err := tree.ResolveType(v.ctx, d.Type, v.semaCtx.GetTypeResolver())
+	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return "", err
 	}
@@ -120,14 +102,14 @@ func (v *ComputedColumnValidator) Validate(
 	// functions. In order to safely serialize user defined types and their
 	// members, we need to serialize the typed expression here.
 	expr, _, err := DequalifyAndValidateExpr(
-		v.ctx,
-		v.desc,
+		ctx,
+		desc,
 		d.Computed.Expr,
 		defType,
 		"computed column",
-		v.semaCtx,
+		semaCtx,
 		tree.VolatilityImmutable,
-		v.tableName,
+		tn,
 	)
 	if err != nil {
 		return "", err
@@ -145,7 +127,7 @@ func (v *ComputedColumnValidator) Validate(
 				return
 			}
 			var col catalog.Column
-			if col, err = v.desc.FindColumnWithID(colID); err != nil {
+			if col, err = desc.FindColumnWithID(colID); err != nil {
 				err = errors.WithAssertionFailure(err)
 				return
 			}
@@ -167,12 +149,12 @@ func (v *ComputedColumnValidator) Validate(
 	return expr, nil
 }
 
-// ValidateNoDependents verifies that the input column is not dependent on a
-// computed column. The function errs if any existing computed columns or
-// computed columns being added reference the given column.
-// TODO(mgartner): Add unit tests for ValidateNoDependents.
-func (v *ComputedColumnValidator) ValidateNoDependents(col catalog.Column) error {
-	for _, c := range v.desc.NonDropColumns() {
+// ValidateColumnHasNoDependents verifies that the input column has no dependent
+// computed columns. It returns an error if any existing or ADD mutation
+// computed columns reference the given column.
+// TODO(mgartner): Add unit tests.
+func ValidateColumnHasNoDependents(desc catalog.TableDescriptor, col catalog.Column) error {
+	for _, c := range desc.NonDropColumns() {
 		if !c.IsComputed() {
 			continue
 		}
@@ -183,7 +165,7 @@ func (v *ComputedColumnValidator) ValidateNoDependents(col catalog.Column) error
 			return errors.WithAssertionFailure(err)
 		}
 
-		err = iterColDescriptors(v.desc, expr, func(colVar catalog.Column) error {
+		err = iterColDescriptors(desc, expr, func(colVar catalog.Column) error {
 			if colVar.GetID() == col.GetID() {
 				return pgerror.Newf(
 					pgcode.InvalidColumnReference,
