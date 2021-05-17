@@ -500,27 +500,44 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	// collect the closure of ID's referenced.
 	ids := make(map[descpb.ID]struct{})
 	for id := range visitor.OIDs {
-		typDesc, err := getType(typedesc.UserDefinedTypeOIDToID(id))
+		uid, err := typedesc.UserDefinedTypeOIDToID(id)
 		if err != nil {
 			return nil, err
 		}
-		for child := range typDesc.GetIDClosure() {
+		typDesc, err := getType(uid)
+		if err != nil {
+			return nil, err
+		}
+		children, err := typDesc.GetIDClosure()
+		if err != nil {
+			return nil, err
+		}
+		for child := range children {
 			ids[child] = struct{}{}
 		}
 	}
 
 	// Now add all of the column types in the table.
-	addIDsInColumn := func(c *descpb.ColumnDescriptor) {
-		for id := range typedesc.GetTypeDescriptorClosure(c.Type) {
+	addIDsInColumn := func(c *descpb.ColumnDescriptor) error {
+		children, err := typedesc.GetTypeDescriptorClosure(c.Type)
+		if err != nil {
+			return err
+		}
+		for id := range children {
 			ids[id] = struct{}{}
 		}
+		return nil
 	}
 	for i := range desc.Columns {
-		addIDsInColumn(&desc.Columns[i])
+		if err := addIDsInColumn(&desc.Columns[i]); err != nil {
+			return nil, err
+		}
 	}
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
-			addIDsInColumn(c)
+			if err := addIDsInColumn(c); err != nil {
+				return nil, err
+			}
 		}
 	}
 
