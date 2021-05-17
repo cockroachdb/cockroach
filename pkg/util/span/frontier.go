@@ -108,7 +108,7 @@ type Frontier struct {
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.
-func MakeFrontier(spans ...roachpb.Span) *Frontier {
+func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
 	s := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
 	for _, span := range spans {
 		e := &frontierEntry{
@@ -119,12 +119,12 @@ func MakeFrontier(spans ...roachpb.Span) *Frontier {
 		}
 		s.idAlloc++
 		if err := s.tree.Insert(e, true /* fast */); err != nil {
-			panic(err)
+			return nil, err
 		}
 		heap.Push(&s.minHeap, e)
 	}
 	s.tree.AdjustRanges()
-	return s
+	return s, nil
 }
 
 // Frontier returns the minimum timestamp being tracked.
@@ -151,13 +151,15 @@ func (f *Frontier) PeekFrontierSpan() roachpb.Span {
 // represent this timestamped span (e.g. if it overlaps with the tracked span
 // set boundary). Similarly, an entry created by a previous Forward may be
 // partially overlapped and have to be split into two entries.
-func (f *Frontier) Forward(span roachpb.Span, ts hlc.Timestamp) bool {
+func (f *Frontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
 	prevFrontier := f.Frontier()
-	f.insert(span, ts)
-	return prevFrontier.Less(f.Frontier())
+	if err := f.insert(span, ts); err != nil {
+		return false, err
+	}
+	return prevFrontier.Less(f.Frontier()), nil
 }
 
-func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) {
+func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) error {
 	entryKeys := span.AsRange()
 	overlapping := f.tree.Get(entryKeys)
 
@@ -214,14 +216,14 @@ func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) {
 	if len(overlapping) == 1 {
 		spe := overlapping[0].(*frontierEntry)
 		if err := f.tree.Delete(spe, false /* fast */); err != nil {
-			panic(err)
+			return err
 		}
 		heap.Remove(&f.minHeap, spe.index)
 	} else {
 		for i := range overlapping {
 			spe := overlapping[i].(*frontierEntry)
 			if err := f.tree.Delete(spe, true /* fast */); err != nil {
-				panic(err)
+				return err
 			}
 			heap.Remove(&f.minHeap, spe.index)
 		}
@@ -230,13 +232,13 @@ func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) {
 	// Then insert!
 	if len(toInsert) == 1 {
 		if err := f.tree.Insert(&toInsert[0], false /* fast */); err != nil {
-			panic(err)
+			return err
 		}
 		heap.Push(&f.minHeap, &toInsert[0])
 	} else {
 		for i := range toInsert {
 			if err := f.tree.Insert(&toInsert[i], true /* fast */); err != nil {
-				panic(err)
+				return err
 			}
 			heap.Push(&f.minHeap, &toInsert[i])
 		}
@@ -245,6 +247,7 @@ func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) {
 	if needAdjust {
 		f.tree.AdjustRanges()
 	}
+	return nil
 }
 
 // Entries invokes the given callback with the current timestamp for each

@@ -33,6 +33,39 @@ func (f *Frontier) entriesStr() string {
 	return buf.String()
 }
 
+type frontierForwarder struct {
+	t        *testing.T
+	f        *Frontier
+	advanced bool
+}
+
+func (f frontierForwarder) expectedAdvanced(expected bool) frontierForwarder {
+	require.Equal(f.t, expected, f.advanced)
+	return f
+}
+func (f frontierForwarder) expectFrontier(wall int64) frontierForwarder {
+	require.Equal(f.t, hlc.Timestamp{WallTime: wall}, f.f.Frontier())
+	return f
+}
+func (f frontierForwarder) expectEntries(expected string) frontierForwarder {
+	require.Equal(f.t, expected, f.f.entriesStr())
+	return f
+}
+
+func makeFrontierForwarded(
+	t *testing.T, f *Frontier,
+) func(s roachpb.Span, wall int64) frontierForwarder {
+	t.Helper()
+	return func(s roachpb.Span, wall int64) frontierForwarder {
+		advanced, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
+		require.NoError(t, err)
+		return frontierForwarder{
+			t:        t,
+			f:        f,
+			advanced: advanced,
+		}
+	}
+}
 func TestSpanFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -46,107 +79,111 @@ func TestSpanFrontier(t *testing.T) {
 	spBD := roachpb.Span{Key: keyB, EndKey: keyD}
 	spCD := roachpb.Span{Key: keyC, EndKey: keyD}
 
-	f := MakeFrontier(spAD)
+	f, err := MakeFrontier(spAD)
+	require.NoError(t, err)
 	require.Equal(t, hlc.Timestamp{}, f.Frontier())
 	require.Equal(t, `{a-d}@0`, f.entriesStr())
+
+	forwardFrontier := makeFrontierForwarded(t, f)
 
 	// Untracked spans are ignored
-	adv := f.Forward(
-		roachpb.Span{Key: []byte("d"), EndKey: []byte("e")},
-		hlc.Timestamp{WallTime: 1},
-	)
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{}, f.Frontier())
-	require.Equal(t, `{a-d}@0`, f.entriesStr())
+	forwardFrontier(roachpb.Span{Key: []byte("d"), EndKey: []byte("e")}, 1).
+		expectedAdvanced(false).
+		expectFrontier(0).
+		expectEntries(`{a-d}@0`)
 
 	// Forward the entire tracked spanspace.
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 1})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 1}, f.Frontier())
-	require.Equal(t, `{a-d}@1`, f.entriesStr())
+	forwardFrontier(spAD, 1).
+		expectedAdvanced(true).
+		expectFrontier(1).
+		expectEntries(`{a-d}@1`)
 
 	// Forward it again.
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 2})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, f.Frontier())
-	require.Equal(t, `{a-d}@2`, f.entriesStr())
+	forwardFrontier(spAD, 2).
+		expectedAdvanced(true).
+		expectFrontier(2).
+		expectEntries(`{a-d}@2`)
 
 	// Forward to the previous frontier.
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 2})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, f.Frontier())
-	require.Equal(t, `{a-d}@2`, f.entriesStr())
+	forwardFrontier(spAD, 2).
+		expectedAdvanced(false).
+		expectFrontier(2).
+		expectEntries(`{a-d}@2`)
 
 	// Forward into the past is ignored.
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 1})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, f.Frontier())
-	require.Equal(t, `{a-d}@2`, f.entriesStr())
+	forwardFrontier(spAD, 1).
+		expectedAdvanced(false).
+		expectFrontier(2).
+		expectEntries(`{a-d}@2`)
 
 	// Forward a subset.
-	adv = f.Forward(spBC, hlc.Timestamp{WallTime: 3})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, f.Frontier())
-	require.Equal(t, `{a-b}@2 {b-c}@3 {c-d}@2`, f.entriesStr())
+	forwardFrontier(spBC, 3).
+		expectedAdvanced(false).
+		expectFrontier(2).
+		expectEntries(`{a-b}@2 {b-c}@3 {c-d}@2`)
 
 	// Forward it more.
-	adv = f.Forward(spBC, hlc.Timestamp{WallTime: 4})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, f.Frontier())
-	require.Equal(t, `{a-b}@2 {b-c}@4 {c-d}@2`, f.entriesStr())
+	forwardFrontier(spBC, 4).
+		expectedAdvanced(false).
+		expectFrontier(2).
+		expectEntries(`{a-b}@2 {b-c}@4 {c-d}@2`)
 
 	// Forward all tracked spans to timestamp before BC (currently at 4).
 	// Advances to the min of tracked spans. Note that this requires the
 	// forwarded span to be split into two spans, one on each side of BC.
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 3})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 3}, f.Frontier())
-	require.Equal(t, `{a-b}@3 {b-c}@4 {c-d}@3`, f.entriesStr())
+	forwardFrontier(spAD, 3).
+		expectedAdvanced(true).
+		expectFrontier(3).
+		expectEntries(`{a-b}@3 {b-c}@4 {c-d}@3`)
 
 	// Forward everything but BC, advances to the min of tracked spans.
-	adv = f.Forward(spAB, hlc.Timestamp{WallTime: 5})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 3}, f.Frontier())
-	adv = f.Forward(spCD, hlc.Timestamp{WallTime: 5})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 4}, f.Frontier())
-	require.Equal(t, `{a-b}@5 {b-c}@4 {c-d}@5`, f.entriesStr())
+	forwardFrontier(spAB, 5).
+		expectedAdvanced(false).
+		expectFrontier(3)
+
+	forwardFrontier(spCD, 5).
+		expectedAdvanced(true).
+		expectFrontier(4).
+		expectEntries(`{a-b}@5 {b-c}@4 {c-d}@5`)
 
 	// Catch BC up.
-	adv = f.Forward(spBC, hlc.Timestamp{WallTime: 5})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 5}, f.Frontier())
-	require.Equal(t, `{a-b}@5 {b-c}@5 {c-d}@5`, f.entriesStr())
+	forwardFrontier(spBC, 5).
+		expectedAdvanced(true).
+		expectFrontier(5).
+		expectEntries(`{a-b}@5 {b-c}@5 {c-d}@5`)
 
 	// Forward them all at once (spans don't collapse for now, this is a TODO).
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 6})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 6}, f.Frontier())
-	require.Equal(t, `{a-b}@6 {b-c}@6 {c-d}@6`, f.entriesStr())
+	forwardFrontier(spAD, 6).
+		expectedAdvanced(true).
+		expectFrontier(6).
+		expectEntries(`{a-b}@6 {b-c}@6 {c-d}@6`)
 
 	// Split AC with BD.
-	adv = f.Forward(spCD, hlc.Timestamp{WallTime: 7})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 6}, f.Frontier())
-	require.Equal(t, `{a-b}@6 {b-c}@6 {c-d}@7`, f.entriesStr())
-	adv = f.Forward(spBD, hlc.Timestamp{WallTime: 8})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 6}, f.Frontier())
-	require.Equal(t, `{a-b}@6 {b-c}@8 {c-d}@8`, f.entriesStr())
-	adv = f.Forward(spAB, hlc.Timestamp{WallTime: 8})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 8}, f.Frontier())
-	require.Equal(t, `{a-b}@8 {b-c}@8 {c-d}@8`, f.entriesStr())
+	forwardFrontier(spCD, 7).
+		expectedAdvanced(false).
+		expectFrontier(6).
+		expectEntries(`{a-b}@6 {b-c}@6 {c-d}@7`)
+
+	forwardFrontier(spBD, 8).
+		expectedAdvanced(false).
+		expectFrontier(6).
+		expectEntries(`{a-b}@6 {b-c}@8 {c-d}@8`)
+
+	forwardFrontier(spAB, 8).
+		expectedAdvanced(true).
+		expectFrontier(8).
+		expectEntries(`{a-b}@8 {b-c}@8 {c-d}@8`)
 
 	// Split BD with AC.
-	adv = f.Forward(spAC, hlc.Timestamp{WallTime: 9})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 8}, f.Frontier())
-	require.Equal(t, `{a-b}@9 {b-c}@9 {c-d}@8`, f.entriesStr())
-	adv = f.Forward(spCD, hlc.Timestamp{WallTime: 9})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 9}, f.Frontier())
-	require.Equal(t, `{a-b}@9 {b-c}@9 {c-d}@9`, f.entriesStr())
+	forwardFrontier(spAC, 9).
+		expectedAdvanced(false).
+		expectFrontier(8).
+		expectEntries(`{a-b}@9 {b-c}@9 {c-d}@8`)
+
+	forwardFrontier(spCD, 9).
+		expectedAdvanced(true).
+		expectFrontier(9).
+		expectEntries(`{a-b}@9 {b-c}@9 {c-d}@9`)
 }
 
 func TestSpanFrontierDisjointSpans(t *testing.T) {
@@ -158,31 +195,35 @@ func TestSpanFrontierDisjointSpans(t *testing.T) {
 	spCE := roachpb.Span{Key: keyC, EndKey: keyE}
 	spDF := roachpb.Span{Key: keyD, EndKey: keyF}
 
-	f := MakeFrontier(spAB, spCE)
+	f, err := MakeFrontier(spAB, spCE)
+	require.NoError(t, err)
 	require.Equal(t, hlc.Timestamp{}, f.Frontier())
 	require.Equal(t, `{a-b}@0 {c-e}@0`, f.entriesStr())
 
+	forwardFrontier := makeFrontierForwarded(t, f)
+
 	// Advance just the tracked spans
-	adv := f.Forward(spCE, hlc.Timestamp{WallTime: 1})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{}, f.Frontier())
-	require.Equal(t, `{a-b}@0 {c-e}@1`, f.entriesStr())
-	adv = f.Forward(spAB, hlc.Timestamp{WallTime: 1})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 1}, f.Frontier())
-	require.Equal(t, `{a-b}@1 {c-e}@1`, f.entriesStr())
+	forwardFrontier(spCE, 1).
+		expectedAdvanced(false).
+		expectFrontier(0).
+		expectEntries(`{a-b}@0 {c-e}@1`)
+
+	forwardFrontier(spAB, 1).
+		expectedAdvanced(true).
+		expectFrontier(1).
+		expectEntries(`{a-b}@1 {c-e}@1`)
 
 	// Advance a span that partially overlaps the tracked spans
-	adv = f.Forward(spDF, hlc.Timestamp{WallTime: 2})
-	require.Equal(t, false, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 1}, f.Frontier())
-	require.Equal(t, `{a-b}@1 {c-d}@1 {d-e}@2`, f.entriesStr())
+	forwardFrontier(spDF, 2).
+		expectedAdvanced(false).
+		expectFrontier(1).
+		expectEntries(`{a-b}@1 {c-d}@1 {d-e}@2`)
 
 	// Advance one span that covers two tracked spans and so needs two entries.
-	adv = f.Forward(spAD, hlc.Timestamp{WallTime: 3})
-	require.Equal(t, true, adv)
-	require.Equal(t, hlc.Timestamp{WallTime: 2}, f.Frontier())
-	require.Equal(t, `{a-b}@3 {c-d}@3 {d-e}@2`, f.entriesStr())
+	forwardFrontier(spAD, 3).
+		expectedAdvanced(true).
+		expectFrontier(2).
+		expectEntries(`{a-b}@3 {c-d}@3 {d-e}@2`)
 }
 
 func TestSpanFrontierHeap(t *testing.T) {
