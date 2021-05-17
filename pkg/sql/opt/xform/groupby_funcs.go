@@ -56,9 +56,10 @@ func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
 	}, grp)
 }
 
-// GenerateStreamingGroupBy generates variants of a GroupBy or DistinctOn
-// expression with more specific orderings on the grouping columns, using the
-// interesting orderings property. See the GenerateStreamingGroupBy rule.
+// GenerateStreamingGroupBy generates variants of a GroupBy, DistinctOn,
+// EnsureDistinctOn, UpsertDistinctOn, or EnsureUpsertDistinctOn expression
+// with more specific orderings on the grouping columns, using the interesting
+// orderings property. See the GenerateStreamingGroupBy rule.
 func (c *CustomFuncs) GenerateStreamingGroupBy(
 	grp memo.RelExpr,
 	op opt.Operator,
@@ -197,4 +198,61 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 		oc.AppendCol(col, true /* descending */)
 	}
 	return oc
+}
+
+// SplitGroupByScanIntoUnionScans splits a non-inverted scan under a GroupBy,
+// DistinctOn, or EnsureUpsertDistinctOn into a UnionAll of scans, where each
+// scan can provide an ordering on the grouping columns. If no such UnionAll
+// can be built, returns ok=false.
+//
+// This is useful because the GenerateStreamingGroupBy rule can then create a
+// streaming grouping operation, which is more efficient.
+// GenerateStreamingGroupBy will use the new interesting orderings provided by
+// the UnionAll of scans to build the streaming operation.
+//
+// See the SplitGroupByScanIntoUnionScans rule for more details.
+func (c *CustomFuncs) SplitGroupByScanIntoUnionScans(
+	scan memo.RelExpr, sp *memo.ScanPrivate, private *memo.GroupingPrivate,
+) (_ memo.RelExpr, ok bool) {
+	cons, ok := c.getKnownScanConstraint(sp)
+	if !ok {
+		// No valid constraint was found.
+		return nil, false
+	}
+
+	intraOrd := private.Ordering
+
+	// Find the length of the prefix of index columns preceding the first groupby
+	// ordering column. We will verify later that the entire ordering sequence is
+	// represented in the index. Ex:
+	//
+	//     Index: +1/+2/-3, Group By internal ordering +3 opt(4) => Prefix Length: 2
+	//
+	keyPrefixLength := cons.Columns.Count()
+	for i := 0; i < cons.Columns.Count(); i++ {
+		col := cons.Columns.Get(i).ID()
+		if private.GroupingCols.Contains(col) || intraOrd.Optional.Contains(col) {
+			// Grouping or optional column.
+			keyPrefixLength = i
+			break
+		}
+		if len(intraOrd.Columns) > 0 &&
+			intraOrd.Columns[0].Group.Contains(col) {
+			// Column matches the one in the ordering.
+			keyPrefixLength = i
+			break
+		}
+	}
+	if keyPrefixLength == 0 {
+		// This case can be handled by GenerateStreamingGroupBy.
+		return nil, false
+	}
+
+	// Create a UnionAll of scans that can provide the ordering of the
+	// GroupingPrivate (if no such UnionAll is possible this will return
+	// ok=false). We pass a limit of 0 since the scans are unlimited
+	// (splitScanIntoUnionScans is also used for another rule with limited scans).
+	return c.SplitScanIntoUnionScans(
+		intraOrd, scan, sp, cons, 0 /* limit */, keyPrefixLength,
+	)
 }

@@ -1070,21 +1070,106 @@ SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: child@child_c_p_id_idx
-            │ equality: (lookup_join_const_col_@12, p_id) = (crdb_region,c_p_id)
+        └── • merge join
+            │ equality: (p_id) = (c_p_id)
+            │ left cols are key
+            │ right cols are key
             │
-            └── • cross join
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: c_p_id
+                │ order key: c_p_id
                 │
-                ├── • values
-                │     size: 1 column, 3 rows
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • union all
+                    │
+                    ├── • union all
+                    │   │
+                    │   ├── • scan
+                    │   │     missing stats
+                    │   │     table: child@child_c_p_id_idx
+                    │   │     spans: [/'ap-southeast-2' - /'ap-southeast-2']
+                    │   │
+                    │   └── • scan
+                    │         missing stats
+                    │         table: child@child_c_p_id_idx
+                    │         spans: [/'ca-central-1' - /'ca-central-1']
+                    │
+                    └── • scan
+                          missing stats
+                          table: child@child_c_p_id_idx
+                          spans: [/'us-east-1' - /'us-east-1']
 
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
 CREATE INDEX new_idx ON regional_by_row_table(a, b)
+
+# The validation query to create the unique constraint should be efficient (see
+# #56201).
+statement ok
+CREATE TABLE t56201 (a INT, b STRING) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b);
+
+query T
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT a, b
+FROM t56201
+GROUP BY a, b
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
+----
+·
+• project
+│ columns: (a, b)
+│ estimated row count: 1 (missing stats)
+│
+└── • limit
+    │ columns: (a, b, count_rows)
+    │ estimated row count: 1 (missing stats)
+    │ count: 1
+    │
+    └── • filter
+        │ columns: (a, b, count_rows)
+        │ estimated row count: 330 (missing stats)
+        │ filter: count_rows > 1
+        │
+        └── • group
+            │ columns: (a, b, count_rows)
+            │ estimated row count: 991 (missing stats)
+            │ aggregate 0: count_rows()
+            │ group by: a, b
+            │ ordered: +a,+b
+            │
+            └── • union all
+                │ columns: (a, b)
+                │ ordering: +a,+b
+                │ estimated row count: 30 (missing stats)
+                │
+                ├── • union all
+                │   │ columns: (a, b)
+                │   │ ordering: +a,+b
+                │   │ estimated row count: 20 (missing stats)
+                │   │
+                │   ├── • scan
+                │   │     columns: (a, b)
+                │   │     ordering: +a,+b
+                │   │     estimated row count: 10 (missing stats)
+                │   │     table: t56201@key_a_b
+                │   │     spans: /"@"-/"@"/PrefixEnd
+                │   │
+                │   └── • scan
+                │         columns: (a, b)
+                │         ordering: +a,+b
+                │         estimated row count: 10 (missing stats)
+                │         table: t56201@key_a_b
+                │         spans: /"\x80"-/"\x80"/PrefixEnd
+                │
+                └── • scan
+                      columns: (a, b)
+                      ordering: +a,+b
+                      estimated row count: 10 (missing stats)
+                      table: t56201@key_a_b
+                      spans: /"\xc0"-/"\xc0"/PrefixEnd
 
 statement ok
 ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
