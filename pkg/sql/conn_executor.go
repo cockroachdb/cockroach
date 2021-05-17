@@ -2711,7 +2711,15 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
 		states[i] = scs.nodes[i].State
-		descIDSet.Add(scs.nodes[i].Element().DescriptorID())
+		// Depending on the element type either a single descriptor ID
+		// will exist or multiple (i.e. foreign keys).
+		if scs.nodes[i].Element().DescriptorID() != descpb.InvalidID {
+			descIDSet.Add(scs.nodes[i].Element().DescriptorID())
+		} else if descSet, ok := scs.nodes[i].Element().(scpb.ElementDescriptorSet); ok {
+			for _, desc := range descSet.DescriptorSet() {
+				descIDSet.Add(desc)
+			}
+		}
 	}
 	descIDs := descIDSet.Ordered()
 	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{

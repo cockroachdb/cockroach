@@ -467,4 +467,31 @@ func (m *visitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) 
 	return nil
 }
 
+func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyRef) error {
+	table, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	fks := table.TableDesc().OutboundFKs
+	if !op.Outbound {
+		fks = table.TableDesc().InboundFKs
+	}
+	newFks := make([]descpb.ForeignKeyConstraint, 0, len(fks))
+	for _, fk := range fks {
+		if op.Outbound && fk.OriginTableID != op.TableID ||
+			op.Name != fk.Name {
+			newFks = append(newFks, fk)
+		} else if fk.ReferencedTableID != op.TableID ||
+			op.Name != fk.Name {
+			newFks = append(newFks, fk)
+		}
+	}
+	if op.Outbound {
+		table.TableDesc().OutboundFKs = newFks
+	} else {
+		table.TableDesc().InboundFKs = newFks
+	}
+	return nil
+}
+
 var _ scop.MutationVisitor = (*visitor)(nil)

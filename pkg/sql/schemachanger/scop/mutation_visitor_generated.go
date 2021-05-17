@@ -43,6 +43,7 @@ type MutationVisitor interface {
 	MakeColumnAbsent(context.Context, MakeColumnAbsent) error
 	AddCheckConstraint(context.Context, AddCheckConstraint) error
 	AddColumnFamily(context.Context, AddColumnFamily) error
+	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -148,4 +149,9 @@ func (op AddCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error
 // Visit is part of the MutationOp interface.
 func (op AddColumnFamily) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.AddColumnFamily(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DropForeignKeyRef(ctx, op)
 }

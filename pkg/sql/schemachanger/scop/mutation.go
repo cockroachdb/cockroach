@@ -201,3 +201,10 @@ type AddColumnFamily struct {
 	TableID descpb.ID
 	Family  descpb.ColumnFamilyDescriptor
 }
+
+type DropForeignKeyRef struct {
+	mutationOp
+	TableID  descpb.ID
+	Name     string
+	Outbound bool
+}

@@ -39,10 +39,12 @@ func (b *buildContext) maybeDropViewAndDependents(
 	viewNode := &scpb.View{
 		TableID:      view.GetID(),
 		DependedOnBy: make([]descpb.ID, 0, len(view.GetDependedOnBy())),
+		DependsOn:    make([]descpb.ID, 0, len(view.TableDesc().DependsOn)),
 	}
 	for _, dep := range view.GetDependedOnBy() {
 		viewNode.DependedOnBy = append(viewNode.DependedOnBy, dep.ID)
 	}
+	viewNode.DependsOn = view.TableDesc().DependsOn
 	if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, viewNode); exists {
 		return
 	}
