@@ -169,7 +169,7 @@ func CopyInFileStmt(destination, schema, table string) string {
 func (f *fileUploadMachine) run(ctx context.Context) error {
 	err := f.c.run(ctx)
 	if err != nil {
-		err = errors.CombineErrors(err, f.w.CloseWithError(err))
+		err = errors.CombineErrors(f.w.CloseWithError(err), err)
 	} else {
 		err = f.w.Close()
 	}

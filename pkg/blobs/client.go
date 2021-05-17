@@ -114,7 +114,8 @@ func (w *streamWriter) CloseWithError(err error) error {
 		return w.Close()
 	}
 	w.cancel()
-	return nil
+	_, err = w.s.CloseAndRecv()
+	return err
 }
 
 func (c *remoteClient) Writer(ctx context.Context, file string) (WriteCloserWithError, error) {
