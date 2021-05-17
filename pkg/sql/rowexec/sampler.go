@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const defaultMinSampleSize = 200
+
 // sketchInfo contains the specification and run-time state for each sketch.
 type sketchInfo struct {
 	spec     execinfrapb.SketchSpec
@@ -101,6 +103,7 @@ func newSamplerProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.SamplerSpec,
+	minSampleSize int,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
@@ -145,7 +148,7 @@ func newSamplerProcessor(
 		// sent as single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		sr.Init(int(spec.SampleSize), minSampleSize, bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		sketchSpec := spec.InvertedSketches[i]
@@ -159,7 +162,7 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), inTypes, &s.memAcc, sampleCols)
+	s.sr.Init(int(spec.SampleSize), minSampleSize, inTypes, &s.memAcc, sampleCols)
 
 	outTypes := make([]*types.T, 0, len(inTypes)+7)
 
@@ -450,6 +453,7 @@ func (s *samplerProcessor) sampleRow(
 ) (earlyExit bool, err error) {
 	// Use Int63 so we don't have headaches converting to DInt.
 	rank := uint64(rng.Int63())
+	prevCapacity := sr.Cap()
 	if err := sr.SampleRow(ctx, s.EvalCtx, row, rank); err != nil {
 		if !sqlerrors.IsOutOfMemoryError(err) {
 			return false, err
@@ -468,6 +472,11 @@ func (s *samplerProcessor) sampleRow(
 		if !emitHelper(ctx, &s.Out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
+	} else if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return false, nil
 }
