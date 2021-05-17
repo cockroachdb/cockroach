@@ -141,7 +141,7 @@ func (sr *SampleReservoir) SampleRow(
 		// Perform memory accounting for the allocated EncDatumRow. We will account
 		// for the additional memory used after copying inside copyRow.
 		if sr.memAcc != nil {
-			if err := sr.memAcc.Grow(ctx, int64(len(rowCopy))*int64(rowCopy[0].Size())); err != nil {
+			if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
 				return err
 			}
 		}
@@ -203,8 +203,8 @@ func (sr *SampleReservoir) copyRow(
 		}
 
 		// Perform memory accounting.
-		if sr.memAcc != nil && afterSize > beforeSize {
-			if err := sr.memAcc.Grow(ctx, int64(afterSize-beforeSize)); err != nil {
+		if sr.memAcc != nil {
+			if err := sr.memAcc.Resize(ctx, int64(beforeSize), int64(afterSize)); err != nil {
 				return err
 			}
 		}
