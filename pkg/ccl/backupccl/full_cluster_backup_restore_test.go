@@ -721,6 +721,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
+	sqlDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[0])
 	tc = testCase{
 		ts: ts[0],
@@ -732,6 +733,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 	testCases = append(testCases, tc)
 
 	sqlDB.Exec(t, `CREATE DATABASE d2`)
+	sqlDB.Exec(t, `CREATE TABLE d2.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[1])
 	tc = testCase{
 		ts: ts[1],
@@ -749,34 +751,38 @@ func TestClusterRevisionHistory(t *testing.T) {
 		ts: ts[2],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
 			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 			checkSQLDB.ExpectErr(t, `database "d2" already exists`, `CREATE DATABASE d2`)
+			checkSQLDB.ExpectErr(t, `relation "d2.public.t" already exists`, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
 
-	// Now let's test an incremental backup with revision history. At the start of
-	// the incremental backup, we expect only d2 to exist.
-	sqlDB.Exec(t, `DROP DATABASE d2;`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
+	sqlDB.Exec(t, `DROP DATABASE d2;`)
 	tc = testCase{
 		ts: ts[3],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
-			// Neither database should exist at this point in time.
 			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
-			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+			checkSQLDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
+			checkSQLDB.ExpectErr(t, `database "d2" already exists`, `CREATE DATABASE d2`)
+			checkSQLDB.ExpectErr(t, `relation "d2.public.t" already exists`, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
 	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, LocalFoo)
 
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
+	sqlDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
 	tc = testCase{
 		ts: ts[4],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
 			checkSQLDB.ExpectErr(t, `database "d1" already exists`, `CREATE DATABASE d1`)
+			checkSQLDB.ExpectErr(t, `relation "d1.public.t" already exists`, `CREATE TABLE d1.t (a INT)`)
 			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+			checkSQLDB.Exec(t, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
@@ -787,7 +793,9 @@ func TestClusterRevisionHistory(t *testing.T) {
 		ts: ts[5],
 		check: func(t *testing.T, checkSQLDB *sqlutils.SQLRunner) {
 			checkSQLDB.Exec(t, `CREATE DATABASE d1`)
+			checkSQLDB.Exec(t, `CREATE TABLE d1.t (a INT)`)
 			checkSQLDB.Exec(t, `CREATE DATABASE d2`)
+			checkSQLDB.Exec(t, `CREATE TABLE d2.t (a INT)`)
 		},
 	}
 	testCases = append(testCases, tc)
