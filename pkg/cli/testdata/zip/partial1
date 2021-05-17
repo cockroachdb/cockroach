@@ -19,7 +19,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
 [cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
 [cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
-[cluster] retrieving SQL data for system.namespace2... writing output: debug/system.namespace2.txt... done
 [cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_node_status... writing output: debug/crdb_internal.kv_node_status.txt... done
 [cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.txt... done
@@ -266,7 +265,7 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] [database: postgres] requesting database details... received response... converting to JSON... writing binary output: debug/schema/postgres@details.json... done
 [cluster] [database: postgres] 0 tables found
 [cluster] [database: system] requesting database details... received response... converting to JSON... writing binary output: debug/schema/system@details.json... done
-[cluster] [database: system] 31 tables found
+[cluster] [database: system] 30 tables found
 [cluster] [database: system] [table: public.comments] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_comments.json... done
 [cluster] [database: system] [table: public.descriptor] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_descriptor.json... done
 [cluster] [database: system] [table: public.eventlog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_eventlog.json... done
@@ -276,7 +275,6 @@ debug zip --concurrency=1 --cpu-profile-duration=0s /dev/null
 [cluster] [database: system] [table: public.locations] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_locations.json... done
 [cluster] [database: system] [table: public.migrations] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_migrations.json... done
 [cluster] [database: system] [table: public.namespace] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_namespace.json... done
-[cluster] [database: system] [table: public.namespace2] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_namespace2.json... done
 [cluster] [database: system] [table: public.protected_ts_meta] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_protected_ts_meta.json... done
 [cluster] [database: system] [table: public.protected_ts_records] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_protected_ts_records.json... done
 [cluster] [database: system] [table: public.rangelog] requesting table details... received response... converting to JSON... writing binary output: debug/schema/system/public_rangelog.json... done

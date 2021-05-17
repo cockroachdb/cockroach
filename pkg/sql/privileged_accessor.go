@@ -31,35 +31,21 @@ import (
 func (p *planner) LookupNamespaceID(
 	ctx context.Context, parentID int64, name string,
 ) (tree.DInt, bool, error) {
-	var r tree.Datums
-	for _, t := range []struct {
-		tableName   string
-		extraClause string
-	}{
-		{fmt.Sprintf("[%d AS namespace]", keys.NamespaceTableID), `AND "parentSchemaID" IN (0, 29)`},
-		{fmt.Sprintf("[%d AS namespace]", keys.DeprecatedNamespaceTableID), ""},
-	} {
-		query := fmt.Sprintf(
-			`SELECT id FROM %s WHERE "parentID" = $1 AND name = $2 %s`,
-			t.tableName,
-			t.extraClause,
-		)
-		var err error
-		r, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
-			ctx,
-			"crdb-internal-get-descriptor-id",
-			p.txn,
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			query,
-			parentID,
-			name,
-		)
-		if err != nil {
-			return 0, false, err
-		}
-		if r != nil {
-			break
-		}
+	query := fmt.Sprintf(
+		`SELECT id FROM [%d AS namespace] WHERE "parentID" = $1 AND "parentSchemaID" IN (0, 29) AND name = $2`,
+		keys.NamespaceTableID,
+	)
+	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+		ctx,
+		"crdb-internal-get-descriptor-id",
+		p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		query,
+		parentID,
+		name,
+	)
+	if err != nil {
+		return 0, false, err
 	}
 	if r == nil {
 		return 0, false, nil

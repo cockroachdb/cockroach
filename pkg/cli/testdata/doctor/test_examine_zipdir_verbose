@@ -2,11 +2,10 @@ debug doctor zipdir --verbose
 ----
 debug doctor zipdir testdata/doctor/debugzip --verbose
 reading testdata/doctor/debugzip/system.descriptor.txt
-reading testdata/doctor/debugzip/system.namespace2.txt
+reading testdata/doctor/debugzip/system.namespace.txt
 reading testdata/doctor/debugzip/system.jobs.txt
-Examining 38 descriptors and 43 namespace entries...
+Examining 37 descriptors and 42 namespace entries...
   ParentID   0, ParentSchemaID  0: database "system" (1): processed
-  ParentID   1, ParentSchemaID 29: relation "namespace" (2): processed
   ParentID   1, ParentSchemaID 29: relation "descriptor" (3): processed
   ParentID   1, ParentSchemaID 29: relation "users" (4): processed
   ParentID   1, ParentSchemaID 29: relation "zones" (5): processed
@@ -26,7 +25,7 @@ Examining 38 descriptors and 43 namespace entries...
   ParentID   1, ParentSchemaID 29: relation "replication_critical_localities" (26): processed
   ParentID   1, ParentSchemaID 29: relation "replication_stats" (27): processed
   ParentID   1, ParentSchemaID 29: relation "reports_meta" (28): processed
-  ParentID   1, ParentSchemaID 29: relation "namespace2" (30): processed
+  ParentID   1, ParentSchemaID 29: relation "namespace" (30): processed
   ParentID   1, ParentSchemaID 29: relation "protected_ts_meta" (31): processed
   ParentID   1, ParentSchemaID 29: relation "protected_ts_records" (32): processed
   ParentID   1, ParentSchemaID 29: relation "role_options" (33): processed
@@ -60,8 +59,7 @@ Examining 38 descriptors and 43 namespace entries...
   ParentID   1, ParentSchemaID 29: namespace entry "jobs" (15): processed
   ParentID   1, ParentSchemaID 29: namespace entry "lease" (11): processed
   ParentID   1, ParentSchemaID 29: namespace entry "locations" (21): processed
-  ParentID   1, ParentSchemaID 29: namespace entry "namespace" (2): processed
-  ParentID   1, ParentSchemaID 29: namespace entry "namespace2" (30): processed
+  ParentID   1, ParentSchemaID 29: namespace entry "namespace" (30): processed
   ParentID   1, ParentSchemaID 29: namespace entry "protected_ts_meta" (31): processed
   ParentID   1, ParentSchemaID 29: namespace entry "protected_ts_records" (32): processed
   ParentID   1, ParentSchemaID 29: namespace entry "rangelog" (13): processed

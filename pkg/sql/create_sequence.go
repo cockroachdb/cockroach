@@ -131,13 +131,7 @@ func doCreateSequence(
 	// makeSequenceTableDesc already validates the table. No call to
 	// desc.ValidateSelf() needed here.
 
-	key := catalogkv.MakeObjectNameKey(
-		params.ctx,
-		params.ExecCfg().Settings,
-		dbDesc.GetID(),
-		schemaID,
-		name.Object(),
-	).Key(params.ExecCfg().Codec)
+	key := catalogkv.MakeObjectNameKey(dbDesc.GetID(), schemaID, name.Object()).Key(params.ExecCfg().Codec)
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {

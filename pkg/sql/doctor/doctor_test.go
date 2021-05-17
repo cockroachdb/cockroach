@@ -35,7 +35,7 @@ import (
 var validTableDesc = &descpb.Descriptor{
 	Union: &descpb.Descriptor_Table{
 		Table: &descpb.TableDescriptor{
-			Name: "t", ID: 1, ParentID: 2,
+			Name: "t", ID: 51, ParentID: 52,
 			Columns: []descpb.ColumnDescriptor{
 				{Name: "col", ID: 1, Type: types.Int},
 			},
@@ -100,7 +100,7 @@ func TestExamineDescriptors(t *testing.T) {
 	inSchemaValidTableDesc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 	{
 		tbl, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(inSchemaValidTableDesc, hlc.Timestamp{WallTime: 1})
-		tbl.UnexposedParentSchemaID = 3
+		tbl.UnexposedParentSchemaID = 53
 	}
 
 	tests := []struct {
@@ -179,21 +179,21 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{ // 7
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
+				{ID: 51, DescBytes: toBytes(t, validTableDesc)},
 				{
-					ID: 2,
+					ID: 52,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 52},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "t"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "t"}, ID: 51},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   2, ParentSchemaID 29: relation "t" (1): expected matching namespace entry, found none
-  ParentID   0, ParentSchemaID 29: namespace entry "t" (1): no matching name info found in non-dropped relation "t"
+  ParentID  52, ParentSchemaID 29: relation "t" (51): expected matching namespace entry, found none
+  ParentID   0, ParentSchemaID 29: namespace entry "t" (51): no matching name info found in non-dropped relation "t"
 `,
 		},
 		{ // 8
@@ -295,35 +295,35 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{ // 12
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, inSchemaValidTableDesc)},
+				{ID: 51, DescBytes: toBytes(t, inSchemaValidTableDesc)},
 				{
-					ID: 2,
+					ID: 52,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 52},
 					}}),
 				},
 				{
-					ID: 3,
+					ID: 53,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
-						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 3, ParentID: 4},
+						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 53, ParentID: 54},
 					}}),
 				},
 				{
-					ID: 4,
+					ID: 54,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db2", ID: 4},
+						Database: &descpb.DatabaseDescriptor{Name: "db2", ID: 54},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 3, Name: "t"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
-				{NameInfo: descpb.NameInfo{ParentID: 4, Name: "schema"}, ID: 3},
-				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 4},
+				{NameInfo: descpb.NameInfo{ParentID: 52, ParentSchemaID: 53, Name: "t"}, ID: 51},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
+				{NameInfo: descpb.NameInfo{ParentID: 54, Name: "schema"}, ID: 53},
+				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 54},
 			},
 			expected: `Examining 4 descriptors and 4 namespace entries...
-  ParentID   2, ParentSchemaID  3: relation "t" (1): parent schema 3 is in different database 4
-  ParentID   4, ParentSchemaID  0: schema "schema" (3): not present in parent database [4] schemas mapping
+  ParentID  52, ParentSchemaID 53: relation "t" (51): parent schema 53 is in different database 54
+  ParentID  54, ParentSchemaID  0: schema "schema" (53): not present in parent database [54] schemas mapping
 `,
 		},
 		{ // 13
@@ -348,17 +348,17 @@ func TestExamineDescriptors(t *testing.T) {
 		{ // 15
 			valid: true,
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
+				{ID: 51, DescBytes: toBytes(t, validTableDesc)},
 				{
-					ID: 2,
+					ID: 52,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 52},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+				{NameInfo: descpb.NameInfo{ParentID: 52, ParentSchemaID: 29, Name: "t"}, ID: 51},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
 			expected: "Examining 2 descriptors and 2 namespace entries...\n",
 		},
@@ -408,25 +408,25 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{ // 18
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, droppedValidTableDesc)},
+				{ID: 51, DescBytes: toBytes(t, droppedValidTableDesc)},
 				{
-					ID: 2,
+					ID: 52,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 52},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+				{NameInfo: descpb.NameInfo{ParentID: 52, ParentSchemaID: 29, Name: "t"}, ID: 51},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   2, ParentSchemaID 29: namespace entry "t" (1): no matching name info in draining names of dropped relation
+  ParentID  52, ParentSchemaID 29: namespace entry "t" (51): no matching name info in draining names of dropped relation
 `,
 		},
 		{ // 19
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, func() *descpb.Descriptor {
+				{ID: 51, DescBytes: toBytes(t, func() *descpb.Descriptor {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 					tbl, _, _, _ := descpb.FromDescriptor(desc)
 					tbl.PrimaryIndex.Disabled = true
@@ -437,19 +437,19 @@ func TestExamineDescriptors(t *testing.T) {
 					return desc
 				}())},
 				{
-					ID: 2,
+					ID: 52,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 52},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+				{NameInfo: descpb.NameInfo{ParentID: 52, ParentSchemaID: 29, Name: "t"}, ID: 51},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   2, ParentSchemaID 29: relation "t" (1): invalid interleave backreference table=500 index=1: referenced table ID 500: descriptor not found
-  ParentID   2, ParentSchemaID 29: relation "t" (1): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
+  ParentID  52, ParentSchemaID 29: relation "t" (51): invalid interleave backreference table=500 index=1: referenced table ID 500: descriptor not found
+  ParentID  52, ParentSchemaID 29: relation "t" (51): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 `,
 		},
 		{ // 20
@@ -490,22 +490,22 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{ // 21
 			descTable: doctor.DescriptorTable{
-				{ID: 1, DescBytes: toBytes(t, func() *descpb.Descriptor {
+				{ID: 51, DescBytes: toBytes(t, func() *descpb.Descriptor {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 					tbl, _, _, _ := descpb.FromDescriptor(desc)
 					tbl.MutationJobs = []descpb.TableDescriptor_MutationJob{{MutationID: 1, JobID: 123}}
 					return desc
 				}())},
 				{
-					ID: 2,
+					ID: 52,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
-						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 52},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
-				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+				{NameInfo: descpb.NameInfo{ParentID: 52, ParentSchemaID: 29, Name: "t"}, ID: 51},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 52},
 			},
 			jobsTable: doctor.JobsTable{
 				{
@@ -515,7 +515,7 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   2, ParentSchemaID 29: relation "t" (1): mutation job 123 has terminal status (canceled)
+  ParentID  52, ParentSchemaID 29: relation "t" (51): mutation job 123 has terminal status (canceled)
 `,
 		},
 	}

@@ -25,9 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLookupNamespaceID tests the lookup namespace id falls back
-// onto system.namespace_deprecated.
-func TestLookupNamespaceIDFallback(t *testing.T) {
+// TestLookupNamespaceID tests the lookup namespace id.
+func TestLookupNamespaceID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -39,7 +38,7 @@ func TestLookupNamespaceIDFallback(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(
 			ctx,
-			catalogkeys.NewDeprecatedTableKey(999, "bob").Key(keys.SystemSQLCodec),
+			catalogkeys.NewPublicTableKey(999, "bob").Key(keys.SystemSQLCodec),
 			9999,
 		)
 	})

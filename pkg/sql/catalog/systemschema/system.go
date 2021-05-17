@@ -59,7 +59,7 @@ func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
 // These system tables are part of the system config.
 const (
 	NamespaceTableSchema = `
-CREATE TABLE system.namespace2 (
+CREATE TABLE system.namespace (
   "parentID" INT8,
   "parentSchemaID" INT8,
   name       STRING,
@@ -413,59 +413,12 @@ var (
 	// SystemDB is the descriptor for the system database.
 	SystemDB = MakeSystemDatabaseDesc()
 
-	// NamespaceTableName is "namespace", which is always and forever the
-	// user-visible name of the system.namespace table. Tautological, but
-	// important.
-	NamespaceTableName = "namespace"
-
-	// DeprecatedNamespaceTable is the descriptor for the deprecated namespace table.
-	DeprecatedNamespaceTable = makeTable(descpb.TableDescriptor{
-		Name:                    NamespaceTableName,
-		ID:                      keys.DeprecatedNamespaceTableID,
-		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
-		Version:                 1,
-		Columns: []descpb.ColumnDescriptor{
-			{Name: "parentID", ID: 1, Type: types.Int},
-			{Name: "name", ID: 2, Type: types.String},
-			{Name: "id", ID: 3, Type: types.Int, Nullable: true},
-		},
-		NextColumnID: 4,
-		Families: []descpb.ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "name"}, ColumnIDs: []descpb.ColumnID{1, 2}},
-			{Name: "fam_3_id", ID: 3, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
-		},
-		NextFamilyID: 4,
-		PrimaryIndex: descpb.IndexDescriptor{
-			Name:             "primary",
-			ID:               1,
-			Unique:           true,
-			ColumnNames:      []string{"parentID", "name"},
-			ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-			ColumnIDs:        []descpb.ColumnID{1, 2},
-			Version:          descpb.StrictIndexColumnIDGuaranteesVersion,
-		},
-		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID], security.NodeUserName()),
-		FormatVersion:  descpb.InterleavedFormatVersion,
-		NextMutationID: 1,
-	})
-
 	// NamespaceTable is the descriptor for the namespace table. Note that this
 	// table should only be written to via KV puts, not via the SQL layer. Some
 	// code assumes that it only has KV entries for column family 4, not the
 	// "sentinel" column family 0 which would be written by SQL.
-	//
-	// Note that the Descriptor.Name of this table is not "namespace", but
-	// something else. This is because, in 20.1, we moved the representation of
-	// namespaces to a new place, and for various reasons, we can't have two
-	// descriptors with the same Name at once.
-	//
-	// TODO(solon): in 20.2, we should change the Name of this descriptor
-	// back to "namespace".
 	NamespaceTable = makeTable(descpb.TableDescriptor{
-		Name:                    "namespace2",
+		Name:                    "namespace",
 		ID:                      keys.NamespaceTableID,
 		ParentID:                keys.SystemDatabaseID,
 		UnexposedParentSchemaID: keys.PublicSchemaID,
@@ -493,7 +446,7 @@ var (
 		},
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
-			descpb.SystemAllowedPrivileges[keys.DeprecatedNamespaceTableID], security.NodeUserName(),
+			descpb.SystemAllowedPrivileges[keys.NamespaceTableID], security.NodeUserName(),
 		),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,

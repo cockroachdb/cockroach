@@ -348,7 +348,7 @@ const (
 	SystemDatabaseID = 1
 	// DeprecatedNamespaceTableID was the tableID for the system.namespace table
 	// for pre-20.1 clusters.
-	DeprecatedNamespaceTableID = 2
+	DeprecatedNamespaceTableID = 2 // pseudo
 	DescriptorTableID          = 3
 	UsersTableID               = 4
 	ZonesTableID               = 5

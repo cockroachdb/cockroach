@@ -154,20 +154,6 @@ type Key int
 const (
 	_ Key = iota - 1 // want first named one to start at zero
 
-	// v20.1 versions.
-	//
-	// NamespaceTableWithSchemas is
-	// https://github.com/cockroachdb/cockroach/pull/41977
-	//
-	// It represents the migration to a new system.namespace table that has an
-	// added parentSchemaID column. In addition to the new column, the table is
-	// no longer in the system config range -- implying it is no longer gossiped.
-	NamespaceTableWithSchemas
-
-	// TODO(irfansharif): The versions above can/should all be removed. They
-	// were orinally introduced in v20.1. There are inflight PRs to do so
-	// (#57155, #57156, #57158).
-
 	// v20.2 versions.
 	//
 	// Start20_2 demarcates work towards CockroachDB v20.2.
@@ -300,11 +286,6 @@ const (
 	// ChangefeedsSupportPrimaryIndexChanges is used to indicate that all
 	// nodes support detecting and restarting on primary index changes.
 	ChangefeedsSupportPrimaryIndexChanges
-	// NamespaceTableWithSchemasMigration is for the migration which copies
-	// entries from the old namespace table to the new one (with schema IDs).
-	// Previously this was implemented as an async task with no guarantees about
-	// completion.
-	NamespaceTableWithSchemasMigration
 	// ForeignKeyRepresentationMigration is used to ensure that all no table
 	// descriptors use the pre-19.2 foreign key migration.
 	ForeignKeyRepresentationMigration
@@ -356,10 +337,6 @@ const (
 // minor version until we are absolutely sure that no new migrations will need
 // to be added (i.e., when cutting the final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
-	{
-		Key:     NamespaceTableWithSchemas,
-		Version: roachpb.Version{Major: 19, Minor: 2, Internal: 5},
-	},
 
 	// v20.2 versions.
 	{
@@ -515,10 +492,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     ChangefeedsSupportPrimaryIndexChanges,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 38},
-	},
-	{
-		Key:     NamespaceTableWithSchemasMigration,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 40},
 	},
 	{
 		Key:     ForeignKeyRepresentationMigration,

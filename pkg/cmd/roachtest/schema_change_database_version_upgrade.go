@@ -40,6 +40,26 @@ func registerSchemaChangeDatabaseVersionUpgrade(r *testRegistry) {
 	})
 }
 
+func createDBStep(node int, name string) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		_, err := db.ExecContext(ctx,
+			fmt.Sprintf(`CREATE DATABASE %s`, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func uploadAndStart(nodes nodeListOption, v string) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		// Put and start the binary.
+		args := u.uploadVersion(ctx, t, nodes, v)
+		// NB: can't start sequentially since cluster already bootstrapped.
+		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+	}
+}
+
 func runSchemaChangeDatabaseVersionUpgrade(
 	ctx context.Context, t *test, c *cluster, buildVersion version.Version,
 ) {

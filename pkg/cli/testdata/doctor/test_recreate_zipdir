@@ -4,7 +4,7 @@ debug doctor recreate zipdir testdata/doctor/debugzip
 BEGIN;
 SELECT 1/(1-sign(count(*))) FROM system.descriptor WHERE id >= 52;
 SELECT crdb_internal.unsafe_delete_descriptor(id, true) FROM system.descriptor WHERE id >= 50;
-SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace2 WHERE id >= 50;
+SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace WHERE id >= 50;
 COMMIT;
 BEGIN;
 SELECT crdb_internal.unsafe_upsert_descriptor(50, decode('12340a0964656661756c74646210321a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f7418012200280140004a00', 'hex'), true);

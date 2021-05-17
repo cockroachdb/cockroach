@@ -232,47 +232,6 @@ func (sk SchemaKey) Name() string {
 	return sk.name
 }
 
-// DeprecatedTableKey implements DescriptorKey interface.
-type DeprecatedTableKey struct {
-	parentID descpb.ID
-	name     string
-}
-
-// NewDeprecatedTableKey returns a new DeprecatedTableKey.
-func NewDeprecatedTableKey(parentID descpb.ID, name string) DeprecatedTableKey {
-	return DeprecatedTableKey{parentID, name}
-}
-
-// Key implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(codec, dtk.parentID, dtk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Name() string {
-	return dtk.name
-}
-
-// DeprecatedDatabaseKey implements DescriptorKey interface.
-type DeprecatedDatabaseKey struct {
-	name string
-}
-
-// NewDeprecatedDatabaseKey returns a new DeprecatedDatabaseKey.
-func NewDeprecatedDatabaseKey(name string) DeprecatedDatabaseKey {
-	return DeprecatedDatabaseKey{name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(codec, keys.RootNamespaceID, ddk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Name() string {
-	return ddk.name
-}
-
 // MakeNameMetadataKey returns the key for the name, as expected by
 // versions >= 20.1.
 // Pass name == "" in order to generate the prefix key to use to scan over all
@@ -329,57 +288,6 @@ func DecodeNameMetadataKey(
 	name = string(bytesBuf)
 
 	return parentID, parentSchemaID, name, nil
-}
-
-// MakeDeprecatedNameMetadataKey returns the key for a name, as expected by
-// versions < 20.1. Pass name == "" in order to generate the prefix key to use
-// to scan over all of the names for the specified parentID.
-func MakeDeprecatedNameMetadataKey(
-	codec keys.SQLCodec, parentID descpb.ID, name string,
-) roachpb.Key {
-	k := codec.IndexPrefix(
-		uint32(systemschema.DeprecatedNamespaceTable.GetID()), uint32(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()))
-	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
-	if name != "" {
-		k = encoding.EncodeBytesAscending(k, []byte(name))
-		k = keys.MakeFamilyKey(k, uint32(systemschema.DeprecatedNamespaceTable.PublicColumns()[2].GetID()))
-	}
-	return k
-}
-
-// DecodeDeprecatedNameMetadataKey returns the components that make up the
-// NameMetadataKey for version < 20.1.
-func DecodeDeprecatedNameMetadataKey(
-	codec keys.SQLCodec, k roachpb.Key,
-) (parentID descpb.ID, name string, err error) {
-	k, _, err = codec.DecodeTablePrefix(k)
-	if err != nil {
-		return 0, "", err
-	}
-
-	var buf uint64
-	k, buf, err = encoding.DecodeUvarintAscending(k)
-	if err != nil {
-		return 0, "", err
-	}
-	if buf != uint64(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()) {
-		return 0, "", errors.Newf("tried get table %d, but got %d", systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID(), buf)
-	}
-
-	k, buf, err = encoding.DecodeUvarintAscending(k)
-	if err != nil {
-		return 0, "", err
-	}
-	parentID = descpb.ID(buf)
-
-	var bytesBuf []byte
-	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
-	if err != nil {
-		return 0, "", err
-	}
-	name = string(bytesBuf)
-
-	return parentID, name, nil
 }
 
 // MakeAllDescsMetadataKey returns the key for all descriptors.

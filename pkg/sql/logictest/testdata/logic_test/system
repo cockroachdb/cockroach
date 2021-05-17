@@ -19,7 +19,6 @@ public  lease                            table  NULL  0  NULL
 public  locations                        table  NULL  0  NULL
 public  migrations                       table  NULL  0  NULL
 public  namespace                        table  NULL  0  NULL
-public  namespace2                       table  NULL  0  NULL
 public  protected_ts_meta                table  NULL  0  NULL
 public  protected_ts_records             table  NULL  0  NULL
 public  rangelog                         table  NULL  0  NULL
@@ -46,7 +45,6 @@ query I rowsort
 SELECT id FROM system.descriptor
 ----
 1
-2
 3
 4
 5
@@ -274,10 +272,6 @@ system  public  namespace                        admin   GRANT
 system  public  namespace                        admin   SELECT
 system  public  namespace                        root    GRANT
 system  public  namespace                        root    SELECT
-system  public  namespace2                       admin   GRANT
-system  public  namespace2                       admin   SELECT
-system  public  namespace2                       root    GRANT
-system  public  namespace2                       root    SELECT
 system  public  protected_ts_meta                admin   GRANT
 system  public  protected_ts_meta                admin   SELECT
 system  public  protected_ts_meta                root    GRANT

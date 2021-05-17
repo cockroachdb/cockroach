@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -245,28 +244,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name: "create system.protected_ts_records table",
 	},
 	{
-		// Introduced in v20.1. Note that this migration
-		// has v2 appended to it because in 20.1 betas, the migration edited the old
-		// system.namespace descriptor to change its Name. This wrought havoc,
-		// causing #47167, which caused 19.2 nodes to fail to be able to read
-		// system.namespace from SQL queries. However, without changing the old
-		// descriptor's Name, backup would fail, since backup requires that no two
-		// descriptors have the same Name. So, in v2 of this migration, we edit
-		// the name of the new table's Descriptor, calling it
-		// namespace2, and re-edit the old descriptor's Name to
-		// be just "namespace" again, to try to help clusters that might have
-		// upgraded to the 20.1 betas with the problem.
-		name:                "create new system.namespace table v2",
-		workFn:              createNewSystemNamespaceDescriptor,
-		includedInBootstrap: clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas),
-		newDescriptorIDs:    staticIDs(keys.NamespaceTableID),
+		// Introduced in v20.1, baked into v21.2.
+		name: "create new system.namespace table v2",
 	},
 	{
 		// Introduced in v20.10. Replaced in v20.1.1 and v20.2 by the
 		// StartSystemNamespaceMigration post-finalization-style migration.
 		name: "migrate system.namespace_deprecated entries into system.namespace",
 		// workFn:              migrateSystemNamespace,
-		includedInBootstrap: clusterversion.ByKey(clusterversion.NamespaceTableWithSchemas),
 	},
 	{
 		// Introduced in v20.1, baked into v20.2.
@@ -342,10 +327,7 @@ func databaseIDs(
 	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
 		var ids []descpb.ID
 		for _, name := range names {
-			// This runs as part of an older migration (introduced in 2.1). We use
-			// the DeprecatedDatabaseKey, and let the 20.1 migration handle moving
-			// from the old namespace table into the new one.
-			kv, err := db.Get(ctx, catalogkeys.NewDeprecatedDatabaseKey(name).Key(codec))
+			kv, err := db.Get(ctx, catalogkeys.NewDatabaseKey(name).Key(codec))
 			if err != nil {
 				return nil, err
 			}
@@ -733,7 +715,7 @@ func CreateSystemTable(
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		tKey := catalogkv.MakePublicTableNameKey(ctx, settings, desc.GetParentID(), desc.GetName())
+		tKey := catalogkeys.NewPublicTableKey(desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(codec), desc.GetID(), nil)
 		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
 		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
@@ -747,44 +729,6 @@ func CreateSystemTable(
 		return nil
 	}
 	return err
-}
-
-func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := txn.NewBatch()
-
-		// Retrieve the existing namespace table's descriptor and change its name to
-		// "namespace". This corrects the behavior of this migration as it existed
-		// in 20.1 betas. The old namespace table cannot be edited without breaking
-		// explicit selects from system.namespace in 19.2.
-		deprecatedKey := catalogkeys.MakeDescMetadataKey(r.codec, keys.DeprecatedNamespaceTableID)
-		deprecatedDesc := &descpb.Descriptor{}
-		ts, err := txn.GetProtoTs(ctx, deprecatedKey, deprecatedDesc)
-		if err != nil {
-			return err
-		}
-		deprecatedTable, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(deprecatedDesc, ts)
-		deprecatedTable.Name = systemschema.DeprecatedNamespaceTable.GetName()
-		b.Put(deprecatedKey, deprecatedDesc)
-
-		// The 19.2 namespace table contains an entry for "namespace" which maps to
-		// the deprecated namespace tables ID. Even though the cluster version at
-		// this point is 19.2, we construct a metadata name key in the 20.1 format.
-		// This is for two reasons:
-		// 1. We do not want to change the mapping in namespace_deprecated for
-		//    "namespace", as for the purpose of namespace_deprecated, namespace
-		//    refers to the correct ID.
-		// 2. By adding the ID mapping in the new system.namespace table, the
-		//    idempotent semantics of the migration ensure that "namespace" maps to
-		//    the correct ID in the new system.namespace table after all tables are
-		//    copied over.
-		nameKey := catalogkeys.NewPublicTableKey(
-			systemschema.NamespaceTable.GetParentID(), systemschema.NamespaceTableName)
-		b.Put(nameKey.Key(r.codec), systemschema.NamespaceTable.GetID())
-		b.Put(catalogkeys.MakeDescMetadataKey(
-			r.codec, systemschema.NamespaceTable.GetID()), systemschema.NamespaceTable.DescriptorProto())
-		return txn.Run(ctx, b)
-	})
 }
 
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {

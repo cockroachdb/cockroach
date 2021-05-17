@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
@@ -513,17 +514,12 @@ func collectDescriptorsForValidation(
 	return &cs.vdg, nil
 }
 
-const (
-	namespaceTableID  = 2
-	namespace2TableID = 30
-)
-
 // validateNamespace checks that the namespace entries associated with a
 // descriptor are sane.
 func validateNamespace(
 	desc Descriptor, vea ValidationErrorAccumulator, namespace map[descpb.NameInfo]descpb.ID,
 ) {
-	if desc.GetID() == namespaceTableID || desc.GetID() == namespace2TableID {
+	if desc.GetID() == keys.NamespaceTableID || desc.GetID() == keys.DeprecatedNamespaceTableID {
 		return
 	}
 
