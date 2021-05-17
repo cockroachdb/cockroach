@@ -1394,6 +1394,72 @@ limit
  │         └── limit hint: 5.00
  └── 5
 
+# Span boundary is exclusive, but the rule applies since the key is longer than
+# the prefix.
+opt expect=SplitScanIntoUnionScans
+SELECT id, latitude, longitude FROM index_tab
+WHERE (latitude = 0 OR latitude = 10) AND longitude IS NOT NULL
+ORDER BY longitude LIMIT 10
+----
+limit
+ ├── columns: id:1!null latitude:4!null longitude:5!null
+ ├── internal-ordering: +5
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(4,5)
+ ├── ordering: +5
+ ├── union-all
+ │    ├── columns: id:1!null latitude:4!null longitude:5!null
+ │    ├── left columns: id:11 latitude:14 longitude:15
+ │    ├── right columns: id:21 latitude:24 longitude:25
+ │    ├── cardinality: [0 - 20]
+ │    ├── ordering: +5
+ │    ├── limit hint: 10.00
+ │    ├── scan index_tab@d
+ │    │    ├── columns: id:11!null latitude:14!null longitude:15!null
+ │    │    ├── constraint: /14/15/16/17/11: (/0/NULL - /0]
+ │    │    ├── limit: 10
+ │    │    ├── key: (11)
+ │    │    ├── fd: ()-->(14), (11)-->(15)
+ │    │    ├── ordering: +15 opt(14) [actual: +15]
+ │    │    └── limit hint: 10.00
+ │    └── scan index_tab@d
+ │         ├── columns: id:21!null latitude:24!null longitude:25!null
+ │         ├── constraint: /24/25/26/27/21: (/10/NULL - /10]
+ │         ├── limit: 10
+ │         ├── key: (21)
+ │         ├── fd: ()-->(24), (21)-->(25)
+ │         ├── ordering: +25 opt(24) [actual: +25]
+ │         └── limit hint: 10.00
+ └── 10
+
+# No-op case since span boundary is exclusive and the key length equals the
+# prefix length.
+opt expect-not=SplitScanIntoUnionScans
+SELECT id, latitude, longitude FROM index_tab
+WHERE latitude IS NOT NULL AND latitude < 4
+ORDER BY longitude LIMIT 10
+----
+limit
+ ├── columns: id:1!null latitude:4!null longitude:5
+ ├── internal-ordering: +5
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(4,5)
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: id:1!null latitude:4!null longitude:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4,5)
+ │    ├── ordering: +5
+ │    ├── limit hint: 10.00
+ │    └── scan index_tab@d
+ │         ├── columns: id:1!null latitude:4!null longitude:5
+ │         ├── constraint: /4/5/6/7/1: (/NULL - /3]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(4,5)
+ └── 10
+
 # No-op case because the scan has an inverted index.
 opt expect-not=SplitScanIntoUnionScans
 SELECT geom FROM index_tab WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
