@@ -1806,6 +1806,7 @@ fuzz: bin/fuzz
 bazel-generate: ## Generate all bazel BUILD files.
 	@echo 'Generating DEPS.bzl and BUILD files using gazelle'
 	./build/bazelutil/bazel-generate.sh
+	rm -f bazel-out # even with --symlink_prefix this still gets created somehow
 
 # No need to include all the dependency files if the user is just
 # requesting help or cleanup.
