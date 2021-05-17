@@ -564,7 +564,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n4.Exec(t, "SELECT * from test WHERE k=1")
 	// Check that the cache was indeed populated.
 	var tableID uint32
-	n1.QueryRow(t, `SELECT id from system.namespace2 WHERE name='test'`).Scan(&tableID)
+	n1.QueryRow(t, `SELECT id from system.namespace WHERE name='test'`).Scan(&tableID)
 	tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
 	n4Cache := tc.Server(3).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 	entry := n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)

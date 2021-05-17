@@ -164,7 +164,7 @@ func getTableCreateParams(
 		if schemaID != keys.PublicSchemaID {
 			sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 		}
-		tKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, dbID, schemaID, tableName.Table())
+		tKey = catalogkv.MakeObjectNameKey(dbID, schemaID, tableName.Table())
 	}
 
 	if persistence.IsUnlogged() {

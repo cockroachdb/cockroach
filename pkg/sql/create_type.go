@@ -175,7 +175,7 @@ func getCreateTypeParams(
 		return nil, descpb.InvalidID, err
 	}
 
-	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
+	typeKey = catalogkv.MakeObjectNameKey(db.GetID(), schemaID, name.Type())
 	return typeKey, schemaID, nil
 }
 
@@ -234,7 +234,7 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, arrayTypeName)
+	arrayTypeKey := catalogkv.MakeObjectNameKey(db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)

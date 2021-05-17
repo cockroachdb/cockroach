@@ -44,8 +44,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGetAllNamesInternal tests both namespace and namespace_deprecated
-// entries.
+// TestGetAllNamesInternal tests system.namespace entries.
 func TestGetAllNamesInternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -58,8 +57,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 		batch.Put(catalogkeys.NewTableKey(999, 444, "bob").Key(keys.SystemSQLCodec), 9999)
-		batch.Put(catalogkeys.NewDeprecatedTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
-		batch.Put(catalogkeys.NewDeprecatedTableKey(999, "overwrite_me_old_value").Key(keys.SystemSQLCodec), 9999)
+		batch.Put(catalogkeys.NewPublicTableKey(1000, "alice").Key(keys.SystemSQLCodec), 10000)
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -68,7 +66,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, sql.NamespaceKey{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
-	assert.Equal(t, sql.NamespaceKey{ParentID: 1000, Name: "alice"}, names[10000])
+	assert.Equal(t, sql.NamespaceKey{ParentID: 1000, ParentSchemaID: 29, Name: "alice"}, names[10000])
 }
 
 // TestRangeLocalityBasedOnNodeIDs tests that the replica_localities shown in crdb_internal.ranges

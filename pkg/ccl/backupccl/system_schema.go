@@ -281,9 +281,6 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.NamespaceTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.DeprecatedNamespaceTable.GetName(): {
-		shouldIncludeInClusterBackup: optOutOfClusterBackup,
-	},
 	systemschema.ProtectedTimestampsMetaTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},

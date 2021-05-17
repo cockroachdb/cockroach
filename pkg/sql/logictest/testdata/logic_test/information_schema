@@ -877,7 +877,6 @@ system         pg_catalog          pg_views                               SYSTEM
 system         pg_extension        geography_columns                      SYSTEM VIEW  NO                  1
 system         pg_extension        geometry_columns                       SYSTEM VIEW  NO                  1
 system         pg_extension        spatial_ref_sys                        SYSTEM VIEW  NO                  1
-system         public              namespace                              BASE TABLE   YES                 1
 system         public              descriptor                             BASE TABLE   YES                 1
 system         public              users                                  BASE TABLE   YES                 1
 system         public              zones                                  BASE TABLE   YES                 1
@@ -897,7 +896,7 @@ system         public              replication_constraint_stats           BASE T
 system         public              replication_critical_localities        BASE TABLE   YES                 1
 system         public              replication_stats                      BASE TABLE   YES                 1
 system         public              reports_meta                           BASE TABLE   YES                 1
-system         public              namespace2                             BASE TABLE   YES                 1
+system         public              namespace                              BASE TABLE   YES                 1
 system         public              protected_ts_meta                      BASE TABLE   YES                 1
 system         public              protected_ts_records                   BASE TABLE   YES                 1
 system         public              role_options                           BASE TABLE   YES                 1
@@ -1003,13 +1002,10 @@ system              public             630200280_40_3_not_null   system         
 system              public             630200280_40_4_not_null   system         public        migrations                       CHECK            NO             NO
 system              public             630200280_40_5_not_null   system         public        migrations                       CHECK            NO             NO
 system              public             primary                   system         public        migrations                       PRIMARY KEY      NO             NO
-system              public             630200280_2_1_not_null    system         public        namespace                        CHECK            NO             NO
-system              public             630200280_2_2_not_null    system         public        namespace                        CHECK            NO             NO
+system              public             630200280_30_1_not_null   system         public        namespace                        CHECK            NO             NO
+system              public             630200280_30_2_not_null   system         public        namespace                        CHECK            NO             NO
+system              public             630200280_30_3_not_null   system         public        namespace                        CHECK            NO             NO
 system              public             primary                   system         public        namespace                        PRIMARY KEY      NO             NO
-system              public             630200280_30_1_not_null   system         public        namespace2                       CHECK            NO             NO
-system              public             630200280_30_2_not_null   system         public        namespace2                       CHECK            NO             NO
-system              public             630200280_30_3_not_null   system         public        namespace2                       CHECK            NO             NO
-system              public             primary                   system         public        namespace2                       PRIMARY KEY      NO             NO
 system              public             630200280_31_1_not_null   system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_2_not_null   system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_3_not_null   system         public        protected_ts_meta                CHECK            NO             NO
@@ -1196,8 +1192,6 @@ system              public             630200280_27_6_not_null   under_replicate
 system              public             630200280_27_7_not_null   over_replicated_ranges IS NOT NULL
 system              public             630200280_28_1_not_null   id IS NOT NULL
 system              public             630200280_28_2_not_null   generated IS NOT NULL
-system              public             630200280_2_1_not_null    parentID IS NOT NULL
-system              public             630200280_2_2_not_null    name IS NOT NULL
 system              public             630200280_30_1_not_null   parentID IS NOT NULL
 system              public             630200280_30_2_not_null   parentSchemaID IS NOT NULL
 system              public             630200280_30_3_not_null   name IS NOT NULL
@@ -1277,9 +1271,7 @@ system         public        migrations                       minor           sy
 system         public        migrations                       patch           system              public             primary
 system         public        namespace                        name            system              public             primary
 system         public        namespace                        parentID        system              public             primary
-system         public        namespace2                       name            system              public             primary
-system         public        namespace2                       parentID        system              public             primary
-system         public        namespace2                       parentSchemaID  system              public             primary
+system         public        namespace                        parentSchemaID  system              public             primary
 system         public        protected_ts_meta                singleton       system              public             check_singleton
 system         public        protected_ts_meta                singleton       system              public             primary
 system         public        protected_ts_records             id              system              public             primary
@@ -1447,13 +1439,10 @@ system         public        migrations                       internal          
 system         public        migrations                       major                     1
 system         public        migrations                       minor                     2
 system         public        migrations                       patch                     3
-system         public        namespace                        id                        3
-system         public        namespace                        name                      2
+system         public        namespace                        id                        4
+system         public        namespace                        name                      3
 system         public        namespace                        parentID                  1
-system         public        namespace2                       id                        4
-system         public        namespace2                       name                      3
-system         public        namespace2                       parentID                  1
-system         public        namespace2                       parentSchemaID            2
+system         public        namespace                        parentSchemaID            2
 system         public        protected_ts_meta                num_records               3
 system         public        protected_ts_meta                num_spans                 4
 system         public        protected_ts_meta                singleton                 1
@@ -2274,10 +2263,6 @@ NULL     admin    system         public              namespace                  
 NULL     admin    system         public              namespace                              SELECT          NULL          YES
 NULL     root     system         public              namespace                              GRANT           NULL          NO
 NULL     root     system         public              namespace                              SELECT          NULL          YES
-NULL     admin    system         public              namespace2                             GRANT           NULL          NO
-NULL     admin    system         public              namespace2                             SELECT          NULL          YES
-NULL     root     system         public              namespace2                             GRANT           NULL          NO
-NULL     root     system         public              namespace2                             SELECT          NULL          YES
 NULL     admin    system         public              protected_ts_meta                      GRANT           NULL          NO
 NULL     admin    system         public              protected_ts_meta                      SELECT          NULL          YES
 NULL     root     system         public              protected_ts_meta                      GRANT           NULL          NO
@@ -2645,10 +2630,6 @@ NULL     public   system         pg_catalog          pg_views                   
 NULL     public   system         pg_extension        geography_columns                      SELECT          NULL          YES
 NULL     public   system         pg_extension        geometry_columns                       SELECT          NULL          YES
 NULL     public   system         pg_extension        spatial_ref_sys                        SELECT          NULL          YES
-NULL     admin    system         public              namespace                              GRANT           NULL          NO
-NULL     admin    system         public              namespace                              SELECT          NULL          YES
-NULL     root     system         public              namespace                              GRANT           NULL          NO
-NULL     root     system         public              namespace                              SELECT          NULL          YES
 NULL     admin    system         public              descriptor                             GRANT           NULL          NO
 NULL     admin    system         public              descriptor                             SELECT          NULL          YES
 NULL     root     system         public              descriptor                             GRANT           NULL          NO
@@ -2828,10 +2809,10 @@ NULL     root     system         public              reports_meta               
 NULL     root     system         public              reports_meta                           INSERT          NULL          NO
 NULL     root     system         public              reports_meta                           SELECT          NULL          YES
 NULL     root     system         public              reports_meta                           UPDATE          NULL          NO
-NULL     admin    system         public              namespace2                             GRANT           NULL          NO
-NULL     admin    system         public              namespace2                             SELECT          NULL          YES
-NULL     root     system         public              namespace2                             GRANT           NULL          NO
-NULL     root     system         public              namespace2                             SELECT          NULL          YES
+NULL     admin    system         public              namespace                              GRANT           NULL          NO
+NULL     admin    system         public              namespace                              SELECT          NULL          YES
+NULL     root     system         public              namespace                              GRANT           NULL          NO
+NULL     root     system         public              namespace                              SELECT          NULL          YES
 NULL     admin    system         public              protected_ts_meta                      GRANT           NULL          NO
 NULL     admin    system         public              protected_ts_meta                      SELECT          NULL          YES
 NULL     root     system         public              protected_ts_meta                      GRANT           NULL          NO
