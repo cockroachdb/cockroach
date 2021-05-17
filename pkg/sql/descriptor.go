@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,13 +65,7 @@ func (p *planner) createDatabase(
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
-	dKey := catalogkv.MakeDatabaseNameKey(ctx, p.ExecCfg().Settings, dbName)
-	// TODO(solon): This conditional can be removed in 20.2. Every database
-	// is created with a public schema for cluster version >= 20.1, so we can remove
-	// the `shouldCreatePublicSchema` logic as well.
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NamespaceTableWithSchemas) {
-		shouldCreatePublicSchema = false
-	}
+	dKey := catalogkeys.NewDatabaseKey(dbName)
 
 	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
 		if database.IfNotExists {

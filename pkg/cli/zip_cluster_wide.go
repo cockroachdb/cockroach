@@ -83,7 +83,6 @@ var debugZipTablesPerCluster = []string{
 	"system.jobs",       // get the raw, restorable jobs records too.
 	"system.descriptor", // descriptors also contain job-like mutation state.
 	"system.namespace",
-	"system.namespace2", // TODO(sqlexec): consider removing in 20.2 or later.
 	"system.scheduled_jobs",
 
 	"crdb_internal.kv_node_status",

@@ -98,7 +98,6 @@ ORDER BY name ASC`)
 		"system.jobs",
 		"system.descriptor",
 		"system.namespace",
-		"system.namespace2",
 		"system.scheduled_jobs",
 	)
 	sort.Strings(tables)
