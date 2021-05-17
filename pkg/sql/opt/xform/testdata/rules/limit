@@ -67,7 +67,7 @@ CREATE TABLE partial_index_tab
 
 # Insert statistics for index_tab. Histogram buckets are included for the
 # latitude column in order to make the optimizer choose specific plans for
-# SplitScanIntoUnionScans tests.
+# SplitLimitedScanIntoUnionScans tests.
 exec-ddl
 ALTER TABLE index_tab INJECT STATISTICS '[
   {
@@ -821,7 +821,7 @@ limit
  └── 5
 
 # -------------------------
-# SplitScanIntoUnionScans
+# SplitLimitedScanIntoUnionScans
 # -------------------------
 
 # Case with limit 10.
@@ -871,7 +871,7 @@ limit
  └── 10
 
 # Case with single-key spans.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region = 'US_EAST' OR region = 'US_WEST'
 ----
 scalar-group-by
@@ -912,7 +912,7 @@ scalar-group-by
            └── data1:6
 
 # Case with multi-column keys in single-key spans.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1)
 FROM index_tab
 WHERE (latitude, longitude) = (1, 2) OR (latitude, longitude) = (4, 5)
@@ -955,7 +955,7 @@ scalar-group-by
            └── data1:6
 
 # Case with countable multi-key spans.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 4
 ----
 scalar-group-by
@@ -1010,7 +1010,7 @@ scalar-group-by
            └── data1:6
 
 # Case with limit ordering on more than one column.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT region, data1, data2
 FROM index_tab
 WHERE region='US_WEST' OR region='US_EAST'
@@ -1046,7 +1046,7 @@ limit
  └── 10
 
 # Case with start key longer than the ordering prefix length.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT region, data1, data2
 FROM index_tab
 WHERE (region='US_WEST' OR region='US_EAST')
@@ -1083,7 +1083,7 @@ limit
  └── 10
 
 # Case with end key longer than the ordering prefix length.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT region, data1, data2
 FROM index_tab
 WHERE (region='US_WEST' OR region='US_EAST')
@@ -1120,7 +1120,7 @@ limit
  └── 10
 
 # Case with both keys longer than the ordering prefix length.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT region, data1, data2
 FROM index_tab
 WHERE (region='US_WEST' OR region='US_EAST')
@@ -1159,7 +1159,7 @@ limit
 
 # Case where one span can be used for a limited scan, but not the others. Note
 # that the last Scan with constraints [/-5 - /-5] and [/0 - /0] is not limited.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT latitude, longitude, data1, data2
 FROM index_tab
 WHERE latitude = 0
@@ -1226,7 +1226,7 @@ limit
  └── 10
 
 # Case with index join.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT *
 FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
 ORDER BY data1 LIMIT 10
@@ -1270,7 +1270,7 @@ index-join index_tab
       └── 10
 
 # Case where check constraints are used.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT * FROM pqrs ORDER BY q LIMIT 5
 ----
 limit
@@ -1322,7 +1322,7 @@ limit
 
 # Case where multiple check constraints are combined into one constraint
 # (CHECK (r > 0) and CHECK (r < 3)).
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT * FROM pqrs ORDER BY s LIMIT 10
 ----
 limit
@@ -1359,7 +1359,7 @@ limit
 
 # Check constraints are not used because the scan is already constrained (the
 # Scan's constraint is used instead).
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT * FROM (SELECT * FROM pqrs WHERE p = 1 OR p = 5) ORDER BY q LIMIT 5
 ----
 limit
@@ -1396,7 +1396,7 @@ limit
 
 # Span boundary is exclusive, but the rule applies since the key is longer than
 # the prefix.
-opt expect=SplitScanIntoUnionScans
+opt expect=SplitLimitedScanIntoUnionScans
 SELECT id, latitude, longitude FROM index_tab
 WHERE (latitude = 0 OR latitude = 10) AND longitude IS NOT NULL
 ORDER BY longitude LIMIT 10
@@ -1435,7 +1435,7 @@ limit
 
 # No-op case since span boundary is exclusive and the key length equals the
 # prefix length.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT id, latitude, longitude FROM index_tab
 WHERE latitude IS NOT NULL AND latitude < 4
 ORDER BY longitude LIMIT 10
@@ -1461,7 +1461,7 @@ limit
  └── 10
 
 # No-op case because the scan has an inverted index.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT geom FROM index_tab WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
 ----
 select
@@ -1493,7 +1493,7 @@ select
       └── st_intersects('010100000000000000000008400000000000000840', geom:8) [outer=(8), immutable, constraints=(/8: (/NULL - ])]
 
 # No-op case because the multi-key span isn't countable.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region > 'US_EAST' AND region < 'US_WEST'
 ----
 scalar-group-by
@@ -1509,7 +1509,7 @@ scalar-group-by
            └── data1:6
 
 # No-op case because the number of keys exceeds maxScanCount.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 20
 ----
 scalar-group-by
@@ -1526,7 +1526,7 @@ scalar-group-by
 
 # No-op case because the same number of rows would be scanned by the split-up
 # scans as by the original.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE id > 0 AND id < 4
 ----
 scalar-group-by
@@ -1545,7 +1545,7 @@ scalar-group-by
            └── data1:6
 
 # No-op case because the scan is already limited.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1)
 FROM (SELECT region, data1 FROM index_tab LIMIT 10)
 WHERE region='ASIA' OR region='AUSTRALIA'
@@ -1568,7 +1568,7 @@ scalar-group-by
            └── data1:6
 
 # No-op case because the limit is negative.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT region, data1
 FROM index_tab
 WHERE region = 'ASIA' OR region = 'EUROPE' ORDER BY data1 LIMIT -1
@@ -1592,7 +1592,7 @@ limit
  └── -1
 
 # No-op case because scan is unconstrained.
-opt expect-not=SplitScanIntoUnionScans
+opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab@b
 ----
 scalar-group-by
