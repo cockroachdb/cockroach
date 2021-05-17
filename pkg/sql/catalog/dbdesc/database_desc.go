@@ -225,7 +225,7 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID())
 	if id, err := desc.MultiRegionEnumID(); err == nil {
 		ids.Add(id)
@@ -233,7 +233,7 @@ func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	for _, schema := range desc.Schemas {
 		ids.Add(schema.ID)
 	}
-	return ids
+	return ids, nil
 }
 
 // ValidateCrossReferences implements the catalog.Descriptor interface.

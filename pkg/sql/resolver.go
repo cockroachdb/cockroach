@@ -276,7 +276,14 @@ func (p *planner) IsTypeVisible(
 	if _, ok := types.OidToType[typeID]; ok {
 		return true, true, nil
 	}
-	typName, _, err := p.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(typeID))
+	id, err := typedesc.UserDefinedTypeOIDToID(typeID)
+	if err != nil {
+		if !types.IsOIDUserDefinedType(typeID) {
+			return false, false, nil //nolint:returnerrcheck
+		}
+		return false, false, err
+	}
+	typName, _, err := p.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		// If a "not found" error happened here, we return "not exists" rather than
 		// the error.
@@ -361,7 +368,11 @@ func (p *planner) ResolveType(
 
 // ResolveTypeByOID implements the tree.TypeResolver interface.
 func (p *planner) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	name, desc, err := p.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
+	id, err := typedesc.UserDefinedTypeOIDToID(oid)
+	if err != nil {
+		return nil, err
+	}
+	name, desc, err := p.GetTypeDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
