@@ -100,14 +100,18 @@ func doMain(cmd *cobra.Command, cmdName string) error {
 			// and PersistentPreRun in `(*cobra.Command) execute()`.)
 			wrapped := cmd.PreRunE
 			cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+				// We call setupLogging before the PreRunE function since
+				// that function may perform logging.
+				err := setupLogging(context.Background(), cmd,
+					false /* isServerCmd */, true /* applyConfig */)
+
 				if wrapped != nil {
 					if err := wrapped(cmd, args); err != nil {
 						return err
 					}
 				}
 
-				return setupLogging(context.Background(), cmd,
-					false /* isServerCmd */, true /* applyConfig */)
+				return err
 			}
 		}
 	}
