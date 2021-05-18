@@ -48,7 +48,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
     title: "Job ID",
     titleAlign: "right",
     cell: (job) => String(job.id),
-    sort: (job) => job.id,
+    sort: (job) => job.id?.toNumber(),
   },
   {
     name: "users",
