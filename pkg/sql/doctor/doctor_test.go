@@ -50,7 +50,7 @@ var validTableDesc = &descpb.Descriptor{
 				ColumnNames:      []string{"col"},
 				ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				ColumnIDs:        []descpb.ColumnID{1},
-				Version:          descpb.EmptyArraysInInvertedIndexesVersion,
+				Version:          descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			NextIndexID: 2,
 			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(

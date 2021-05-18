@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -238,7 +239,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "IsDisabled", idx.GetName())
 		require.False(t, idx.IsCreatedExplicitly(),
 			errMsgFmt, "IsCreatedExplicitly", idx.GetName())
-		require.Equal(t, descpb.IndexDescriptorVersion(0x2), idx.GetVersion(),
+		require.Equal(t, descpb.IndexDescriptorVersion(0x3), idx.GetVersion(),
 			errMsgFmt, "GetVersion", idx.GetName())
 		require.Equal(t, descpb.PartitioningDescriptor{}, idx.GetPartitioning(),
 			errMsgFmt, "GetPartitioning", idx.GetName())
@@ -316,4 +317,75 @@ func TestIndexInterface(t *testing.T) {
 	require.Equal(t, 2, s3.NumStoredColumns())
 	require.Equal(t, "c5", s3.GetStoredColumnName(0))
 	require.Equal(t, "c6", s3.GetStoredColumnName(1))
+}
+
+// TestIndexStrictColumnIDs tests that the index format version value
+// descpb.StrictIndexColumnIDGuaranteesVersion can prevent issues stemming from
+// redundant column IDs in descpb.IndexDescriptor.
+func TestIndexStrictColumnIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Create a regular table with a secondary index.
+	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	_, err := conn.Exec(`
+		CREATE DATABASE d;
+		CREATE TABLE d.t (
+			c1 INT,
+			c2 INT,
+			CONSTRAINT pk PRIMARY KEY (c1 ASC),
+			INDEX sec (c2 ASC)
+		);
+	`)
+	require.NoError(t, err)
+
+	// Mess with the table descriptor to add redundant columns in the secondary
+	// index while still passing validation.
+	mut := catalogkv.TestingGetMutableExistingTableDescriptor(db, keys.SystemSQLCodec, "d", "t")
+	idx := &mut.Indexes[0]
+	id := idx.ColumnIDs[0]
+	name := idx.ColumnNames[0]
+	idx.Version = descpb.EmptyArraysInInvertedIndexesVersion
+	idx.StoreColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
+	idx.StoreColumnNames = append([]string{}, name, name, name, name)
+	idx.ExtraColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
+	mut.Version++
+	require.NoError(t, catalog.ValidateSelf(mut))
+
+	// Store the corrupted table descriptor.
+	err = db.Put(
+		ctx,
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mut.GetID()),
+		mut.DescriptorProto(),
+	)
+	require.NoError(t, err)
+
+	// Add a new row.
+	_, err = conn.Exec(`
+		SET tracing = on,kv;
+		INSERT INTO d.t VALUES (0, 0);
+		SET tracing = off;
+	`)
+	require.NoError(t, err)
+
+	// Retrieve KV trace and check for redundant values.
+	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'InitPut%'`)
+	require.NoError(t, err)
+	defer rows.Close()
+	require.True(t, rows.Next())
+	var msg string
+	err = rows.Scan(&msg)
+	require.NoError(t, err)
+	require.Equal(t, `InitPut /Table/53/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, msg)
+
+	// Test that with the strict guarantees, this table descriptor would have been
+	// considered invalid.
+	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
+	require.EqualError(t, catalog.ValidateSelf(mut),
+		`relation "t" (53): index "sec" has duplicates in ExtraColumnIDs: [2 2 2 2]`)
+
+	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
+	require.NoError(t, err)
+
 }

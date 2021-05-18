@@ -483,7 +483,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 
 	encodingVersion := descpb.SecondaryIndexFamilyFormatVersion
 	if params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.EmptyArraysInInvertedIndexes) {
-		encodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+		// descpb.StrictIndexColumnIDGuaranteesVersion is like
+		// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level of
+		// descriptor validation checks.
+		encodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
 	}
 	indexDesc.Version = encodingVersion
 

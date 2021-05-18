@@ -986,6 +986,50 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 				return fmt.Errorf("index %q cannot store virtual column %q", index.Name, index.StoreColumnNames[i])
 			}
 		}
+		// Check that ColumnID slices are disjoint sets.
+		if index.Version < descpb.StrictIndexColumnIDGuaranteesVersion {
+			continue
+		}
+		slices := []struct {
+			name  string
+			slice []descpb.ColumnID
+		}{
+			{"ColumnIDs", index.ColumnIDs},
+			{"ExtraColumnIDs", index.ExtraColumnIDs},
+			{"StoreColumnIDs", index.StoreColumnIDs},
+		}
+		allIDs := catalog.MakeTableColSet()
+		sets := map[string]catalog.TableColSet{}
+		for _, s := range slices {
+			set := catalog.MakeTableColSet(s.slice...)
+			sets[s.name] = set
+			if set.Len() == 0 {
+				continue
+			}
+			if set.Ordered()[0] <= 0 {
+				return errors.AssertionFailedf("index %q contains invalid column ID value %d in %s",
+					index.Name, set.Ordered()[0], s.name)
+			}
+			if set.Len() < len(s.slice) {
+				return errors.AssertionFailedf("index %q has duplicates in %s: %v",
+					index.Name, s.name, s.slice)
+			}
+			allIDs.UnionWith(set)
+		}
+		foundIn := make([]string, 0, len(sets))
+		for _, colID := range allIDs.Ordered() {
+			foundIn = foundIn[:0]
+			for _, s := range slices {
+				set := sets[s.name]
+				if set.Contains(colID) {
+					foundIn = append(foundIn, s.name)
+				}
+			}
+			if len(foundIn) > 1 {
+				return errors.AssertionFailedf("index %q has column ID %d present in: %v",
+					index.Name, colID, foundIn)
+			}
+		}
 	}
 
 	return nil

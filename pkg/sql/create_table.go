@@ -1571,7 +1571,10 @@ func NewTableDesc(
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
 		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
-			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+			// descpb.StrictIndexColumnIDGuaranteesVersion is like
+			// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level
+			// of descriptor validation checks.
+			indexEncodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
 		}
 	}
 
@@ -2228,17 +2231,22 @@ func NewTableDesc(
 			// if they are detected, ensure each index contains the implicitly
 			// partitioned column.
 			if numImplicitCols := newPrimaryIndex.Partitioning.NumImplicitColumns; numImplicitCols > 0 {
-				for _, idx := range desc.AllIndexes() {
-					if idx.GetEncodingType() == descpb.SecondaryIndexEncoding {
-						for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
-							if !idx.ContainsColumnID(implicitPrimaryColID) {
-								idx.IndexDesc().ExtraColumnIDs = append(
-									idx.IndexDesc().ExtraColumnIDs,
-									implicitPrimaryColID,
-								)
-							}
+				for _, idx := range desc.PublicNonPrimaryIndexes() {
+					if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
+						continue
+					}
+					missingExtraColumnIDs := make([]descpb.ColumnID, 0, numImplicitCols)
+					for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
+						if !idx.ContainsColumnID(implicitPrimaryColID) {
+							missingExtraColumnIDs = append(missingExtraColumnIDs, implicitPrimaryColID)
 						}
 					}
+					if len(missingExtraColumnIDs) == 0 {
+						continue
+					}
+					newIdxDesc := idx.IndexDescDeepCopy()
+					newIdxDesc.ExtraColumnIDs = append(newIdxDesc.ExtraColumnIDs, missingExtraColumnIDs...)
+					desc.SetPublicNonPrimaryIndex(idx.Ordinal(), newIdxDesc)
 				}
 			}
 			desc.SetPrimaryIndex(newPrimaryIndex)
