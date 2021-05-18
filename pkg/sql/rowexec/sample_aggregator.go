@@ -284,7 +284,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			colIdx := uint32(invColIdx)
 			if rank, err := row[s.rankCol].GetInt(); err == nil {
 				// Inverted sample row.
-				// Retain the rows with the top ranks.
+				// Shrink capacity to match the child samplerProcessor and then retain
+				// the row if it had one of the top (smallest) ranks.
+				s.maybeDecreaseSamples(ctx, s.invSr[colIdx], row)
 				sampleRow := row[s.invIdxKeyCol : s.invIdxKeyCol+1]
 				if err := s.sampleRow(ctx, s.invSr[colIdx], sampleRow, uint64(rank)); err != nil {
 					return false, err
@@ -303,7 +305,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 		if rank, err := row[s.rankCol].GetInt(); err == nil {
 			// Sample row.
-			// Retain the rows with the top ranks.
+			// Shrink capacity to match the child samplerProcessor and then retain the
+			// row if it had one of the top (smallest) ranks.
+			s.maybeDecreaseSamples(ctx, &s.sr, row)
 			if err := s.sampleRow(ctx, &s.sr, row[:s.rankCol], uint64(rank)); err != nil {
 				return false, err
 			}
@@ -361,6 +365,23 @@ func (s *sampleAggregator) processSketchRow(
 		return errors.NewAssertionErrorWithWrappedErrf(err, "merging sketch data")
 	}
 	return nil
+}
+
+// maybeDecreaseSamples shrinks the capacity of the aggregate reservoir to be <=
+// the capacity of the child reservoir. This is done to prevent biasing the
+// sampling in favor of child sampleProcessors with larger reservoirs.
+func (s *sampleAggregator) maybeDecreaseSamples(
+	ctx context.Context, sr *stats.SampleReservoir, row rowenc.EncDatumRow,
+) {
+	if capacity, err := row[s.numRowsCol].GetInt(); err == nil {
+		prevCapacity := sr.Cap()
+		if sr.MaybeResize(ctx, int(capacity)) {
+			log.Infof(
+				ctx, "histogram samples reduced from %d to %d to match sampler processor",
+				prevCapacity, sr.Cap(),
+			)
+		}
+	}
 }
 
 func (s *sampleAggregator) sampleRow(

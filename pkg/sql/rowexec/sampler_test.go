@@ -43,7 +43,14 @@ func runSampler(
 		types.Int, // null vals
 		types.Bytes,
 	}
-
+	const (
+		valCol = iota
+		rankCol
+		sketchIndexCol
+		numRowsCol
+		numNullsCol
+		sketchDataCol
+	)
 	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
@@ -93,16 +100,17 @@ func runSampler(
 		} else if row == nil {
 			break
 		}
-		if row[0].IsNull() {
+
+		if row[valCol].IsNull() {
 			// This is a sketch row.
 			continue
 		}
-		for i := 2; i < len(outTypes); i++ {
-			if !row[i].IsNull() {
+		for i := sketchIndexCol; i < len(outTypes); i++ {
+			if i != numRowsCol && !row[i].IsNull() {
 				t.Fatalf("expected NULL on column %d, got %s", i, row[i].Datum)
 			}
 		}
-		v := *row[0].Datum.(*tree.DInt)
+		v := *row[valCol].Datum.(*tree.DInt)
 		if seen[v] {
 			t.Fatalf("duplicate row %d", v)
 		}
@@ -207,7 +215,15 @@ func TestSamplerSketch(t *testing.T) {
 		types.Int,   // null vals
 		types.Bytes, // sketch data
 	}
-
+	const (
+		valCol0 = iota
+		valCol1
+		rankCol
+		sketchIndexCol
+		numRowsCol
+		numNullsCol
+		sketchDataCol
+	)
 	out := distsqlutils.NewRowBuffer(outTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 	st := cluster.MakeTestingClusterSettings()
@@ -264,21 +280,21 @@ func TestSamplerSketch(t *testing.T) {
 
 	for sketchIdx, r := range rows {
 		// First three columns are for sampled rows.
-		for i := 0; i < 3; i++ {
+		for i := valCol0; i < sketchIndexCol; i++ {
 			if !r[i].IsNull() {
 				t.Errorf("expected NULL on column %d, got %s", i, r[i].Datum)
 			}
 		}
-		if v := int(*r[3].Datum.(*tree.DInt)); v != sketchIdx {
+		if v := int(*r[sketchIndexCol].Datum.(*tree.DInt)); v != sketchIdx {
 			t.Errorf("expected sketch index %d, got %d", sketchIdx, v)
 		}
-		if v := int(*r[4].Datum.(*tree.DInt)); v != len(inputRows) {
+		if v := int(*r[numRowsCol].Datum.(*tree.DInt)); v != len(inputRows) {
 			t.Errorf("expected numRows %d, got %d", len(inputRows), v)
 		}
-		if v := int(*r[5].Datum.(*tree.DInt)); v != numNulls[sketchIdx] {
+		if v := int(*r[numNullsCol].Datum.(*tree.DInt)); v != numNulls[sketchIdx] {
 			t.Errorf("expected numNulls %d, got %d", numNulls[sketchIdx], v)
 		}
-		data := []byte(*r[6].Datum.(*tree.DBytes))
+		data := []byte(*r[sketchDataCol].Datum.(*tree.DBytes))
 		var s hyperloglog.Sketch
 		if err := s.UnmarshalBinary(data); err != nil {
 			t.Fatal(err)
