@@ -37,7 +37,7 @@ backends.
 
 Install Prometheus Operator:
 * `kubectl apply -f
-https://raw.githubusercontent.com/coreos/prometheus-operator/release-0.20/bundle.yaml`
+https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.47.1/bundle.yaml`
 
 Ensure that the instance of prometheus-operator has started before
 continuing.  The `kubectl get` command and its desired output is below:
