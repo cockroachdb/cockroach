@@ -4,6 +4,7 @@ load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 go_library(
     name = "colexecwindow",
     srcs = [
+        "first_value.go",
         "partitioner.go",
         "window_functions_util.go",
         ":gen-exec",  # keep
