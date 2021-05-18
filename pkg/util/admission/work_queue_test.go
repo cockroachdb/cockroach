@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 type builderWithMu struct {
@@ -65,11 +66,11 @@ func (tg *testGranter) returnGrant() {
 func (tg *testGranter) tookWithoutPermission() {
 	tg.buf.printf("tookWithoutPermission")
 }
-func (tg *testGranter) continueGrantChain() {
-	tg.buf.printf("continueGrantChain")
+func (tg *testGranter) continueGrantChain(grantChainNum uint64) {
+	tg.buf.printf("continueGrantChain %d", grantChainNum)
 }
-func (tg *testGranter) grant() {
-	rv := tg.r.granted()
+func (tg *testGranter) grant(grantChainNum uint64) {
+	rv := tg.r.granted(grantChainNum)
 	if rv {
 		// Need deterministic output, and this is racing with the goroutine that
 		// was admitted. Sleep to let it get scheduled. We could do something more
@@ -124,7 +125,7 @@ TestWorkQueueBasic is a datadriven test with the following commands:
 init
 admit id=<int> tenant=<int> priority=<int> create-time=<int> bypass=<bool>
 set-try-get-return-value v=<bool>
-granted
+granted chain-num=<int>
 cancel-work id=<int>
 work-done id=<int>
 print
@@ -142,7 +143,7 @@ func TestWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				tg = &testGranter{buf: &buf}
-				q = makeWorkQueue(KVWork, tg, false, true).(*WorkQueue)
+				q = makeWorkQueue(KVWork, tg, false, true, nil).(*WorkQueue)
 				tg.r = q
 				workMap.workMap = make(map[int]*testWork)
 				return ""
@@ -168,7 +169,8 @@ func TestWorkQueueBasic(t *testing.T) {
 					BypassAdmission: bypass,
 				}
 				go func(ctx context.Context, info WorkInfo, id int) {
-					err := q.Admit(ctx, info)
+					enabled, err := q.Admit(ctx, info)
+					require.True(t, enabled)
 					if err != nil {
 						buf.printf("id %d: admit failed", id)
 						workMap.delete(id)
@@ -189,7 +191,9 @@ func TestWorkQueueBasic(t *testing.T) {
 				return ""
 
 			case "granted":
-				tg.grant()
+				var chainNum int
+				d.ScanArgs(t, "chain-num", &chainNum)
+				tg.grant(uint64(chainNum))
 				return buf.stringAndReset()
 
 			case "cancel-work":

@@ -12,6 +12,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -30,9 +33,11 @@ go_test(
     embed = [":admission"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )

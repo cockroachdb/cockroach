@@ -8,7 +8,10 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/goschedstats",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/timeutil"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
 )
 
 go_test(
