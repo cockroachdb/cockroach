@@ -518,7 +518,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	tablePrefix := p.execCfg.Codec.TablePrefix(uint32(tableID))
 
 	// Fetch all of the range descriptors for this index.
-	ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
+	ranges, err := kvclient.ScanMetaKVs(ctx, p.execCfg.DB.NewTxn(ctx, "truncate-copy-splits"), roachpb.Span{
 		Key:    tablePrefix,
 		EndKey: tablePrefix.PrefixEnd(),
 	})
