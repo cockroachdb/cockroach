@@ -1008,9 +1008,12 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	var private interface{}
 	switch t := scalar.(type) {
-	case *NullExpr, *TupleExpr, *CollateExpr:
+	case *NullExpr, *TupleExpr:
 		// Private is redundant with logical type property.
 		private = nil
+
+	case *CollateExpr:
+		fmt.Fprintf(f.Buffer, " locale='%s'", t.Locale)
 
 	case *AnyExpr:
 		// We don't want to show the OriginalExpr; just show Cmp.
