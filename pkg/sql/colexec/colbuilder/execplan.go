@@ -1180,11 +1180,36 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			for _, wf := range core.Windower.WindowFns {
-				// We allocate the capacity for two extra types because of the
-				// temporary columns that can be appended below.
-				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+2)
+				// We allocate the capacity for two extra types because of the temporary
+				// columns that can be appended below. Capacity is also allocated for
+				// each of the argument types in case casting is necessary.
+				typs := make([]*types.T, len(result.ColumnTypes), len(result.ColumnTypes)+len(wf.ArgsIdxs)+2)
 				copy(typs, result.ColumnTypes)
-				tempColOffset, partitionColIdx := uint32(0), tree.NoColumnIdx
+
+				tempColOffset := uint32(0)
+				argTypes := make([]*types.T, len(wf.ArgsIdxs))
+				argIdxs := make([]int, len(wf.ArgsIdxs))
+				for i, idx := range wf.ArgsIdxs {
+					// Retrieve the type of each argument and perform any necessary casting.
+					expectedType := colexecwindow.GetWindowFnArgType(*wf.Func.WindowFunc, i)
+					if !expectedType.Identical(typs[idx]) {
+						// We must cast to the expected argument type.
+						castIdx := len(typs)
+						input, err = colexecbase.GetCastOperator(
+							streamingAllocator, input, int(idx), castIdx, typs[idx], expectedType,
+						)
+						if err != nil {
+							colexecerror.InternalError(errors.AssertionFailedf(
+								"failed to cast window function argument to type %v", expectedType))
+						}
+						typs = append(typs, expectedType)
+						idx = uint32(castIdx)
+						tempColOffset++
+					}
+					argTypes[i] = expectedType
+					argIdxs[i] = int(idx)
+				}
+				partitionColIdx := tree.NoColumnIdx
 				peersColIdx := tree.NoColumnIdx
 				windowFn := *wf.Func.WindowFunc
 				if len(core.Windower.PartitionBy) > 0 {
@@ -1192,10 +1217,10 @@ func NewColOperator(
 					// (probably by leveraging hash routers once we can
 					// distribute). The decision about which kind of partitioner
 					// to use should come from the optimizer.
-					partitionColIdx = int(wf.OutputColIdx)
+					partitionColIdx = int(wf.OutputColIdx + tempColOffset)
 					input, err = colexecwindow.NewWindowSortingPartitioner(
 						streamingAllocator, input, typs,
-						core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx),
+						core.Windower.PartitionBy, wf.Ordering.Columns, partitionColIdx,
 						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) (colexecop.Operator, error) {
 							return result.createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
@@ -1262,6 +1287,20 @@ func NewColOperator(
 					if c, ok := result.Root.(colexecop.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
+				case execinfrapb.WindowerSpec_NTILE:
+					// We are using an unlimited memory monitor here because
+					// the ntile operators themselves are responsible for
+					// making sure that we stay within the memory limit, and
+					// they will fall back to disk if necessary.
+					opName := opNamePrefix + "ntile"
+					unlimitedAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					diskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+					result.Root = colexecwindow.NewNTileOperator(
+						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
+						args.FDSemaphore, input, typs, outputIdx, partitionColIdx, argIdxs[0], diskAcc,
+					)
 				default:
 					return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
 				}
@@ -1278,7 +1317,7 @@ func NewColOperator(
 					result.Root = colexecbase.NewSimpleProjectOp(result.Root, int(wf.OutputColIdx+tempColOffset), projection)
 				}
 
-				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, []*types.T{}...)
+				_, returnType, err := execinfrapb.GetWindowFunctionInfo(wf.Func, argTypes...)
 				if err != nil {
 					return r, err
 				}

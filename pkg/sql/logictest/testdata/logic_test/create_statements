@@ -427,7 +427,8 @@ CREATE TABLE crdb_internal.jobs (
    fraction_completed FLOAT8 NULL,
    high_water_timestamp DECIMAL NULL,
    error STRING NULL,
-   coordinator_id INT8 NULL
+   coordinator_id INT8 NULL,
+   trace_id INT8 NULL
 )  CREATE TABLE crdb_internal.jobs (
    job_id INT8 NULL,
    job_type STRING NULL,
@@ -444,7 +445,8 @@ CREATE TABLE crdb_internal.jobs (
    fraction_completed FLOAT8 NULL,
    high_water_timestamp DECIMAL NULL,
    error STRING NULL,
-   coordinator_id INT8 NULL
+   coordinator_id INT8 NULL,
+   trace_id INT8 NULL
 )  {}  {}
 CREATE TABLE crdb_internal.kv_node_status (
    node_id INT8 NOT NULL,

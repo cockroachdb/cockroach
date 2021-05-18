@@ -619,7 +619,8 @@ CREATE TABLE crdb_internal.jobs (
 	fraction_completed 		FLOAT,
 	high_water_timestamp	DECIMAL,
 	error              		STRING,
-	coordinator_id     		INT
+	coordinator_id     		INT,
+  trace_id              INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -671,9 +672,10 @@ CREATE TABLE crdb_internal.jobs (
 				id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
-					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
+					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode,
+					traceID = tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
+					tree.DNull
 
 				// Extract data from the payload.
 				payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -726,6 +728,7 @@ CREATE TABLE crdb_internal.jobs (
 						leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 					}
 					errorStr = tree.NewDString(payload.Error)
+					traceID = tree.NewDInt(tree.DInt(payload.TraceID))
 				}
 
 				// Extract data from the progress field.
@@ -781,6 +784,7 @@ CREATE TABLE crdb_internal.jobs (
 					highWaterTimestamp,
 					errorStr,
 					leaseNode,
+					traceID,
 				)
 				return container, nil
 			}
