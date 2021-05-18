@@ -43,7 +43,7 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (string, catalog.TableColSet, error) {
+) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 	nonDropColumns := desc.NonDropColumns()
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
@@ -51,14 +51,14 @@ func DequalifyAndValidateExpr(
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
 	replacedExpr, colIDs, err := replaceColumnVars(desc, expr)
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
 	typedExpr, err := SanitizeVarFreeExpr(
@@ -71,10 +71,10 @@ func DequalifyAndValidateExpr(
 	)
 
 	if err != nil {
-		return "", colIDs, err
+		return "", nil, colIDs, err
 	}
 
-	return tree.Serialize(typedExpr), colIDs, nil
+	return tree.Serialize(typedExpr), typedExpr.ResolvedType(), colIDs, nil
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
