@@ -18,7 +18,7 @@ type statementsType = Array<statementType>;
 
 /**
  * Function to calculate total workload of statements
- * Currently is recalculating every time is called, if that becames an issue
+ * Currently is recalculating every time is called, if that becomes an issue
  * on the future, consider use of cache and memoize the function
  * @param statements array of statements (AggregateStatistics or Statement)
  * @returns the total workload of all statements
