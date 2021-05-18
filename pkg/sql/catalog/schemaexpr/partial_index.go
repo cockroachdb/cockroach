@@ -40,7 +40,7 @@ func ValidatePartialIndexPredicate(
 	tn *tree.TableName,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
-	expr, _, err := DequalifyAndValidateExpr(
+	expr, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		desc,
 		e,
