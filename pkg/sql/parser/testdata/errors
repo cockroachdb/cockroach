@@ -18,7 +18,7 @@ HINT: try \h <SOURCE>
 error
 SET TIME ZONE INTERVAL 'foobar'
 ----
-at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar"
+at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing number at position 0: "foobar"
 DETAIL: source SQL:
 SET TIME ZONE INTERVAL 'foobar'
                                ^
@@ -26,7 +26,7 @@ SET TIME ZONE INTERVAL 'foobar'
 error
 SELECT INTERVAL 'foo'
 ----
-at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing unit at position 0: "foo"
+at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing number at position 0: "foo"
 DETAIL: source SQL:
 SELECT INTERVAL 'foo'
                      ^
