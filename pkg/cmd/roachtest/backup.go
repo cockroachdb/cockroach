@@ -32,37 +32,110 @@ const (
 	KMSRegionBEnvVar = "AWS_KMS_REGION_B"
 	KMSKeyARNAEnvVar = "AWS_KMS_KEY_ARN_A"
 	KMSKeyARNBEnvVar = "AWS_KMS_KEY_ARN_B"
+
+	// rows2TiB is the number of rows to import to load 2TB of data (when
+	// replicated).
+	rows2TiB   = 65_104_166
+	rows100GiB = rows2TiB / 20
+	rows30GiB  = rows2TiB / 66
+	rows15GiB  = rows30GiB / 2
+	rows5GiB   = rows100GiB / 20
+	rows3GiB   = rows30GiB / 10
 )
 
-func registerBackup(r *testRegistry) {
-	importBankData := func(ctx context.Context, rows int, t *test, c *cluster) string {
-		dest := c.name
-		// Randomize starting with encryption-at-rest enabled.
-		c.encryptAtRandom = true
+func importBankDataSplit(ctx context.Context, rows, ranges int, t *test, c *cluster) string {
+	dest := c.name
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 
-		if local {
-			rows = 100
-			dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
-		}
-
-		c.Put(ctx, workload, "./workload")
-		c.Put(ctx, cockroach, "./cockroach")
-
-		// NB: starting the cluster creates the logs dir as a side effect,
-		// needed below.
-		c.Start(ctx, t)
-		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-		time.Sleep(time.Second) // wait for csv server to open listener
-
-		importArgs := []string{
-			"./workload", "fixtures", "import", "bank",
-			"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
-			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
-		}
-		c.Run(ctx, c.Node(1), importArgs...)
-
-		return dest
+	if local {
+		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
+
+	c.Put(ctx, workload, "./workload")
+	c.Put(ctx, cockroach, "./cockroach")
+
+	// NB: starting the cluster creates the logs dir as a side effect,
+	// needed below.
+	c.Start(ctx, t)
+	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+	time.Sleep(time.Second) // wait for csv server to open listener
+
+	importArgs := []string{
+		"./workload", "fixtures", "import", "bank",
+		"--db=bank", "--payload-bytes=10240", fmt.Sprintf("--ranges=%d", ranges), "--csv-server", "http://localhost:8081",
+		fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+	}
+	c.Run(ctx, c.Node(1), importArgs...)
+
+	return dest
+}
+
+func importBankData(ctx context.Context, rows int, t *test, c *cluster) string {
+	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
+}
+
+func registerBackupNodeShutdown(r *testRegistry) {
+	// backupNodeRestartSpec runs a backup and randomly shuts down a node during
+	// the backup.
+	backupNodeRestartSpec := makeClusterSpec(4)
+	loadBackupData := func(ctx context.Context, t *test, c *cluster) string {
+		// This aught to be enough since this isn't a performance test.
+		rows := rows15GiB
+		if local {
+			// Needs to be sufficiently large to give each processor a good chunk of
+			// works so the job doesn't complete immediately.
+			rows = rows5GiB
+		}
+		return importBankData(ctx, rows, t, c)
+	}
+
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
+		Owner:      OwnerBulkIO,
+		Cluster:    backupNodeRestartSpec,
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 3
+			dest := loadBackupData(ctx, t, c)
+			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
+			startBackup := func(c *cluster) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, gatewayNode)
+				defer gatewayDB.Close()
+
+				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
+				return
+			}
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
+		},
+	})
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
+		Owner:      OwnerBulkIO,
+		Cluster:    backupNodeRestartSpec,
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 2
+			dest := loadBackupData(ctx, t, c)
+			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
+			startBackup := func(c *cluster) (jobID string, err error) {
+				gatewayDB := c.Conn(ctx, gatewayNode)
+				defer gatewayDB.Close()
+
+				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
+				return
+			}
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startBackup)
+		},
+	})
+
+}
+
+func registerBackup(r *testRegistry) {
 
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
@@ -71,7 +144,10 @@ func registerBackup(r *testRegistry) {
 		Cluster:    backup2TBSpec,
 		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			rows := 65104166
+			rows := rows2TiB
+			if local {
+				rows = 100
+			}
 			dest := importBankData(ctx, rows, t, c)
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
@@ -96,7 +172,10 @@ func registerBackup(r *testRegistry) {
 			}
 
 			// ~10GiB - which is 30Gib replicated.
-			rows := 976562
+			rows := rows30GiB
+			if local {
+				rows = 100
+			}
 			dest := importBankData(ctx, rows, t, c)
 
 			conn := c.Conn(ctx, 1)

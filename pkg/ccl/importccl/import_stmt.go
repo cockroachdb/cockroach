@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -2049,11 +2050,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime,
+	res, err := ingestWithRetry(ctx, p, r.job, tables, files, format, details.Walltime,
 		r.testingKnobs.alwaysFlushJobProgress)
 	if err != nil {
 		return err
 	}
+
 	pkIDs := make(map[uint64]struct{}, len(details.Tables))
 	for _, t := range details.Tables {
 		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
@@ -2111,6 +2113,49 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	return nil
+}
+
+func ingestWithRetry(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	job *jobs.Job,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	from []string,
+	format roachpb.IOFileFormat,
+	walltime int64,
+	alwaysFlushProgress bool,
+) (roachpb.BulkOpSummary, error) {
+
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	retryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+
+	// We want to retry an import if there are transient failures (i.e. worker
+	// nodes dying), so if we receive a retryable error, re-plan and retry the
+	// import.
+	var res roachpb.BulkOpSummary
+	var err error
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		res, err = sql.DistIngest(ctx, execCtx, job, tables, from, format, walltime, alwaysFlushProgress)
+		if err == nil {
+			break
+		}
+
+		if utilccl.IsPermanentBulkJobError(err) {
+			return roachpb.BulkOpSummary{}, err
+		}
+
+		log.Warningf(ctx, `encountered retryable error: %+v`, err)
+	}
+
+	if err != nil {
+		return roachpb.BulkOpSummary{}, errors.Wrap(err, "exhausted retries")
+	}
+	return res, nil
 }
 
 func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.ExecutorConfig) error {

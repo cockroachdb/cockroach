@@ -13,9 +13,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -50,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -541,6 +544,58 @@ func makeBackupLocalityMap(
 	}
 
 	return backupLocalityMap, nil
+}
+
+func restoreWithRetry(
+	restoreCtx context.Context,
+	execCtx sql.JobExecContext,
+	numNodes int,
+	backupManifests []BackupManifest,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	endTime hlc.Timestamp,
+	dataToRestore restorationData,
+	job *jobs.Job,
+	encryption *jobspb.BackupEncryptionOptions,
+) (RowCount, error) {
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	retryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+
+	// We want to retry a restore if there are transient failures (i.e. worker nodes
+	// dying), so if we receive a retryable error, re-plan and retry the backup.
+	var res RowCount
+	var err error
+	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
+		res, err = restore(
+			restoreCtx,
+			execCtx,
+			numNodes,
+			backupManifests,
+			backupLocalityInfo,
+			endTime,
+			dataToRestore,
+			job,
+			encryption,
+		)
+		if err == nil {
+			break
+		}
+
+		if !utilccl.IsDistSQLRetryableError(err) {
+			return RowCount{}, err
+		}
+
+		log.Warningf(restoreCtx, `encountered retryable error: %+v`, err)
+	}
+
+	if err != nil {
+		return RowCount{}, errors.Wrap(err, "exhausted retries")
+	}
+	return res, nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1566,7 +1621,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	var resTotal RowCount
 	if !preData.isEmpty() {
-		res, err := restore(
+		res, err := restoreWithRetry(
 			ctx,
 			p,
 			numNodes,
@@ -1601,7 +1656,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	{
 		// Restore the main data bundle. We notably only restore the system tables
 		// later.
-		res, err := restore(
+		res, err := restoreWithRetry(
 			ctx,
 			p,
 			numNodes,
