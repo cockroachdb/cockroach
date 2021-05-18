@@ -79,6 +79,11 @@ func (sr *SampleReservoir) Len() int {
 	return len(sr.samples)
 }
 
+// Cap returns K, the maximum number of samples the reservoir can hold.
+func (sr *SampleReservoir) Cap() int {
+	return cap(sr.samples)
+}
+
 // Less is part of heap.Interface.
 func (sr *SampleReservoir) Less(i, j int) bool {
 	// We want a max heap, so higher ranks sort first.
@@ -93,8 +98,38 @@ func (sr *SampleReservoir) Swap(i, j int) {
 // Push is part of heap.Interface, but we're not using it.
 func (sr *SampleReservoir) Push(x interface{}) { panic("unimplemented") }
 
-// Pop is part of heap.Interface, but we're not using it.
-func (sr *SampleReservoir) Pop() interface{} { panic("unimplemented") }
+// Pop is part of heap.Interface.
+func (sr *SampleReservoir) Pop() interface{} {
+	n := len(sr.samples)
+	samp := sr.samples[n-1]
+	sr.samples[n-1] = SampledRow{} // Avoid leaking the popped sample.
+	sr.samples = sr.samples[:n-1]
+	return samp
+}
+
+// MaybeResize safely shrinks the capacity of the reservoir (K) without
+// introducing bias if the requested capacity is less than the current
+// capacity, and returns whether the capacity changed. (Note that the capacity
+// can only decrease without introducing bias. Increasing capacity would cause
+// later rows to be over-represented relative to earlier rows.)
+func (sr *SampleReservoir) MaybeResize(ctx context.Context, k int) bool {
+	if k >= cap(sr.samples) {
+		return false
+	}
+	// Make sure we have initialized the heap before popping.
+	heap.Init(sr)
+	for len(sr.samples) > k {
+		samp := heap.Pop(sr).(SampledRow)
+		if sr.memAcc != nil {
+			sr.memAcc.Shrink(ctx, int64(samp.Row.Size()))
+		}
+	}
+	// Copy to a new array to allow garbage collection.
+	samples := make([]SampledRow, len(sr.samples), k)
+	copy(samples, sr.samples)
+	sr.samples = samples
+	return true
+}
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir.
 func (sr *SampleReservoir) SampleRow(
