@@ -219,8 +219,8 @@ func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 func TestReliableIntentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t)
-	skip.UnderStress(t)
+	skip.UnderRace(t, "timing-sensitive test")
+	skip.UnderStress(t, "multi-node test")
 
 	testutils.RunTrueAndFalse(t, "ForceSyncIntentResolution", func(t *testing.T, sync bool) {
 		ctx := context.Background()
@@ -283,8 +283,8 @@ func TestReliableIntentCleanup(t *testing.T) {
 					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
 				require.NoError(t, err)
 				return len(result.Intents) == 0
-			}, 10*time.Second, 100*time.Millisecond, "intent cleanup timed out") {
-				require.Fail(t, "found stale intents", "%v", len(result.Intents))
+			}, 30*time.Second, 200*time.Millisecond, "intent cleanup timed out") {
+				require.Fail(t, "found stale intents", "%v intents", len(result.Intents))
 			}
 		}
 
@@ -299,7 +299,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 					storage.MVCCGetOptions{})
 				require.NoError(t, err)
 				return !ok
-			}, 5*time.Second, 100*time.Millisecond, "txn entry cleanup timed out") {
+			}, 10*time.Second, 100*time.Millisecond, "txn entry cleanup timed out") {
 				require.Fail(t, "found stale txn entry", "%v", txnEntry)
 			}
 		}
