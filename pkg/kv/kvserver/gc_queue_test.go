@@ -110,7 +110,8 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 		}
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
 		r := makeGCQueueScoreImpl(
-			ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{})
+			ctx, int64(seed), now, ms, zonepb.GCPolicy{TTLSeconds: ttlSec}, hlc.Timestamp{},
+			true /* canAdvanceGCThreshold */)
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
 		if !result {
@@ -132,7 +133,7 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			LiveBytes:         int64(liveBytes),
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
-		}, zonepb.GCPolicy{TTLSeconds: 60}, hlc.Timestamp{})
+		}, zonepb.GCPolicy{TTLSeconds: 60}, hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
 		t.Fatal(err)
@@ -156,7 +157,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			hlc.Timestamp{},
+			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
@@ -171,7 +172,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			hlc.Timestamp{},
+			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
 		)
 		require.True(t, r.ShouldQueue)
 		require.NotZero(t, r.FinalScore)
@@ -182,7 +183,7 @@ func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
 			ms, zonepb.GCPolicy{TTLSeconds: 10000},
-			hlc.Timestamp{WallTime: expiration - 100},
+			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
 		)
 		require.False(t, r.ShouldQueue)
 		require.Zero(t, r.FinalScore)
@@ -221,7 +222,8 @@ func TestGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 				ms.ValBytes = 1e9
 			}
 
-			r := makeGCQueueScoreImpl(ctx, seed, now, ms, policy, tc.lastGC)
+			r := makeGCQueueScoreImpl(
+				ctx, seed, now, ms, policy, tc.lastGC, true /* canAdvanceGCThreshold */)
 			require.Equal(t, tc.expectGC, r.ShouldQueue)
 		})
 	}
@@ -342,7 +344,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
 	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, zonepb.GCPolicy{
 		TTLSeconds: int32(ttl.Seconds()),
-	}, hlc.Timestamp{})
+	}, hlc.Timestamp{}, true /* canAdvanceGCThreshold */)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
 			b, r.ShouldQueue, prio, r.FinalScore, after, ttl, ms, r)
@@ -447,15 +449,13 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 
 		// Write 1000 distinct 1kb intents at the initial timestamp. This means that
 		// the average intent age is just the time elapsed from now, and this is roughly
-		// normalized by one day at the time of writing. Note that the size of the writes
+		// normalized by one hour at the time of writing. Note that the size of the writes
 		// doesn't matter. In reality, the value-based GC score will often strike first.
 		cws.multiKey(100, valSize, txn, &ms)
 
-		cws.shouldQueue(false, 1.00, 24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 1.99, 2*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 3.99, 4*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 6.98, 7*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(true, 11.97, 12*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 0.12, 1*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 0.87, 7*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(true, 1.12, 9*time.Hour, irrelevantTTL, ms)
 	}
 }
 
