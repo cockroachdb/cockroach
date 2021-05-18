@@ -208,8 +208,8 @@ var inputs = map[string][]string{
 		// float encodings. These deviations are still correct, and it's not worth
 		// special casing them into the code, so they are commented out here.
 		//"NaN",
-		//"Inf",
-		//"-Inf",
+		"Inf",
+		"-Inf",
 		"-000.000",
 		"-0000021234.23246346000000",
 		"-1.2",
@@ -229,8 +229,8 @@ var inputs = map[string][]string{
 		// float encodings. These deviations are still correct, and it's not worth
 		// special casing them into the code, so they are commented out here.
 		//"NaN",
-		//"Inf",
-		//"-Inf",
+		"Inf",
+		"-Inf",
 		"-000.000",
 		"-0000021234.2",
 		"-1.2",
