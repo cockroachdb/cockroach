@@ -399,7 +399,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 	t.Run("defaults returned if not option set", func(t *testing.T) {
 		opts := make(map[string]string)
 
-		expected := defaultSaramaConfig
+		expected := defaultSaramaConfig()
 
 		cfg, err := getSaramaConfig(opts)
 		require.NoError(t, err)
@@ -430,6 +430,53 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		cfg, err = getSaramaConfig(opts)
 		require.NoError(t, err)
 		require.Error(t, cfg.Validate())
+	})
+	t.Run("options overlay defaults", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"MaxMessages": 1000, "Frequency": "1s"}}`
+
+		expected := defaultSaramaConfig()
+		expected.Flush.MaxMessages = 1000
+		expected.Flush.Frequency = jsonDuration(time.Second)
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, expected, cfg)
+	})
+	t.Run("apply parses valid version", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"version": "0.8.2.0"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.V0_8_2_0, saramaCfg.Version)
+	})
+	t.Run("apply allows for unset version", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.NoError(t, err)
+		require.Equal(t, sarama.KafkaVersion{}, saramaCfg.Version)
+	})
+	t.Run("apply errors if version is invalid", func(t *testing.T) {
+		opts := make(map[string]string)
+		opts[changefeedbase.OptKafkaSinkConfig] = `{"version": "invalid"}`
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := &sarama.Config{}
+		err = cfg.Apply(saramaCfg)
+		require.Error(t, err)
 	})
 }
 
