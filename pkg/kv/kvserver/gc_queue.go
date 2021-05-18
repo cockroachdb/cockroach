@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -35,6 +36,8 @@ import (
 const (
 	// gcQueueTimerDuration is the duration between GCs of queued replicas.
 	gcQueueTimerDuration = 1 * time.Second
+	// gcQueueTimeout is the timeout for a single GC run.
+	gcQueueTimeout = 10 * time.Minute
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total replica priority.
 	intentAgeNormalization = 24 * time.Hour // 1 day
@@ -102,10 +105,13 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,
-			successes:            store.metrics.GCQueueSuccesses,
-			failures:             store.metrics.GCQueueFailures,
-			pending:              store.metrics.GCQueuePending,
-			processingNanos:      store.metrics.GCQueueProcessingNanos,
+			processTimeoutFunc: func(_ *cluster.Settings, _ replicaInQueue) time.Duration {
+				return gcQueueTimeout
+			},
+			successes:       store.metrics.GCQueueSuccesses,
+			failures:        store.metrics.GCQueueFailures,
+			pending:         store.metrics.GCQueuePending,
+			processingNanos: store.metrics.GCQueueProcessingNanos,
 		},
 	)
 	return gcq
