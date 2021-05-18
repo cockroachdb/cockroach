@@ -1202,8 +1202,9 @@ func formatVal(
 		// not interpret the bytes and for us here to print that as-is, so
 		// that we can let the user see and control the result using
 		// `bytea_output`.
-		return lex.EncodeByteArrayToRawBytes(string(t),
-			sessiondatapb.BytesEncodeEscape, false /* skipHexPrefix */)
+		return string(lex.EncodeByteArrayToRawBytes(
+			t, sessiondatapb.BytesEncodeEscape, false /* skipHexPrefix */),
+		)
 
 	case time.Time:
 		tfmt, ok := timeOutputFormats[colType]

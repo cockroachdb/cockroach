@@ -135,7 +135,7 @@ func TestByteArrayDecoding(t *testing.T) {
 			if s.auto {
 				dec, err = lex.DecodeRawBytesToByteArrayAuto([]byte(s.in))
 			} else {
-				dec, err = lex.DecodeRawBytesToByteArray(s.in, s.inFmt)
+				dec, err = lex.DecodeRawBytesToByteArray([]byte(s.in), s.inFmt)
 			}
 			if s.err != "" {
 				if err == nil {
@@ -179,17 +179,17 @@ func TestByteArrayEncoding(t *testing.T) {
 				sessiondatapb.BytesEncodeBase64,
 			} {
 				t.Run(format.String(), func(t *testing.T) {
-					enc := lex.EncodeByteArrayToRawBytes(s.in, format, false)
+					enc := lex.EncodeByteArrayToRawBytes([]byte(s.in), format, false)
 
 					expEnc := s.out[int(format)]
-					if enc != expEnc {
+					if string(enc) != expEnc {
 						t.Fatalf("encoded %q, expected %q", enc, expEnc)
 					}
 
 					if format == sessiondatapb.BytesEncodeHex {
 						// Check that the \x also can be skipped.
-						enc2 := lex.EncodeByteArrayToRawBytes(s.in, format, true)
-						if enc[2:] != enc2 {
+						enc2 := lex.EncodeByteArrayToRawBytes([]byte(s.in), format, true)
+						if string(enc[2:]) != string(enc2) {
 							t.Fatal("can't skip prefix")
 						}
 						enc = enc[2:]

@@ -98,10 +98,10 @@ func writeTextFloat64(b *writeBuffer, fl float64, conv sessiondatapb.DataConvers
 	b.write(s)
 }
 
-func writeTextBytes(b *writeBuffer, v string, conv sessiondatapb.DataConversionConfig) {
+func writeTextBytes(b *writeBuffer, v []byte, conv sessiondatapb.DataConversionConfig) {
 	result := lex.EncodeByteArrayToRawBytes(v, conv.BytesEncodeFormat, false /* skipHexPrefix */)
 	b.putInt32(int32(len(result)))
-	b.write([]byte(result))
+	b.write(result)
 }
 
 func writeTextUUID(b *writeBuffer, v uuid.UUID) {
@@ -181,7 +181,7 @@ func writeTextDatumNotNull(
 		b.writeLengthPrefixedDatum(v)
 
 	case *tree.DBytes:
-		writeTextBytes(b, string(*v), conv)
+		writeTextBytes(b, []byte(*v), conv)
 
 	case *tree.DUuid:
 		writeTextUUID(b, v.UUID)
@@ -306,7 +306,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		b.writeLengthPrefixedString(d.String())
 
 	case types.BytesFamily:
-		writeTextBytes(b, string(vec.Bytes().Get(idx)), conv)
+		writeTextBytes(b, vec.Bytes().Get(idx), conv)
 
 	case types.UuidFamily:
 		id, err := uuid.FromBytes(vec.Bytes().Get(idx))

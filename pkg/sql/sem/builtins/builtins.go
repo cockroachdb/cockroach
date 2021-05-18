@@ -1043,8 +1043,9 @@ var builtins = map[string]builtinDefinition{
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for encode()")
 				}
-				return tree.NewDString(lex.EncodeByteArrayToRawBytes(
-					string(data), be, true /* skipHexPrefix */)), nil
+				return tree.NewDString(string(lex.EncodeByteArrayToRawBytes(
+					[]byte(data), be, true /* skipHexPrefix */),
+				)), nil
 			},
 			Info:       "Encodes `data` using `format` (`hex` / `escape` / `base64`).",
 			Volatility: tree.VolatilityImmutable,
@@ -1062,7 +1063,7 @@ var builtins = map[string]builtinDefinition{
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
-				res, err := lex.DecodeRawBytesToByteArray(data, be)
+				res, err := lex.DecodeRawBytesToByteArray([]byte(data), be)
 				if err != nil {
 					return nil, err
 				}
