@@ -734,18 +734,22 @@ SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
 	),
 	"st_geomfromgeojson": makeBuiltin(
 		defProps(),
-		stringOverload1(
-			func(_ *tree.EvalContext, s string) (tree.Datum, error) {
-				g, err := geo.ParseGeometryFromGeoJSON([]byte(s))
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g, err := geo.ParseGeometryFromGeoJSON([]byte(tree.MustBeDString(args[0])))
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDGeometry(g), nil
 			},
-			types.Geometry,
-			infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
-			tree.VolatilityImmutable,
-		),
+			// Simulate PostgreSQL's ambiguity type resolving check that prefers
+			// strings over JSON.
+			PreferredOverload: true,
+			Info:              infoBuilder{info: "Returns the Geometry from an GeoJSON representation."}.String(),
+			Volatility:        tree.VolatilityImmutable,
+		},
 		jsonOverload1(
 			func(_ *tree.EvalContext, s json.JSON) (tree.Datum, error) {
 				// TODO(otan): optimize to not string it first.
