@@ -1349,17 +1349,17 @@ CREATE TABLE pg_catalog.pg_policy (
 //PgCatalogSequences is an empty table in the pg_catalog that is not implemented yet
 const PgCatalogSequences = `
 CREATE TABLE pg_catalog.pg_sequences (
-	cache_size INT,
-	cycle BOOL,
-	data_type REGTYPE,
-	max_value INT,
-	sequenceowner NAME,
-	start_value INT,
-	increment_by INT,
-	last_value INT,
-	min_value INT,
 	schemaname NAME,
-	sequencename NAME
+	sequencename NAME,
+	sequenceowner NAME,
+	data_type REGTYPE,
+	start_value INT,
+	min_value INT,
+	max_value INT,
+	increment_by INT,
+	cycle BOOL,
+	cache_size INT,
+	last_value INT
 )`
 
 //PgCatalogSubscriptionRel is an empty table in the pg_catalog that is not implemented yet
