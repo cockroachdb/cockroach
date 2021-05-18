@@ -7477,9 +7477,7 @@ func arrayNumInvertedIndexEntries(
 
 	v := descpb.SecondaryIndexFamilyFormatVersion
 	if version == tree.DNull {
-		if ctx.Settings.Version.IsActive(
-			ctx.Context, clusterversion.EmptyArraysInInvertedIndexes,
-		) {
+		if ctx.Settings.Version.IsActive(ctx.Context, clusterversion.EmptyArraysInInvertedIndexes) {
 			v = descpb.EmptyArraysInInvertedIndexesVersion
 		}
 	} else {

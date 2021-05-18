@@ -74,6 +74,10 @@ type PostDeserializationTableDescriptorChanges struct {
 	// UpgradedFormatVersion indicates that the FormatVersion was upgraded.
 	UpgradedFormatVersion bool
 
+	// UpgradedIndexFormatVersion indicates that the format version of at least
+	// one index descriptor was upgraded
+	UpgradedIndexFormatVersion bool
+
 	// FixedPrivileges indicates that the privileges were fixed.
 	//
 	// TODO(ajwerner): Determine whether this still needs to exist of can be
@@ -646,6 +650,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 
 	// Populate IDs.
 	for _, idx := range desc.AllIndexes() {
+		maybeUpgradeIndexFormatVersion(idx.IndexDesc())
 		if idx.GetID() != 0 {
 			// This index has already been populated. Nothing to do.
 			continue
