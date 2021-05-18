@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -170,6 +171,8 @@ type Node struct {
 	additionalStoreInitCh chan struct{}
 
 	perReplicaServer kvserver.Server
+
+	admissionQ *admission.WorkQueue
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -898,7 +901,38 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
+	bypassAdmission := args.IsAdmin()
+	// TODO(sumeer): properly initialize tenant ID. If non-SystemTenantID sends
+	// a request with source other than AdmissionHeader_FROM_SQL, change it to
+	// FROM_SQL.
+	tenantID := roachpb.SystemTenantID
+	if args.AdmissionHeader.Source == roachpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	createTime := args.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admission.WorkPriority(args.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+	}
+	var enabled bool
+	if n.admissionQ != nil {
+		var err error
+		enabled, err = n.admissionQ.Admit(ctx, admissionInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
 	br, err := n.batchInternal(ctx, args)
+	if n.admissionQ != nil && enabled {
+		n.admissionQ.AdmittedWorkDone(tenantID)
+	}
 
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC
