@@ -34,6 +34,9 @@ one another, we'd have two different prometheus jobs that had duplicated
 backends.
 * `kubectl label svc cockroachdb prometheus=cockroachdb`
 
+Check for the latest Prometheus Operator 
+[release version](https://github.com/prometheus-operator/prometheus-operator/blob/master/RELEASE.md). 
+Specify the version number in the below command.
 
 Install Prometheus Operator:
 * `kubectl apply -f
