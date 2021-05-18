@@ -48,7 +48,7 @@ export function approximify(value: number) {
  * @description
  * This function preserves behavior introduced by following issue in d3-scale library (starting from 2.2 version)
  * https://github.com/d3/d3-scale/issues/117
- * It is expected for scaling withing closed domain range, the start value is returned.
+ * It is expected for scaling within closed domain range, the start value is returned.
  * @example
  * scaleLinear().domain([0, 0])(0) // --> 0.5
  * scaleLinear().domain(normalizeClosedDomain([0, 0]))(0) // --> 0
