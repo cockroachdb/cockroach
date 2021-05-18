@@ -362,7 +362,6 @@ func (t *Tracer) startSpanGeneric(
 		traceID:      traceID,
 		spanID:       spanID,
 		goroutineID:  goroutineID,
-		operation:    opName,
 		startTime:    startTime,
 		parentSpanID: opts.parentSpanID(),
 		logTags:      opts.LogTags,
@@ -371,6 +370,7 @@ func (t *Tracer) startSpanGeneric(
 		},
 		testing: t.testing,
 	}
+	helper.crdbSpan.mu.operation = opName
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
 	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
 	helper.span.i = spanInner{

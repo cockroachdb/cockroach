@@ -34,7 +34,6 @@ type crdbSpan struct {
 	parentSpanID uint64
 	goroutineID  uint64
 
-	operation string
 	startTime time.Time
 
 	// logTags are set to the log tags that were available when this Span was
@@ -58,7 +57,8 @@ type testingKnob struct {
 type crdbSpanMu struct {
 	syncutil.Mutex
 	// duration is initialized to -1 and set on Finish().
-	duration time.Duration
+	duration  time.Duration
+	operation string // name of operation associated with the span
 
 	recording struct {
 		// recordingType is the recording type of the ongoing recording, if any.
@@ -324,7 +324,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		SpanID:       s.spanID,
 		ParentSpanID: s.parentSpanID,
 		GoroutineID:  s.goroutineID,
-		Operation:    s.operation,
+		Operation:    s.mu.operation,
 		StartTime:    s.startTime,
 		Duration:     s.mu.duration,
 	}
