@@ -1711,7 +1711,6 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
 	_ = s.stopper.RunAsyncTask(ctx, "lease-renewer", func(ctx context.Context) {
-		repls := make(map[*Replica]struct{})
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
 
@@ -1724,21 +1723,24 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 		// lease expires and when we should attempt to renew it as a result.
 		renewalDuration := s.cfg.RangeLeaseActiveDuration() / 5
 		for {
+			NumOfReplWithLease := 0
 			s.renewableLeases.Range(func(k int64, v unsafe.Pointer) bool {
 				repl := (*Replica)(v)
+				NumOfReplWithLease++
 				annotatedCtx := repl.AnnotateCtx(ctx)
 				if _, pErr := repl.redirectOnOrAcquireLease(annotatedCtx); pErr != nil {
 					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
 					}
 					s.renewableLeases.Delete(k)
+					NumOfReplWithLease--
 				}
 				return true
 			})
-
-			if len(repls) > 0 {
+			if NumOfReplWithLease > 0 {
 				timer.Reset(renewalDuration)
 			}
+
 			select {
 			case <-s.renewableLeasesSignal:
 			case <-timer.C:
