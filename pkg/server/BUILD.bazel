@@ -76,7 +76,6 @@ go_library(
         "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/kv/kvprober",
         "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/closedts/container",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvserverbase",

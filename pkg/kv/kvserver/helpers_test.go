@@ -204,18 +204,6 @@ func (s *Store) RaftSchedulerPriorityID() roachpb.RangeID {
 	return s.scheduler.PriorityID()
 }
 
-// ClearClosedTimestampStorage clears the closed timestamp storage of all
-// knowledge about closed timestamps.
-func (s *Store) ClearClosedTimestampStorage() {
-	s.cfg.ClosedTimestamp.Storage.Clear()
-}
-
-// RequestClosedTimestamp instructs the closed timestamp client to request the
-// relevant node to publish its MLAI for the provided range.
-func (s *Store) RequestClosedTimestamp(nodeID roachpb.NodeID, rangeID roachpb.RangeID) {
-	s.cfg.ClosedTimestamp.Clients.Request(nodeID, rangeID)
-}
-
 func NewTestStorePool(cfg StoreConfig) *StorePool {
 	TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, TestTimeUntilStoreDeadOff)
 	return NewStorePool(
@@ -262,11 +250,6 @@ func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
-}
-
-// MaxClosed returns the maximum closed timestamp known to the Replica.
-func (r *Replica) MaxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
-	return r.maxClosed(ctx)
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to

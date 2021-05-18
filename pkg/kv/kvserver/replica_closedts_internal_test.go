@@ -509,8 +509,8 @@ func (r *mockReceiver) HTML() string {
 	return ""
 }
 
-// Test that r.GetClosedTimestampV2() mixes its sources of information correctly.
-func TestReplicaClosedTimestampV2(t *testing.T) {
+// Test that r.GetClosedTimestamp() mixes its sources of information correctly.
+func TestReplicaClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -567,7 +567,7 @@ func TestReplicaClosedTimestampV2(t *testing.T) {
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
 			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
 			tc.repl.mu.Unlock()
-			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestampV2(ctx))
+			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestamp(ctx))
 		})
 	}
 }

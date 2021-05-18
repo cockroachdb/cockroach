@@ -222,9 +222,6 @@ const (
 	// are propagated across RPC boundaries independently of their verbosity setting.
 	// This requires a version gate this violates implicit assumptions in v20.2.
 	TracingVerbosityIndependentSemantics
-	// ClosedTimestampsRaftTransport enables the Raft transport for closed
-	// timestamps and disables the previous per-node transport.
-	ClosedTimestampsRaftTransport
 	// PriorReadSummaries introduces support for the use of read summary objects
 	// to ship information about reads on a range through lease changes and
 	// range merges.
@@ -409,10 +406,6 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TracingVerbosityIndependentSemantics,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 28},
-	},
-	{
-		Key:     ClosedTimestampsRaftTransport,
-		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 36},
 	},
 	{
 		Key:     PriorReadSummaries,
