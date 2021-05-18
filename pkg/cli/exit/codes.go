@@ -10,60 +10,66 @@
 
 package exit
 
-// Codes that are common to all command times (server + client) follow.
+const (
+	//
+	// Codes that are common to all command times (server + client) follow.
+	//
 
-// Success (0) represents a normal process termination.
-func Success() Code { return Code{0} }
+	// Success represents a normal process termination.
+	Success Code = 0
 
-// UnspecifiedError (1) indicates the process has terminated with an
-// error condition. The specific cause of the error can be found in
-// the logging output.
-func UnspecifiedError() Code { return Code{1} }
+	// UnspecifiedError indicates the process has terminated with an
+	// error condition. The specific cause of the error can be found in
+	// the logging output.
+	UnspecifiedError = 1
 
-// UnspecifiedGoPanic (2) indicates the process has terminated due to
-// an uncaught Go panic or some other error in the Go runtime.
-//
-// The reporting of this exit code likely indicates a programming
-// error inside CockroachDB.
-//
-// Conversely, this should not be used when implementing features.
-func UnspecifiedGoPanic() Code { return Code{2} }
+	// UnspecifiedGoPanic indicates the process has terminated due to
+	// an uncaught Go panic or some other error in the Go runtime.
+	//
+	// The reporting of this exit code likely indicates a programming
+	// error inside CockroachDB.
+	//
+	// Conversely, this should not be used when implementing features.
+	UnspecifiedGoPanic = 2
 
-// Interrupted (3) indicates the server process was interrupted with
-// Ctrl+C / SIGINT.
-func Interrupted() Code { return Code{3} }
+	// Interrupted indicates the server process was interrupted with
+	// Ctrl+C / SIGINT.
+	Interrupted = 3
 
-// CommandLineFlagError (4) indicates there was an error in the
-// command-line parameters.
-func CommandLineFlagError() Code { return Code{4} }
+	// CommandLineFlagError indicates there was an error in the
+	// command-line parameters.
+	CommandLineFlagError = 4
 
-// LoggingStderrUnavailable (5) indicates that an error occurred
-// during a logging operation to the process' stderr stream.
-func LoggingStderrUnavailable() Code { return Code{5} }
+	// LoggingStderrUnavailable indicates that an error occurred
+	// during a logging operation to the process' stderr stream.
+	LoggingStderrUnavailable = 5
 
-// LoggingFileUnavailable (6) indicates that an error occurred
-// during a logging operation to a file.
-func LoggingFileUnavailable() Code { return Code{6} }
+	// LoggingFileUnavailable indicates that an error occurred
+	// during a logging operation to a file.
+	LoggingFileUnavailable = 6
 
-// FatalError (7) indicates that a logical error in the server caused
-// an emergency shutdown.
-func FatalError() Code { return Code{7} }
+	// FatalError indicates that a logical error in the server caused
+	// an emergency shutdown.
+	FatalError = 7
 
-// TimeoutAfterFatalError (8) indicates that an emergency shutdown
-// due to a fatal error did not occur properly due to some blockage
-// in the logging system.
-func TimeoutAfterFatalError() Code { return Code{8} }
+	// TimeoutAfterFatalError indicates that an emergency shutdown
+	// due to a fatal error did not occur properly due to some blockage
+	// in the logging system.
+	TimeoutAfterFatalError = 8
 
-// LoggingNetCollectorUnavailable (9) indicates that an error occurred
-// during a logging operation to a network collector.
-func LoggingNetCollectorUnavailable() Code { return Code{9} }
+	// LoggingNetCollectorUnavailable indicates that an error occurred
+	// during a logging operation to a network collector.
+	LoggingNetCollectorUnavailable = 9
 
-// Codes that are specific to client commands follow. It's possible
-// for codes to be reused across separate client or server commands.
-// Command-specific exit codes should be allocated down from 125.
+	//
+	// Codes that are specific to client commands follow. It's possible
+	// for codes to be reused across separate client or server commands.
+	// Command-specific exit codes should be allocated down from 125.
+	//
 
-// 'doctor' exit codes.
+	// 'doctor' exit codes.
 
-// DoctorValidationFailed indicates that the 'doctor' command has detected
-// an inconsistency in the SQL metaschema.
-func DoctorValidationFailed() Code { return Code{125} }
+	// DoctorValidationFailed indicates that the 'doctor' command has detected
+	// an inconsistency in the SQL metaschema.
+	DoctorValidationFailed = 125
+)

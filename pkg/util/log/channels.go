@@ -66,7 +66,7 @@ func shoutfDepth(
 		// Fatal error handling later already tries to exit even if I/O should
 		// block, but crash reporting might also be in the way.
 		t := time.AfterFunc(10*time.Second, func() {
-			exit.WithCode(exit.TimeoutAfterFatalError())
+			exit.WithCode(exit.TimeoutAfterFatalError)
 		})
 		defer t.Stop()
 	}

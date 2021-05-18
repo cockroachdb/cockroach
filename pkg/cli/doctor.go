@@ -146,7 +146,7 @@ func runDoctor(
 		if err == nil {
 			if !valid {
 				return &cliError{
-					exitCode: exit.DoctorValidationFailed(),
+					exitCode: exit.DoctorValidationFailed,
 					cause:    errors.New("validation failed"),
 				}
 			}
@@ -162,7 +162,7 @@ func runDoctor(
 		// Note: we are using "unspecified" here because the error
 		// return does not distinguish errors like connection errors
 		// etc, from errors during extraction.
-		exitCode: exit.UnspecifiedError(),
+		exitCode: exit.UnspecifiedError,
 		cause:    errors.Wrapf(err, "doctor command %q failed", commandName),
 	}
 }

@@ -803,7 +803,7 @@ func TestExitOnFullDisk(t *testing.T) {
 	}
 
 	l.outputMu.Lock()
-	l.exitLocked(fmt.Errorf("out of space"), exit.UnspecifiedError())
+	l.exitLocked(fmt.Errorf("out of space"), exit.UnspecifiedError)
 	l.outputMu.Unlock()
 
 	exited.Wait()

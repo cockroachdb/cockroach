@@ -11,4 +11,4 @@
 package exit
 
 // Silence the linter.
-var _ = UnspecifiedGoPanic()
+var _ = UnspecifiedGoPanic

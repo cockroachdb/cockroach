@@ -137,7 +137,7 @@ func TestHLCPhysicalClockJump(t *testing.T) {
 	var fatal bool
 	defer log.ResetExitFunc()
 	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
-		if r == exit.FatalError() {
+		if r == exit.FatalError {
 			fatal = true
 		}
 	})
@@ -429,7 +429,7 @@ func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
 	defer log.ResetExitFunc()
 	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r == exit.FatalError() {
+		if r == exit.FatalError {
 			fatal = true
 		}
 	})
@@ -478,7 +478,7 @@ func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
 	defer log.ResetExitFunc()
 	log.SetExitFunc(true /* hideStack */, func(r exit.Code) {
 		defer log.Flush()
-		if r == exit.FatalError() {
+		if r == exit.FatalError {
 			fatal = true
 		}
 	})

@@ -30,7 +30,7 @@ import (
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR:", err)
-		exit.WithCode(exit.UnspecifiedError())
+		exit.WithCode(exit.UnspecifiedError)
 	}
 }
 

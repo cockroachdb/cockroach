@@ -34,7 +34,7 @@ func init() {
 func runLogFormats(_ *cobra.Command, args []string) {
 	if err := runLogFormatsInternal(args); err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR:", err)
-		exit.WithCode(exit.UnspecifiedError())
+		exit.WithCode(exit.UnspecifiedError)
 	}
 }
 

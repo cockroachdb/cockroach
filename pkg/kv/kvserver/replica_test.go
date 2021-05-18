@@ -3369,7 +3369,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 	if !testutils.IsPError(pErr, "replica corruption") {
 		t.Fatal(pErr)
 	}
-	if exitStatus != exit.FatalError() {
+	if exitStatus != exit.FatalError {
 		t.Fatalf("did not fatal (exit status %d)", exitStatus)
 	}
 }
@@ -4165,7 +4165,7 @@ func TestEndTxnWithMalformedSplitTrigger(t *testing.T) {
 		t.Errorf("unexpected error: %s", pErr)
 	}
 
-	if exitStatus != exit.FatalError() {
+	if exitStatus != exit.FatalError {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }
@@ -6572,7 +6572,7 @@ func TestReplicaCorruption(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.
-	if exitStatus != exit.FatalError() {
+	if exitStatus != exit.FatalError {
 		t.Fatalf("unexpected exit status %d", exitStatus)
 	}
 }

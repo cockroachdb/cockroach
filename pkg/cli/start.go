@@ -371,7 +371,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// If any store has something to say against a server start-up
 	// (e.g. previously detected corruption), listen to them now.
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
-		return &cliError{exitCode: exit.FatalError(), cause: err}
+		return &cliError{exitCode: exit.FatalError, cause: err}
 	}
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
@@ -760,7 +760,7 @@ If problems persist, please see %s.`
 			// "legitimate" and should be acknowledged with a success exit
 			// code. So we keep the error state here for later.
 			returnErr = &cliError{
-				exitCode: exit.Interrupted(),
+				exitCode: exit.Interrupted,
 				// INFO because a single interrupt is rather innocuous.
 				severity: severity.INFO,
 				cause:    errors.New("interrupted"),

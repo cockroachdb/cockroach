@@ -195,7 +195,7 @@ func (l *fileSink) output(extraFlush bool, b []byte) error {
 
 // exitCode implements the logSink interface.
 func (l *fileSink) exitCode() exit.Code {
-	return exit.LoggingFileUnavailable()
+	return exit.LoggingFileUnavailable
 }
 
 // emergencyOutput implements the logSink interface.

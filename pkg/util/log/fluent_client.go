@@ -56,7 +56,7 @@ func (l *fluentSink) attachHints(stacks []byte) []byte {
 
 // exitCode implements the logSink interface.
 func (l *fluentSink) exitCode() exit.Code {
-	return exit.LoggingNetCollectorUnavailable()
+	return exit.LoggingNetCollectorUnavailable
 }
 
 // output implements the logSink interface.
