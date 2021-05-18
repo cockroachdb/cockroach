@@ -2882,12 +2882,45 @@ var pgCatalogReplicationOriginStatusTable = virtualSchemaTable{
 }
 
 var pgCatalogSequencesTable = virtualSchemaTable{
-	comment: "pg_sequences was created for compatibility and is currently unimplemented",
-	schema:  vtable.PgCatalogSequences,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return nil
+	comment: `pg_sequences is very similar as pg_sequence.
+https://www.postgresql.org/docs/13/view-pg-sequences.html
+`,
+	schema: vtable.PgCatalogSequences,
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
+			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+				if !table.IsSequence() {
+					return nil
+				}
+				opts := table.GetSequenceOpts()
+				lastValue := tree.DNull
+				sequenceValue, err := p.GetSequenceValue(ctx, p.execCfg.Codec, table)
+				if err != nil {
+					return err
+				}
+
+				if sequenceValue != opts.Start-opts.Increment {
+					// Before using for the first time, sequenceValue will be:
+					// opts.Start - opts.Increment.
+					lastValue = tree.NewDInt(tree.DInt(sequenceValue))
+				}
+
+				return addRow(
+					tree.NewDString(scName),                 // schemaname
+					tree.NewDString(table.GetName()),        // sequencename
+					getOwnerName(table),                     // sequenceowner
+					tree.NewDOid(tree.DInt(oid.T_int8)),     // data_type
+					tree.NewDInt(tree.DInt(opts.Start)),     // start_value
+					tree.NewDInt(tree.DInt(opts.MinValue)),  // min_value
+					tree.NewDInt(tree.DInt(opts.MaxValue)),  // max_value
+					tree.NewDInt(tree.DInt(opts.Increment)), // increment_by
+					tree.DBoolFalse,                         // cycle
+					tree.NewDInt(tree.DInt(opts.CacheSize)), // cache_size
+					lastValue,                               // last_value
+				)
+			},
+		)
 	},
-	unimplemented: true,
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because
