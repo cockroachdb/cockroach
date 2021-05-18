@@ -27,6 +27,7 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
       SELECT string_agg(raw_config_sql, e';\n') FROM crdb_internal.zones
       WHERE database_name = %[1]s
       AND table_name = %[2]s 
+			AND schema_name = %[5]s
       AND raw_config_yaml IS NOT NULL
       AND raw_config_sql IS NOT NULL
     )
