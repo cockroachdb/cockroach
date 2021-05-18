@@ -423,6 +423,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
@@ -504,6 +505,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t_idx@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING v, w
@@ -546,6 +548,7 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 WHERE v=45 RETURNING v, w
@@ -594,6 +597,7 @@ vectorized: true
                       estimated row count: 10 (missing stats)
                       table: t_idx@t_idx_v_idx
                       spans: /45-/46
+                      locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET c=6 WHERE a=2
@@ -663,6 +667,7 @@ vectorized: true
               estimated row count: 1,000 (missing stats)
               table: t_idx@primary
               spans: FULL SCAN
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_idx SET b=b+1 RETURNING w
@@ -705,6 +710,7 @@ vectorized: true
                   estimated row count: 1,000 (missing stats)
                   table: t_idx@primary
                   spans: FULL SCAN
+                  locking strength: for update
 
 subtest Upsert
 
@@ -825,6 +831,7 @@ vectorized: true
                 │ table: t@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (column8, column1, column2)
@@ -887,6 +894,7 @@ vectorized: true
                 │ table: t@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (column8, column1, column2)
@@ -1019,6 +1027,7 @@ vectorized: true
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (column11, column12, column1, column2, column3)
@@ -1155,6 +1164,7 @@ vectorized: true
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (column11, column12, column1, column2, column3)
@@ -1233,6 +1243,7 @@ vectorized: true
                 │ table: t_idx@primary
                 │ equality: (column1) = (a)
                 │ equality cols are key
+                │ locking strength: for update
                 │
                 └── • render
                     │ columns: (column11, column12, column1, column2, column3)
