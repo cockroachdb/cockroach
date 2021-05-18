@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
@@ -98,14 +99,32 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary str
 	require.NoError(t, err)
 	u.Host = c.ExternalIP(ctx, c.Node(tn.node))[0] + ":" + strconv.Itoa(tn.sqlPort)
 	tn.pgURL = u.String()
-	c.l.Printf("sql server for tenant %d should be running at %s", tn.tenantID, tn.pgURL)
 
-	const warmupPeriod = 3 * time.Second
-	select {
-	case err := <-tn.errCh:
+	// The tenant is usually responsible ~right away, but it
+	// has on occasions taken more than 3s for it to connect
+	// to the KV layer, and it won't open the SQL port until
+	// it has.
+	if err := retry.ForDuration(45*time.Second, func() error {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-tn.errCh:
+			t.Fatal(err)
+		default:
+		}
+
+		db, err := gosql.Open("postgres", tn.pgURL)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		_, err = db.ExecContext(ctx, `SELECT 1`)
+		return err
+	}); err != nil {
 		t.Fatal(err)
-	case <-time.After(warmupPeriod):
 	}
+
+	c.l.Printf("sql server for tenant %d running at %s", tn.tenantID, tn.pgURL)
 }
 
 // runMultiTenantUpgrade exercises upgrading tenants and their host cluster.
