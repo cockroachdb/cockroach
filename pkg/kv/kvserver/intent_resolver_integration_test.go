@@ -186,8 +186,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t)
-	skip.UnderStress(t)
+	skip.UnderRace(t, "timing-sensitive test")
 
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -208,7 +207,7 @@ func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 		batch.Put([]byte(fmt.Sprintf("key%v", i)), []byte("value"))
 	}
 	require.NoError(t, txn.Run(ctx, batch))
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	require.NoError(t, txn.Rollback(ctx))
 	require.NoError(t, ctx.Err())
