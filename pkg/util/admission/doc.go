@@ -112,10 +112,10 @@
 //
 // Usage of WorkQueue for KV:
 // // Before starting some work
-// if err := kvQueue.Admit(ctx, WorkInfo{TenantID: tid, ...}); err != nil {
+// if enabled, err := kvQueue.Admit(ctx, WorkInfo{TenantID: tid, ...}); err != nil {
 //   return err
 // }
 // doWork()
-// kvQueue.AdmittedWorkDone(tid)
+// if enabled { kvQueue.AdmittedWorkDone(tid) }
 
 package admission

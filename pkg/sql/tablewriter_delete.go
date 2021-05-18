@@ -230,6 +230,9 @@ func (td *tableDeleter) clearIndex(ctx context.Context, idx catalog.Index) error
 
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
+
+	// TODO(sumeer): this is bypassing admission control, since it is not using
+	// the currently instrumented shared code paths.
 	b := &kv.Batch{}
 	b.AddRawRequest(&roachpb.ClearRangeRequest{
 		RequestHeader: roachpb.RequestHeader{

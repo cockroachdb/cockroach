@@ -79,7 +79,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -418,10 +420,29 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
+	gcoord, metrics := admission.NewGrantCoordinator(admission.Options{
+		MinCPUSlots:                    1,
+		MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
+		SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
+		SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
+		SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
+		SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
+		Settings:                       st,
+	})
+	for i := range metrics {
+		registry.AddMetricStruct(metrics[i])
+	}
+	cbID := goschedstats.RegisterRunnableCountCallback(gcoord.CPULoad)
+	stopper.AddCloser(stop.CloserFn(func() {
+		goschedstats.UnregisterRunnableCountCallback(cbID)
+	}))
+	stopper.AddCloser(gcoord)
+
 	dbCtx := kv.DefaultDBContext(stopper)
 	dbCtx.NodeID = idContainer
 	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
+	db.SQLKVResponseAdmissionQ = gcoord.GetWorkQueue(admission.SQLKVResponseWork)
 
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	if knobs := cfg.TestingKnobs.NodeLiveness; knobs != nil {
@@ -596,6 +617,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID)
+	node.admissionQ = gcoord.GetWorkQueue(admission.KVWork)
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)

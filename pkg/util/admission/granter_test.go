@@ -11,10 +11,12 @@
 package admission
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -28,15 +30,17 @@ type testRequester struct {
 
 	waitingRequests        bool
 	returnFalseFromGranted bool
+	grantChainID           grantChainID
 }
 
 func (tr *testRequester) hasWaitingRequests() bool {
 	return tr.waitingRequests
 }
 
-func (tr *testRequester) granted() bool {
-	fmt.Fprintf(tr.buf, "%s: granted, and returning %t\n", workKindString(tr.workKind),
-		!tr.returnFalseFromGranted)
+func (tr *testRequester) granted(grantChainID grantChainID) bool {
+	fmt.Fprintf(tr.buf, "%s: granted in chain %d, and returning %t\n", workKindString(tr.workKind),
+		grantChainID, !tr.returnFalseFromGranted)
+	tr.grantChainID = grantChainID
 	return !tr.returnFalseFromGranted
 }
 
@@ -57,7 +61,7 @@ func (tr *testRequester) tookWithoutPermission() {
 
 func (tr *testRequester) continueGrantChain() {
 	fmt.Fprintf(tr.buf, "%s: continueGrantChain\n", workKindString(tr.workKind))
-	tr.granter.continueGrantChain()
+	tr.granter.continueGrantChain(tr.grantChainID)
 }
 
 // TestGranterBasic is a datadriven test with the following commands:
@@ -84,10 +88,13 @@ func TestGranterBasic(t *testing.T) {
 		buf.Reset()
 		return str
 	}
+	settings := cluster.MakeTestingClusterSettings()
+	KVSlotAdjusterOverloadThreshold.Override(context.Background(), &settings.SV, 1)
 	datadriven.RunTest(t, "testdata/granter", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-grant-coordinator":
 			var opts Options
+			opts.Settings = settings
 			d.ScanArgs(t, "min-cpu", &opts.MinCPUSlots)
 			d.ScanArgs(t, "max-cpu", &opts.MaxCPUSlots)
 			d.ScanArgs(t, "sql-kv-tokens", &opts.SQLKVResponseBurstTokens)
@@ -95,7 +102,8 @@ func TestGranterBasic(t *testing.T) {
 			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
-				workKind WorkKind, granter granter, usesTokens bool, tiedToRange bool) requester {
+				workKind WorkKind, granter granter, usesTokens bool, tiedToRange bool,
+				_ *cluster.Settings) requester {
 				req := &testRequester{
 					workKind:   workKind,
 					granter:    granter,
