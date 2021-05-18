@@ -185,6 +185,16 @@ func maybeFillInDescriptor(
 ) (changes PostDeserializationTableDescriptorChanges, err error) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 
+	changes.UpgradedIndexFormatVersion = maybeUpgradeIndexFormatVersion(&desc.PrimaryIndex)
+	for i := range desc.Indexes {
+		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(&desc.Indexes[i])
+	}
+	for i := range desc.Mutations {
+		if idx := desc.Mutations[i].GetIndex(); idx != nil {
+			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || maybeUpgradeIndexFormatVersion(idx)
+		}
+	}
+
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
 	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
 	// run again and mixed-version clusters always write "good" descriptors.
@@ -449,5 +459,26 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 
 	desc.FormatVersion = descpb.FamilyFormatVersion
 
+	return true
+}
+
+// maybeUpgradeIndexFormatVersion tries to promote an index to version
+// descpb.StrictIndexColumnIDGuaranteesVersion whenever possible.
+func maybeUpgradeIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
+	if idx.Version != descpb.EmptyArraysInInvertedIndexesVersion {
+		return false
+	}
+	slice := make([]descpb.ColumnID, 0, len(idx.ColumnIDs)+len(idx.ExtraColumnIDs)+len(idx.StoreColumnIDs))
+	slice = append(slice, idx.ColumnIDs...)
+	slice = append(slice, idx.ExtraColumnIDs...)
+	slice = append(slice, idx.StoreColumnIDs...)
+	set := catalog.MakeTableColSet(slice...)
+	if len(slice) != set.Len() {
+		return false
+	}
+	if set.Contains(0) {
+		return false
+	}
+	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	return true
 }

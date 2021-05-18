@@ -1519,7 +1519,10 @@ func NewTableDesc(
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
 		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
-			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+			// descpb.StrictIndexColumnIDGuaranteesVersion is like
+			// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level
+			// of descriptor validation checks.
+			indexEncodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
 		}
 	}
 
@@ -2191,11 +2194,13 @@ func NewTableDesc(
 				// partitioned column.
 				if numImplicitCols := newPrimaryIndex.Partitioning.NumImplicitColumns; numImplicitCols > 0 {
 					for _, idx := range desc.PublicNonPrimaryIndexes() {
+						if idx.GetEncodingType() != descpb.SecondaryIndexEncoding {
+							continue
+						}
 						missingExtraColumnIDs := make([]descpb.ColumnID, 0, numImplicitCols)
 						for _, implicitPrimaryColID := range newPrimaryIndex.ColumnIDs[:numImplicitCols] {
 							if !idx.ContainsColumnID(implicitPrimaryColID) {
 								missingExtraColumnIDs = append(missingExtraColumnIDs, implicitPrimaryColID)
-								idx.IndexDesc().ExtraColumnIDs = append(idx.IndexDesc().ExtraColumnIDs, implicitPrimaryColID)
 							}
 						}
 						if len(missingExtraColumnIDs) == 0 {

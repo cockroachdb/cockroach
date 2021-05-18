@@ -510,3 +510,123 @@ func TestLogicalColumnID(t *testing.T) {
 	}
 
 }
+
+func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
+	tests := []struct {
+		desc        descpb.TableDescriptor
+		expUpgrade  bool
+		expValidErr string
+	}{
+		{
+			desc: descpb.TableDescriptor{
+				FormatVersion: descpb.BaseFormatVersion,
+				ID:            51,
+				Name:          "tbl",
+				ParentID:      52,
+				NextColumnID:  3,
+				NextIndexID:   2,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "foo"},
+					{ID: 2, Name: "bar"},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:               descpb.IndexID(1),
+					Name:             "primary",
+					ColumnIDs:        []descpb.ColumnID{1, 2},
+					ColumnNames:      []string{"foo", "bar"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					Version:          descpb.EmptyArraysInInvertedIndexesVersion,
+				},
+			},
+			expUpgrade: true,
+		},
+		{
+			desc: descpb.TableDescriptor{
+				FormatVersion: descpb.BaseFormatVersion,
+				ID:            51,
+				Name:          "tbl",
+				ParentID:      52,
+				NextColumnID:  3,
+				NextIndexID:   3,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "foo"},
+					{ID: 2, Name: "bar"},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:               descpb.IndexID(1),
+					Name:             "primary",
+					ColumnIDs:        []descpb.ColumnID{1, 2},
+					ColumnNames:      []string{"foo", "bar"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					Version:          descpb.StrictIndexColumnIDGuaranteesVersion,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{
+						ID:               descpb.IndexID(2),
+						Name:             "other",
+						ColumnIDs:        []descpb.ColumnID{1},
+						ColumnNames:      []string{"foo"},
+						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						ExtraColumnIDs:   []descpb.ColumnID{1},
+						Version:          descpb.SecondaryIndexFamilyFormatVersion,
+					},
+				},
+			},
+			expUpgrade: false,
+		},
+		{
+			desc: descpb.TableDescriptor{
+				FormatVersion: descpb.BaseFormatVersion,
+				ID:            51,
+				Name:          "tbl",
+				ParentID:      52,
+				NextColumnID:  3,
+				NextIndexID:   3,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "foo"},
+					{ID: 2, Name: "bar"},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:               descpb.IndexID(1),
+					Name:             "primary",
+					ColumnIDs:        []descpb.ColumnID{1, 2},
+					ColumnNames:      []string{"foo", "bar"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
+					Version:          descpb.StrictIndexColumnIDGuaranteesVersion,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{
+						ID:               descpb.IndexID(2),
+						Name:             "other",
+						ColumnIDs:        []descpb.ColumnID{1},
+						ColumnNames:      []string{"foo"},
+						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						ExtraColumnIDs:   []descpb.ColumnID{1},
+						Version:          descpb.StrictIndexColumnIDGuaranteesVersion,
+					},
+				},
+			},
+			expUpgrade:  false,
+			expValidErr: "relation \"tbl\" (51): index \"other\" has column ID 1 present in: [ColumnIDs ExtraColumnIDs]",
+		},
+	}
+	for i, test := range tests {
+		b := NewBuilder(&test.desc)
+		err := b.RunPostDeserializationChanges(context.Background(), nil)
+		desc := b.BuildImmutableTable()
+		require.NoError(t, err)
+		changes, err := GetPostDeserializationChanges(desc)
+		require.NoError(t, err)
+		err = catalog.ValidateSelf(desc)
+		if test.expValidErr == "" {
+			require.NoError(t, err)
+		} else {
+			require.EqualError(t, err, test.expValidErr)
+		}
+
+		upgraded := changes.UpgradedIndexFormatVersion
+		if upgraded != test.expUpgrade {
+			t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
+		}
+	}
+}
