@@ -824,6 +824,24 @@ build-scalar
 collate locale='en' [type=collatedstring{en}]
  └── const: 'hello' [type=string]
 
+build-scalar vars=(a string)
+'hello' COLLATE en_US
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar vars=(a string)
+'hello' COLLATE "en_US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
+build-scalar vars=(a string)
+'hello' COLLATE "en-US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── const: 'hello' [type=string]
+
 build-scalar
 random()
 ----
@@ -1154,6 +1172,24 @@ build-scalar vars=(a string)
 a COLLATE en
 ----
 collate locale='en' [type=collatedstring{en}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE en_US
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "en_US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
+ └── variable: a:1 [type=string]
+
+build-scalar vars=(a string)
+a COLLATE "en-US"
+----
+collate locale='en_US' [type=collatedstring{en_US}]
  └── variable: a:1 [type=string]
 
 exec-ddl
