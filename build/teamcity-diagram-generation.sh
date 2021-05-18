@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 source "$(dirname "${0}")/teamcity-support.sh"
 
 tc_start_block "Get Railroad Jar"
