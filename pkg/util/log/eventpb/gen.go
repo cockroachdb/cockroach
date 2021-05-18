@@ -604,7 +604,7 @@ Events in this category are logged to the ` + "`" + `{{.LogChannel}}` + "`" + ` 
 {{ .Comment }}
 
 | Value | Textual alias in code or documentation | Description |
-|--|--|
+|--|--|--|
 {{range .Values -}}
 | {{ .Value }} | {{ .Name }} | {{ .Comment | tableCell }} |
 {{end}}
