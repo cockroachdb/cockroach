@@ -61,7 +61,7 @@ func (w column) Ordinal() int {
 
 // Public returns true iff the column is active, i.e. readable.
 func (w column) Public() bool {
-	return !w.IsMutation() && !w.IsSystemColumn()
+	return !w.IsMutation() && !w.IsSystemColumn() && !w.IsInaccessible()
 }
 
 // GetID returns the column ID.
@@ -127,6 +127,11 @@ func (w column) IsHidden() bool {
 	return w.desc.Hidden
 }
 
+// IsInaccessible returns true iff the column is not accessible.
+func (w column) IsInaccessible() bool {
+	return w.desc.Inaccessible
+}
+
 // NumUsesSequences returns the number of sequences used by this column.
 func (w column) NumUsesSequences() int {
 	return len(w.desc.UsesSequenceIds)
@@ -178,15 +183,16 @@ func (w column) IsSystemColumn() bool {
 
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
-	all       []catalog.Column
-	public    []catalog.Column
-	writable  []catalog.Column
-	deletable []catalog.Column
-	nonDrop   []catalog.Column
-	visible   []catalog.Column
-	readable  []catalog.Column
-	withUDTs  []catalog.Column
-	system    []catalog.Column
+	all          []catalog.Column
+	public       []catalog.Column
+	inaccessible []catalog.Column
+	writable     []catalog.Column
+	deletable    []catalog.Column
+	nonDrop      []catalog.Column
+	visible      []catalog.Column
+	readable     []catalog.Column
+	withUDTs     []catalog.Column
+	system       []catalog.Column
 }
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
@@ -195,13 +201,28 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 	c := columnCache{}
 	// Build a slice of structs to back the public and system interfaces in c.all.
 	// This is better than allocating memory once per struct.
-	numPublic := len(desc.Columns)
-	backingStructs := make([]column, numPublic, numPublic+len(colinfo.AllSystemColumnDescs))
+	numPublic := 0
+	numInaccessible := 0
 	for i := range desc.Columns {
-		backingStructs[i] = column{desc: &desc.Columns[i], ordinal: i}
+		if desc.Columns[i].Inaccessible {
+			numInaccessible++
+		} else {
+			numPublic++
+		}
+	}
+	backingStructs := make([]column, 0, numPublic+numInaccessible+len(colinfo.AllSystemColumnDescs))
+	for i := range desc.Columns {
+		if !desc.Columns[i].Inaccessible {
+			backingStructs = append(backingStructs, column{desc: &desc.Columns[i], ordinal: i})
+		}
+	}
+	for i := range desc.Columns {
+		if desc.Columns[i].Inaccessible {
+			backingStructs = append(backingStructs, column{desc: &desc.Columns[i], ordinal: i})
+		}
 	}
 	numMutations := len(mutations.columns)
-	numDeletable := numPublic + numMutations
+	numDeletable := numPublic + numInaccessible + numMutations
 	for i := range colinfo.AllSystemColumnDescs {
 		col := column{
 			desc:    &colinfo.AllSystemColumnDescs[i],
@@ -224,10 +245,11 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 	c.deletable = c.all[:numDeletable]
 	c.system = c.all[numDeletable:]
 	c.public = c.all[:numPublic]
+	c.inaccessible = c.all[numPublic : numPublic+numInaccessible]
 	if numMutations == 0 {
 		c.readable = c.public
 		c.writable = c.public
-		c.nonDrop = c.public
+		c.nonDrop = c.all[:numPublic+numInaccessible]
 	} else {
 		readableDescs := make([]descpb.ColumnDescriptor, 0, numMutations)
 		readableBackingStructs := make([]column, 0, numMutations)

@@ -405,7 +405,10 @@ type ColumnTableDef struct {
 	Type     ResolvableTypeReference
 	IsSerial bool
 	Hidden   bool
-	Nullable struct {
+	// Inaccessible cannot be set to true by the parser. It is used internally
+	// to create inaccessible columns in planner.addColumnImpl.
+	Inaccessible bool
+	Nullable     struct {
 		Nullability    Nullability
 		ConstraintName Name
 	}

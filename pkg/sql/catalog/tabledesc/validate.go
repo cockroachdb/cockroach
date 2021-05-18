@@ -699,6 +699,10 @@ func (desc *wrapper) validateColumns(
 		} else if column.IsVirtual() {
 			return fmt.Errorf("virtual column %q is not computed", column.GetName())
 		}
+
+		if column.IsHidden() && column.IsInaccessible() {
+			return errors.AssertionFailedf("column %q cannot be hidden an inaccessible", column.GetName())
+		}
 	}
 	return nil
 }

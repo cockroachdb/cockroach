@@ -915,7 +915,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	var name tree.Name
 	for n, done := 1, false; !done; n++ {
 		done = true
-		name = tree.Name(fmt.Sprintf("idx_expr_%d", n))
+		name = tree.Name(fmt.Sprintf("crdb_idx_expr_%d", n))
 		for _, col := range tt.Columns {
 			if col.ColName() == name {
 				done = false
@@ -932,7 +932,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 		name,
 		typ,
 		true, /* nullable */
-		cat.Hidden,
+		cat.Inaccessible,
 		exprStr,
 	)
 	tt.Columns = append(tt.Columns, col)

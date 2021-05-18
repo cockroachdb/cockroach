@@ -182,6 +182,11 @@ func checkColumnDoesNotExist(
 	if col.Public() {
 		return true, sqlerrors.NewColumnAlreadyExistsError(tree.ErrString(&name), tableDesc.GetName())
 	}
+	if col.IsInaccessible() {
+		return false, pgerror.Newf(pgcode.DuplicateColumn,
+			"column name %q conflicts with an internal column name",
+			col.GetName())
+	}
 	if col.Adding() {
 		return false, pgerror.Newf(pgcode.DuplicateColumn,
 			"duplicate: column %q in the middle of being added, not yet public",

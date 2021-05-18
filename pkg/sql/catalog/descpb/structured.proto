@@ -136,7 +136,16 @@ message ColumnDescriptor {
   // schemaexpr.FormatExpr* functions.
   optional string default_expr = 5;
   reserved 9;
+  // Hidden columns are visible to queries by name, but are not part of star
+  // expansion. A hidden column is displayed in SHOW CREATE TABLE output. A user
+  // can create a hidden column with the NOT VISIBLE qualifier.
   optional bool hidden = 6 [(gogoproto.nullable) = false];
+  // Inaccessible columns not not visible to queries by name, not part of star
+  // expansion, and do not appear in SHOW CREATE TABLE output. An inaccessible
+  // column cannot be referenced in any expressions, such as CHECK constraints,
+  // computed columns, or partial index predicates. A user cannot create an
+  // inaccessible column.
+  optional bool inaccessible = 17 [(gogoproto.nullable) = false];
   reserved 7;
   // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];

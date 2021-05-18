@@ -333,7 +333,7 @@ func formatColumn(col *Column, buf *bytes.Buffer) {
 	}
 	kind := col.Kind()
 	// Omit the visibility for mutation and virtual inverted columns, which are
-	// always inacessible.
+	// always inaccessible.
 	if kind != WriteOnly && kind != DeleteOnly && kind != VirtualInverted {
 		switch col.Visibility() {
 		case Hidden:
