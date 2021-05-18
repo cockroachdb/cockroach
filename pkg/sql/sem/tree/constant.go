@@ -361,7 +361,6 @@ func (expr *NumVal) ResolveAsType(
 			return nil, err
 		}
 		oid := NewDOid(*d.(*DInt))
-		oid.semanticType = typ
 		return oid, nil
 	default:
 		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
