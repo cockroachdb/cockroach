@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/lib/pq/oid"
 )
 
 // DequalifyColumnRefs returns a serialized expression with database and table
@@ -317,7 +316,7 @@ func GetSeqIDFromExpr(expr tree.Expr) (int64, bool) {
 	// a *tree.DOid (if type checked).
 	switch n := expr.(type) {
 	case *tree.AnnotateTypeExpr:
-		if typ, safe := tree.GetStaticallyKnownType(n.Type); !safe || typ.Oid() != oid.T_regclass {
+		if typ, safe := tree.GetStaticallyKnownType(n.Type); !safe || typ.Family() != types.OidFamily {
 			return 0, false
 		}
 		numVal, ok := n.Expr.(*tree.NumVal)
