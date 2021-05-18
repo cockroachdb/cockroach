@@ -821,7 +821,7 @@ concat [type=jsonb]
 build-scalar
 'hello' COLLATE en
 ----
-collate [type=collatedstring{en}]
+collate locale='en' [type=collatedstring{en}]
  └── const: 'hello' [type=string]
 
 build-scalar
@@ -1153,7 +1153,7 @@ tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, 
 build-scalar vars=(a string)
 a COLLATE en
 ----
-collate [type=collatedstring{en}]
+collate locale='en' [type=collatedstring{en}]
  └── variable: a:1 [type=string]
 
 exec-ddl
