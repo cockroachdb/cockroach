@@ -19,12 +19,31 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
+	"admission.kv.enabled",
+	"when true, work performed by the KV layer is subject to admission control",
+	false).WithPublic()
+var SQLKVResponseWorkAdmissionControlEnabled = settings.RegisterBoolSetting(
+	"admission.sql_kv_response.enabled",
+	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
+		"admission control",
+	false).WithPublic()
+
+var admissionControlEnabledSettings [numWorkKinds]*settings.BoolSetting
+
+func init() {
+	admissionControlEnabledSettings[KVWork] = KVAdmissionControlEnabled
+	admissionControlEnabledSettings[SQLKVResponseWork] = SQLKVResponseWorkAdmissionControlEnabled
+}
 
 // WorkPriority represents the priority of work. In an WorkQueue, it is only
 // used for ordering within a tenant. High priority work can starve lower
@@ -112,6 +131,7 @@ type WorkQueue struct {
 	granter     granter
 	usesTokens  bool
 	tiedToRange bool
+	settings    *cluster.Settings
 
 	// Prevents more than one caller to be in Admit and calling tryGet or adding
 	// to the queue. It allows WorkQueue to release mu before calling tryGet and
@@ -132,7 +152,7 @@ type WorkQueue struct {
 var _ requester = &WorkQueue{}
 
 func makeWorkQueue(
-	workKind WorkKind, granter granter, usesTokens bool, tiedToRange bool,
+	workKind WorkKind, granter granter, usesTokens bool, tiedToRange bool, settings *cluster.Settings,
 ) requester {
 	gcStopCh := make(chan struct{})
 	q := &WorkQueue{
@@ -140,6 +160,7 @@ func makeWorkQueue(
 		granter:     granter,
 		usesTokens:  usesTokens,
 		tiedToRange: tiedToRange,
+		settings:    settings,
 		metrics:     makeWorkQueueMetrics(string(workKindString(workKind))),
 		gcStopCh:    gcStopCh,
 	}
@@ -164,7 +185,11 @@ func makeWorkQueue(
 // waitingWork.ch.
 
 // Admit is called when requesting admission for some work.
-func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
+func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err error) {
+	enabledSetting := admissionControlEnabledSettings[q.workKind]
+	if q.settings != nil && enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
+		return false, nil
+	}
 	q.metrics.Requested.Inc(1)
 	tenantID := info.TenantID.ToUint64()
 
@@ -188,7 +213,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
 		q.admitMu.Unlock()
 		q.granter.tookWithoutPermission()
 		q.metrics.Admitted.Inc(1)
-		return nil
+		return true, nil
 	}
 
 	if len(q.mu.tenantHeap) == 0 {
@@ -199,7 +224,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
 		if q.granter.tryGet() {
 			q.admitMu.Unlock()
 			q.metrics.Admitted.Inc(1)
-			return nil
+			return true, nil
 		}
 		// Did not get token/slot.
 		//
@@ -233,8 +258,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
 				q.admitMu.Unlock()
 				q.metrics.Errored.Inc(1)
 				deadline, _ := ctx.Deadline()
-				return errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
-					workKindString(q.workKind), deadline, startTime)
+				return true,
+					errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
+						workKindString(q.workKind), deadline, startTime)
 			}
 		default:
 		}
@@ -256,10 +282,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
 		q.mu.Lock()
 		if work.heapIndex == -1 {
 			// No longer in heap. Raced with token/slot grant.
+			grantChainNum := <-work.ch
 			tenant.used--
 			q.mu.Unlock()
 			q.granter.returnGrant()
-			q.granter.continueGrantChain()
+			q.granter.continueGrantChain(grantChainNum)
 		} else {
 			tenant.waitingWorkHeap.remove(work)
 			if len(tenant.waitingWorkHeap) == 0 {
@@ -273,9 +300,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
 		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
 		q.metrics.WaitQueueLength.Dec(1)
 		deadline, _ := ctx.Deadline()
-		return errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
-			workKindString(q.workKind), deadline, startTime, waitDur)
-	case _, ok := <-work.ch:
+		return true,
+			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
+				workKindString(q.workKind), deadline, startTime, waitDur)
+	case grantChainNum, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
 		}
@@ -287,8 +315,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) error {
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
-		q.granter.continueGrantChain()
-		return nil
+		q.granter.continueGrantChain(grantChainNum)
+		return true, nil
 	}
 }
 
@@ -319,7 +347,7 @@ func (q *WorkQueue) hasWaitingRequests() bool {
 	return len(q.mu.tenantHeap) > 0
 }
 
-func (q *WorkQueue) granted() bool {
+func (q *WorkQueue) granted(grantChainNum uint64) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if len(q.mu.tenantHeap) == 0 {
@@ -327,7 +355,8 @@ func (q *WorkQueue) granted() bool {
 	}
 	tenant := q.mu.tenantHeap[0]
 	item := heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
-	item.ch <- struct{}{}
+	item.grantTime = timeutil.Now()
+	item.ch <- grantChainNum
 	tenant.used++
 	if len(tenant.waitingWorkHeap) > 0 {
 		q.mu.tenantHeap.fix(tenant)
@@ -459,10 +488,11 @@ func (th *tenantHeap) Pop() interface{} {
 type waitingWork struct {
 	priority   WorkPriority
 	createTime int64
-	ch         chan struct{}
+	ch         chan uint64
 	// The heapIndex is maintained by the heap.Interface methods, and represents
 	// the heapIndex of the item in the heap. -1 when not in the heap.
 	heapIndex int
+	grantTime time.Time
 }
 
 // waitingWorkHeap is a heap of waiting work within a tenant. It is ordered in
@@ -476,7 +506,7 @@ func makeWaitingWork(priority WorkPriority, createTime int64) *waitingWork {
 	return &waitingWork{
 		priority:   priority,
 		createTime: createTime,
-		ch:         make(chan struct{}, 1),
+		ch:         make(chan uint64, 1),
 		heapIndex:  -1,
 	}
 }

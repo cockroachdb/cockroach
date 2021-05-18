@@ -14,11 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -139,6 +141,20 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
 	}
+	// Do admission control for response processing. This is the shared write
+	// path for most SQL mutations.
+	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
+	if responseAdmissionQ != nil {
+		requestAdmissionHeader := tb.txn.AdmissionHeader()
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admission.WorkPriority(requestAdmissionHeader.Priority),
+			CreateTime: requestAdmissionHeader.CreateTime,
+		}
+		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
+	}
 	tb.b = tb.txn.NewBatch()
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
@@ -147,6 +163,8 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 
 // finalize shares the common finalize() code between tableWriters.
 func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
+	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
+	// for response processing when finalizing.
 	if tb.autoCommit == autoCommitEnabled {
 		log.Event(ctx, "autocommit enabled")
 		// An auto-txn can commit the transaction with the batch. This is an

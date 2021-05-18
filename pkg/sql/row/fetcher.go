@@ -673,6 +673,8 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.lockWaitPolicy,
 		rf.mon,
 		forceProductionKVBatchSize,
+		txn.AdmissionHeader(),
+		txn.DB().SQLKVResponseAdmissionQ,
 	)
 	if err != nil {
 		return err

@@ -70,7 +70,11 @@ func interestingGoroutines() map[int64]string {
 			strings.Contains(stack, "sigterm.handler") ||
 			strings.Contains(stack, "runtime_mcall") ||
 			strings.Contains(stack, "goroutine in C code") ||
-			strings.Contains(stack, "runtime.CPUProfile") {
+			strings.Contains(stack, "runtime.CPUProfile") ||
+			// The admission control package creates a small number of goroutines
+			// that live forever, and would be cumbersome to shut down cleanly, so
+			// we ignore those.
+			strings.Contains(stack, "github.com/cockroachdb/cockroach/pkg/util/admission.makeWorkQueue") {
 			continue
 		}
 		gs[goid.ExtractGID([]byte(g))] = g

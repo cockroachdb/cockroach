@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -75,6 +76,30 @@ var total uint64
 // The EWMA coefficient is 0.5.
 var ewma uint64
 
+type RunnableCountCallback func(numRunnable int, numProcs int)
+
+var callbackInfo struct {
+	mu syncutil.Mutex
+	cb RunnableCountCallback
+}
+
+// RegisterRunnableCountCallback registers a callback to be run with the
+// runnable and procs info every 1ms. This is exclusively for use by admission
+// control that wants to react extremely quickly to cpu changes. Past
+// experience in other systems (not CockroachDB) motivated not consuming a
+// smoothed signal for admission control. The CockroachDB setting may possibly
+// be different enough for that experience to not apply, but changing this to
+// a smoothed value (say over 1s) should be done only after thorough load
+// testing under adversarial load conditions (specifically, we need to react
+// quickly to large drops in runnable due to blocking on IO, so that we don't
+// waste cpu -- a workload that fluctuates rapidly between being IO bound and
+// cpu bound could stress the usage of a smoothed signal).
+func RegisterRunnableCountCallback(cb RunnableCountCallback) {
+	callbackInfo.mu.Lock()
+	defer callbackInfo.mu.Unlock()
+	callbackInfo.cb = cb
+}
+
 func init() {
 	go func() {
 		lastTime := timeutil.Now()
@@ -107,6 +132,12 @@ func init() {
 				numSamples = 0
 			}
 			runnable, numProcs := numRunnableGoroutines()
+			callbackInfo.mu.Lock()
+			cb := callbackInfo.cb
+			callbackInfo.mu.Unlock()
+			if cb != nil {
+				cb(runnable, numProcs)
+			}
 			// The value of the sample is the ratio of runnable to numProcs (scaled
 			// for fixed-point arithmetic).
 			sum += uint64(runnable) * toFixedPoint / uint64(numProcs)
