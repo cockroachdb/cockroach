@@ -496,7 +496,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 	opts := make(map[string]string)
 	cfg, err := getSaramaConfig(opts)
 	require.NoError(t, err)
-	require.Equal(t, defaultSaramaConfig, cfg)
+	require.Equal(t, defaultSaramaConfig(), cfg)
 
 	expected := &saramaConfig{}
 	expected.Flush.MaxMessages = 1000
