@@ -458,7 +458,8 @@ func (p *planner) dropIndexByName(
 			// the meta ranges directly.
 			if p.ExecCfg().Codec.ForSystemTenant() {
 				span := tableDesc.IndexSpan(p.ExecCfg().Codec, idxEntry.ID)
-				ranges, err := ScanMetaKVs(ctx, p.txn, span)
+				txn := p.ExecCfg().DB.NewTxn(ctx, "scan-ranges-for-index-drop")
+				ranges, err := ScanMetaKVs(ctx, txn, span)
 				if err != nil {
 					return err
 				}
