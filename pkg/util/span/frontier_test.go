@@ -229,6 +229,13 @@ func TestSpanFrontierDisjointSpans(t *testing.T) {
 		expectedAdvanced(true).
 		expectFrontier(2).
 		expectEntries(`{a-b}@3 {c-d}@3 {d-e}@2`)
+
+	// Advance span that overlaps all the spans tracked by this frontier.
+	// {c-d} and {d-e} should collaps.
+	forwardFrontier(roachpb.Span{Key: roachpb.Key(`0`), EndKey: roachpb.Key(`q`)}, 4).
+		expectedAdvanced(true).
+		expectFrontier(4).
+		expectEntries(`{a-b}@4 {c-e}@4`)
 }
 
 func TestSpanFrontierHeap(t *testing.T) {

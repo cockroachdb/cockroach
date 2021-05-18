@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
-        "//pkg/sql/covering",
         "//pkg/util/hlc",
         "//pkg/util/interval",
     ],
