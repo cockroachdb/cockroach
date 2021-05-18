@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -450,7 +449,6 @@ func TestBumpSideTransportClosed(t *testing.T) {
 // 6, the lease proposal doesn't bump the assignedClosedTimestamp.
 func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 65109, "flaky test")
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -517,6 +515,16 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			RaftConfig: base.RaftConfig{
+				// Disable preemptive lease extensions because, if the server startup
+				// takes too long before we pause the clock, such an extension can
+				// happen on the range of interest, and messes up the test that expects
+				// the lease to expire.
+				RangeLeaseRenewalFraction: -1,
+				// Also make expiration-based leases last for a long time, as the test
+				// wants a valid lease after cluster start.
+				RaftElectionTimeoutTicks: 1000,
+			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					ClockSource: manual.UnixNano,
@@ -594,6 +602,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 	select {
 	case <-leaseAcqCh:
 	case err := <-leaseAcqErrCh:
+		close(leaseTransferCh)
 		t.Fatalf("lease request unexpectedly finished. err: %v", err)
 	}
 	// Let the previously blocked transfer succeed. n2's lease acquisition remains
