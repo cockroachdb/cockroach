@@ -1519,7 +1519,10 @@ func NewTableDesc(
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	if version != (clusterversion.ClusterVersion{}) {
 		if version.IsActive(clusterversion.EmptyArraysInInvertedIndexes) {
-			indexEncodingVersion = descpb.EmptyArraysInInvertedIndexesVersion
+			// descpb.StrictIndexColumnIDGuaranteesVersion is like
+			// descpb.EmptyArraysInInvertedIndexesVersion but allows a stronger level
+			// of descriptor validation checks.
+			indexEncodingVersion = descpb.StrictIndexColumnIDGuaranteesVersion
 		}
 	}
 
