@@ -656,7 +656,7 @@ func (r *Registry) cleanupOldJobsPage(
 		}
 	}
 	if len(toDelete.Array) > 0 {
-		log.Infof(ctx, "cleaning up expired job records: %d", len(toDelete.Array))
+		log.Infof(ctx, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		var nDeleted int
 		if nDeleted, err = r.ex.Exec(
@@ -664,10 +664,7 @@ func (r *Registry) cleanupOldJobsPage(
 		); err != nil {
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
-		if nDeleted != len(toDelete.Array) {
-			return false, 0, errors.AssertionFailedf("asked to delete %d rows but %d were actually deleted",
-				len(toDelete.Array), nDeleted)
-		}
+		log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
 	}
 	return !morePages, maxID, nil
 }
