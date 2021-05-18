@@ -21,11 +21,14 @@ import (
 
 // ResolveBlankPaddedChar pads the given string with spaces if blank padding is
 // required or returns the string unmodified otherwise.
-func ResolveBlankPaddedChar(s string, t *types.T) string {
+// Note that this method operates on byte slices rather than strings in order to
+// avoid making deep copies if possible and give the flexibility to do so to the
+// caller.
+func ResolveBlankPaddedChar(s []byte, t *types.T) []byte {
 	if t.Oid() == oid.T_bpchar && len(s) < int(t.Width()) {
 		// Pad spaces on the right of the string to make it of length specified
 		// in the type t.
-		return fmt.Sprintf("%-*v", t.Width(), s)
+		return []byte(fmt.Sprintf("%-*v", t.Width(), s))
 	}
 	return s
 }
@@ -50,10 +53,10 @@ func (d *DTuple) pgwireFormat(ctx *FmtCtx) {
 		switch dv := UnwrapDatum(nil, v).(type) {
 		case dNull:
 		case *DString:
-			s := ResolveBlankPaddedChar(string(*dv), t)
+			s := string(ResolveBlankPaddedChar([]byte(*dv), t))
 			pgwireFormatStringInTuple(&ctx.Buffer, s)
 		case *DCollatedString:
-			s := ResolveBlankPaddedChar(dv.Contents, t)
+			s := string(ResolveBlankPaddedChar([]byte(dv.Contents), t))
 			pgwireFormatStringInTuple(&ctx.Buffer, s)
 			// Bytes cannot use the default case because they will be incorrectly
 			// double escaped.
