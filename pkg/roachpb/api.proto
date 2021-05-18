@@ -1990,6 +1990,33 @@ message Header {
   reserved 7, 10, 12, 14;
 }
 
+// AdmissionHeader contains information utilized by admission control for the
+// request.
+message AdmissionHeader {
+  // Priority is utilized within a tenant. See admission.WorkPriority.
+  int32 priority = 1;
+  // CreateTime is equivalent to Time.UnixNano() at the creation time of this
+  // request or a parent request. See admission.WorkInfo.Priority for details.
+  // It is used to give preference to older requests.
+  int64 create_time = 2;
+  // Source represents the immediate source of a request. FROM_SQL represents
+  // a KV request originating in SQL, and ROOT_KV represents a request
+  // originating within KV, but at the root of the tree of requests.
+  // BatchRequests can cause other BatchRequests (e.g. to PushTransaction),
+  // which may result in yet more BatchRequests (e.g. to
+  // ResolveIndeterminateCommit). These can cause a deadlock when using slot
+  // based admission control. Only FROM_SQL and ROOT_KV requests are subject
+  // to admission control. This behavior errs on the side of no deadlock, if
+  // we overlooked an instrumentation point, since the default value of OTHER
+  // bypasses admission control.
+  enum Source {
+    OTHER = 0;
+    FROM_SQL = 1;
+    ROOT_KV = 2;
+  }
+  Source source = 3;
+}
+
 // A BatchRequest contains one or more requests to be executed in
 // parallel, or if applicable (based on write-only commands and
 // range-locality), as a single update.
@@ -1998,6 +2025,7 @@ message BatchRequest {
 
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
+  AdmissionHeader admission_header = 3 [(gogoproto.nullable) = false];
 }
 
 // A BatchResponse contains one or more responses, one per request
@@ -2086,6 +2114,9 @@ message RangeFeedRequest {
   // with_diff specifies whether RangeFeedValue updates should contain the
   // previous value that was overwritten.
   bool with_diff = 3;
+  // AdmissionHeader is used only at the start of the range feed stream, since
+  // the initial catch-up scan be expensive.
+  AdmissionHeader admission_header = 4 [(gogoproto.nullable) = false];
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to

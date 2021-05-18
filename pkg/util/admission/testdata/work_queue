@@ -54,9 +54,9 @@ tenantHeap len: 2 top tenant: 71
  tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
  tenant-id: 71 used: 0 heap: 0: pri: 0, ct: 5 1: pri: -128, ct: 4
 
-granted
+granted chain-id=5
 ----
-continueGrantChain
+continueGrantChain 5
 id 5: admit succeeded
 granted: returned true
 
@@ -105,15 +105,15 @@ tenantHeap len: 2 top tenant: 53
  tenant-id: 53 used: 0 heap: 0: pri: 0, ct: 3
  tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
 
-granted
+granted chain-id=7
 ----
-continueGrantChain
+continueGrantChain 7
 id 2: admit succeeded
 granted: returned true
 
-granted
+granted chain-id=9
 ----
-continueGrantChain
+continueGrantChain 9
 id 4: admit succeeded
 granted: returned true
 
@@ -126,7 +126,7 @@ tenantHeap len: 0
  tenant-id: 71 used: 2
 
 # Granted returns false.
-granted
+granted chain-id=10
 ----
 granted: returned false
 

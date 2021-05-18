@@ -2564,4 +2564,68 @@ var charts = []sectionDescription{
 			},
 		},
 	},
+	{
+		Organization: [][]string{{Process, "Node", "Admission"}},
+		Charts: []chartDescription{
+			{
+				Title: "Work Queue Admission Counter",
+				Metrics: []string{
+					"admission.requested.kv",
+					"admission.admitted.kv",
+					"admission.errored.kv",
+					"admission.requested.sql-kv-response",
+					"admission.admitted.sql-kv-response",
+					"admission.errored.sql-kv-response",
+					"admission.requested.sql-sql-response",
+					"admission.admitted.sql-sql-response",
+					"admission.errored.sql-sql-response",
+					"admission.requested.sql-leaf-start",
+					"admission.admitted.sql-leaf-start",
+					"admission.errored.sql-leaf-start",
+					"admission.requested.sql-root-start",
+					"admission.admitted.sql-root-start",
+					"admission.errored.sql-root-start",
+				},
+			},
+			{
+				Title: "Work Queue Length",
+				Metrics: []string{
+					"admission.wait_queue_length.kv",
+					"admission.wait_queue_length.sql-kv-response",
+					"admission.wait_queue_length.sql-sql-response",
+					"admission.wait_queue_length.sql-leaf-start",
+					"admission.wait_queue_length.sql-root-start",
+				},
+			},
+			{
+				Title: "Work Queue Admission Latency Sum",
+				Metrics: []string{
+					"admission.wait_sum.kv",
+					"admission.wait_sum.sql-kv-response",
+					"admission.wait_sum.sql-sql-response",
+					"admission.wait_sum.sql-leaf-start",
+					"admission.wait_sum.sql-root-start",
+				},
+			},
+			{
+				Title: "Work Queue Latency Distribution",
+				Metrics: []string{
+					"admission.wait_durations.kv",
+					"admission.wait_durations.sql-kv-response",
+					"admission.wait_durations.sql-sql-response",
+					"admission.wait_durations.sql-leaf-start",
+					"admission.wait_durations.sql-root-start",
+				},
+			},
+			{
+				Title: "Granter",
+				Metrics: []string{
+					"admission.granter.total_slots.kv",
+					"admission.granter.used_slots.kv",
+					"admission.granter.used_slots.sql-leaf-start",
+					"admission.granter.used_slots.sql-root-start",
+				},
+			},
+		},
+	},
 }
