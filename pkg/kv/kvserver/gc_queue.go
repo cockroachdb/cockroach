@@ -45,12 +45,12 @@ const (
 	gcQueueIntentCooldownDuration = 2 * time.Hour
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total replica priority.
-	intentAgeNormalization = 24 * time.Hour // 1 day
+	intentAgeNormalization = 8 * time.Hour
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
 	gcKeyScoreThreshold    = 2
-	gcIntentScoreThreshold = 10
+	gcIntentScoreThreshold = 1
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
@@ -173,17 +173,13 @@ func (gcq *gcQueue) shouldQueue(
 	if !canGC {
 		return false, 0
 	}
-	// If performing a GC will not advance the GC threshold, there's no reason
-	// to GC again.
-	if newThreshold.Equal(oldThreshold) {
-		return false, 0
-	}
+	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
 	lastGC, err := repl.getQueueLastProcessed(ctx, gcq.name)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 		return false, 0
 	}
-	r := makeGCQueueScore(ctx, repl, gcTimestamp, lastGC, *zone.GC)
+	r := makeGCQueueScore(ctx, repl, gcTimestamp, lastGC, *zone.GC, canAdvanceGCThreshold)
 	return r.ShouldQueue, r.FinalScore
 }
 
@@ -193,6 +189,7 @@ func makeGCQueueScore(
 	now hlc.Timestamp,
 	lastGC hlc.Timestamp,
 	policy zonepb.GCPolicy,
+	canAdvanceGCThreshold bool,
 ) gcQueueScore {
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
@@ -205,7 +202,8 @@ func makeGCQueueScore(
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
 	// trigger GC at the same time.
-	r := makeGCQueueScoreImpl(ctx, int64(repl.RangeID), now, ms, policy, lastGC)
+	r := makeGCQueueScoreImpl(
+		ctx, int64(repl.RangeID), now, ms, policy, lastGC, canAdvanceGCThreshold)
 	return r
 }
 
@@ -305,6 +303,7 @@ func makeGCQueueScoreImpl(
 	ms enginepb.MVCCStats,
 	policy zonepb.GCPolicy,
 	lastGC hlc.Timestamp,
+	canAdvanceGCThreshold bool,
 ) gcQueueScore {
 	ms.Forward(now.WallTime)
 	var r gcQueueScore
@@ -374,7 +373,7 @@ func makeGCQueueScoreImpl(
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
 	// First determine whether we should queue based on MVCC score alone.
-	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold
+	r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > gcKeyScoreThreshold
 
 	// Next, determine whether we should queue based on intent score. For
 	// intents, we also enforce a cooldown time since we may not actually
@@ -480,11 +479,12 @@ func (gcq *gcQueue) process(
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
-	canGC, cacheTimestamp, gcTimestamp, _, newThreshold :=
+	canGC, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold :=
 		repl.checkProtectedTimestampsForGC(ctx, *zone.GC)
 	if !canGC {
 		return false, nil
 	}
+	canAdvanceGCThreshold := !newThreshold.Equal(oldThreshold)
 	// We don't recheck ShouldQueue here, since the range may have been enqueued
 	// manually e.g. via the admin server.
 	lastGC, err := repl.getQueueLastProcessed(ctx, gcq.name)
@@ -492,7 +492,7 @@ func (gcq *gcQueue) process(
 		lastGC = hlc.Timestamp{}
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 	}
-	r := makeGCQueueScore(ctx, repl, gcTimestamp, lastGC, *zone.GC)
+	r := makeGCQueueScore(ctx, repl, gcTimestamp, lastGC, *zone.GC, canAdvanceGCThreshold)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
 	// Synchronize the new GC threshold decision with concurrent
 	// AdminVerifyProtectedTimestamp requests.
@@ -543,7 +543,7 @@ func (gcq *gcQueue) process(
 
 	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
 	log.Eventf(ctx, "GC score after GC: %s", makeGCQueueScore(
-		ctx, repl, repl.store.Clock().Now(), lastGC, *zone.GC))
+		ctx, repl, repl.store.Clock().Now(), lastGC, *zone.GC, canAdvanceGCThreshold))
 	updateStoreMetricsWithGCInfo(gcq.store.metrics, info)
 	return true, nil
 }
