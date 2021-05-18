@@ -28,6 +28,9 @@ import (
 // splitPreApply is called when the raft command is applied. Any
 // changes to the given ReadWriter will be written atomically with the
 // split commit.
+//
+// initClosedTS is the closed timestamp carried by the split command. It will be
+// used to initialize the new RHS range.
 func splitPreApply(
 	ctx context.Context,
 	r *Replica,
@@ -116,47 +119,20 @@ func splitPreApply(
 	}
 
 	// Persist the closed timestamp.
+	//
+	// In order to tolerate a nil initClosedTS input, let's forward to
+	// r.GetClosedTimestamp(). Generally, initClosedTS is not expected to be nil
+	// (and is expected to be in advance of r.GetClosedTimestamp() since it's
+	// coming hot off a Raft command), but let's not rely on the non-nil. Note
+	// that r.GetClosedTimestamp() does not yet incorporate initClosedTS because
+	// the split command has not been applied yet.
+	if initClosedTS == nil {
+		initClosedTS = &hlc.Timestamp{}
+	}
+	initClosedTS.Forward(r.GetClosedTimestamp(ctx))
 	if err := rsl.SetClosedTimestamp(ctx, readWriter, initClosedTS); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}
-
-	// The initialMaxClosed is assigned to the RHS replica to ensure that
-	// follower reads do not regress following the split. After the split occurs
-	// there will be no information in the closedts subsystem about the newly
-	// minted RHS range from its leaseholder's store. Furthermore, the RHS will
-	// have a lease start time equal to that of the LHS which might be quite
-	// old. This means that timestamps which follow the least StartTime for the
-	// LHS part are below the current closed timestamp for the LHS would no
-	// longer be readable on the RHS after the split.
-	//
-	// It is necessary for correctness that the call to maxClosed used to
-	// determine the current closed timestamp happens during the splitPreApply
-	// so that it uses a LAI that is _before_ the index at which this split is
-	// applied. If it were to refer to a LAI equal to or after the split then
-	// the value of initialMaxClosed might be unsafe.
-	//
-	// Concretely, any closed timestamp based on an LAI that is equal to or
-	// above the split index might be larger than the initial closed timestamp
-	// assigned to the RHS range's initial leaseholder. This is because the LHS
-	// range's leaseholder could continue closing out timestamps at the split's
-	// LAI after applying the split. Slow followers in that range could hear
-	// about these closed timestamp notifications before applying the split
-	// themselves. If these slow followers were allowed to pass these closed
-	// timestamps created after the split to the RHS replicas they create during
-	// the application of the split then these RHS replicas might end up with
-	// initialMaxClosed values above their current range's official closed
-	// timestamp. The leaseholder of the RHS range could then propose a write at
-	// a timestamp below this initialMaxClosed, violating the closed timestamp
-	// systems most important property.
-	//
-	// Using an LAI from before the index at which this split is applied avoids
-	// the hazard and ensures that no replica on the RHS is created with an
-	// initialMaxClosed that could be violated by a proposal on the RHS's
-	// initial leaseholder. See #44878.
-	initialMaxClosed, _ := r.maxClosed(ctx)
-	rightRepl.mu.Lock()
-	rightRepl.mu.initialMaxClosed = initialMaxClosed
-	rightRepl.mu.Unlock()
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
