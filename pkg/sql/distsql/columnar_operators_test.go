@@ -1105,28 +1105,40 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 					inputTypes := typs[:nCols:nCols]
 					rows := randgen.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 
+					var argsIdxs []uint32
+					if windowFn == execinfrapb.WindowerSpec_NTILE {
+						// Currently only ntile takes an input argument, which must be an
+						// int. Choose a random column other than the output column.
+						argsIdxs = append(argsIdxs, rand.Uint32()%uint32(nCols))
+					}
+
 					windowerSpec := &execinfrapb.WindowerSpec{
 						PartitionBy: partitionBy,
 						WindowFns: []execinfrapb.WindowerSpec_WindowFn{
 							{
 								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
+								ArgsIdxs:     argsIdxs,
 								Ordering:     generateOrderingGivenPartitionBy(rng, nCols, nOrderingCols, partitionBy),
 								OutputColIdx: uint32(nCols),
 								FilterColIdx: tree.NoColumnIdx,
 							},
 						},
 					}
-					if windowFn == execinfrapb.WindowerSpec_ROW_NUMBER &&
+					if (windowFn == execinfrapb.WindowerSpec_ROW_NUMBER ||
+						windowFn == execinfrapb.WindowerSpec_NTILE) &&
 						len(partitionBy)+len(windowerSpec.WindowFns[0].Ordering.Columns) < nCols {
-						// The output of row_number is not deterministic if there are
-						// columns that are not present in either PARTITION BY or ORDER BY
-						// clauses, so we skip such a configuration.
+						// The outputs of row_number and ntile are not deterministic if
+						// there are columns that are not present in either PARTITION BY or
+						// ORDER BY clauses, so we skip such a configuration.
 						continue
 					}
 
-					// Currently, we only support window functions that take no
-					// arguments, so we leave the second argument empty.
-					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn})
+					argTypes := make([]*types.T, len(argsIdxs))
+					for i, idx := range argsIdxs {
+						argTypes[i] = typs[idx]
+					}
+
+					_, outputType, err := execinfrapb.GetWindowFunctionInfo(execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn}, argTypes...)
 					require.NoError(t, err)
 					pspec := &execinfrapb.ProcessorSpec{
 						Input:       []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},

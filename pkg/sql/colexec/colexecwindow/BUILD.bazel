@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/colexecop",  # keep
         "//pkg/sql/colmem",  # keep
         "//pkg/sql/execinfrapb",  # keep
+        "//pkg/sql/sem/builtins",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/mon",  # keep
@@ -63,6 +64,7 @@ go_test(
 
 # Map between target name and relevant template.
 targets = [
+    ("ntile.eg.go", "ntile_tmpl.go"),
     ("rank.eg.go", "rank_tmpl.go"),
     ("relative_rank.eg.go", "relative_rank_tmpl.go"),
     ("row_number.eg.go", "row_number_tmpl.go"),
