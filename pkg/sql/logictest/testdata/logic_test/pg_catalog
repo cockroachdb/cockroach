@@ -2015,7 +2015,7 @@ objoid      classoid    objsubid  description
 4294967155  4294967205  0         security labels (empty - feature does not exist)
 4294967156  4294967205  0         security labels (empty)
 4294967154  4294967205  0         sequences (see also information_schema.sequences)
-4294967153  4294967205  0         pg_sequences was created for compatibility and is currently unimplemented
+4294967153  4294967205  0         pg_sequences is very similar as pg_sequence.
 4294967152  4294967205  0         session variables (incomplete)
 4294967151  4294967205  0         pg_shadow was created for compatibility and is currently unimplemented
 4294967148  4294967205  0         shared dependencies (empty - not implemented)
@@ -3305,3 +3305,38 @@ SET stub_catalog_tables=true
 
 statement ok
 SELECT * FROM pg_seclabel
+
+statement ok
+CREATE SEQUENCE serial START 101 INCREMENT 5
+
+# Last value must return NULL when querying pg_sequences and sequence haven't
+# been used.
+query I
+SELECT last_value FROM pg_sequences WHERE sequencename = 'serial'
+----
+NULL
+
+statement ok
+SELECT nextval('serial');
+SELECT nextval('serial');
+SELECT nextval('serial');
+
+# Now last_value should be 111
+query TTTOIIIIBII colnames
+SELECT * FROM pg_sequences WHERE sequencename = 'serial'
+----
+schemaname  sequencename  sequenceowner  data_type  start_value  min_value  max_value            increment_by  cycle  cache_size  last_value
+public      serial        root           20         101          1          9223372036854775807  5             false  1           111
+
+# Testing sequenceowner and cache_size
+statement ok
+CREATE USER anyuser;
+GRANT CREATE ON DATABASE test TO anyuser;
+ALTER SEQUENCE serial OWNER TO anyuser;
+ALTER SEQUENCE serial CACHE 10;
+
+query TI colnames
+SELECT sequenceowner, cache_size FROM pg_sequences WHERE sequencename = 'serial'
+----
+sequenceowner  cache_size
+anyuser        10

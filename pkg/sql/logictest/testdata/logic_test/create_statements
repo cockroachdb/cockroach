@@ -3110,29 +3110,29 @@ CREATE TABLE pg_catalog.pg_sequence (
    seqcycle BOOL NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_sequences (
-   cache_size INT8 NULL,
-   cycle BOOL NULL,
-   data_type REGTYPE NULL,
-   max_value INT8 NULL,
-   sequenceowner NAME NULL,
-   start_value INT8 NULL,
-   increment_by INT8 NULL,
-   last_value INT8 NULL,
-   min_value INT8 NULL,
    schemaname NAME NULL,
-   sequencename NAME NULL
+   sequencename NAME NULL,
+   sequenceowner NAME NULL,
+   data_type REGTYPE NULL,
+   start_value INT8 NULL,
+   min_value INT8 NULL,
+   max_value INT8 NULL,
+   increment_by INT8 NULL,
+   cycle BOOL NULL,
+   cache_size INT8 NULL,
+   last_value INT8 NULL
 )  CREATE TABLE pg_catalog.pg_sequences (
-   cache_size INT8 NULL,
-   cycle BOOL NULL,
-   data_type REGTYPE NULL,
-   max_value INT8 NULL,
-   sequenceowner NAME NULL,
-   start_value INT8 NULL,
-   increment_by INT8 NULL,
-   last_value INT8 NULL,
-   min_value INT8 NULL,
    schemaname NAME NULL,
-   sequencename NAME NULL
+   sequencename NAME NULL,
+   sequenceowner NAME NULL,
+   data_type REGTYPE NULL,
+   start_value INT8 NULL,
+   min_value INT8 NULL,
+   max_value INT8 NULL,
+   increment_by INT8 NULL,
+   cycle BOOL NULL,
+   cache_size INT8 NULL,
+   last_value INT8 NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_settings (
    name STRING NULL,
