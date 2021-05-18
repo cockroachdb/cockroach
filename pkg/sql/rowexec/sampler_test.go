@@ -99,7 +99,7 @@ func runSampler(
 			continue
 		}
 		for i := 2; i < len(outTypes); i++ {
-			if !row[i].IsNull() {
+			if i != 3 /* num rows col */ && !row[i].IsNull() {
 				t.Fatalf("expected NULL on column %d, got %s", i, row[i].Datum)
 			}
 		}

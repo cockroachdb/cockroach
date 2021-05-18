@@ -79,6 +79,10 @@ func (sr *SampleReservoir) Len() int {
 	return len(sr.samples)
 }
 
+func (sr *SampleReservoir) Cap() int {
+	return cap(sr.samples)
+}
+
 // Less is part of heap.Interface.
 func (sr *SampleReservoir) Less(i, j int) bool {
 	// We want a max heap, so higher ranks sort first.
@@ -93,8 +97,28 @@ func (sr *SampleReservoir) Swap(i, j int) {
 // Push is part of heap.Interface, but we're not using it.
 func (sr *SampleReservoir) Push(x interface{}) { panic("unimplemented") }
 
-// Pop is part of heap.Interface, but we're not using it.
-func (sr *SampleReservoir) Pop() interface{} { panic("unimplemented") }
+// Pop is part of heap.Interface.
+func (sr *SampleReservoir) Pop() interface{} {
+	samp := sr.samples[0]
+	sr.samples = sr.samples[1:]
+	return samp
+}
+
+// Resize safely decreases K without introducing bias. (Note that K can only
+// decrease without introducing bias. Increasing K would cause later rows to be
+// over-represented relative to earlier rows.)
+func (sr *SampleReservoir) Resize(ctx context.Context, k int) {
+	if k >= cap(sr.samples) {
+		return
+	}
+	for len(sr.samples) > k {
+		samp := heap.Pop(sr).(SampledRow)
+		if sr.memAcc != nil {
+			sr.memAcc.Shrink(ctx, int64(samp.Row.Size()))
+		}
+	}
+	sr.samples = sr.samples[:len(sr.samples):k]
+}
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir.
 func (sr *SampleReservoir) SampleRow(

@@ -284,6 +284,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 			if rank, err := row[s.rankCol].GetInt(); err == nil {
 				// Inverted sample row.
 				// Retain the rows with the top ranks.
+				if capacity, err := row[s.numRowsCol].GetInt(); err == nil {
+					s.invSr[colIdx].Resize(ctx, int(capacity))
+				}
 				sampleRow := row[s.invIdxKeyCol : s.invIdxKeyCol+1]
 				if err := s.sampleRow(ctx, s.invSr[colIdx], sampleRow, uint64(rank)); err != nil {
 					return false, err
@@ -303,6 +306,9 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		if rank, err := row[s.rankCol].GetInt(); err == nil {
 			// Sample row.
 			// Retain the rows with the top ranks.
+			if capacity, err := row[s.numRowsCol].GetInt(); err == nil {
+				s.sr.Resize(ctx, int(capacity))
+			}
 			if err := s.sampleRow(ctx, &s.sr, row[:s.rankCol], uint64(rank)); err != nil {
 				return false, err
 			}
