@@ -133,7 +133,7 @@ type IntentResolver struct {
 	stopper      *stop.Stopper
 	testingKnobs kvserverbase.IntentResolverTestingKnobs
 	ambientCtx   log.AmbientContext
-	sem          *quotapool.IntPool // semaphore to limit async goroutines
+	sem          *quotapool.IntPool // semaphore to limit async goroutines for intent resolution
 
 	rdc RangeCache
 
@@ -157,9 +157,6 @@ type IntentResolver struct {
 func setConfigDefaults(c *Config) {
 	if c.TaskLimit == 0 {
 		c.TaskLimit = defaultTaskLimit
-	}
-	if c.TaskLimit == -1 || c.TestingKnobs.ForceSyncIntentResolution {
-		c.TaskLimit = 0
 	}
 	if c.MaxGCBatchIdle == 0 {
 		c.MaxGCBatchIdle = defaultGCBatchIdle
@@ -207,12 +204,13 @@ func New(c Config) *IntentResolver {
 		gcBatchSize = c.TestingKnobs.MaxGCBatchSize
 	}
 	ir.gcBatcher = requestbatcher.New(requestbatcher.Config{
-		Name:            "intent_resolver_gc_batcher",
-		MaxMsgsPerBatch: gcBatchSize,
-		MaxWait:         c.MaxGCBatchWait,
-		MaxIdle:         c.MaxGCBatchIdle,
-		Stopper:         c.Stopper,
-		Sender:          c.DB.NonTransactionalSender(),
+		Name:                      "intent_resolver_gc_batcher",
+		MaxMsgsPerBatch:           gcBatchSize,
+		MaxWait:                   c.MaxGCBatchWait,
+		MaxIdle:                   c.MaxGCBatchIdle,
+		Stopper:                   c.Stopper,
+		Sender:                    c.DB.NonTransactionalSender(),
+		DropRequestInBackpressure: true,
 	})
 	intentResolutionBatchSize := intentResolverBatchSize
 	intentResolutionRangeBatchSize := intentResolverRangeBatchSize
@@ -684,7 +682,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 }
 
 func (ir *IntentResolver) gcTxnRecord(
-	ctx context.Context, rangeID roachpb.RangeID, txn *roachpb.Transaction,
+	ctx context.Context, rangeID roachpb.RangeID, txn *roachpb.Transaction, onComplete func(error),
 ) error {
 	// We successfully resolved the intents, so we're able to GC from
 	// the txn span directly.
@@ -723,7 +721,9 @@ func (ir *IntentResolver) gcTxnRecord(
 	// always issued on behalf of the range on which this record resides which is
 	// a strong signal that it is the range which will contain the transaction
 	// record now.
-	_, err := ir.gcBatcher.Send(ctx, rangeID, &gcArgs)
+	err := ir.gcBatcher.SendAsync(ctx, rangeID, &gcArgs, func(response requestbatcher.Response) {
+		onComplete(response.Err)
+	})
 	if err != nil {
 		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
 			roachpb.Key(txn.Key))
@@ -754,21 +754,23 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	if pErr := ir.ResolveIntents(ctx, txn.LocksAsLockUpdates(), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
-	// Run transaction record GC outside of ir.sem.
-	return ir.stopper.RunAsyncTask(
-		ctx,
-		"storage.IntentResolver: cleanup txn records",
-		func(ctx context.Context) {
-			err := ir.gcTxnRecord(ctx, rangeID, txn)
-			if onComplete != nil {
-				onComplete(err)
-			}
-			if err != nil {
+	return ir.gcTxnRecord(ctx, rangeID, txn, func(err error) {
+		if onComplete != nil {
+			onComplete(err)
+		}
+		if err != nil {
+			if errors.Is(err, stop.ErrThrottled) {
+				ir.Metrics.TxnRecordCleanupDropped.Inc(1)
 				if ir.every.ShouldLog() {
-					log.Warningf(ctx, "failed to gc transaction record: %v", err)
+					log.Warningf(ctx, "Dropping request to cleanup txn record for %v", txn)
+				}
+			} else {
+				if ir.every.ShouldLog() {
+					log.Warningf(ctx, "Failed to process cleanup for txn record for %v", txn)
 				}
 			}
-		})
+		}
+	})
 }
 
 // ResolveOptions is used during intent resolution.

@@ -1411,13 +1411,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	s.intentResolver = intentresolver.New(intentresolver.Config{
-		Clock:                s.cfg.Clock,
-		DB:                   s.db,
-		Stopper:              stopper,
-		TaskLimit:            s.cfg.IntentResolverTaskLimit,
-		AmbientCtx:           s.cfg.AmbientCtx,
-		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
-		RangeDescriptorCache: intentResolverRangeCache,
+		Clock:                     s.cfg.Clock,
+		DB:                        s.db,
+		Stopper:                   stopper,
+		IntentResolutionTaskLimit: s.cfg.IntentResolverTaskLimit,
+		AmbientCtx:                s.cfg.AmbientCtx,
+		TestingKnobs:              s.cfg.TestingKnobs.IntentResolverKnobs,
+		RangeDescriptorCache:      intentResolverRangeCache,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 

@@ -20,17 +20,25 @@ var (
 		Measurement: "Intent Resolutions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTransactionRecordCleanupDropped = metric.Metadata{
+		Name:        "intentresolver.txnrecord.dropped",
+		Help:        "Number of txn record attempts that were dropped by the intent resolver due top throttling",
+		Measurement: "Intent Resolutions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics contains the metrics for the IntentResolver.
 type Metrics struct {
 	// Intent resolver metrics.
 	IntentResolverAsyncThrottled *metric.Counter
+	TxnRecordCleanupDropped      *metric.Counter
 }
 
 func makeMetrics() Metrics {
 	// Intent resolver metrics.
 	return Metrics{
 		IntentResolverAsyncThrottled: metric.NewCounter(metaIntentResolverAsyncThrottled),
+		TxnRecordCleanupDropped:      metric.NewCounter(metaTransactionRecordCleanupDropped),
 	}
 }

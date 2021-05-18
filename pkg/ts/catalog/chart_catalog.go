@@ -890,6 +890,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Dropped Transaction Record Cleanup Attempts",
+				Metrics: []string{
+					"intentresolver.txnrecord.dropped",
+				},
+			},
+			{
 				Title: "Overview",
 				Metrics: []string{
 					"intents.abort-attempts",
