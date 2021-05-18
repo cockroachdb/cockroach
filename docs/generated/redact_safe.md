@@ -4,7 +4,7 @@ File | Type
 --|--
 pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `Type`
-pkg/kv/kvserver/closedts/ctpb/entry.go | `LAI`
+pkg/kv/kvserver/closedts/ctpb/service.go | `LAI`
 pkg/kv/kvserver/concurrency/lock/locking.go | `WaitPolicy`
 pkg/kv/kvserver/raft.go | `SnapshotRequest_Type`
 pkg/roachpb/data.go | `LeaseSequence`

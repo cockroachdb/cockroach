@@ -1327,8 +1327,7 @@ type StoreMetrics struct {
 	MaxLockWaitQueueWaitersForLock *metric.Gauge
 
 	// Closed timestamp metrics.
-	ClosedTimestampMaxBehindNanos  *metric.Gauge
-	ClosedTimestampFailuresToClose *metric.Gauge
+	ClosedTimestampMaxBehindNanos *metric.Gauge
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -1723,8 +1722,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
 
 		// Closed timestamp metrics.
-		ClosedTimestampMaxBehindNanos:  metric.NewGauge(metaClosedTimestampMaxBehindNanos),
-		ClosedTimestampFailuresToClose: metric.NewGauge(metaClosedTimestampFailuresToClose),
+		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 	}
 	storeRegistry.AddMetricStruct(sm)
 

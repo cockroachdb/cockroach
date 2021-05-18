@@ -137,10 +137,6 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 	)
 }
 
-func (t *testProposer) raftTransportClosedTimestampEnabled() bool {
-	return true
-}
-
 func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 	// Note that t.raftGroup can be nil, which FlushLockedWithRaftGroup supports.
 	return fn(t.raftGroup)

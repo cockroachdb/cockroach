@@ -655,8 +655,6 @@ func (s *Store) updateLivenessMap() {
 	nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
 	for nodeID, entry := range nextMap {
 		if entry.IsLive {
-			// Make sure we ask all live nodes for closed timestamp updates.
-			s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
 			continue
 		}
 		// Liveness claims that this node is down, but ConnHealth gets the last say

@@ -7,8 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvbase",
-        "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/util/grpcutil",

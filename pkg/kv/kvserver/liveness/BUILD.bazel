@@ -10,8 +10,6 @@ go_library(
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb:with-mocks",
         "//pkg/settings/cluster",
