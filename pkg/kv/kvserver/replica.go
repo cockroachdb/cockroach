@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -439,9 +438,6 @@ type Replica struct {
 		// we know that the replica has caught up.
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
-		// initialMaxClosed is the initial maxClosed timestamp for the replica as known
-		// from its left-hand-side upon creation.
-		initialMaxClosed hlc.Timestamp
 
 		// The most recently updated time for each follower of this range. This is updated
 		// every time a Raft message is received from a peer.
@@ -1150,7 +1146,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
 	// this first before RLocking below. Performance of this extra lock
 	// acquisition is not a concern.
-	ri.ActiveClosedTimestamp, _ = r.maxClosed(context.Background())
+	ri.ActiveClosedTimestamp = r.GetClosedTimestamp(ctx)
 
 	// NB: numRangefeedRegistrations doesn't require Replica.mu to be locked.
 	// However, it does require coordination between multiple goroutines, so
@@ -1177,25 +1173,6 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	if desc := ri.ReplicaState.Desc; desc != nil {
-		// Learner replicas don't serve follower reads, but they still receive
-		// closed timestamp updates, so include them here.
-		allReplicas := desc.Replicas().Descriptors()
-		for i := range allReplicas {
-			replDesc := &allReplicas[i]
-			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
-				mlai, found := e.MLAI[r.RangeID]
-				if !found {
-					return false // not done
-				}
-				if ri.NewestClosedTimestamp.ClosedTimestamp.Less(e.ClosedTimestamp) {
-					ri.NewestClosedTimestamp.NodeID = replDesc.NodeID
-					ri.NewestClosedTimestamp.ClosedTimestamp = e.ClosedTimestamp
-					ri.NewestClosedTimestamp.MLAI = int64(mlai)
-					ri.NewestClosedTimestamp.Epoch = int64(e.Epoch)
-				}
-				return true // done
-			})
-		}
 	}
 	if r.mu.tenantID != (roachpb.TenantID{}) {
 		ri.TenantID = r.mu.tenantID.ToUint64()

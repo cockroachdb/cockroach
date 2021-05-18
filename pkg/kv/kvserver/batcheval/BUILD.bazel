@@ -57,8 +57,6 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/batcheval/result",
-        "//pkg/kv/kvserver/closedts",
-        "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/gc",

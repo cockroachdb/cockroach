@@ -391,9 +391,6 @@ func (n *Node) start(
 		return errors.Errorf("couldn't gossip descriptor for node %d: %s", n.Descriptor.NodeID, err)
 	}
 
-	// Start the closed timestamp subsystem.
-	n.storeCfg.ClosedTimestamp.Start(n.Descriptor.NodeID)
-
 	// Create stores from the engines that were already initialized.
 	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)

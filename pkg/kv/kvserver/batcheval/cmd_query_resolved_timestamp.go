@@ -54,7 +54,7 @@ func QueryResolvedTimestamp(
 	// because QueryResolvedTimestamp requests are often run without acquiring
 	// latches (see roachpb.INCONSISTENT) and often also on follower replicas,
 	// so latches won't help them to synchronize with writes.
-	closedTS := cArgs.EvalCtx.GetClosedTimestampV2(ctx)
+	closedTS := cArgs.EvalCtx.GetClosedTimestamp(ctx)
 
 	// Compute the minimum timestamp of any intent in the request's key span,
 	// which may span the entire range, but does not need to.
