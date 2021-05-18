@@ -1,0 +1,141 @@
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c STRING,
+  INDEX ((a + b)),
+  INDEX (lower(c), (a + b))
+)
+----
+
+# Do not include inaccessible virtual computed columns in star expansion.
+build
+SELECT * FROM t
+----
+project
+ ├── columns: k:1!null a:2 b:3 c:4
+ └── project
+      ├── columns: crdb_idx_expr_1:6 crdb_idx_expr_2:7 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      ├── scan t
+      │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      │    └── computed column expressions
+      │         ├── crdb_idx_expr_1:6
+      │         │    └── a:2 + b:3
+      │         └── crdb_idx_expr_2:7
+      │              └── lower(c:4)
+      └── projections
+           ├── a:2 + b:3 [as=crdb_idx_expr_1:6]
+           └── lower(c:4) [as=crdb_idx_expr_2:7]
+
+# Insert values for inaccessible virtual computed columns.
+build
+INSERT INTO t VALUES (1, 2, 3, 'foo')
+----
+insert t
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => k:1
+ │    ├── column2:9 => a:2
+ │    ├── column3:10 => b:3
+ │    ├── column4:11 => c:4
+ │    ├── crdb_idx_expr_1_comp:12 => crdb_idx_expr_1:6
+ │    └── crdb_idx_expr_2_comp:13 => crdb_idx_expr_2:7
+ └── project
+      ├── columns: crdb_idx_expr_1_comp:12!null crdb_idx_expr_2_comp:13 column1:8!null column2:9!null column3:10!null column4:11!null
+      ├── values
+      │    ├── columns: column1:8!null column2:9!null column3:10!null column4:11!null
+      │    └── (1, 2, 3, 'foo')
+      └── projections
+           ├── column2:9 + column3:10 [as=crdb_idx_expr_1_comp:12]
+           └── lower(column4:11) [as=crdb_idx_expr_2_comp:13]
+
+# Insert values for inaccessible virtual computed columns.
+build
+UPDATE t SET a = 1
+----
+update t
+ ├── columns: <none>
+ ├── fetch columns: k:8 a:9 b:10 c:11 crdb_idx_expr_1:13 crdb_idx_expr_2:14
+ ├── update-mapping:
+ │    ├── a_new:15 => a:2
+ │    └── crdb_idx_expr_1_comp:16 => crdb_idx_expr_1:6
+ └── project
+      ├── columns: crdb_idx_expr_1_comp:16 crdb_idx_expr_2_comp:17 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12 crdb_idx_expr_1:13 crdb_idx_expr_2:14 a_new:15!null
+      ├── project
+      │    ├── columns: a_new:15!null k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12 crdb_idx_expr_1:13 crdb_idx_expr_2:14
+      │    ├── project
+      │    │    ├── columns: crdb_idx_expr_1:13 crdb_idx_expr_2:14 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    │    ├── scan t
+      │    │    │    ├── columns: k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    │    │    └── computed column expressions
+      │    │    │         ├── crdb_idx_expr_1:13
+      │    │    │         │    └── a:9 + b:10
+      │    │    │         └── crdb_idx_expr_2:14
+      │    │    │              └── lower(c:11)
+      │    │    └── projections
+      │    │         ├── a:9 + b:10 [as=crdb_idx_expr_1:13]
+      │    │         └── lower(c:11) [as=crdb_idx_expr_2:14]
+      │    └── projections
+      │         └── 1 [as=a_new:15]
+      └── projections
+           ├── a_new:15 + b:10 [as=crdb_idx_expr_1_comp:16]
+           └── lower(c:11) [as=crdb_idx_expr_2_comp:17]
+
+# Do not include inaccessible virtual computed columns in NATURAL JOIN filter.
+build
+SELECT * FROM t t1 NATURAL JOIN t t2
+----
+project
+ ├── columns: k:1!null a:2!null b:3!null c:4!null
+ └── inner-join (hash)
+      ├── columns: k:1!null a:2!null b:3!null c:4!null crdb_internal_mvcc_timestamp:5 crdb_idx_expr_1:6 crdb_idx_expr_2:7 k:8!null a:9!null b:10!null c:11!null crdb_internal_mvcc_timestamp:12 crdb_idx_expr_1:13 crdb_idx_expr_2:14
+      ├── project
+      │    ├── columns: crdb_idx_expr_1:6 crdb_idx_expr_2:7 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      │    ├── scan t
+      │    │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      │    │    └── computed column expressions
+      │    │         ├── crdb_idx_expr_1:6
+      │    │         │    └── a:2 + b:3
+      │    │         └── crdb_idx_expr_2:7
+      │    │              └── lower(c:4)
+      │    └── projections
+      │         ├── a:2 + b:3 [as=crdb_idx_expr_1:6]
+      │         └── lower(c:4) [as=crdb_idx_expr_2:7]
+      ├── project
+      │    ├── columns: crdb_idx_expr_1:13 crdb_idx_expr_2:14 k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    ├── scan t
+      │    │    ├── columns: k:8!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    │    └── computed column expressions
+      │    │         ├── crdb_idx_expr_1:13
+      │    │         │    └── a:9 + b:10
+      │    │         └── crdb_idx_expr_2:14
+      │    │              └── lower(c:11)
+      │    └── projections
+      │         ├── a:9 + b:10 [as=crdb_idx_expr_1:13]
+      │         └── lower(c:11) [as=crdb_idx_expr_2:14]
+      └── filters
+           ├── k:1 = k:8
+           ├── a:2 = a:9
+           ├── b:3 = b:10
+           └── c:4 = c:11
+
+
+# Allow aliasing a column with the same name as an inaccessible virtual column.
+build
+SELECT a AS crdb_idx_expr_1 FROM t
+----
+project
+ ├── columns: crdb_idx_expr_1:2
+ └── project
+      ├── columns: crdb_idx_expr_1:6 crdb_idx_expr_2:7 k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      ├── scan t
+      │    ├── columns: k:1!null a:2 b:3 c:4 crdb_internal_mvcc_timestamp:5
+      │    └── computed column expressions
+      │         ├── crdb_idx_expr_1:6
+      │         │    └── a:2 + b:3
+      │         └── crdb_idx_expr_2:7
+      │              └── lower(c:4)
+      └── projections
+           ├── a:2 + b:3 [as=crdb_idx_expr_1:6]
+           └── lower(c:4) [as=crdb_idx_expr_2:7]

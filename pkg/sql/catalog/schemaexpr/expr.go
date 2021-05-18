@@ -25,6 +25,52 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// InferExprType returns the type of an expression. It can infer the type of an
+// expression with column references because it replaces column variables with
+// dummyColumns that can be type-checked. An error is returned if the
+// expression's volatility is greater than maxVolatility.
+func InferExprType(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	expr tree.Expr,
+	op string,
+	semaCtx *tree.SemaContext,
+	maxVolatility tree.Volatility,
+	tn *tree.TableName,
+) (*types.T, error) {
+	nonDropColumns := desc.NonDropColumns()
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+	)
+
+	// Strip database and table names from qualified column names.
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	typedExpr, err := SanitizeVarFreeExpr(
+		ctx,
+		replacedExpr,
+		types.Any,
+		op,
+		semaCtx,
+		maxVolatility,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return typedExpr.ResolvedType(), nil
+}
+
 // DequalifyAndValidateExpr validates that an expression has the given type
 // and contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression and the set of column IDs within

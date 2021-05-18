@@ -164,6 +164,12 @@ func MakeIndexDescriptor(
 		return nil, err
 	}
 
+	// Replace expression index elements with inaccessible virtual computed
+	// columns. The virtual columns are added as mutation columns to tableDesc.
+	if err := replaceExpressionElemsWithVirtualCols(params, tableDesc, &n); err != nil {
+		return nil, err
+	}
+
 	// Ensure that the index name does not exist before trying to create the index.
 	if err := tableDesc.ValidateIndexNameIsUnique(string(n.Name)); err != nil {
 		return nil, err
@@ -296,16 +302,90 @@ func MakeIndexDescriptor(
 func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
 	for _, column := range columns {
 		if column.Expr != nil {
-			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+			// Skip expression-based index columns. They are handled in
+			// replaceExpressionElemsWithVirtualCols.
+			continue
 		}
 		foundColumn, err := desc.FindColumnWithName(column.Column)
 		if err != nil {
 			return err
 		}
-		if foundColumn.Dropped() {
+		if foundColumn.Dropped() || foundColumn.IsInaccessible() {
 			return colinfo.NewUndefinedColumnError(string(column.Column))
 		}
 	}
+	return nil
+}
+
+// replaceExpressionElemsWithVirtualCols replaces each IndexElem in n with a
+// non-nil Expr with a virtual column with the same expression. The virtual
+// column is added to desc as a mutation column.
+func replaceExpressionElemsWithVirtualCols(
+	params runParams, desc *tabledesc.Mutable, n *tree.CreateIndex,
+) error {
+	tn, err := params.p.getQualifiedTableName(params.ctx, desc)
+	if err != nil {
+		return err
+	}
+
+	for i := range n.Columns {
+		elem := &n.Columns[i]
+		if elem.Expr != nil {
+			if !params.SessionData().EnableExpressionBasedIndexes {
+				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+			}
+
+			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionBasedIndexes) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"version %v must be finalized to use expression-based indexes",
+					clusterversion.ExpressionBasedIndexes)
+			}
+
+			// Infer the type of the expression so that we can assign a type to
+			// the computed column.
+			typ, err := schemaexpr.InferExprType(
+				params.ctx,
+				desc,
+				elem.Expr,
+				"index expression",
+				params.p.SemaCtx(),
+				tree.VolatilityImmutable,
+				tn,
+			)
+			if err != nil {
+				return err
+			}
+
+			colName := tabledesc.GenerateUniqueName("crdb_idx_expr", func(name string) bool {
+				_, err := desc.FindColumnWithName(tree.Name(name))
+				return err == nil
+			})
+			addCol := &tree.AlterTableAddColumn{
+				ColumnDef: makeExpressionBasedIndexVirtualColumn(colName, typ, elem.Expr),
+			}
+
+			// Add the virtual column to desc as a mutation column.
+			if err := params.p.addColumnImpl(
+				params,
+				&alterTableNode{
+					tableDesc: desc,
+					n: &tree.AlterTable{
+						Cmds: []tree.AlterTableCmd{addCol},
+					},
+				},
+				tn,
+				desc,
+				addCol,
+			); err != nil {
+				return err
+			}
+
+			// Set the column name and unset the expression.
+			elem.Column = tree.Name(colName)
+			elem.Expr = nil
+		}
+	}
+
 	return nil
 }
 

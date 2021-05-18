@@ -755,7 +755,7 @@ func ResolveUniqueWithoutIndexConstraint(
 		return err
 	}
 	if constraintName == "" {
-		constraintName = tabledesc.GenerateUniqueConstraintName(
+		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
@@ -955,7 +955,7 @@ func ResolveFK(
 	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = tabledesc.GenerateUniqueConstraintName(
+		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
@@ -1087,7 +1087,7 @@ func addIndexForFK(
 	constraintName string,
 	ts TableState,
 ) (descpb.IndexID, error) {
-	autoIndexName := tabledesc.GenerateUniqueConstraintName(
+	autoIndexName := tabledesc.GenerateUniqueName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
 		func(name string) bool {
 			return tbl.ValidateIndexNameIsUnique(name) != nil
@@ -2751,6 +2751,26 @@ func makeShardCheckConstraintDef(
 		},
 		Hidden: true,
 	}, nil
+}
+
+func makeExpressionBasedIndexVirtualColumn(
+	colName string, typ *types.T, expr tree.Expr,
+) *tree.ColumnTableDef {
+	c := &tree.ColumnTableDef{
+		Name:         tree.Name(colName),
+		Type:         typ,
+		Inaccessible: true,
+	}
+	c.Computed.Computed = true
+	c.Computed.Expr = expr
+	c.Computed.Virtual = true
+
+	// TODO(mgartner): If we can determine the expression will never evaluate to
+	// NULL, the optimizer might be able to better optimize queries using the
+	// expression-based index.
+	c.Nullable.Nullability = tree.Null
+
+	return c
 }
 
 // incTelemetryForNewColumn increments relevant telemetry every time a new column

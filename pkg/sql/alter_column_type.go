@@ -259,7 +259,7 @@ func alterColumnTypeGeneral(
 		return err == nil
 	}
 
-	shadowColName := tabledesc.GenerateUniqueConstraintName(col.GetName(), nameExists)
+	shadowColName := tabledesc.GenerateUniqueName(col.GetName(), nameExists)
 
 	var newColComputeExpr *string
 	// oldCol still needs to have values written to it in case nodes read it from
