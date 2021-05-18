@@ -20,10 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -366,6 +365,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	for i := range outRow {
 		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
+	// Reuse the numRows column for the capacity of the sample reservoir.
+	outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(s.sr.Cap()))}
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
@@ -378,6 +379,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 		outRow[i] = rowenc.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 	for col, invSr := range s.invSr {
+		// Reuse the numRows column for the capacity of the sample reservoir.
+		outRow[s.numRowsCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(invSr.Cap()))}
 		outRow[s.invColIdxCol] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(col))}
 		for _, sample := range invSr.Get() {
 			// Reuse the rank column for inverted index keys.
@@ -448,7 +451,7 @@ func (s *samplerProcessor) sampleRow(
 	// Use Int63 so we don't have headaches converting to DInt.
 	rank := uint64(rng.Int63())
 	if err := sr.SampleRow(ctx, s.EvalCtx, row, rank); err != nil {
-		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
+		if !sqlerrors.IsOutOfMemoryError(err) {
 			return false, err
 		}
 		// We hit an out of memory error. Clear the sample reservoir and
