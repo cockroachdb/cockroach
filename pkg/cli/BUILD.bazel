@@ -4,6 +4,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "cli",
     srcs = [
+        "absolute_fs.go",
         "auth.go",
         "cert.go",
         "cli.go",
@@ -49,6 +50,7 @@ go_library(
         "start_unix.go",
         "start_windows.go",
         "statement_diag.go",
+        "swappable_fs.go",
         "testutils.go",
         "tsdump.go",
         "userfile.go",
@@ -196,6 +198,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//tool",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_elastic_gosigar//:gosigar",
