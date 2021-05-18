@@ -38,6 +38,28 @@ func (h Header) WriteTimestamp() hlc.Timestamp {
 	return ts
 }
 
+// Summary prints a short summary of the requests in a batch.
+func (ba *BatchRequest) Summary() redact.RedactableString {
+	if len(ba.Requests) == 0 {
+		return "empty batch"
+	}
+
+	var p redact.StringBuilder
+	counts := ba.getReqCounts()
+	var comma bool
+	for i, v := range counts {
+		if v != 0 {
+			if comma {
+				p.SafeString(", ")
+			}
+			comma = true
+
+			p.Printf("%d %s", v, requestNames[i])
+		}
+	}
+	return p.RedactableString()
+}
+
 // SetActiveTimestamp sets the correct timestamp at which the request is to be
 // carried out. For transactional requests, ba.Timestamp must be zero initially
 // and it will be set to txn.ReadTimestamp (note though this mostly impacts

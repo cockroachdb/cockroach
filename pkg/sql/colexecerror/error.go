@@ -12,12 +12,13 @@ package colexecerror
 
 import (
 	"bufio"
+	"bytes"
 	"context"
-	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
@@ -38,8 +39,8 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 
 		// Find where the panic came from and only proceed if it is related to the
 		// vectorized engine.
-		stackTrace := string(debug.Stack())
-		scanner := bufio.NewScanner(strings.NewReader(stackTrace))
+		stackTrace := log.GetStacks(false /* all */)
+		scanner := bufio.NewScanner(bytes.NewReader(stackTrace.StripMarkers()))
 		panicLineFound := false
 		for scanner.Scan() {
 			if strings.Contains(scanner.Text(), panicLineSubstring) {
@@ -48,9 +49,14 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			}
 		}
 		if !panicLineFound {
+			// Note: even though the assertion failure also captures a stack
+			// trace, we want the text of the error to explain what is the
+			// stack trace that was parsed and that _led_ to this assertion
+			// failing.
 			panic(errors.AssertionFailedf("panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace))
 		}
 		if !scanner.Scan() {
+			// Note: ditto above wrt. stack trace redundancy.
 			panic(errors.AssertionFailedf("unexpectedly there is no line below the panic line in the stack trace\n%s", stackTrace))
 		}
 		panicEmittedFrom := strings.TrimSpace(scanner.Text())

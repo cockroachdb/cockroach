@@ -123,7 +123,7 @@ func (ru *%[1]s) MustSetInner(r %[2]s) {
 	}
 
 	fmt.Fprintf(w, `	default:
-		panic(fmt.Sprintf("unsupported type %%T for %%T", r, ru))
+		panic(errors.AssertionFailedf("unsupported type %%T for %%T", r, ru))
 	}
 	ru.Value = union
 }
@@ -151,10 +151,10 @@ func main() {
 package roachpb
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
+  "github.com/cockroachdb/errors"
+  "github.com/cockroachdb/redact"
 )
+
 `)
 
 	// Generate GetInner methods.
@@ -188,7 +188,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 	}
 
 	fmt.Fprintf(f, `		default:
-			panic(fmt.Sprintf("unsupported request: %%+v", ru))
+			panic(errors.AssertionFailedf("unsupported request: %%+v", ru))
 		}
 	}
 	return counts
@@ -210,7 +210,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 
 	// Generate Summary function.
 	fmt.Fprintf(f, `
-var requestNames = []string{`)
+var requestNames = []redact.SafeString{`)
 	for _, v := range reqVariants {
 		name := v.variantName
 		for str, short := range shorthands {
@@ -220,41 +220,6 @@ var requestNames = []string{`)
 	"%s",`, name)
 	}
 	fmt.Fprint(f, `
-}
-`)
-
-	// We don't use Fprint to avoid go vet warnings about
-	// formatting directives in string.
-	fmt.Fprint(f, `
-// Summary prints a short summary of the requests in a batch.
-func (ba *BatchRequest) Summary() string {
-	var b strings.Builder
-	ba.WriteSummary(&b)
-	return b.String()
-}
-
-// WriteSummary writes a short summary of the requests in a batch
-// to the provided builder.
-func (ba *BatchRequest) WriteSummary(b *strings.Builder) {
-	if len(ba.Requests) == 0 {
-		b.WriteString("empty batch")
-		return
-	}
-	counts := ba.getReqCounts()
-	var tmp [10]byte
-	var comma bool
-	for i, v := range counts {
-		if v != 0 {
-			if comma {
-				b.WriteString(", ")
-			}
-			comma = true
-
-			b.Write(strconv.AppendInt(tmp[:0], int64(v), 10))
-			b.WriteString(" ")
-			b.WriteString(requestNames[i])
-		}
-	}
 }
 `)
 
@@ -316,7 +281,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	}
 
 	fmt.Fprintf(f, "%s", `		default:
-			panic(fmt.Sprintf("unsupported request: %+v", r))
+			panic(errors.AssertionFailedf("unsupported request: %+v", r))
 		}
 	}
 	return br
@@ -334,7 +299,7 @@ func CreateRequest(method Method) Request {
 	}
 	fmt.Fprintf(f, "%s", `
 	default:
-		panic(fmt.Sprintf("unsupported method: %+v", method))
+		panic(errors.AssertionFailedf("unsupported method: %+v", method))
 	}
 }
 `)

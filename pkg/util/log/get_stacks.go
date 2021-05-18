@@ -10,23 +10,37 @@
 
 package log
 
-import "runtime"
+import (
+	"runtime"
 
-// getStacks is a wrapper for runtime.Stack that attempts to recover the data for all goroutines.
-func getStacks(all bool) []byte {
-	// We don't know how big the traces are, so grow a few times if they don't fit. Start large, though.
-	n := 10000
+	"github.com/cockroachdb/redact"
+)
+
+// stackTraceApproxSize is the approximate minimum size of a goroutine stack trace.
+const stackTraceApproxSize = 1024
+
+// GetStacks is a wrapper for runtime.Stack that attempts to recover
+// the data for all goroutines.
+//
+// The result is a redactable string, where safe details
+// in the stack trace do not get removed by string redaction.
+func GetStacks(all bool) redact.RedactableBytes {
+	// We don't know how big the traces are, so grow a few times if they
+	// don't fit. Start large, though.
+	n := stackTraceApproxSize
 	if all {
-		n = 100000
+		n = runtime.NumGoroutine() * n
 	}
 	var trace []byte
-	for i := 0; i < 5; i++ {
+	for ; n <= (512 << 20 /* 512MiB */); n *= 2 {
 		trace = make([]byte, n)
 		nbytes := runtime.Stack(trace, all)
 		if nbytes < len(trace) {
 			return trace[:nbytes]
 		}
-		n *= 2
 	}
-	return trace
+	// Note: this cast is valid because Go currently does not embed
+	// values inside stack traces. If this were to change, we would need
+	// to insert redaction markers properly inside the stack traces.
+	return redact.RedactableBytes(trace)
 }

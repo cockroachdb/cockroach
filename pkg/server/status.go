@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"runtime/pprof"
 	"sort"
 	"strconv"
@@ -78,9 +77,6 @@ import (
 const (
 	// Default Maximum number of log entries returned.
 	defaultMaxLogEntries = 1000
-
-	// stackTraceApproxSize is the approximate size of a goroutine stack trace.
-	stackTraceApproxSize = 1024
 
 	// statusPrefix is the root of the cluster statistics and metrics API.
 	statusPrefix = "/_status/"
@@ -1153,18 +1149,8 @@ func (s *statusServer) Stacks(
 
 	switch req.Type {
 	case serverpb.StacksType_GOROUTINE_STACKS:
-		bufSize := runtime.NumGoroutine() * stackTraceApproxSize
-		for {
-			buf := make([]byte, bufSize)
-			length := runtime.Stack(buf, true)
-			// If this wasn't large enough to accommodate the full set of
-			// stack traces, increase by 2 and try again.
-			if length == bufSize {
-				bufSize = bufSize * 2
-				continue
-			}
-			return &serverpb.JSONResponse{Data: buf[:length]}, nil
-		}
+		stacks := log.GetStacks(true /* all */)
+		return &serverpb.JSONResponse{Data: stacks.StripMarkers()}, nil
 	case serverpb.StacksType_THREAD_STACKS:
 		return &serverpb.JSONResponse{Data: []byte(storage.ThreadStacks())}, nil
 	default:

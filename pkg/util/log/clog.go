@@ -15,7 +15,6 @@ package log
 
 import (
 	"context"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // logging is the global state of the logging setup.
@@ -274,9 +274,9 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 
 		switch traceback {
 		case tracebackSingle:
-			entry.stacks = getStacks(false)
+			entry.stacks = GetStacks(false)
 		case tracebackAll:
-			entry.stacks = getStacks(true)
+			entry.stacks = GetStacks(true)
 		}
 
 		for _, s := range l.sinkInfos {
@@ -425,9 +425,9 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 
 // DumpStacks produces a dump of the stack traces in the logging output.
 func DumpStacks(ctx context.Context) {
-	allStacks := getStacks(true)
+	allStacks := GetStacks(true)
 	// TODO(knz): This should really be a "debug" level, not "info".
-	Infof(ctx, "stack traces:\n%s", allStacks)
+	Infof(ctx, "stack traces:\n%s", redact.RedactableBytes(allStacks))
 }
 
 func setActive() {
@@ -435,7 +435,8 @@ func setActive() {
 	defer logging.mu.Unlock()
 	if !logging.mu.active {
 		logging.mu.active = true
-		logging.mu.firstUseStack = string(debug.Stack())
+		stacks := GetStacks(false)
+		logging.mu.firstUseStack = string(stacks.StripMarkers())
 	}
 }
 

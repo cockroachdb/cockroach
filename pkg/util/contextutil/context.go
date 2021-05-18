@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -72,7 +71,9 @@ func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, cont
 	}
 	return ctx, func() {
 		if log.V(2) {
-			log.InfofDepth(ctx, 1, "canceling context:\n%s", debug.Stack())
+			// The formatting with %+v of an error ensures that a stack
+			// trace gets printed.
+			log.InfofDepth(ctx, 1, "%+v", errors.New("canceling context"))
 		} else if log.V(1) {
 			log.InfofDepth(ctx, 1, "canceling context")
 		}

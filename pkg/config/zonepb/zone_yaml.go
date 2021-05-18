@@ -11,8 +11,6 @@
 package zonepb
 
 import (
-	"fmt"
-	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -54,14 +52,14 @@ var _ yaml.Unmarshaler = &ConstraintsConjunction{}
 
 // MarshalYAML implements yaml.Marshaler.
 func (c ConstraintsConjunction) MarshalYAML() (interface{}, error) {
-	return nil, fmt.Errorf(
-		"MarshalYAML should never be called directly on Constraints (%v): %v", c, debug.Stack())
+	return nil, errors.AssertionFailedf(
+		"MarshalYAML should never be called directly on Constraints (%v)", c)
 }
 
 // UnmarshalYAML implements yaml.Marshaler.
 func (c *ConstraintsConjunction) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	return fmt.Errorf(
-		"UnmarshalYAML should never be called directly on Constraints: %v", debug.Stack())
+	return errors.AssertionFailedf(
+		"UnmarshalYAML should never be called directly on Constraints")
 }
 
 // ConstraintsList is an alias for a slice of Constraints that can be

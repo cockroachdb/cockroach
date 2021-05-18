@@ -402,9 +402,9 @@ func evaluateBatch(
 				index, retResults, limit := index, retResults, limit // don't alloc unless branch taken
 				err := errorutil.UnexpectedWithIssueErrorf(46652,
 					"received %d results, limit was %d (original limit: %d, batch=%s idx=%d)",
-					errors.Safe(retResults), errors.Safe(limit),
-					errors.Safe(ba.Header.MaxSpanRequestKeys),
-					errors.Safe(ba.Summary()), errors.Safe(index))
+					retResults, limit,
+					ba.Header.MaxSpanRequestKeys,
+					ba.Summary(), index)
 				if sentryIssue46720Limiter.Allow() {
 					log.Errorf(ctx, "%v", err)
 					errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
@@ -422,8 +422,8 @@ func evaluateBatch(
 				index, retResults := index, retResults // don't alloc unless branch taken
 				log.Fatalf(ctx,
 					"received %d results, limit was exhausted (original limit: %d, batch=%s idx=%d)",
-					errors.Safe(retResults), errors.Safe(ba.Header.MaxSpanRequestKeys),
-					errors.Safe(ba.Summary()), errors.Safe(index))
+					retResults, ba.Header.MaxSpanRequestKeys,
+					ba.Summary(), index)
 			}
 		}
 		// Same as for MaxSpanRequestKeys above, keep track of the limit and
