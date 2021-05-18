@@ -71,6 +71,14 @@ func indexReferencesTable(this *scpb.Table, that *scpb.SecondaryIndex) bool {
 	return that.TableID == this.TableID
 }
 
+func seqReferencesTable(this *scpb.Table, that *scpb.Sequence) bool {
+	return this.TableID == that.OwnerTableID
+}
+
+func tableReferencesDefaultExpression(this *scpb.Table, that *scpb.DefaultExpression) bool {
+	return this.TableID == that.TableID
+}
+
 func defaultExprReferencesColumn(this *scpb.Sequence, that *scpb.DefaultExpression) bool {
 	for _, seq := range that.UsesSequenceIDs {
 		if seq == this.TableID {
@@ -141,8 +149,9 @@ var rules = map[scpb.Element]targetRules{
 					op: func(this *scpb.DefaultExpression) []scop.Op {
 						return []scop.Op{
 							&scop.RemoveColumnDefaultExpression{
-								TableID:  this.TableID,
-								ColumnID: this.ColumnID,
+								TableID:     this.TableID,
+								ColumnID:    this.ColumnID,
+								SequenceIDs: this.UsesSequenceIDs,
 							},
 							&scop.UpdateRelationDeps{
 								TableID: this.TableID,
@@ -338,6 +347,16 @@ var rules = map[scpb.Element]targetRules{
 					dirPredicate: sameDirection,
 					thatState:    scpb.State_ABSENT,
 					predicate:    tableReferencesType,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    seqReferencesTable,
+				},
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    tableReferencesDefaultExpression,
 				},
 			},
 		},

@@ -98,8 +98,9 @@ type UpdateRelationDeps struct {
 // RemoveColumnDefaultExpression removes the default expression on a given table column.
 type RemoveColumnDefaultExpression struct {
 	mutationOp
-	TableID  descpb.ID
-	ColumnID descpb.ColumnID
+	TableID     descpb.ID
+	ColumnID    descpb.ColumnID
+	SequenceIDs []descpb.ID
 }
 
 // RemoveTypeBackRef removes type back references from a relation.

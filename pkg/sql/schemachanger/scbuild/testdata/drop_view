@@ -70,8 +70,8 @@ DROP VIEW defaultdb.v1 CASCADE
       view:
         dependedOnBy: []
         dependsOn:
-        - 53
         - 54
+        - 53
         tableId: 55
   state: PUBLIC
 - target:

@@ -610,8 +610,8 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 			panic(err)
 		}
 
-		// Loop through and add all constraints
-		// Loop over the outbound foreign keys
+		// Loop through and update in bound and outbound
+		// foreign key references.
 		for _, fk := range table.GetInboundFKs() {
 			fkNode := &scpb.ForeignKey{
 				OriginID:         fk.OriginTableID,
@@ -641,6 +641,30 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 					fkNode)
 			}
 		}
+		// Setup nodes for dropping sequences
+		// and cleaning up default expressions.
+		for _, col := range table.PublicColumns() {
+			// Loop over owned sequences
+			for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
+				seqID := col.GetOwnsSequenceID(seqIdx)
+				table, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, seqID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc))
+				if err != nil {
+					panic(err)
+				}
+				b.dropSequenceDesc(ctx, table, tree.DropCascade)
+			}
+			// Setup logic to clean up the default expression,
+			// only if sequences are depending on it.
+			if col.NumUsesSequences() > 0 {
+				b.addNode(scpb.Target_DROP,
+					&scpb.DefaultExpression{
+						DefaultExpr:     col.GetDefaultExpr(),
+						TableID:         table.GetID(),
+						UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
+						ColumnID:        col.GetID()})
+			}
+		}
+
 		// Clean up type back references
 		b.removeTypeBackRefDeps(ctx, table)
 		b.addNode(scpb.Target_DROP,

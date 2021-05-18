@@ -135,6 +135,42 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	// Clean up the default expression and the sequence ID's
 	column.ColumnDesc().DefaultExpr = nil
 	column.ColumnDesc().UsesSequenceIds = nil
+
+	// Remove the references inside the sequences.
+	for _, seqID := range op.SequenceIDs {
+		seqDesc, err := m.descs.GetMutableTableByID(ctx, seqID)
+		if err != nil {
+			return err
+		}
+		if seqDesc.Dropped() {
+			continue
+		}
+		idxToRemove := -1
+		colIdxToRemove := -1
+		for depIdx, deps := range seqDesc.DependedOnBy {
+			if deps.ID == op.TableID {
+				for colIdx, colID := range deps.ColumnIDs {
+					if colID == op.ColumnID {
+						idxToRemove = depIdx
+						colIdxToRemove = colIdx
+						break
+					}
+				}
+			}
+			if idxToRemove != -1 {
+				// First drop the column ID out
+				seqDesc.DependedOnBy[idxToRemove].ColumnIDs = append(
+					seqDesc.DependedOnBy[idxToRemove].ColumnIDs[:colIdxToRemove],
+					seqDesc.DependedOnBy[idxToRemove].ColumnIDs[colIdxToRemove+1:]...)
+				if len(seqDesc.DependedOnBy[idxToRemove].ColumnIDs) == 0 {
+					// Next drop the entire dependency if no columns are left.
+					seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:idxToRemove],
+						seqDesc.DependedOnBy[idxToRemove+1:]...)
+				}
+				break
+			}
+		}
+	}
 	return nil
 }
 

@@ -23,14 +23,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// dropSequence builds targets and transforms the provided schema change nodes
-// accordingly, given an DROP SEQUENCE statement.
+// dropSequenceDesc builds targets and transformations using a descriptor.
 func (b *buildContext) dropSequenceDesc(
-	ctx context.Context, table catalog.TableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, table catalog.TableDescriptor, cascade tree.DropBehavior,
 ) {
+	// FIXME: Deduplicate and fix cycles.
 	// Check if there are dependencies.
 	err := table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-		if behavior != tree.DropCascade {
+		if cascade != tree.DropCascade {
 			return pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
 				"cannot drop sequence %s because other objects depend on it",
@@ -50,8 +50,7 @@ func (b *buildContext) dropSequenceDesc(
 					TableID:         dep.ID,
 					ColumnID:        col.GetID(),
 					UsesSequenceIDs: col.ColumnDesc().UsesSequenceIds,
-					DefaultExpr:     "",
-				}
+					DefaultExpr:     ""}
 				if exists, _ := b.checkIfNodeExists(scpb.Target_DROP, defaultExpr); !exists {
 					b.addNode(scpb.Target_DROP, defaultExpr)
 				}
