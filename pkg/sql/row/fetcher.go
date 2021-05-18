@@ -587,6 +587,12 @@ func (rf *Fetcher) StartScan(
 	return rf.StartScanFrom(ctx, &f)
 }
 
+// TestingInconsistentScanSleep introduces a sleep inside the fetcher after
+// every KV batch.
+// TODO(radu): consolidate with forceProductionKVBatchSize into a
+// FetcherTestingKnobs struct.
+var TestingInconsistentScanSleep time.Duration
+
 // StartInconsistentScan initializes and starts an inconsistent scan, where each
 // KV batch can be read at a different historical timestamp.
 //
@@ -645,6 +651,9 @@ func (rf *Fetcher) StartInconsistentScan(
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
 			return nil, err.GoError()
+		}
+		if TestingInconsistentScanSleep != 0 {
+			time.Sleep(TestingInconsistentScanSleep)
 		}
 		return res, nil
 	}
