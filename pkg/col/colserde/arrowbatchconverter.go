@@ -513,5 +513,17 @@ func deserializeArrowIntoBytes(
 		// corresponds.
 		b = make([]byte, 0)
 	}
-	coldata.BytesFromArrowSerializationFormat(bytes, b, bytesArr.ValueOffsets())
+	offsets := bytesArr.ValueOffsets()
+	if len(offsets) > 0 {
+		first := offsets[0]
+		if first > 0 {
+			// Because Binary.ValueBytes() truncates the data according to the
+			// offsets, the data now begins at index zero even if it did not before.
+			// We rely on the non-decreasing offsets invariant here.
+			for i := range offsets {
+				offsets[i] -= first
+			}
+		}
+	}
+	coldata.BytesFromArrowSerializationFormat(bytes, b, offsets)
 }

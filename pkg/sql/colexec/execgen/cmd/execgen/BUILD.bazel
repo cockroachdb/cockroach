@@ -25,6 +25,8 @@ go_library(
         "hashjoiner_gen.go",
         "hashtable_gen.go",
         "is_null_ops_gen.go",
+        "lag_gen.go",
+        "lead_gen.go",
         "like_ops_gen.go",
         "main.go",
         "mergejoinbase_gen.go",

@@ -1191,8 +1191,9 @@ func NewColOperator(
 				argIdxs := make([]int, len(wf.ArgsIdxs))
 				for i, idx := range wf.ArgsIdxs {
 					// Retrieve the type of each argument and perform any necessary casting.
-					expectedType := colexecwindow.GetWindowFnArgType(*wf.Func.WindowFunc, i)
-					if !expectedType.Identical(typs[idx]) {
+					needsCast, expectedType := colexecwindow.WindowFnArgNeedsCast(
+						*wf.Func.WindowFunc, typs[idx], i)
+					if needsCast {
 						// We must cast to the expected argument type.
 						castIdx := len(typs)
 						input, err = colexecbase.GetCastOperator(
@@ -1299,7 +1300,45 @@ func NewColOperator(
 					diskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					result.Root = colexecwindow.NewNTileOperator(
 						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
-						args.FDSemaphore, input, typs, outputIdx, partitionColIdx, argIdxs[0], diskAcc,
+						args.FDSemaphore, diskAcc, input, typs, outputIdx, partitionColIdx, argIdxs[0],
+					)
+				case execinfrapb.WindowerSpec_LAG:
+					opName := opNamePrefix + "lag"
+					unlimitedAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					diskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+					argIdx := argIdxs[0]
+					offsetIdx, defaultIdx := tree.NoColumnIdx, tree.NoColumnIdx
+					if len(argIdxs) > 1 {
+						offsetIdx = argIdxs[1]
+						if len(argIdxs) > 2 {
+							defaultIdx = argIdxs[2]
+						}
+					}
+					result.Root, err = colexecwindow.NewLagOperator(
+						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
+						args.FDSemaphore, diskAcc, input, typs, outputIdx, partitionColIdx,
+						argIdx, offsetIdx, defaultIdx,
+					)
+				case execinfrapb.WindowerSpec_LEAD:
+					opName := opNamePrefix + "lead"
+					unlimitedAllocator := colmem.NewAllocator(
+						ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, opName, spec.ProcessorID), factory,
+					)
+					diskAcc := result.createDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
+					argIdx := argIdxs[0]
+					offsetIdx, defaultIdx := tree.NoColumnIdx, tree.NoColumnIdx
+					if len(argIdxs) > 1 {
+						offsetIdx = argIdxs[1]
+						if len(argIdxs) > 2 {
+							defaultIdx = argIdxs[2]
+						}
+					}
+					result.Root, err = colexecwindow.NewLeadOperator(
+						unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx), args.DiskQueueCfg,
+						args.FDSemaphore, diskAcc, input, typs, outputIdx, partitionColIdx,
+						argIdx, offsetIdx, defaultIdx,
 					)
 				default:
 					return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
