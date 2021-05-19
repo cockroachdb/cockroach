@@ -183,6 +183,7 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 func TestReliableIntentCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 65447, "fixing the flake uncovered additional bugs in #65458")
 	skip.UnderRace(t, "timing-sensitive test")
 	skip.UnderStress(t, "multi-node test")
 
