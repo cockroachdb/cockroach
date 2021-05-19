@@ -80,6 +80,13 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		return max
 	}())
 
+// maxIntentsPerScanError is maximum number of intents returned in
+// WriteIntentError when MVCCScan{*} functions fail.
+// If this threshold is set to zero, no limit would be applied.
+var maxIntentsPerScanError = envutil.EnvOrDefaultInt64(
+	"COCKROACH_MAX_INTENTS_PER_SCAN_ERROR",
+	5000)
+
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
@@ -2372,6 +2379,7 @@ func mvccScanToBytes(
 		ts:               timestamp,
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
+		maxIntents: 			maxIntentsPerScanError,
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
