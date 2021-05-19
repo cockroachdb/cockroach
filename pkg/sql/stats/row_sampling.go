@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -120,8 +121,7 @@ func (sr *SampleReservoir) Resize(ctx context.Context, k int) {
 	sr.samples = sr.samples[:len(sr.samples):k]
 }
 
-// SampleRow looks at a row and either drops it or adds it to the reservoir.
-func (sr *SampleReservoir) SampleRow(
+func (sr *SampleReservoir) trySampleRow(
 	ctx context.Context, evalCtx *tree.EvalContext, row rowenc.EncDatumRow, rank uint64,
 ) error {
 	if len(sr.samples) < cap(sr.samples) {
@@ -148,12 +148,33 @@ func (sr *SampleReservoir) SampleRow(
 	// Replace the max rank if ours is smaller.
 	if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
 		if err := sr.copyRow(ctx, evalCtx, sr.samples[0].Row, row); err != nil {
+			// XXX At this point sr.samples[0].Row could have a mix of old and new
+			// values, but as long as the caller immediately Pops it is fine to keep
+			// using the reservoir.
 			return err
 		}
 		sr.samples[0].Rank = rank
 		heap.Fix(sr, 0)
 	}
 	return nil
+}
+
+// SampleRow looks at a row and either drops it or adds it to the reservoir. The
+// capacity of the reservoir (K) will shrink if it hits a memory limit. If
+// capacity goes below 1, SampleRow will return an error. If SampleRow returns
+// an error (any type of error), no additional calls to SampleRow should be made
+// as the failed samples will have introduced bias.
+func (sr *SampleReservoir) SampleRow(
+	ctx context.Context, evalCtx *tree.EvalContext, row rowenc.EncDatumRow, rank uint64,
+) error {
+	for {
+		err := sr.trySampleRow(ctx, evalCtx, row, rank)
+		if err == nil || !sqlerrors.IsOutOfMemoryError(err) || len(sr.samples) <= 1 {
+			return err
+		}
+		// We've used too much memory. Remove the highest-rank sample and try again.
+		sr.Resize(ctx, len(sr.samples)-1)
+	}
 }
 
 // Get returns the sampled rows.
