@@ -93,13 +93,16 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 	if false {
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
-		// empty string which uses the local cockroach binary.
-		newV := "21.1.0"
-		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
-		if err != nil {
-			t.Fatal(err)
-		}
-		makeVersionFixtureAndFatal(ctx, t, c, predV, newV)
+		// empty string which uses the local cockroach binary. Make sure that
+		// this binary then has the correct version. For example, to make a
+		// "v20.2" fixture, you will need a binary that has "v20.2" in the
+		// output of `./cockroach version`, and this process will end up
+		// creating fixtures that have "v20.2" in them. This would be part
+		// of tagging the master branch as v21.1 in the process of going
+		// through the major release for v20.2.
+		var makeFixtureVersion string
+		// makeFixtureVersion = "21.2.0"
+		makeVersionFixtureAndFatal(ctx, t, c, makeFixtureVersion)
 	}
 
 	testFeaturesStep := versionUpgradeTestFeatures.step(c.All())
@@ -511,9 +514,33 @@ func stmtFeatureTest(
 // the artifacts. The test will fail on purpose when it's done with instructions
 // on where to move the files.
 func makeVersionFixtureAndFatal(
-	ctx context.Context, t *test, c *cluster, predecessorVersion string, makeFixtureVersion string,
+	ctx context.Context, t *test, c *cluster, makeFixtureVersion string,
 ) {
+	var useLocalBinary bool
+	if makeFixtureVersion == "" {
+		c.Start(ctx, t, c.Node(1))
+		require.NoError(t, c.Conn(ctx, 1).QueryRowContext(
+			ctx,
+			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
+		).Scan(&makeFixtureVersion))
+		c.Wipe(ctx, c.Node(1))
+		useLocalBinary = true
+	}
+
+	predecessorVersion, err := PredecessorVersion(*version.MustParse("v" + makeFixtureVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	c.l.Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
+
+	if useLocalBinary {
+		// Make steps below use the main cockroach binary (in particular, don't try
+		// to download the released version for makeFixtureVersion which may not yet
+		// exist)
+		makeFixtureVersion = ""
+	}
+
 	c.encryptDefault = false
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
