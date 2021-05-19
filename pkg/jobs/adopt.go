@@ -255,17 +255,15 @@ func (r *Registry) runJob(
 	//
 	// A new root span will be created on every resumption of the job.
 	var spanOptions []tracing.SpanOption
-	if tj, ok := resumer.(TraceableJob); ok {
-		if tj.ForceRealSpan() {
-			spanOptions = append(spanOptions, tracing.WithForceRealSpan())
-		}
+	if _, ok := resumer.(TraceableJob); ok {
+		spanOptions = append(spanOptions, tracing.WithForceRealSpan())
 	}
 	ctx, span = r.settings.Tracer.StartSpanCtx(ctx, spanName, spanOptions...)
 	defer span.Finish()
 	if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
 		ju *JobUpdater) error {
-		md.Payload.TraceID = span.TraceID()
-		ju.UpdatePayload(md.Payload)
+		md.Progress.TraceID = span.TraceID()
+		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
 		return err
