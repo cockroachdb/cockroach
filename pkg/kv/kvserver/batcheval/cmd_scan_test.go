@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -84,6 +85,7 @@ func testScanReverseScanInner(
 			Timestamp:   ts,
 			TargetBytes: tb,
 		},
+		EvalCtx: (&MockEvalCtx{ClusterSettings: cluster.MakeClusterSettings()}).EvalContext(),
 	}
 
 	if !reverse {

@@ -628,7 +628,7 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 	}
 
 	// Export range is fixed to k:["00010", "10000"), ts:(999, 2000] for all tests.
-	testDataCount := int(maxIntentsPerSstExportError.Default() + 1)
+	testDataCount := int(MaxIntentsPerWriteIntentError.Default() + 1)
 	testData := make([]testValue, testDataCount*2)
 	expectedErrors := make([]int, testDataCount)
 	for i := 0; i < testDataCount; i++ {
@@ -636,5 +636,5 @@ func TestSstExportFailureIntentBatching(t *testing.T) {
 		testData[i*2+1] = intent(key(i*2+12), "intent", ts(1001))
 		expectedErrors[i] = i*2 + 1
 	}
-	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:maxIntentsPerSstExportError.Default()]))
+	t.Run("Receive no more than limit intents", checkReportedErrors(testData, expectedErrors[:MaxIntentsPerWriteIntentError.Default()]))
 }
