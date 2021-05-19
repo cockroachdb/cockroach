@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // SampledRow is a row that was sampled.
@@ -51,6 +52,11 @@ type SampleReservoir struct {
 	ra       rowenc.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
 
+	// minNumSamples is the minimum K needed for sampling to be meaningful. If the
+	// reservoir capacity would fall below this, SampleRow will err instead of
+	// decreasing K further.
+	minNumSamples int
+
 	// sampleCols contains the ordinals of columns that should be sampled from
 	// each row. Note that the sampled rows still contain all columns, but
 	// any columns not part of this set are given a null value.
@@ -61,12 +67,24 @@ var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
 func (sr *SampleReservoir) Init(
-	numSamples int, colTypes []*types.T, memAcc *mon.BoundAccount, sampleCols util.FastIntSet,
-) {
+	numSamples int,
+	minNumSamples int,
+	colTypes []*types.T,
+	memAcc *mon.BoundAccount,
+	sampleCols util.FastIntSet,
+) error {
+	if numSamples < 1 {
+		return errors.AssertionFailedf("numSamples (%d) < 1", numSamples)
+	}
+	if minNumSamples < 1 {
+		return errors.AssertionFailedf("minNumSamples (%d) < 1", numSamples)
+	}
 	sr.samples = make([]SampledRow, 0, numSamples)
+	sr.minNumSamples = minNumSamples
 	sr.colTypes = colTypes
 	sr.memAcc = memAcc
 	sr.sampleCols = sampleCols
+	return nil
 }
 
 // Disable releases the memory of this SampleReservoir and sets its capacity
@@ -161,15 +179,16 @@ func (sr *SampleReservoir) trySampleRow(
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir. The
 // capacity of the reservoir (K) will shrink if it hits a memory limit. If
-// capacity goes below 1, SampleRow will return an error. If SampleRow returns
-// an error (any type of error), no additional calls to SampleRow should be made
-// as the failed samples will have introduced bias.
+// capacity goes below minNumSamples, SampleRow will return an error. If
+// SampleRow returns an error (any type of error), no additional calls to
+// SampleRow should be made as the failed samples will have introduced bias.
 func (sr *SampleReservoir) SampleRow(
 	ctx context.Context, evalCtx *tree.EvalContext, row rowenc.EncDatumRow, rank uint64,
 ) error {
 	for {
 		err := sr.trySampleRow(ctx, evalCtx, row, rank)
-		if err == nil || !sqlerrors.IsOutOfMemoryError(err) || len(sr.samples) <= 1 {
+		if err == nil || !sqlerrors.IsOutOfMemoryError(err) ||
+			len(sr.samples) <= 1 || cap(sr.samples) <= sr.minNumSamples {
 			return err
 		}
 		// We've used too much memory. Remove the highest-rank sample and try again.

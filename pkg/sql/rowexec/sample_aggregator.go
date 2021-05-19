@@ -104,6 +104,11 @@ func newSampleAggregator(
 		}
 	}
 
+	sampleSize, minSampleSize := int(spec.SampleSize), int(spec.MinSampleSize)
+	if minSampleSize < 1 || minSampleSize > sampleSize {
+		minSampleSize = sampleSize
+	}
+
 	ctx := flowCtx.EvalCtx.Ctx()
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will disable histogram collection if this limit is not
@@ -143,14 +148,14 @@ func newSampleAggregator(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
+	s.sr.Init(sampleSize, minSampleSize, input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
 	for i := range spec.InvertedSketches {
 		var sr stats.SampleReservoir
 		// The datums are converted to their inverted index bytes and
 		// sent as a single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		sr.Init(sampleSize, minSampleSize, bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		s.invSketch[col] = &sketchInfo{
