@@ -114,6 +114,9 @@ type pebbleMVCCScanner struct {
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
 	// if nonzero.
 	targetBytes int64
+	// Stop adding intents and abort scan once maxIntents threshold is reached.
+	// Ignored if zero or if doing inconsistent scan.
+	maxIntents int64
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -470,6 +473,10 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// in the scan range.
 		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
+			return false
+		}
+		// Limit number of intents returned in write intent error.
+		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
 			return false
 		}
 		return p.advanceKey()
