@@ -3492,7 +3492,7 @@ func TestDiscoverIntentAcrossLeaseTransferAwayAndBack(t *testing.T) {
 	// Transfer the lease to Server 1. Do so non-cooperatively instead of using
 	// a lease transfer, because the cooperative lease transfer would get stuck
 	// acquiring latches, which are held by txn2.
-	err = tc.MoveRangeLeaseNonCooperatively(rangeDesc, tc.Target(1), manual)
+	_, err = tc.MoveRangeLeaseNonCooperatively(ctx, rangeDesc, tc.Target(1), manual)
 	require.NoError(t, err)
 
 	// Send an arbitrary request to the range to update the range descriptor

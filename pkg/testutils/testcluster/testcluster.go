@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -906,23 +905,26 @@ func (tc *TestCluster) RemoveLeaseHolderOrFatal(
 
 // MoveRangeLeaseNonCooperatively is part of the TestClusterInterface.
 func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
-	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget, manual *hlc.HybridManualClock,
-) error {
+	ctx context.Context,
+	rangeDesc roachpb.RangeDescriptor,
+	dest roachpb.ReplicationTarget,
+	manual *hlc.HybridManualClock,
+) (*roachpb.Lease, error) {
 	knobs := tc.clusterArgs.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs)
 	if !knobs.AllowLeaseRequestProposalsWhenNotLeader {
 		// Without this knob, we'd have to architect a Raft leadership change
 		// too in order to let the replica get the lease. It's easier to just
 		// require that callers set it.
-		return errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
+		return nil, errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
 	}
 
 	destServer, err := tc.FindMemberServer(dest.StoreID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	destStore, err := destServer.Stores().GetStore(dest.StoreID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// We are going to advance the manual clock so that the current lease
@@ -931,13 +933,15 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 	// when it's up for grabs. To handle that case, we wrap the entire operation
 	// in an outer retry loop.
 	const retryDur = testutils.DefaultSucceedsSoonDuration
-	return retry.ForDuration(retryDur, func() error {
+	var newLease *roachpb.Lease
+	err = retry.ForDuration(retryDur, func() error {
 		// Find the current lease.
 		prevLease, _, err := tc.FindRangeLease(rangeDesc, nil /* hint */)
 		if err != nil {
 			return err
 		}
 		if prevLease.Replica.StoreID == dest.StoreID {
+			newLease = &prevLease
 			return nil
 		}
 
@@ -946,6 +950,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		if err != nil {
 			return err
 		}
+		log.Infof(ctx, "test: advancing clock to lease expiration")
 		manual.Increment(lhStore.GetStoreConfig().LeaseExpiration())
 
 		// Heartbeat the destination server's liveness record so that if we are
@@ -957,24 +962,20 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 
 		// Issue a request to the target replica, which should notice that the
 		// old lease has expired and that it can acquire the lease.
-		var newLease *roachpb.Lease
-		ctx := context.Background()
-		req := &roachpb.LeaseInfoRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: rangeDesc.StartKey.AsRawKey(),
-			},
+		r, err := destStore.GetReplica(rangeDesc.RangeID)
+		if err != nil {
+			return err
 		}
-		h := roachpb.Header{RangeID: rangeDesc.RangeID}
-		reply, pErr := kv.SendWrappedWith(ctx, destStore, h, req)
-		if pErr != nil {
-			log.Infof(ctx, "LeaseInfoRequest failed: %v", pErr)
-			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok && lErr.Lease != nil {
+		ls, err := r.TestingAcquireLease(ctx)
+		if err != nil {
+			log.Infof(ctx, "TestingAcquireLease failed: %s", err)
+			if lErr := (*roachpb.NotLeaseHolderError)(nil); errors.As(err, &lErr) {
 				newLease = lErr.Lease
 			} else {
-				return pErr.GoError()
+				return err
 			}
 		} else {
-			newLease = &reply.(*roachpb.LeaseInfoResponse).Lease
+			newLease = &ls.Lease
 		}
 
 		// Is the lease in the right place?
@@ -984,6 +985,8 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		}
 		return nil
 	})
+	log.Infof(ctx, "MoveRangeLeaseNonCooperatively: acquired lease: %s. err: %v", newLease, err)
+	return newLease, err
 }
 
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
