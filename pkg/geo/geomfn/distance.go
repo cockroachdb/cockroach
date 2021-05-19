@@ -443,7 +443,7 @@ func (u *geomMinDistanceUpdater) Update(aPoint geodist.Point, bPoint geodist.Poi
 	b := bPoint.GeomPoint
 
 	dist := coordNorm(coordSub(a, b))
-	if dist < u.currentValue {
+	if dist < u.currentValue || u.coordA == nil {
 		u.currentValue = dist
 		if u.geometricalObjOrder == geometricalObjectsFlipped {
 			u.coordA = b
@@ -526,7 +526,7 @@ func (u *geomMaxDistanceUpdater) Update(aPoint geodist.Point, bPoint geodist.Poi
 	b := bPoint.GeomPoint
 
 	dist := coordNorm(coordSub(a, b))
-	if dist > u.currentValue {
+	if dist > u.currentValue || u.coordA == nil {
 		u.currentValue = dist
 		if u.geometricalObjOrder == geometricalObjectsFlipped {
 			u.coordA = b
