@@ -73,7 +73,7 @@ type nonDeterministicFailure struct {
 
 // The provided format string should be safe for reporting.
 func makeNonDeterministicFailure(format string, args ...interface{}) error {
-	err := errors.Newf(format, args...)
+	err := errors.AssertionFailedWithDepthf(1, format, args...)
 	return &nonDeterministicFailure{
 		wrapped:  err,
 		safeExpl: err.Error(),

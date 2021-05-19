@@ -604,12 +604,16 @@ type Store struct {
 	}
 
 	counts struct {
-		// Number of placeholders removed due to error.
-		removedPlaceholders int32
-		// Number of placeholders successfully filled by a snapshot.
+		// Number of placeholders removed due to error. Not a good fit for meaningful
+		// metrics, as snapshots to initialized ranges don't get a placeholder.
+		failedPlaceholders int32
+		// Number of placeholders successfully filled by a snapshot. Not a good fit
+		// for meaningful metrics, as snapshots to initialized ranges don't get a
+		// placeholder.
 		filledPlaceholders int32
 		// Number of placeholders removed due to a snapshot that was dropped by
-		// raft.
+		// raft. Not a good fit for meaningful metrics, as snapshots to initialized
+		// ranges don't get a placeholder.
 		droppedPlaceholders int32
 	}
 

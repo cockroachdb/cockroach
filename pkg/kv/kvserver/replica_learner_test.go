@@ -669,7 +669,16 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	scratchStartKey := tc.ScratchRange(t)
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
+		// NB: we don't use tc.AddVoters because that will auto-retry
+		// and the test expects to see the error that results on the
+		// first attempt.
+		desc, err := tc.LookupRange(scratchStartKey)
+		if err != nil {
+			return err
+		}
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, scratchStartKey, desc, roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		return err
 	})
 

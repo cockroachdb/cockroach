@@ -420,6 +420,21 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// we expect the originator to campaign instead.
 		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, timeutil.Now())
+		if req.Message.Type == raftpb.MsgSnap {
+			// Occasionally a snapshot message may arrive under an outdated term,
+			// which would lead to Raft discarding the snapshot. This should be
+			// really rare in practice, but it does happen in tests and in particular
+			// can happen to the synchronous snapshots on the learner path, which
+			// will then have to wait for the raft snapshot queue to send another
+			// snapshot. However, in some tests it is desirable to disable the
+			// raft snapshot queue. This workaround makes that possible.
+			//
+			// See TestReportUnreachableRemoveRace for the test that prompted
+			// this addition.
+			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
+				req.Message.Term = term
+			}
+		}
 		err := raftGroup.Step(req.Message)
 		if errors.Is(err, raft.ErrProposalDropped) {
 			// A proposal was forwarded to this replica but we couldn't propose it.
@@ -444,8 +459,14 @@ func (r *Replica) raftSchedulerCtx(schedulerCtx context.Context) context.Context
 	return schedulerCtx
 }
 
+type handleSnapshotStats struct {
+	offered bool
+	applied bool
+}
+
 type handleRaftReadyStats struct {
 	applyCommittedEntriesStats
+	snap handleSnapshotStats
 }
 
 // noSnap can be passed to handleRaftReady when no snapshot should be processed.
@@ -473,8 +494,11 @@ func (r *Replica) handleRaftReady(
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (handleRaftReadyStats, string, error) {
+) (_ handleRaftReadyStats, _ string, foo error) {
 	var stats handleRaftReadyStats
+	if inSnap.State != nil {
+		stats.snap.offered = true
+	}
 
 	var hasReady bool
 	var rd raft.Ready
@@ -549,51 +573,63 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		leaderID = roachpb.ReplicaID(rd.SoftState.Lead)
 	}
 
-	if !raft.IsEmptySnap(rd.Snapshot) {
-		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
-		if err != nil {
-			const expl = "invalid snapshot id"
-			return stats, expl, errors.Wrap(err, expl)
-		}
-		if inSnap.SnapUUID == (uuid.UUID{}) {
-			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
-		}
-		if snapUUID != inSnap.SnapUUID {
-			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
-		}
+	if inSnap.State != nil {
+		if !raft.IsEmptySnap(rd.Snapshot) {
+			snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
+			if err != nil {
+				const expl = "invalid snapshot id"
+				return stats, expl, errors.Wrap(err, expl)
+			}
+			if inSnap.SnapUUID == (uuid.UUID{}) {
+				log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
+			}
+			if snapUUID != inSnap.SnapUUID {
+				log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
+			}
 
-		// Applying this snapshot may require us to subsume one or more of our right
-		// neighbors. This occurs if this replica is informed about the merges via a
-		// Raft snapshot instead of a MsgApp containing the merge commits, e.g.,
-		// because it went offline before the merge commits applied and did not come
-		// back online until after the merge commits were truncated away.
-		subsumedRepls, releaseMergeLock := r.maybeAcquireSnapshotMergeLock(ctx, inSnap)
-		defer releaseMergeLock()
+			// Applying this snapshot may require us to subsume one or more of our right
+			// neighbors. This occurs if this replica is informed about the merges via a
+			// Raft snapshot instead of a MsgApp containing the merge commits, e.g.,
+			// because it went offline before the merge commits applied and did not come
+			// back online until after the merge commits were truncated away.
+			subsumedRepls, releaseMergeLock := r.maybeAcquireSnapshotMergeLock(ctx, inSnap)
+			defer releaseMergeLock()
 
-		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
-			const expl = "while applying snapshot"
-			return stats, expl, errors.Wrap(err, expl)
+			if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
+				const expl = "while applying snapshot"
+				return stats, expl, errors.Wrap(err, expl)
+			}
+			stats.snap.applied = true
+
+			// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
+			// applySnapshot, but we also want to make sure we reflect these changes in
+			// the local variables we're tracking here.
+			r.mu.RLock()
+			lastIndex = r.mu.lastIndex
+			lastTerm = r.mu.lastTerm
+			raftLogSize = r.mu.raftLogSize
+			r.mu.RUnlock()
+
+			// We refresh pending commands after applying a snapshot because this
+			// replica may have been temporarily partitioned from the Raft group and
+			// missed leadership changes that occurred. Suppose node A is the leader,
+			// and then node C gets partitioned away from the others. Leadership passes
+			// back and forth between A and B during the partition, but when the
+			// partition is healed node A is leader again.
+			if !r.store.TestingKnobs().DisableRefreshReasonSnapshotApplied &&
+				refreshReason == noReason {
+				refreshReason = reasonSnapshotApplied
+			}
 		}
-
-		// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
-		// applySnapshot, but we also want to make sure we reflect these changes in
-		// the local variables we're tracking here.
-		r.mu.RLock()
-		lastIndex = r.mu.lastIndex
-		lastTerm = r.mu.lastTerm
-		raftLogSize = r.mu.raftLogSize
-		r.mu.RUnlock()
-
-		// We refresh pending commands after applying a snapshot because this
-		// replica may have been temporarily partitioned from the Raft group and
-		// missed leadership changes that occurred. Suppose node A is the leader,
-		// and then node C gets partitioned away from the others. Leadership passes
-		// back and forth between A and B during the partition, but when the
-		// partition is healed node A is leader again.
-		if !r.store.TestingKnobs().DisableRefreshReasonSnapshotApplied &&
-			refreshReason == noReason {
-			refreshReason = reasonSnapshotApplied
-		}
+	} else if !raft.IsEmptySnap(rd.Snapshot) {
+		// If we didn't expect Raft to have a snapshot but it has one
+		// regardless, that is unexpected and indicates a programming
+		// error.
+		err := makeNonDeterministicFailure(
+			"have inSnap=nil, but raft has a snapshot %s",
+			raft.DescribeSnapshot(rd.Snapshot),
+		)
+		return stats, getNonDeterministicFailureExplanation(err), err
 	}
 
 	// If the ready struct includes entries that have been committed, these
@@ -1704,6 +1740,10 @@ func (r *Replica) acquireSplitLock(
 	if err != nil {
 		return nil, err
 	}
+	// The right hand side of a split is always uninitialized since
+	// the left hand side blocks snapshots to it, and a snapshot is
+	// required to initialize it (if the split trigger doesn't - and
+	// this code here is part of the split trigger).
 	if rightRepl.IsInitialized() {
 		return nil, errors.Errorf("RHS of split %s / %s already initialized before split application",
 			&split.LeftDesc, &split.RightDesc)
