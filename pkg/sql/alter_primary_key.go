@@ -202,7 +202,7 @@ func (p *planner) AlterPrimaryKey(
 		CreatedExplicitly: true,
 		EncodingType:      descpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
-		Version:           descpb.EmptyArraysInInvertedIndexesVersion,
+		Version:           descpb.StrictIndexColumnIDGuaranteesVersion,
 	}
 
 	// If the new index is requested to be sharded, set up the index descriptor
@@ -245,30 +245,6 @@ func (p *planner) AlterPrimaryKey(
 	}
 	if err := tableDesc.AllocateIDs(ctx); err != nil {
 		return err
-	}
-
-	// Ensure that the new primary index stores all columns in the table. We can't
-	// use AllocateID's to fill the stored columns here because it assumes
-	// that the indexed columns are n.PrimaryIndex.ColumnIDs, but here we want
-	// to consider the indexed columns to be newPrimaryIndexDesc.ColumnIDs.
-	newPrimaryIndexDesc.StoreColumnNames, newPrimaryIndexDesc.StoreColumnIDs = nil, nil
-	for _, col := range tableDesc.Columns {
-		// We do not store virtual columns.
-		if col.Virtual {
-			continue
-		}
-
-		containsCol := false
-		for _, colID := range newPrimaryIndexDesc.ColumnIDs {
-			if colID == col.ID {
-				containsCol = true
-				break
-			}
-		}
-		if !containsCol {
-			newPrimaryIndexDesc.StoreColumnIDs = append(newPrimaryIndexDesc.StoreColumnIDs, col.ID)
-			newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.Name)
-		}
 	}
 
 	if alterPKNode.Interleave != nil {
@@ -382,6 +358,31 @@ func (p *planner) AlterPrimaryKey(
 		tabledesc.UpdateIndexPartitioning(newPrimaryIndexDesc, newImplicitCols, newPartitioning)
 	}
 
+	// Ensure that the new primary index stores all columns in the table. We can't
+	// use AllocateID's to fill the stored columns here because it assumes
+	// that the indexed columns are n.PrimaryIndex.ColumnIDs, but here we want
+	// to consider the indexed columns to be newPrimaryIndexDesc.ColumnIDs.
+	newPrimaryIndexDesc.ExtraColumnIDs = nil
+	newPrimaryIndexDesc.StoreColumnNames, newPrimaryIndexDesc.StoreColumnIDs = nil, nil
+	for _, col := range tableDesc.Columns {
+		// We do not store virtual columns.
+		if col.Virtual {
+			continue
+		}
+
+		containsCol := false
+		for _, colID := range newPrimaryIndexDesc.ColumnIDs {
+			if colID == col.ID {
+				containsCol = true
+				break
+			}
+		}
+		if !containsCol {
+			newPrimaryIndexDesc.StoreColumnIDs = append(newPrimaryIndexDesc.StoreColumnIDs, col.ID)
+			newPrimaryIndexDesc.StoreColumnNames = append(newPrimaryIndexDesc.StoreColumnNames, col.Name)
+		}
+	}
+
 	// Create a new index that indexes everything the old primary index
 	// does, but doesn't store anything.
 	if shouldCopyPrimaryKey(tableDesc, newPrimaryIndexDesc, alterPrimaryKeyLocalitySwap) {
@@ -465,19 +466,6 @@ func (p *planner) AlterPrimaryKey(
 			tabledesc.UpdateIndexPartitioning(&newIndex, nil /* newImplicitCols */, descpb.PartitioningDescriptor{})
 		}
 
-		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
-		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc); err != nil {
-			return err
-		}
-		// If the index that we are rewriting is interleaved, we need to setup the rewritten
-		// index to be interleaved as well. Since we cloned the index, the interleave descriptor
-		// on the new index is already set up. So, we just need to add the backreference from the
-		// parent to this new index.
-		if len(newIndex.Interleave.Ancestors) != 0 {
-			if err := p.finalizeInterleave(ctx, tableDesc, &newIndex); err != nil {
-				return err
-			}
-		}
 		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
 		if isNewPartitionAllBy {
 			newImplicitCols, newPartitioning, err := CreatePartitioning(
@@ -495,6 +483,21 @@ func (p *planner) AlterPrimaryKey(
 			}
 			tabledesc.UpdateIndexPartitioning(&newIndex, newImplicitCols, newPartitioning)
 		}
+
+		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
+		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc); err != nil {
+			return err
+		}
+		// If the index that we are rewriting is interleaved, we need to setup the rewritten
+		// index to be interleaved as well. Since we cloned the index, the interleave descriptor
+		// on the new index is already set up. So, we just need to add the backreference from the
+		// parent to this new index.
+		if len(newIndex.Interleave.Ancestors) != 0 {
+			if err := p.finalizeInterleave(ctx, tableDesc, &newIndex); err != nil {
+				return err
+			}
+		}
+
 		oldIndexIDs = append(oldIndexIDs, idx.GetID())
 		newIndexIDs = append(newIndexIDs, newIndex.ID)
 	}

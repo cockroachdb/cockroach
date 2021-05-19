@@ -349,7 +349,7 @@ func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
-	return tc.ExecuteDDLWithIndexVersion(sql, descpb.EmptyArraysInInvertedIndexesVersion)
+	return tc.ExecuteDDLWithIndexVersion(sql, descpb.StrictIndexColumnIDGuaranteesVersion)
 }
 
 // ExecuteDDLWithIndexVersion parses the given DDL SQL statement and creates

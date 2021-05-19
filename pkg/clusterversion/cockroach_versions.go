@@ -555,11 +555,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     AcquisitionTypeInLeaseHistory,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 6},
 	},
-
 	{
 		Key:     SerializeViewUDTs,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 8},
 	},
+
 	// Step (2): Add new versions here.
 })
 
