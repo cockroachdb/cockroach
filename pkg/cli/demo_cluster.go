@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -55,6 +56,7 @@ type transientCluster struct {
 	stopper     *stop.Stopper
 	firstServer *server.TestServer
 	servers     []*server.TestServer
+	defaultDB   string
 
 	httpFirstPort int
 	sqlFirstPort  int
@@ -121,6 +123,14 @@ func (c *transientCluster) start(
 	ctx context.Context, cmd *cobra.Command, gen workload.Generator,
 ) (err error) {
 	ctx = logtags.AddTag(ctx, "start-demo-cluster", nil)
+
+	// Initialize the connection database.
+	// We can't do this earlier as this depends on which generator is used.
+	c.defaultDB = catalogkeys.DefaultDatabaseName
+	if gen != nil {
+		c.defaultDB = gen.Meta().Name
+	}
+
 	// We now proceed to start all the nodes concurrently. This is
 	// somewhat a complicated dance.
 	//
@@ -316,7 +326,7 @@ func (c *transientCluster) start(
 		}
 
 		// Prepare the URL for use by the SQL shell.
-		c.connURL, err = c.getNetworkURLForServer(0, gen, true /* includeAppName */)
+		c.connURL, err = c.getNetworkURLForServer(0, true /* includeAppName */)
 		if err != nil {
 			return err
 		}
@@ -883,29 +893,26 @@ func generateCerts(certsDir string) (err error) {
 }
 
 func (c *transientCluster) getNetworkURLForServer(
-	serverIdx int, gen workload.Generator, includeAppName bool,
+	serverIdx int, includeAppName bool,
 ) (string, error) {
 	options := url.Values{}
 	if includeAppName {
 		options.Add("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo")
 	}
 	sqlURL := url.URL{
-		Scheme: "postgres",
+		Scheme: "postgresql",
 		Host:   c.servers[serverIdx].ServingSQLAddr(),
-	}
-	if gen != nil {
-		// The generator wants a particular database name to be
-		// pre-filled.
-		sqlURL.Path = gen.Meta().Name
+		Path:   c.defaultDB,
 	}
 	// For a demo cluster we don't use client TLS certs and instead use
 	// password-based authentication with the password pre-filled in the
 	// URL.
 	if demoCtx.insecure {
-		sqlURL.User = url.User(security.RootUser)
+		options.Add("user", security.RootUser)
 		options.Add("sslmode", "disable")
 	} else {
-		sqlURL.User = url.UserPassword(c.adminUser.Normalized(), c.adminPassword)
+		options.Add("user", c.adminUser.Normalized())
+		options.Add("password", c.adminPassword)
 		options.Add("sslmode", "require")
 	}
 	sqlURL.RawQuery = options.Encode()
@@ -964,7 +971,7 @@ func (c *transientCluster) setupWorkload(
 		if demoCtx.runWorkload {
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURL, err := c.getNetworkURLForServer(i, gen, true /* includeAppName */)
+				sqlURL, err := c.getNetworkURLForServer(i, true /* includeAppName */)
 				if err != nil {
 					return err
 				}
@@ -1110,6 +1117,7 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 		portNumber: c.sqlFirstPort + int(nodeID) - 1,
 		username:   c.adminUser,
 		password:   c.adminPassword,
+		database:   c.defaultDB,
 	}
 }
 
@@ -1118,6 +1126,7 @@ type unixSocketDetails struct {
 	portNumber int
 	username   security.SQLUsername
 	password   string
+	database   string
 }
 
 func (s unixSocketDetails) exists() bool {
@@ -1136,13 +1145,16 @@ func (s unixSocketDetails) String() string {
 	options := url.Values{}
 	options.Add("host", s.socketDir)
 	options.Add("port", strconv.Itoa(s.portNumber))
+	options.Add("user", s.username.Normalized())
+	options.Add("password", s.password)
 
 	// Node: in the generated unix socket URL, a password is always
 	// included even in insecure mode This is OK because in insecure
 	// mode the password is not checked on the server.
 	sqlURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(s.username.Normalized(), s.password),
+		Scheme:   "postgresql",
+		Host:     "unix", // Unused.
+		Path:     s.database,
 		RawQuery: options.Encode(),
 	}
 	return sqlURL.String()
@@ -1180,7 +1192,7 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 		}
 		fmt.Fprintln(w, "  (webui)   ", serverURL)
 		// Print network URL if defined.
-		netURL, err := c.getNetworkURLForServer(i, nil, false /*includeAppName*/)
+		netURL, err := c.getNetworkURLForServer(i, false /*includeAppName*/)
 		if err != nil {
 			fmt.Fprintln(stderr, errors.Wrap(err, "retrieving network URL"))
 		} else {

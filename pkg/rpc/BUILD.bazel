@@ -32,6 +32,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/catalogkeys",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/growstack",

@@ -338,15 +338,15 @@ func (cliCtx *cliContext) makeClientConnURL() (url.URL, error) {
 		Path:   cliCtx.sqlConnDBName,
 	}
 
+	opts := url.Values{}
+
 	if cliCtx.sqlConnUser != "" {
+		opts.Set("user", cliCtx.sqlConnUser)
 		if cliCtx.sqlConnPasswd != "" {
-			pgurl.User = url.UserPassword(cliCtx.sqlConnUser, cliCtx.sqlConnPasswd)
-		} else {
-			pgurl.User = url.User(cliCtx.sqlConnUser)
+			opts.Set("password", cliCtx.sqlConnPasswd)
 		}
 	}
 
-	opts := url.Values{}
 	for k, v := range cliCtx.extraConnURLOptions {
 		opts[k] = v
 	}

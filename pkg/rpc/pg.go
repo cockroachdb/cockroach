@@ -14,6 +14,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 )
 
 // LoadSecurityOptions extends a url.Values with SSL settings suitable for
@@ -21,6 +22,7 @@ import (
 func (ctx *SecurityContext) LoadSecurityOptions(
 	options url.Values, username security.SQLUsername,
 ) error {
+	options.Set("user", username.Normalized())
 	if ctx.config.Insecure {
 		options.Set("sslmode", "disable")
 		options.Del("sslrootcert")
@@ -88,9 +90,12 @@ func (ctx *SecurityContext) PGURL(user *url.Userinfo) (*url.URL, error) {
 		return nil, err
 	}
 	return &url.URL{
-		Scheme:   "postgresql",
-		User:     user,
-		Host:     ctx.config.SQLAdvertiseAddr,
+		Scheme: "postgresql",
+		Host:   ctx.config.SQLAdvertiseAddr,
+		Path:   catalogkeys.DefaultDatabaseName, // Non-empty Path is needed for many drivers.
+		// Note: we pass the username as part of the options in RawQuery
+		// and not via the URL "user" field, as this works better with
+		// JDBC client drivers.
 		RawQuery: options.Encode(),
 	}, nil
 }
