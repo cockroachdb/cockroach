@@ -441,6 +441,7 @@ func (s *samplerProcessor) sampleRow(
 ) (earlyExit bool, err error) {
 	// Use Int63 so we don't have headaches converting to DInt.
 	rank := uint64(rng.Int63())
+	prevCapacity := sr.Cap()
 	if err := sr.SampleRow(ctx, s.EvalCtx, row, rank); err != nil {
 		if !sqlerrors.IsOutOfMemoryError(err) {
 			return false, err
@@ -459,6 +460,11 @@ func (s *samplerProcessor) sampleRow(
 		if !emitHelper(ctx, s.Output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
+	} else if sr.Cap() != prevCapacity {
+		log.Infof(
+			ctx, "histogram samples reduced from %d to %d due to excessive memory utilization",
+			prevCapacity, sr.Cap(),
+		)
 	}
 	return false, nil
 }

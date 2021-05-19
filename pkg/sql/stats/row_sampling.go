@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -130,40 +131,63 @@ func (sr *SampleReservoir) MaybeResize(ctx context.Context, k int) bool {
 	return true
 }
 
-// SampleRow looks at a row and either drops it or adds it to the reservoir.
+// retryMaybeResize tries to execute a memory-allocating operation, shrinking
+// the capacity of the reservoir (K) as necessary until the operation succeeds
+// or fails with a non-out-of-memory error.
+func (sr *SampleReservoir) retryMaybeResize(ctx context.Context, op func() error) error {
+	for {
+		if err := op(); err == nil || !sqlerrors.IsOutOfMemoryError(err) ||
+			len(sr.samples) <= 1 {
+			return err
+		}
+		// We've used too much memory. Remove half the samples and try again.
+		sr.MaybeResize(ctx, len(sr.samples)/2)
+	}
+}
+
+// SampleRow looks at a row and either drops it or adds it to the reservoir. The
+// capacity of the reservoir (K) will shrink if it hits a memory limit. If
+// capacity goes below 1, SampleRow will return an error. If SampleRow returns
+// an error (any type of error), no additional calls to SampleRow should be made
+// as the failed samples will have introduced bias.
 func (sr *SampleReservoir) SampleRow(
 	ctx context.Context, evalCtx *tree.EvalContext, row rowenc.EncDatumRow, rank uint64,
 ) error {
-	if len(sr.samples) < cap(sr.samples) {
-		// We haven't accumulated enough rows yet, just append.
-		rowCopy := sr.ra.AllocRow(len(row))
+	return sr.retryMaybeResize(ctx, func() error {
+		if len(sr.samples) < cap(sr.samples) {
+			// We haven't accumulated enough rows yet, just append.
+			rowCopy := sr.ra.AllocRow(len(row))
 
-		// Perform memory accounting for the allocated EncDatumRow. We will account
-		// for the additional memory used after copying inside copyRow.
-		if sr.memAcc != nil {
-			if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
+			// Perform memory accounting for the allocated EncDatumRow. We will
+			// account for the additional memory used after copying inside copyRow.
+			if sr.memAcc != nil {
+				if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
+					return err
+				}
+			}
+			if err := sr.copyRow(ctx, evalCtx, rowCopy, row); err != nil {
 				return err
 			}
+			sr.samples = append(sr.samples, SampledRow{Row: rowCopy, Rank: rank})
+			if len(sr.samples) == cap(sr.samples) {
+				// We just reached the limit; initialize the heap.
+				heap.Init(sr)
+			}
+			return nil
 		}
-		if err := sr.copyRow(ctx, evalCtx, rowCopy, row); err != nil {
-			return err
-		}
-		sr.samples = append(sr.samples, SampledRow{Row: rowCopy, Rank: rank})
-		if len(sr.samples) == cap(sr.samples) {
-			// We just reached the limit; initialize the heap.
-			heap.Init(sr)
+		// Replace the max rank if ours is smaller.
+		if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
+			if err := sr.copyRow(ctx, evalCtx, sr.samples[0].Row, row); err != nil {
+				// WARNING: At this point sr.samples[0].Row might have a mix of old and
+				// new values. The caller must call heap.Pop() to keep using the
+				// reservoir.
+				return err
+			}
+			sr.samples[0].Rank = rank
+			heap.Fix(sr, 0)
 		}
 		return nil
-	}
-	// Replace the max rank if ours is smaller.
-	if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
-		if err := sr.copyRow(ctx, evalCtx, sr.samples[0].Row, row); err != nil {
-			return err
-		}
-		sr.samples[0].Rank = rank
-		heap.Fix(sr, 0)
-	}
-	return nil
+	})
 }
 
 // Get returns the sampled rows.
