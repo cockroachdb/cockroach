@@ -70,6 +70,11 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
+// StoreStartKey returns a store-local key for node's most recent restart timestamp.
+func StoreStartKey() roachpb.Key {
+	return MakeStoreKey(localStoreStartSuffix, nil)
+}
+
 // StoreHLCUpperBoundKey returns the store-local key for storing an upper bound
 // to the wall time used by HLC.
 func StoreHLCUpperBoundKey() roachpb.Key {

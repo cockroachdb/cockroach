@@ -2097,13 +2097,43 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 }
 
 // ReadLastUpTimestamp returns the "last up" timestamp recorded in this store.
-// This value can be used to approximate the last time the engine was was being
+// This value can be used to approximate the last time the engine was being
 // served as a store by a running node. If the store does not contain a "last
 // up" timestamp (for example, on a newly bootstrapped store), the zero
 // timestamp is returned instead.
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	var timestamp hlc.Timestamp
 	ok, err := storage.MVCCGetProto(ctx, s.Engine(), keys.StoreLastUpKey(), hlc.Timestamp{},
+		&timestamp, storage.MVCCGetOptions{})
+	if err != nil {
+		return hlc.Timestamp{}, err
+	} else if !ok {
+		return hlc.Timestamp{}, nil
+	}
+	return timestamp, nil
+}
+
+// WriteStartTimestamp records the supplied timestamp into the "start" key
+// on this store. This value should be refreshed whenever this store's node
+// restarts; it is used to log the most recent restart for the node.
+func (s *Store) WriteStartTimestamp(ctx context.Context, time hlc.Timestamp) error {
+	ctx = s.AnnotateCtx(ctx)
+	return storage.MVCCPutProto(
+		ctx,
+		s.engine,
+		nil,
+		keys.StoreStartKey(),
+		hlc.Timestamp{},
+		nil,
+		&time,
+	)
+}
+
+// ReadStartTimestamp returns the "start" timestamp recorded in this store.
+// This value is used to log the start history for the node.
+func (s *Store) ReadStartTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+	var timestamp hlc.Timestamp
+	ok, err := storage.MVCCGetProto(ctx, s.Engine(), keys.StoreStartKey(), hlc.Timestamp{},
 		&timestamp, storage.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err

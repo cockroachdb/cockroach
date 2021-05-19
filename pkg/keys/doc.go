@@ -223,6 +223,7 @@ var _ = [...]interface{}{
 	StoreIdentKey,          // "iden"
 	StoreNodeTombstoneKey,  // "ntmb"
 	StoreLastUpKey,         // "uptm"
+	StoreStartKey,          // "sttm"
 	StoreCachedSettingsKey, // "stng"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
