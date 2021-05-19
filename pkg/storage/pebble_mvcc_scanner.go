@@ -114,6 +114,9 @@ type pebbleMVCCScanner struct {
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
 	// if nonzero.
 	targetBytes int64
+	// Stop adding intents and abort scan once maxIntents threshold is reached.
+	// Ignored if zero or if doing inconsistent scan.
+	maxIntents int64
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -150,6 +153,16 @@ type pebbleMVCCScanner struct {
 	// Number of iterations to try before we do a Seek/SeekReverse. Stays within
 	// [1, maxItersBeforeSeek] and defaults to maxItersBeforeSeek/2 .
 	itersBeforeSeek int
+	// Number of keys collected as values and intents in inconsistent mode.
+	// This is different from number of results plus number of intents as we could
+	// have intent without value and value without intent as well as both.
+	collectedKeys int64
+	// This flag indicates that last iteration collected only intent, but not
+	// a preceding value for it. It is set whenever intent is discovered and reset
+	// back if corresponding value is present. It is used to calculate number of
+	// collected keys and to check if we need to advance iterator when calculating
+	// resume span.
+	hasOnlyIntent bool
 }
 
 // Pool for allocating pebble MVCC Scanners.
@@ -171,6 +184,7 @@ func (p *pebbleMVCCScanner) release() {
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction, localUncertaintyLimit hlc.Timestamp) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
+	p.collectedKeys = 0
 
 	if txn != nil {
 		p.txn = txn
@@ -217,25 +231,32 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 	p.maybeFailOnMoreRecent()
 
 	var resume *roachpb.Span
-	if p.maxKeys > 0 && p.results.count == p.maxKeys && p.advanceKey() {
-		if p.reverse {
-			// curKey was not added to results, so it needs to be included in the
-			// resume span.
-			//
-			// NB: this is equivalent to:
-			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
-			// but with half the allocations.
-			curKey := p.curUnsafeKey.Key
-			curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
-			copy(curKeyCopy, curKey)
-			resume = &roachpb.Span{
-				Key:    p.start,
-				EndKey: curKeyCopy.Next(),
-			}
-		} else {
-			resume = &roachpb.Span{
-				Key:    append(roachpb.Key(nil), p.curUnsafeKey.Key...),
-				EndKey: p.end,
+	if p.maxKeys > 0 && p.collectedKeys == p.maxKeys {
+		// We need to look at two cases here. First is when we last saw an intent which
+		// has no previous value, in that case iterator is already pointing to the next
+		// key and we can just check if underlying iterator is still valid.
+		// Second is when we collected a value and in that case iterator is still pointing
+		// to that value, so we need to advance the key prior to capturing resume span.
+		if p.hasOnlyIntent && p.iterValid() || p.advanceKey() {
+			if p.reverse {
+				// curKey was not added to results, so it needs to be included in the
+				// resume span.
+				//
+				// NB: this is equivalent to:
+				//  append(roachpb.Key(nil), p.curKey.Key...).Next()
+				// but with half the allocations.
+				curKey := p.curUnsafeKey.Key
+				curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
+				copy(curKeyCopy, curKey)
+				resume = &roachpb.Span{
+					Key:    p.start,
+					EndKey: curKeyCopy.Next(),
+				}
+			} else {
+				resume = &roachpb.Span{
+					Key:    append(roachpb.Key(nil), p.curUnsafeKey.Key...),
+					EndKey: p.end,
+				}
 			}
 		}
 	}
@@ -321,6 +342,7 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 // Emit a tuple and return true if we have reason to believe iteration can
 // continue.
 func (p *pebbleMVCCScanner) getAndAdvance() bool {
+	p.hasOnlyIntent = false
 	if !p.curUnsafeKey.Timestamp.IsEmpty() {
 		// ts < read_ts
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
@@ -442,6 +464,11 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// return the intent separately; the caller may want to resolve
 		// it.
 		if p.maxKeys > 0 && p.results.count == p.maxKeys {
+			// TODO(oleg): This check seems broken and it should never
+			// reach this point with results count reaching max. We
+			// always get out of getAndAdvance either by addAndAdvance or
+			// by seekVersion which is also calling addAndAdvance.
+			//
 			// We've already retrieved the desired number of keys and now
 			// we're adding the resume key. We don't want to add the
 			// intent here as the intents should only correspond to KVs
@@ -449,10 +476,18 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 			return false
 		}
 		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
+		p.collectedKeys++
+		p.hasOnlyIntent = true
 		if p.err != nil {
 			return false
 		}
-
+		if p.maxKeys > 0 && p.collectedKeys == p.maxKeys {
+			// We've reached maximum number of keys in results and intents combined.
+			// To get to the next save point for resume span we use seekVersion that
+			// would add potential value if it exists or just advance underlying iterator.
+			p.seekVersion(prevTS, false)
+			return false
+		}
 		return p.seekVersion(prevTS, false)
 	}
 
@@ -470,6 +505,10 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// in the scan range.
 		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
+			return false
+		}
+		// Limit number of intents returned in write intent error.
+		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
 			return false
 		}
 		return p.advanceKey()
@@ -659,15 +698,24 @@ func (p *pebbleMVCCScanner) addAndAdvance(rawKey []byte, val []byte) bool {
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
 		p.results.put(rawKey, val)
+		if !p.hasOnlyIntent {
+			p.collectedKeys++
+		}
+		p.hasOnlyIntent = false
 		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current
 			// number of keys.
 			//
 			// TODO(bilal): see if this can be implemented more transparently.
-			p.maxKeys = p.results.count
+			p.maxKeys = p.collectedKeys
 		}
-		if p.maxKeys > 0 && p.results.count == p.maxKeys {
+		// If we have a key limit and it is exceeded then we skip advancing the key
+		// because resume span calculation relies on current key pointing to last
+		// value and not the next one.
+		// By skipping advance here, we prevent iterator moving further so that it
+		// would be moved by resume span calculation
+		if p.maxKeys > 0 && p.collectedKeys == p.maxKeys {
 			return false
 		}
 	}
