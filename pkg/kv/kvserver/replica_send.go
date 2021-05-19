@@ -597,7 +597,7 @@ func (r *Replica) handleMergeInProgressError(
 	if ba.IsSingleTransferLeaseRequest() {
 		return roachpb.NewErrorf("cannot transfer lease while merge in progress")
 	}
-	log.Event(ctx, "waiting on in-progress merge")
+	log.Event(ctx, "waiting on in-progress range merge")
 	select {
 	case <-mergeCompleteCh:
 		// Merge complete. Retry the command.

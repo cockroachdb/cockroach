@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"go.etcd.io/etcd/raft/v3"
 )
 
@@ -565,12 +564,4 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
-}
-
-// AcquireLease is redirectOnOrAcquireLease exposed for tests.
-func (r *Replica) AcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
-	ctx = r.AnnotateCtx(ctx)
-	ctx = logtags.AddTag(ctx, "lease-acq", nil)
-	l, pErr := r.redirectOnOrAcquireLease(ctx)
-	return l, pErr.GoError()
 }

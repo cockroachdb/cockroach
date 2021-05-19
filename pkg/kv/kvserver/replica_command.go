@@ -784,6 +784,7 @@ func (r *Replica) AdminMerge(
 		txn := kv.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
 		if err != nil {
+			log.VEventf(ctx, 2, "merge txn failed: %s", err)
 			txn.CleanupOnError(ctx, err)
 		}
 		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
