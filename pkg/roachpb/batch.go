@@ -597,8 +597,20 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			s.Printf("%s(commit:%t) [%s]",
-				req.Method(), et.Commit, h.Key)
+			split := et.InternalCommitTrigger.SplitTrigger != nil
+			merge := et.InternalCommitTrigger.MergeTrigger != nil
+			chgRepls := et.InternalCommitTrigger.ChangeReplicasTrigger != nil
+			s.Printf("%s(commit:%t", req.Method(), et.Commit)
+			if split {
+				s.SafeString(" split")
+			}
+			if merge {
+				s.SafeString(" merge")
+			}
+			if chgRepls {
+				s.SafeString(" chgRepls")
+			}
+			s.Printf(") [%s]", h.Key)
 		} else {
 			h := req.Header()
 			if req.Method() == PushTxn {

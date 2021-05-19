@@ -159,7 +159,7 @@ type TestClusterInterface interface {
 		rangeDesc roachpb.RangeDescriptor,
 		dest roachpb.ReplicationTarget,
 		manual *hlc.HybridManualClock,
-	) error
+	) (*roachpb.Lease, error)
 
 	// LookupRange returns the descriptor of the range containing key.
 	LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error)
