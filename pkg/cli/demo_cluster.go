@@ -58,6 +58,7 @@ type transientCluster struct {
 	stopper     *stop.Stopper
 	firstServer *server.TestServer
 	servers     []*server.TestServer
+	defaultDB   string
 
 	httpFirstPort int
 	sqlFirstPort  int
@@ -124,6 +125,14 @@ func (c *transientCluster) start(
 	ctx context.Context, cmd *cobra.Command, gen workload.Generator,
 ) (err error) {
 	ctx = logtags.AddTag(ctx, "start-demo-cluster", nil)
+
+	// Initialize the connection database.
+	// We can't do this earlier as this depends on which generator is used.
+	c.defaultDB = catalogkeys.DefaultDatabaseName
+	if gen != nil {
+		c.defaultDB = gen.Meta().Name
+	}
+
 	// We now proceed to start all the nodes concurrently. This is
 	// somewhat a complicated dance.
 	//
@@ -319,7 +328,7 @@ func (c *transientCluster) start(
 		}
 
 		// Prepare the URL for use by the SQL shell.
-		c.connURL, err = c.getNetworkURLForServer(ctx, 0, gen, true /* includeAppName */)
+		c.connURL, err = c.getNetworkURLForServer(ctx, 0, true /* includeAppName */)
 		if err != nil {
 			return err
 		}
@@ -886,7 +895,7 @@ func generateCerts(certsDir string) (err error) {
 }
 
 func (c *transientCluster) getNetworkURLForServer(
-	ctx context.Context, serverIdx int, gen workload.Generator, includeAppName bool,
+	ctx context.Context, serverIdx int, includeAppName bool,
 ) (string, error) {
 	u := pgurl.New()
 	if includeAppName {
@@ -897,10 +906,8 @@ func (c *transientCluster) getNetworkURLForServer(
 	host, port, _ := netutil.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
-		WithDatabase(catalogkeys.DefaultDatabaseName)
-	if gen != nil {
-		u.WithDatabase(gen.Meta().Name)
-	}
+		WithDatabase(c.defaultDB)
+
 	// For a demo cluster we don't use client TLS certs and instead use
 	// password-based authentication with the password pre-filled in the
 	// URL.
@@ -968,7 +975,7 @@ func (c *transientCluster) setupWorkload(
 		if demoCtx.runWorkload {
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURL, err := c.getNetworkURLForServer(ctx, i, gen, true /* includeAppName */)
+				sqlURL, err := c.getNetworkURLForServer(ctx, i, true /* includeAppName */)
 				if err != nil {
 					return err
 				}
@@ -1114,6 +1121,7 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 		portNumber: c.sqlFirstPort + int(nodeID) - 1,
 		username:   c.adminUser,
 		password:   c.adminPassword,
+		database:   c.defaultDB,
 	}
 }
 
@@ -1122,6 +1130,7 @@ type unixSocketDetails struct {
 	portNumber int
 	username   security.SQLUsername
 	password   string
+	database   string
 }
 
 func (s unixSocketDetails) exists() bool {
@@ -1140,13 +1149,15 @@ func (s unixSocketDetails) String() string {
 	options := url.Values{}
 	options.Add("host", s.socketDir)
 	options.Add("port", strconv.Itoa(s.portNumber))
+	options.Add("user", s.username.Normalized())
+	options.Add("password", s.password)
 
 	// Node: in the generated unix socket URL, a password is always
 	// included even in insecure mode This is OK because in insecure
 	// mode the password is not checked on the server.
 	sqlURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(s.username.Normalized(), s.password),
+		Scheme:   "postgresql",
+		Path:     s.database,
 		RawQuery: options.Encode(),
 	}
 	return sqlURL.String()
@@ -1184,7 +1195,7 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 		}
 		fmt.Fprintln(w, "  (webui)   ", serverURL)
 		// Print network URL if defined.
-		netURL, err := c.getNetworkURLForServer(context.Background(), i, nil, false /*includeAppName*/)
+		netURL, err := c.getNetworkURLForServer(context.Background(), i, false /*includeAppName*/)
 		if err != nil {
 			fmt.Fprintln(stderr, errors.Wrap(err, "retrieving network URL"))
 		} else {
