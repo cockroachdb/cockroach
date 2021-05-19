@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
@@ -45,8 +44,7 @@ type Config struct {
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
 	LeaseMgr           *lease.Manager
-	Metrics            *Metrics
-	MM                 *mon.BytesMonitor
+	EventBufferFactory func() EventBuffer
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
 	SchemaChangePolicy changefeedbase.SchemaChangePolicy
@@ -92,16 +90,14 @@ func Run(ctx context.Context, cfg Config) error {
 		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 		pff = rangefeedFactory(distSender.RangeFeed)
 	}
-	bf := func() EventBuffer {
-		return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
-	}
+
 	f := newKVFeed(
 		cfg.Sink, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
 		cfg.Codec,
-		sf, sc, pff, bf)
+		sf, sc, pff, cfg.EventBufferFactory)
 	g.GoCtx(f.run)
 	err := g.Wait()
 	// NB: The higher layers of the changefeed should detect the boundary and the
