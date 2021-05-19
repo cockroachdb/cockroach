@@ -2066,7 +2066,7 @@ authentication failure.
 
 
 | Value | Textual alias in code or documentation | Description |
-|--|--|
+|--|--|--|
 | 0 | UNKNOWN | is reported when the reason is unknown. |
 | 1 | USER_RETRIEVAL_ERROR | occurs when there was an internal error accessing the principals. |
 | 2 | USER_NOT_FOUND | occurs when the principal is unknown. |
