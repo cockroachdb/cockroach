@@ -114,6 +114,13 @@ type pebbleMVCCScanner struct {
 	// Stop adding keys once p.result.bytes matches or exceeds this threshold,
 	// if nonzero.
 	targetBytes int64
+	// Stop adding intents and abort scan once maxIntents threshold is reached.
+	// Ignored if zero.
+	// This limit is only applicable to consistent scans since they return
+	// intents as an error. For inconsistent scans number of intents is limited
+	// by number of keys scan requests and clients should rely on pagination
+	// to sensibly process large ranges.
+	maxIntents int64
 	// Transaction epoch and sequence number.
 	txn               *roachpb.Transaction
 	txnEpoch          enginepb.TxnEpoch
@@ -442,6 +449,11 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// return the intent separately; the caller may want to resolve
 		// it.
 		if p.maxKeys > 0 && p.results.count == p.maxKeys {
+			// TODO(oleg): This check seems broken and it should never
+			// reach this point with results count reaching max. We
+			// always get out of getAndAdvance either by addAndAdvance or
+			// by seekVersion which is also calling addAndAdvance.
+			//
 			// We've already retrieved the desired number of keys and now
 			// we're adding the resume key. We don't want to add the
 			// intent here as the intents should only correspond to KVs
@@ -470,6 +482,10 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// in the scan range.
 		p.err = p.intents.Set(p.curRawKey, p.curValue, nil)
 		if p.err != nil {
+			return false
+		}
+		// Limit number of intents returned in write intent error.
+		if p.maxIntents > 0 && int64(p.intents.Count()) >= p.maxIntents {
 			return false
 		}
 		return p.advanceKey()
