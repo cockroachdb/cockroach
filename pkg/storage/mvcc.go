@@ -53,6 +53,12 @@ const (
 	// compatibility. See:
 	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
 	MinimumMaxOpenFiles = 1700
+	// Default value for maximum number of intents reported by ExportToSST
+	// and Scan operations in WriteIntentError is set to half of the maximum
+	// lock table size.
+	// This value is subject to tuning in real environment as we have more
+	// data available.
+	maxIntentsPerWriteIntentErrorDefault = 5000
 )
 
 var (
@@ -68,6 +74,14 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
 )
+
+// MaxIntentsPerWriteIntentError sets maximum number of intents returned in
+// WriteIntentError in operations that return multiple intents per error.
+// Currently it is used in Scan, ReverseScan, and ExportToSST.
+var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+	"storage.mvcc.max_intents_per_error",
+	"maximum number of intents returned in error during export of scan requests",
+	maxIntentsPerWriteIntentErrorDefault)
 
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_ROCKSDB_CONCURRENCY", func() int {
@@ -2372,6 +2386,7 @@ func mvccScanToBytes(
 		ts:               timestamp,
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
+		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
@@ -2508,6 +2523,12 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
+	// MaxIntents is a maximum number of intents collected by scanner in
+	// consistent mode before returning WriteIntentError.
+	//
+	// Not used in inconsistent scans.
+	// The zero value indicates no limit.
+	MaxIntents int64
 }
 
 func (opts *MVCCScanOptions) validate() error {
