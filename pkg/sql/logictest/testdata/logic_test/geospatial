@@ -2488,6 +2488,16 @@ Square overlapping left and right square  Square (left)                         
 Square overlapping left and right square  Square (right)                            POLYGON ((0 0, -0.1 0, -0.1 1, 0 1, 0 0))
 Square overlapping left and right square  Square overlapping left and right square  POLYGON EMPTY
 
+query TT
+SELECT
+  st_astext(st_shortestline(a, b)),
+  st_astext(st_longestline(a, b))
+FROM ( VALUES
+  (st_scale('multipoint (0 0, 1 1)', 0, 'NaN'::float)::geometry, 'linestring (0 0, 1 1)'::geometry)
+) regression_t65422(a, b)
+----
+LINESTRING (0 NaN, 0 0)  LINESTRING (0 NaN, 0 0)
+
 # Binary predicates
 query TTBBBBBBBBBBBB
 SELECT
