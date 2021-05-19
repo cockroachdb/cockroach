@@ -2628,7 +2628,12 @@ func TestReplicaTombstone(t *testing.T) {
 		// this as a heartbeat. This demonstrates case (4) where a raft message
 		// to a newer replica ID (in this case a heartbeat) removes an initialized
 		// Replica.
-		_, err = tc.AddVoters(key, tc.Target(2))
+		//
+		// Don't use tc.AddVoter; this would retry internally as we're faking a
+		// a snapshot error here (and these are all considered retriable).
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, key, tc.LookupRangeOrFatal(t, key), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
+		)
 		require.Regexp(t, "boom", err)
 		tombstone := waitForTombstone(t, store.Engine(), rangeID)
 		require.Equal(t, roachpb.ReplicaID(4), tombstone.NextReplicaID)
@@ -2644,7 +2649,9 @@ func TestReplicaTombstone(t *testing.T) {
 		// We could replica GC these replicas without too much extra work but they
 		// also should be rare. Note this is not new with learner replicas.
 		setMinHeartbeat(5)
-		_, err = tc.AddVoters(key, tc.Target(2))
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, key, tc.LookupRangeOrFatal(t, key), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(2)),
+		)
 		require.Regexp(t, "boom", err)
 		// We will start out reading the old tombstone so keep retrying.
 		testutils.SucceedsSoon(t, func() error {

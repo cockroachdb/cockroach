@@ -3308,7 +3308,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// second node).
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		_, err := tc.AddVoters(k, tc.Target(1))
+		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, k, tc.LookupRangeOrFatal(t, k), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		return err
 	})
 
@@ -3343,7 +3345,9 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	// Now repeatedly re-add the learner on the rhs, so it has a
 	// different replicaID than the split trigger expects.
 	add := func() {
-		_, err := tc.AddVoters(kRHS, tc.Target(1))
+		_, err := tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, kRHS, tc.LookupRangeOrFatal(t, kRHS), roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1)),
+		)
 		// The "snapshot intersects existing range" error is expected if the store
 		// has not heard a raft message addressed to a later replica ID while the
 		// "was not found on" error is expected if the store has heard that it has
