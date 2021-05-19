@@ -459,6 +459,71 @@ func TestAvroCollatedString(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestAvroEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b status, c int default 0)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'open')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, null)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, foo)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"open"},"c":{"long":0}}}}`,
+			`foo: {"a":{"long":2}}->{"after":{"foo":{"a":{"long":2},"b":null,"c":{"long":0}}}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TYPE status ADD value 'review'`)
+		sqlDB.Exec(t, `INSERT INTO foo values (4, 'review')`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":4}}->{"after":{"foo":{"a":{"long":4},"b":{"string":"review"},"c":{"long":0}}}}`,
+		})
+
+		// Renaming an enum type doesn't count as a change itself but gets picked up by the encoder
+		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'open' to 'active'`)
+		sqlDB.Exec(t, `INSERT INTO foo values (3, 'active')`)
+		sqlDB.Exec(t, `UPDATE foo set c=1 where a=1`)
+
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a":{"long":3}}->{"after":{"foo":{"a":{"long":3},"b":{"string":"active"},"c":{"long":0}}}}`,
+			`foo: {"a":{"long":1}}->{"after":{"foo":{"a":{"long":1},"b":{"string":"active"},"c":{"long":1}}}}`,
+		})
+
+		// Enum can be part of a compound primary key
+		sqlDB.Exec(t, `CREATE TABLE soft_deletes (a INT, b status, c INT default 0, PRIMARY KEY (a,b))`)
+		sqlDB.Exec(t, `INSERT INTO soft_deletes values (0, 'active')`)
+
+		sd := feed(t, f, `CREATE CHANGEFEED FOR soft_deletes `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, sd)
+		assertPayloadsAvro(t, reg, sd, []string{
+			`soft_deletes: {"a":{"long":0},"b":{"string":"active"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"active"},"c":{"long":0}}}}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TYPE status RENAME value 'active' to 'open'`)
+		sqlDB.Exec(t, `UPDATE soft_deletes set c=1 where a=0`)
+
+		assertPayloadsAvro(t, reg, sd, []string{
+			`soft_deletes: {"a":{"long":0},"b":{"string":"open"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"open"},"c":{"long":1}}}}`,
+		})
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestAvroSchemaNaming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

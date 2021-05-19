@@ -41,6 +41,15 @@ import (
 	"golang.org/x/text/collate"
 )
 
+var testTypes = make(map[string]*types.T)
+var testTypeResolver = tree.MakeTestingMapTypeResolver(testTypes)
+
+func makeTestSemaCtx() tree.SemaContext {
+	testSemaCtx := tree.MakeSemaContext()
+	testSemaCtx.TypeResolver = testTypeResolver
+	return testSemaCtx
+}
+
 func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	ctx := context.Background()
 	stmt, err := parser.ParseOne(createTableStmt)
@@ -54,7 +63,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
 	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
 		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
@@ -65,7 +74,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	evalCtx := &tree.EvalContext{}
 
 	valuesStmt, err := parser.ParseOne(values)
@@ -134,7 +143,7 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	}
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
-	semaCtx := tree.MakeSemaContext()
+	semaCtx := makeTestSemaCtx()
 	col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
 	return col, err
 }
