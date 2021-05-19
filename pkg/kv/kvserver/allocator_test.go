@@ -2551,6 +2551,8 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// NB: These stores are ordered from least likely to most likely to receive a
+	// replica.
 	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID:  1,
@@ -2560,17 +2562,17 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 		{
 			StoreID:  2,
 			Node:     roachpb.NodeDescriptor{NodeID: 2},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 450},
 		},
 		{
 			StoreID:  3,
 			Node:     roachpb.NodeDescriptor{NodeID: 3},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 300},
 		},
 		{
 			StoreID:  4,
 			Node:     roachpb.NodeDescriptor{NodeID: 4},
-			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 150},
 		},
 	}
 
@@ -2599,6 +2601,11 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 			[]roachpb.StoreID{1},
 			[]roachpb.StoreID{2, 3, 4},
 			[]roachpb.StoreID{},
+		},
+		{
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{2, 4},
+			[]roachpb.StoreID{3},
 		},
 	}
 
@@ -2645,7 +2652,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 		})
 
 		t.Run(fmt.Sprintf("%d/rebalance", testIdx), func(t *testing.T) {
-			results := rankedCandidateListForRebalancing(
+			rebalanceOpts := rankedCandidateListForRebalancing(
 				context.Background(),
 				sl,
 				removalConstraintsChecker,
@@ -2657,24 +2664,20 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				a.scorerOptions(),
 				voterTarget,
 			)
-
-			for i := range results {
-				if !expectedStoreIDsMatch(tc.existing, results[i].existingCandidates) {
-					t.Errorf(
-						"results[%d]: expected existing candidates %v, got %v",
-						i,
-						tc.existing,
-						results[i].existingCandidates,
-					)
+			if len(tc.expected) > 0 {
+				require.Len(t, rebalanceOpts, 1)
+				candidateStores := make([]roachpb.StoreID, len(rebalanceOpts[0].candidates))
+				for i, cand := range rebalanceOpts[0].candidates {
+					candidateStores[i] = cand.store.StoreID
 				}
-				if !expectedStoreIDsMatch(tc.expected, results[i].candidates) {
-					t.Errorf(
-						"results[%d]: expected candidates %v, got %v",
-						i,
-						tc.expected,
-						results[i].candidates,
-					)
+				require.ElementsMatch(t, tc.expected, candidateStores)
+				existingStores := make([]roachpb.StoreID, len(rebalanceOpts[0].existingCandidates))
+				for i, cand := range rebalanceOpts[0].existingCandidates {
+					existingStores[i] = cand.store.StoreID
 				}
+				require.ElementsMatch(t, tc.existing, existingStores)
+			} else {
+				require.Len(t, rebalanceOpts, 0)
 			}
 		})
 	}
