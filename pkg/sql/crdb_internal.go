@@ -728,7 +728,6 @@ CREATE TABLE crdb_internal.jobs (
 						leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 					}
 					errorStr = tree.NewDString(payload.Error)
-					traceID = tree.NewDInt(tree.DInt(payload.TraceID))
 				}
 
 				// Extract data from the progress field.
@@ -763,6 +762,7 @@ CREATE TABLE crdb_internal.jobs (
 								}
 							}
 						}
+						traceID = tree.NewDInt(tree.DInt(progress.TraceID))
 					}
 				}
 
