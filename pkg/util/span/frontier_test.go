@@ -29,11 +29,12 @@ import (
 
 func (f *Frontier) entriesStr() string {
 	var buf strings.Builder
-	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) {
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) OpResult {
 		if buf.Len() != 0 {
 			buf.WriteString(` `)
 		}
 		fmt.Fprintf(&buf, `%s@%d`, sp, ts.WallTime)
+		return ContinueMatch
 	})
 	return buf.String()
 }
@@ -231,7 +232,7 @@ func TestSpanFrontierDisjointSpans(t *testing.T) {
 		expectEntries(`{a-b}@3 {c-d}@3 {d-e}@2`)
 
 	// Advance span that overlaps all the spans tracked by this frontier.
-	// {c-d} and {d-e} should collaps.
+	// {c-d} and {d-e} should collapse.
 	forwardFrontier(roachpb.Span{Key: roachpb.Key(`0`), EndKey: roachpb.Key(`q`)}, 4).
 		expectedAdvanced(true).
 		expectFrontier(4).
@@ -301,6 +302,126 @@ func TestSequentialSpans(t *testing.T) {
 		expectedRanges = append(expectedRanges, fmt.Sprintf("%s@%d", span, i+1))
 	}
 	require.Equal(t, strings.Join(expectedRanges, " "), f.entriesStr())
+}
+
+func TestSpanEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key := func(c byte) roachpb.Key {
+		return roachpb.Key{c}
+	}
+	mkspan := func(start, end byte) roachpb.Span {
+		return roachpb.Span{Key: key(start), EndKey: key(end)}
+	}
+
+	spAZ := mkspan('A', 'Z')
+	f, err := MakeFrontier(spAZ)
+	require.NoError(t, err)
+
+	advance := func(s roachpb.Span, wall int64) {
+		_, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
+		require.NoError(t, err)
+	}
+
+	spanEntries := func(sp roachpb.Span) string {
+		var buf strings.Builder
+		f.SpanEntries(sp, func(s roachpb.Span, ts hlc.Timestamp) OpResult {
+			if buf.Len() != 0 {
+				buf.WriteString(` `)
+			}
+			fmt.Fprintf(&buf, `%s@%d`, s, ts.WallTime)
+			return ContinueMatch
+		})
+		return buf.String()
+	}
+
+	// Nothing overlaps span fully to the left of frontier.
+	require.Equal(t, ``, spanEntries(mkspan('0', '9')))
+	// Nothing overlaps span fully to the right of the frontier.
+	require.Equal(t, ``, spanEntries(mkspan('a', 'z')))
+
+	// Span overlaps entire frontier.
+	require.Equal(t, `{A-Z}@0`, spanEntries(spAZ))
+	advance(spAZ, 1)
+	require.Equal(t, `{A-Z}@1`, spanEntries(spAZ))
+
+	// Span overlaps part of the frontier, with left part outside frontier.
+	require.Equal(t, `{A-C}@1`, spanEntries(mkspan('0', 'C')))
+
+	// Span overlaps part of the frontier, with right part outside frontier.
+	require.Equal(t, `{Q-Z}@1`, spanEntries(mkspan('Q', 'c')))
+
+	// Span fully inside frontier.
+	require.Equal(t, `{P-W}@1`, spanEntries(mkspan('P', 'W')))
+
+	// Advance part of the frontier.
+	advance(mkspan('C', 'E'), 2)
+	advance(mkspan('H', 'M'), 5)
+	advance(mkspan('N', 'Q'), 3)
+
+	// Span overlaps various parts of the frontier.
+	require.Equal(t,
+		`{A-C}@1 {C-E}@2 {E-H}@1 {H-M}@5 {M-N}@1 {N-P}@3`,
+		spanEntries(mkspan('3', 'P')))
+}
+
+func TestUpdatedEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	key := func(c byte) roachpb.Key {
+		return roachpb.Key{c}
+	}
+	mkspan := func(start, end byte) roachpb.Span {
+		return roachpb.Span{Key: key(start), EndKey: key(end)}
+	}
+
+	spAZ := mkspan('A', 'Z')
+	f, err := MakeFrontier(spAZ)
+	require.NoError(t, err)
+
+	var wall int64 = 0
+	advance := func(s roachpb.Span, newWall int64) {
+		wall = newWall
+		_, err := f.Forward(s, hlc.Timestamp{WallTime: wall})
+		require.NoError(t, err)
+	}
+
+	updatedEntries := func(cutoff int64) string {
+		var buf strings.Builder
+		f.UpdatedEntries(hlc.Timestamp{WallTime: cutoff}, func(s roachpb.Span, ts hlc.Timestamp) OpResult {
+			if buf.Len() != 0 {
+				buf.WriteString(` `)
+			}
+			fmt.Fprintf(&buf, `%s@%d`, s, ts.WallTime)
+			return ContinueMatch
+		})
+		return buf.String()
+	}
+
+	// If we haven't configured frontier to keep track of updates, we expect to see
+	// all spans as updated.
+	require.Equal(t, ``, updatedEntries(0))
+	require.Equal(t, ``, updatedEntries(1))
+	advance(mkspan('C', 'E'), 2)
+	require.Equal(t, ``, updatedEntries(1))
+
+	f.TrackUpdateTimestamp(func() hlc.Timestamp { return hlc.Timestamp{WallTime: wall} })
+
+	advance(mkspan('C', 'E'), 3)
+	require.Equal(t, `{C-E}@3`, updatedEntries(0))
+	require.Equal(t, `{C-E}@3`, updatedEntries(2))
+	advance(mkspan('D', 'E'), 4)
+	require.Equal(t, `{C-D}@3 {D-E}@4`, updatedEntries(3))
+
+	// Nothing was updated after t=4
+	require.Equal(t, ``, updatedEntries(4))
+
+	advance(mkspan('C', 'E'), 5)
+	require.Equal(t, `{C-E}@5`, updatedEntries(4))
+
+	advance(spAZ, 5)
+	require.Equal(t, `{A-Z}@5`, updatedEntries(4))
+	require.Equal(t, ``, updatedEntries(5))
 }
 
 // symbols that can make up spans.
