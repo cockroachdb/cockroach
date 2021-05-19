@@ -143,7 +143,7 @@ type CallbackOperator struct {
 	ZeroInputNode
 	InitCb  func(context.Context)
 	NextCb  func() coldata.Batch
-	CloseCb func(context.Context) error
+	CloseCb func() error
 }
 
 var _ ClosableOperator = &CallbackOperator{}
@@ -165,11 +165,11 @@ func (o *CallbackOperator) Next() coldata.Batch {
 }
 
 // Close is part of the ClosableOperator interface.
-func (o *CallbackOperator) Close(ctx context.Context) error {
+func (o *CallbackOperator) Close() error {
 	if o.CloseCb == nil {
 		return nil
 	}
-	return o.CloseCb(ctx)
+	return o.CloseCb()
 }
 
 // TestingSemaphore is a semaphore.Semaphore that never blocks and is always

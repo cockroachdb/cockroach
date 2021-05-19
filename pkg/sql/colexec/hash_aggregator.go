@@ -539,15 +539,15 @@ func (op *hashAggregator) Reset(ctx context.Context) {
 	op.state = hashAggregatorBuffering
 }
 
-func (op *hashAggregator) Close(ctx context.Context) error {
+func (op *hashAggregator) Close() error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
-		retErr = op.inputTrackingState.tuples.Close(ctx)
+		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())
 	}
-	if err := op.toClose.Close(ctx); err != nil {
+	if err := op.toClose.Close(); err != nil {
 		retErr = err
 	}
 	return retErr

@@ -598,7 +598,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(r.Ctx); err != nil {
+			if err := r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -611,10 +611,11 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 	}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
+func (r *_RELATIVE_RANK_STRINGOp) Close() error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
+	ctx := r.EnsureCtx()
 	var lastErr error
 	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err

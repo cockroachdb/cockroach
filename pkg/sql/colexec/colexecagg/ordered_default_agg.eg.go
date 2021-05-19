@@ -241,9 +241,9 @@ func (a *defaultOrderedAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *defaultOrderedAggAlloc) Close(ctx context.Context) error {
+func (a *defaultOrderedAggAlloc) Close() error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(ctx)
+		fn.fn.Close(fn.ctx)
 	}
 	a.returnedFns = nil
 	return nil

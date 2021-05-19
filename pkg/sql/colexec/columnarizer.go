@@ -126,7 +126,7 @@ func newColumnarizer(
 				// Close will call InternalClose(). Note that we don't return
 				// any trailing metadata here because the columnarizers
 				// propagate it in DrainMeta.
-				if err := c.Close(c.Ctx); util.CrdbTestBuild && err != nil {
+				if err := c.Close(); util.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
 				}
@@ -137,7 +137,7 @@ func newColumnarizer(
 	return c
 }
 
-// Init is part of the Operator interface.
+// Init is part of the colexecop.Operator interface.
 func (c *Columnarizer) Init(ctx context.Context) {
 	if c.removedFromFlow {
 		return
@@ -181,7 +181,7 @@ func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
 	return s
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 func (c *Columnarizer) Next() coldata.Batch {
 	if c.removedFromFlow {
 		return coldata.ZeroBatch
@@ -281,8 +281,8 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	return c.accumulatedMeta
 }
 
-// Close is part of the colexecop.Operator interface.
-func (c *Columnarizer) Close(context.Context) error {
+// Close is part of the colexecop.ClosableOperator interface.
+func (c *Columnarizer) Close() error {
 	if c.removedFromFlow {
 		return nil
 	}
@@ -290,7 +290,7 @@ func (c *Columnarizer) Close(context.Context) error {
 	return nil
 }
 
-// ChildCount is part of the Operator interface.
+// ChildCount is part of the execinfra.OpNode interface.
 func (c *Columnarizer) ChildCount(verbose bool) int {
 	if _, ok := c.input.(execinfra.OpNode); ok {
 		return 1
@@ -298,7 +298,7 @@ func (c *Columnarizer) ChildCount(verbose bool) int {
 	return 0
 }
 
-// Child is part of the Operator interface.
+// Child is part of the execinfra.OpNode interface.
 func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 	if nth == 0 {
 		if n, ok := c.input.(execinfra.OpNode); ok {

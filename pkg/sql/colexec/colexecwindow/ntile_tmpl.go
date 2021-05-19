@@ -21,6 +21,7 @@ package colexecwindow
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
@@ -403,7 +404,7 @@ func (r *_NTILE_STRINGOp) Next() coldata.Batch {
 			colexecerror.InternalError(
 				errors.AssertionFailedf("ntile operator in processing state without buffered rows"))
 		case nTileFinished:
-			if err = r.Close(r.Ctx); err != nil {
+			if err = r.Close(); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -478,9 +479,9 @@ func (r *nTileBase) setNTile(batch coldata.Batch, endIdx int) {
 	}
 }
 
-func (r *nTileBase) Close(ctx context.Context) error {
+func (r *nTileBase) Close() error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
-	return r.bufferQueue.Close(ctx)
+	return r.bufferQueue.Close(r.nTileInitFields.EnsureCtx())
 }

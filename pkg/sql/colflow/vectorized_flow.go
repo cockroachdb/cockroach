@@ -1023,14 +1023,14 @@ func (s *vectorizedFlowCreator) setupOutput(
 // callbackCloser is a utility struct that implements the Closer interface by
 // calling the provided callback.
 type callbackCloser struct {
-	closeCb func(context.Context) error
+	closeCb func() error
 }
 
 var _ colexecop.Closer = &callbackCloser{}
 
 // Close implements the Closer interface.
-func (c *callbackCloser) Close(ctx context.Context) error {
-	return c.closeCb(ctx)
+func (c *callbackCloser) Close() error {
+	return c.closeCb()
 }
 
 func (s *vectorizedFlowCreator) setupFlow(
@@ -1120,12 +1120,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 				for i := range toCloseCopy {
 					func(idx int) {
 						closed := false
-						result.ToClose[idx] = &callbackCloser{closeCb: func(ctx context.Context) error {
+						result.ToClose[idx] = &callbackCloser{closeCb: func() error {
 							if !closed {
 								closed = true
 								atomic.AddInt32(&s.numClosed, 1)
 							}
-							return toCloseCopy[idx].Close(ctx)
+							return toCloseCopy[idx].Close()
 						}}
 					}(i)
 				}

@@ -420,7 +420,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (s *ParallelUnorderedSynchronizer) Close(context.Context) error {
+func (s *ParallelUnorderedSynchronizer) Close() error {
 	if state := s.getState(); state != parallelUnorderedSynchronizerStateUninitialized {
 		// Input goroutines have been started and will take care of closing the
 		// closers from the corresponding input trees, so we don't need to do
@@ -438,7 +438,7 @@ func (s *ParallelUnorderedSynchronizer) Close(context.Context) error {
 	// so it is safe to close all closers from this goroutine.
 	var lastErr error
 	for _, input := range s.inputs {
-		if err := input.ToClose.Close(s.Ctx); err != nil {
+		if err := input.ToClose.Close(); err != nil {
 			lastErr = err
 		}
 	}

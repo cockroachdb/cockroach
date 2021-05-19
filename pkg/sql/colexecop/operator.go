@@ -31,12 +31,11 @@ type Operator interface {
 	//
 	// Canceling the provided context results in forceful termination of
 	// execution. The operators are expected to hold onto the provided context
-	// (and derive a new one if needed) that is then used for Next() calls.
+	// (and derive a new one if needed) that is then used for Next(),
+	// DrainMeta(), and Close() calls (when applicable).
 	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
-	// TODO(yuzefovich): use the stored context for DrainMeta calls (when
-	// applicable) too.
 	Init(ctx context.Context)
 
 	// Next returns the next Batch from this operator. Once the operator is
@@ -138,11 +137,11 @@ type BufferingInMemoryOperator interface {
 // if we have a simple project on top of a disk-backed operator, that simple
 // project needs to implement this interface so that Close() call could be
 // propagated correctly).
-// TODO(yuzefovich): clarify the contract that Close must be safe to call even
-// if the Operator - when it implements the Closer interface - hasn't been
-// initialized.
 type Closer interface {
-	Close(ctx context.Context) error
+	// Close releases the resources associated with this Closer. If this Closer
+	// is an Operator, the implementation of Close must be safe to execute even
+	// if Operator.Init wasn't called.
+	Close() error
 }
 
 // Closers is a slice of Closers.
@@ -155,17 +154,17 @@ type Closers []Closer
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 	prefix += ":"
 	for _, closer := range c {
-		if err := closer.Close(ctx); err != nil && log.V(1) {
+		if err := closer.Close(); err != nil && log.V(1) {
 			log.Infof(ctx, "%s error closing Closer: %v", prefix, err)
 		}
 	}
 }
 
 // Close closes all Closers and returns the last error (if any occurs).
-func (c Closers) Close(ctx context.Context) error {
+func (c Closers) Close() error {
 	var lastErr error
 	for _, closer := range c {
-		if err := closer.Close(ctx); err != nil {
+		if err := closer.Close(); err != nil {
 			lastErr = err
 		}
 	}
@@ -225,6 +224,8 @@ type NonExplainable interface {
 type InitHelper struct {
 	// Ctx is the context passed on the first call to Init(). If it is nil, then
 	// Init() hasn't been called yet.
+	// NOTE: if a non-nil context is needed, use EnsureCtx() to retrieve it
+	// instead of accessing this field directly.
 	Ctx context.Context
 }
 
@@ -239,6 +240,15 @@ func (h *InitHelper) Init(ctx context.Context) bool {
 	}
 	h.Ctx = ctx
 	return true
+}
+
+// EnsureCtx returns the context which this helper was initialized with or the
+// background context if Init hasn't been called.
+func (h *InitHelper) EnsureCtx() context.Context {
+	if h.Ctx == nil {
+		return context.Background()
+	}
+	return h.Ctx
 }
 
 // MakeOneInputHelper returns a new OneInputHelper.
@@ -286,6 +296,8 @@ func (c *CloserHelper) Reset() {
 }
 
 // ClosableOperator is an Operator that needs to be Close()'d.
+// NOTE: even if the Operator wasn't Init()'ed properly, it must still be safe
+// to Close().
 type ClosableOperator interface {
 	Operator
 	Closer
@@ -308,12 +320,12 @@ type OneInputCloserHelper struct {
 var _ Closer = &OneInputCloserHelper{}
 
 // Close implements the Closer interface.
-func (c *OneInputCloserHelper) Close(ctx context.Context) error {
+func (c *OneInputCloserHelper) Close() error {
 	if !c.CloserHelper.Close() {
 		return nil
 	}
 	if closer, ok := c.Input.(Closer); ok {
-		return closer.Close(ctx)
+		return closer.Close()
 	}
 	return nil
 }
