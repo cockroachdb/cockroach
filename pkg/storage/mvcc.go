@@ -53,6 +53,11 @@ const (
 	// compatibility. See:
 	// https://wpdev.uservoice.com/forums/266908-command-prompt-console-bash-on-ubuntu-on-windo/suggestions/17310124-add-ability-to-change-max-number-of-open-files-for
 	MinimumMaxOpenFiles = 1700
+	// Default value for maximum number of intents reported by ExportToSST
+	// in WriteIntentError is set to half of the maximum lock table size.
+	// This value is subject to tuning in real environment as we have more
+	// data available.
+	maxIntentsPerWriteIntentErrorDefault = 5000
 )
 
 var (
@@ -69,6 +74,11 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	0*time.Millisecond,
 )
 
+var MaxIntentsPerWriteIntentError = settings.RegisterIntSetting(
+	"storage.mvcc.max_intents_per_error",
+	"maximum number of intents returned in error during export of scan requests",
+	maxIntentsPerWriteIntentErrorDefault)
+
 var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_ROCKSDB_CONCURRENCY", func() int {
 		// Use up to min(numCPU, 4) threads for background RocksDB compactions per
@@ -79,6 +89,13 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 		}
 		return max
 	}())
+
+// maxIntentsPerScanError is maximum number of intents returned in
+// WriteIntentError when MVCCScan{*} functions fail.
+// If this threshold is set to zero, no limit would be applied.
+var maxIntentsPerScanError = envutil.EnvOrDefaultInt64(
+	"COCKROACH_MAX_INTENTS_PER_SCAN_ERROR",
+	5000)
 
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
@@ -2372,6 +2389,7 @@ func mvccScanToBytes(
 		ts:               timestamp,
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
+		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		tombstones:       opts.Tombstones,
 		failOnMoreRecent: opts.FailOnMoreRecent,
@@ -2508,6 +2526,15 @@ type MVCCScanOptions struct {
 	//
 	// The zero value indicates no limit.
 	TargetBytes int64
+	// MaxIntents is a maximum number of intents collected by scanner in
+	// consistent mode. Scanning will stop without reaching MaxKeys if this
+	// threshold is reached.
+	// For inconsistent scans number of intents is limited by number of keys
+	// scan requests and clients should rely on pagination to sensibly process
+	// large ranges.
+	//
+	// The zero value indicates no limit.
+	MaxIntents int64
 }
 
 func (opts *MVCCScanOptions) validate() error {

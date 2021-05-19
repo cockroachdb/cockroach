@@ -639,10 +639,16 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			ts := []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {Logical: 3}, {Logical: 4}, {Logical: 5}, {Logical: 6}}
+			ts := []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {Logical: 3}, {Logical: 4}, {Logical: 5}, {Logical: 6}, {Logical: 7}}
 
 			txn1ts := makeTxn(*txn1, ts[2])
 			txn2ts := makeTxn(*txn2, ts[5])
+			txnMap := map[int]*roachpb.Transaction{
+				2: txn1ts,
+				5: txn2ts,
+				6: txn2ts,
+				7: txn2ts,
+			}
 
 			fixtureKVs := []roachpb.KeyValue{
 				{Key: testKey1, Value: mkVal("testValue1 pre", ts[0])},
@@ -651,28 +657,30 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 				{Key: testKey2, Value: mkVal("testValue2", ts[3])},
 				{Key: testKey3, Value: mkVal("testValue3", ts[4])},
 				{Key: testKey4, Value: mkVal("testValue4", ts[5])},
+				{Key: testKey5, Value: mkVal("testValue5", ts[5])},
+				{Key: testKey6, Value: mkVal("testValue5", ts[5])},
 			}
 			for i, kv := range fixtureKVs {
-				var txn *roachpb.Transaction
-				if i == 2 {
-					txn = txn1ts
-				} else if i == 5 {
-					txn = txn2ts
-				}
 				v := *protoutil.Clone(&kv.Value).(*roachpb.Value)
 				v.Timestamp = hlc.Timestamp{}
-				if err := MVCCPut(ctx, engine, nil, kv.Key, kv.Value.Timestamp, v, txn); err != nil {
+				if err := MVCCPut(ctx, engine, nil, kv.Key, kv.Value.Timestamp, v, txnMap[i]); err != nil {
 					t.Fatal(err)
 				}
 			}
 
+			// Limit number of intents per error in consistent scan temporarily.
+			defer func(oldVal int64) { maxIntentsPerScanError = oldVal }(maxIntentsPerScanError)
+			maxIntentsPerScanError = 2
+
 			scanCases := []struct {
+				name       string
 				consistent bool
 				txn        *roachpb.Transaction
 				expIntents []roachpb.Intent
 				expValues  []roachpb.KeyValue
 			}{
 				{
+					name:       "consistent-all-keys",
 					consistent: true,
 					txn:        nil,
 					expIntents: []roachpb.Intent{
@@ -683,14 +691,17 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 					expValues: nil,
 				},
 				{
+					name:       "consistent-txn1",
 					consistent: true,
 					txn:        txn1ts,
 					expIntents: []roachpb.Intent{
 						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey4),
+						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey5),
 					},
 					expValues: nil, // []roachpb.KeyValue{fixtureKVs[2], fixtureKVs[3], fixtureKVs[4]},
 				},
 				{
+					name:       "consistent-txn2",
 					consistent: true,
 					txn:        txn2ts,
 					expIntents: []roachpb.Intent{
@@ -699,52 +710,51 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 					expValues: nil, // []roachpb.KeyValue{fixtureKVs[3], fixtureKVs[4], fixtureKVs[5]},
 				},
 				{
+					name:       "inconsistent-all-keys",
 					consistent: false,
 					txn:        nil,
 					expIntents: []roachpb.Intent{
 						roachpb.MakeIntent(&txn1ts.TxnMeta, testKey1),
 						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey4),
+						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey5),
+						roachpb.MakeIntent(&txn2ts.TxnMeta, testKey6),
 					},
 					expValues: []roachpb.KeyValue{fixtureKVs[0], fixtureKVs[3], fixtureKVs[4], fixtureKVs[1]},
 				},
 			}
 
-			for i, scan := range scanCases {
-				cStr := "inconsistent"
-				if scan.consistent {
-					cStr = "consistent"
-				}
-				res, err := MVCCScan(ctx, engine, testKey1, testKey4.Next(),
-					hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn})
-				var wiErr *roachpb.WriteIntentError
-				_ = errors.As(err, &wiErr)
-				if (err == nil) != (wiErr == nil) {
-					t.Errorf("%s(%d): unexpected error: %+v", cStr, i, err)
-				}
+			for _, scan := range scanCases {
+				t.Run(scan.name, func(t *testing.T) {
+					res, err := MVCCScan(ctx, engine, testKey1, testKey6.Next(),
+						hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Inconsistent: !scan.consistent, Txn: scan.txn})
+					var wiErr *roachpb.WriteIntentError
+					_ = errors.As(err, &wiErr)
+					if (err == nil) != (wiErr == nil) {
+						t.Errorf("unexpected error: %+v", err)
+					}
 
-				if wiErr == nil != !scan.consistent {
-					t.Errorf("%s(%d): expected write intent error; got %s", cStr, i, err)
-					continue
-				}
+					if wiErr == nil != !scan.consistent {
+						t.Fatalf("expected write intent error; got %s", err)
+					}
 
-				intents := res.Intents
-				kvs := res.KVs
-				if len(intents) > 0 != !scan.consistent {
-					t.Errorf("%s(%d): expected different intents slice; got %+v", cStr, i, intents)
-					continue
-				}
+					intents := res.Intents
+					kvs := res.KVs
+					if len(intents) > 0 != !scan.consistent {
+						t.Fatalf("expected different intents slice; got %+v", intents)
+					}
 
-				if scan.consistent {
-					intents = wiErr.Intents
-				}
+					if scan.consistent {
+						intents = wiErr.Intents
+					}
 
-				if !reflect.DeepEqual(intents, scan.expIntents) {
-					t.Fatalf("%s(%d): expected intents:\n%+v;\n got\n%+v", cStr, i, scan.expIntents, intents)
-				}
+					if !reflect.DeepEqual(intents, scan.expIntents) {
+						t.Fatalf("expected intents:\n%+v;\n got\n%+v", scan.expIntents, intents)
+					}
 
-				if !reflect.DeepEqual(kvs, scan.expValues) {
-					t.Errorf("%s(%d): expected values %+v; got %+v", cStr, i, scan.expValues, kvs)
-				}
+					if !reflect.DeepEqual(kvs, scan.expValues) {
+						t.Fatalf("expected values %+v; got %+v", scan.expValues, kvs)
+					}
+				})
 			}
 		})
 	}
@@ -1444,6 +1454,119 @@ func TestMVCCScanInconsistent(t *testing.T) {
 			if !reflect.DeepEqual(res.KVs, expKVs) {
 				t.Errorf("expected key values equal %v != %v", res.Intents, expKVs)
 			}
+		})
+	}
+}
+
+func TestMVCCScanInconsistentLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	for _, engineImpl := range mvccEngineImpls {
+		t.Run(engineImpl.name, func(t *testing.T) {
+			engine := engineImpl.create()
+			defer engine.Close()
+
+			ts1 := hlc.Timestamp{WallTime: 1}
+			ts2 := hlc.Timestamp{WallTime: 2}
+			//ts3 := hlc.Timestamp{WallTime: 3}
+			//ts4 := hlc.Timestamp{WallTime: 4}
+			ts5 := hlc.Timestamp{WallTime: 5}
+			//ts6 := hlc.Timestamp{WallTime: 6}
+			if err := MVCCPut(ctx, engine, nil, testKey1, ts1, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := MVCCPut(ctx, engine, nil, testKey2, ts1, value2, nil); err != nil {
+				t.Fatal(err)
+			}
+			txn1ts2 := makeTxn(*txn1, ts2)
+			if err := MVCCPut(ctx, engine, nil, testKey2, txn1ts2.ReadTimestamp, value2, txn1ts2); err != nil {
+				t.Fatal(err)
+			}
+			txn2ts5 := makeTxn(*txn2, ts5)
+			if err := MVCCPut(ctx, engine, nil, testKey3, txn2ts5.ReadTimestamp, value2, txn2ts5); err != nil {
+				t.Fatal(err)
+			}
+			if err := MVCCPut(ctx, engine, nil, testKey4, ts1, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := MVCCPut(ctx, engine, nil, testKey5, ts2, value4, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			makeTimestampedValue := func(v roachpb.Value, ts hlc.Timestamp) roachpb.Value {
+				v.Timestamp = ts
+				return v
+			}
+
+			assertIntentsEqual := func(expected, actual []roachpb.Intent) {
+				t.Helper()
+				if !reflect.DeepEqual(expected, actual) {
+					t.Fatalf("expected %v, but found %v", expected, actual)
+				}
+			}
+
+			assertValuesEqual := func(expected, actual []roachpb.KeyValue) {
+				t.Helper()
+				if !reflect.DeepEqual(expected, actual) {
+					t.Fatalf("expected %v, but found %v", expected, actual)
+				}
+			}
+
+			t.Run("stop after intent", func(t *testing.T) {
+				// Check if we can stop after intent correctly. First scan should only
+				// consume 3 keys.
+				res, _ := MVCCScan(
+					ctx, engine, testKey1, testKey5.Next(), hlc.Timestamp{WallTime: 7},
+					MVCCScanOptions{Inconsistent: true, MaxKeys: 3},
+				)
+				assertIntentsEqual([]roachpb.Intent{
+					roachpb.MakeIntent(&txn1ts2.TxnMeta, testKey2),
+					roachpb.MakeIntent(&txn2ts5.TxnMeta, testKey3),
+				}, res.Intents)
+				assertValuesEqual([]roachpb.KeyValue{
+					{Key: testKey1, Value: makeTimestampedValue(value1, ts1)},
+					{Key: testKey2, Value: makeTimestampedValue(value2, ts1)},
+				}, res.KVs)
+				// Check that resumed scan returning remaining keys.
+				res, _ = MVCCScan(
+					ctx, engine, res.ResumeSpan.Key, res.ResumeSpan.EndKey, hlc.Timestamp{WallTime: 7},
+					MVCCScanOptions{Inconsistent: true},
+				)
+				assertIntentsEqual(nil, res.Intents)
+				assertValuesEqual([]roachpb.KeyValue{
+					{Key: testKey4, Value: makeTimestampedValue(value1, ts1)},
+					{Key: testKey5, Value: makeTimestampedValue(value4, ts2)},
+				}, res.KVs)
+			})
+
+			t.Run("stop after value and intent", func(t *testing.T) {
+				// Check that stopping after intent which has previous value works.
+				res, _ := MVCCScan(
+					ctx, engine, testKey1, testKey5.Next(), hlc.Timestamp{WallTime: 7},
+					MVCCScanOptions{Inconsistent: true, MaxKeys: 2},
+				)
+				assertIntentsEqual([]roachpb.Intent{
+					roachpb.MakeIntent(&txn1ts2.TxnMeta, testKey2),
+				}, res.Intents)
+				assertValuesEqual([]roachpb.KeyValue{
+					{Key: testKey1, Value: makeTimestampedValue(value1, ts1)},
+					{Key: testKey2, Value: makeTimestampedValue(value2, ts1)},
+				}, res.KVs)
+				// Check that resumed scan returning remaining keys.
+				res, _ = MVCCScan(
+					ctx, engine, res.ResumeSpan.Key, res.ResumeSpan.EndKey, hlc.Timestamp{WallTime: 7},
+					MVCCScanOptions{Inconsistent: true},
+				)
+				assertIntentsEqual([]roachpb.Intent{
+					roachpb.MakeIntent(&txn2ts5.TxnMeta, testKey3),
+				}, res.Intents)
+				assertValuesEqual([]roachpb.KeyValue{
+					{Key: testKey4, Value: makeTimestampedValue(value1, ts1)},
+					{Key: testKey5, Value: makeTimestampedValue(value4, ts2)},
+				}, res.KVs)
+			})
 		})
 	}
 }
