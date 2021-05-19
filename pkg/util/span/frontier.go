@@ -25,11 +25,11 @@ import (
 // frontierEntry represents a timestamped span. It is used as the nodes in both
 // the interval tree and heap needed to keep the Frontier.
 type frontierEntry struct {
-	id   int64
-	keys interval.Range
-	span roachpb.Span
-	ts   hlc.Timestamp
-
+	id       int64
+	keys     interval.Range
+	span     roachpb.Span
+	ts       hlc.Timestamp
+	updateTS hlc.Timestamp
 	// The index of the item in the frontierHeap, maintained by the
 	// heap.Interface methods.
 	index int
@@ -104,6 +104,10 @@ type Frontier struct {
 	minHeap frontierHeap
 
 	idAlloc int64
+
+	// getUpdateTimestamp, if not nil, returns the hlc timestamp when
+	// updating frontier.
+	getUpdateTimestamp func() hlc.Timestamp
 }
 
 // makeSpan copies intervals start/end points and returns a span.
@@ -135,6 +139,11 @@ func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
 	}
 	f.tree.AdjustRanges()
 	return f, nil
+}
+
+// TrackUpdateTimestamp asks frontier to keep track of span update timestamp.
+func (f *Frontier) TrackUpdateTimestamp(now func() hlc.Timestamp) {
+	f.getUpdateTimestamp = now
 }
 
 // Frontier returns the minimum timestamp being tracked.
@@ -222,19 +231,23 @@ func extendRangeToTheRight(
 }
 
 func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
-	const continueMatch = false
-
 	// Set of frontier entries to add and remove.
 	var toAdd, toRemove []*frontierEntry
+
+	var updateTS hlc.Timestamp
+	if f.getUpdateTimestamp != nil {
+		updateTS = f.getUpdateTimestamp()
+	}
 
 	// addEntry adds frontier entry to the toAdd list.
 	addEntry := func(r interval.Range, ts hlc.Timestamp) {
 		sp := makeSpan(r)
 		toAdd = append(toAdd, &frontierEntry{
-			id:   f.idAlloc,
-			span: sp,
-			keys: sp.AsRange(),
-			ts:   ts,
+			id:       f.idAlloc,
+			span:     sp,
+			keys:     sp.AsRange(),
+			ts:       ts,
+			updateTS: updateTS,
 		})
 		f.idAlloc++
 	}
@@ -289,10 +302,11 @@ func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 			todoRange.Start = overlap.keys.Start
 		}
 
-		// Fast case: we already recorded higher timestamp for this overlap.
-		if insertTS.LessEq(overlap.ts) {
+		// Fast case: we already recorded higher timestamp for this overlap
+		if insertTS.Less(overlap.ts) {
+			overlap.updateTS = updateTS
 			todoRange.Start = overlap.keys.End
-			return continueMatch
+			return ContinueMatch
 		}
 
 		// At this point, we know that overlap timestamp is not ahead of the insertTS
@@ -333,7 +347,7 @@ func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 			consumePrefix(overlap.keys.End)
 		}
 
-		return continueMatch
+		return ContinueMatch
 	}, span.AsRange())
 
 	// Add remaining pending range.
@@ -356,16 +370,79 @@ func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 	return nil
 }
 
+// An Operation is a function that operates on a frontier spans. If done is returned true, the
+// Operation is indicating that no further work needs to be done and so the DoMatching function
+// should traverse no further.
+type Operation func(roachpb.Span, hlc.Timestamp) (done bool)
+
+const (
+	// ContinueMatch signals DoMatching should continue.
+	ContinueMatch = false
+	// StopMatch signals DoMatching should stop.
+	StopMatch = true
+)
+
 // Entries invokes the given callback with the current timestamp for each
 // component span in the tracked span set.
-func (f *Frontier) Entries(fn func(roachpb.Span, hlc.Timestamp)) {
+func (f *Frontier) Entries(fn Operation) {
 	f.tree.Do(func(i interval.Interface) bool {
 		spe := i.(*frontierEntry)
-		fn(spe.span, spe.ts)
-		return false
+		return fn(spe.span, spe.ts)
 	})
 }
 
+// UpdatedEntries is similar to Entries, but invokes provided fn only if
+// the span update timestamp is newer than cutoff.
+func (f *Frontier) UpdatedEntries(cutoff hlc.Timestamp, fn Operation) {
+	f.tree.Do(func(i interval.Interface) bool {
+		e := i.(*frontierEntry)
+		if cutoff.Less(e.updateTS) {
+			return fn(e.span, e.ts)
+		}
+		return ContinueMatch
+	})
+}
+
+// SpanEntries invokes op for each sub-span of the specified span with the
+// timestamp as observed by this frontier.
+//
+// Time
+// 5|      .b__c               .
+// 4|      .             h__k  .
+// 3|      .      e__f         .
+// 1 ---a----------------------m---q-- Frontier
+//      |___________span___________|
+//
+// In the above example, frontier tracks [b, m) and the current frontier
+// timestamp is 1.  SpanEntries for span [a-q) will invoke op with:
+//   ([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
+// Note: neither [a-b) nor [m, q) will be emitted since they fall outside the spans
+// tracked by this frontier.
+func (f *Frontier) SpanEntries(span roachpb.Span, op Operation) {
+	todoRange := span.AsRange()
+
+	f.tree.DoMatching(func(i interval.Interface) bool {
+		e := i.(*frontierEntry)
+
+		// Skip untracked portion.
+		if todoRange.Start.Compare(e.keys.Start) < 0 {
+			todoRange.Start = e.keys.Start
+		}
+
+		end := e.keys.End
+		if e.keys.End.Compare(todoRange.End) > 0 {
+			end = todoRange.End
+		}
+
+		if op(roachpb.Span{Key: roachpb.Key(todoRange.Start), EndKey: roachpb.Key(end)}, e.ts) == StopMatch {
+			return StopMatch
+		}
+		todoRange.Start = end
+		return ContinueMatch
+	}, span.AsRange())
+}
+
+// String implements Stringer.
 func (f *Frontier) String() string {
 	var buf strings.Builder
 	f.tree.Do(func(i interval.Interface) bool {
