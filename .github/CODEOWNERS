@@ -26,10 +26,16 @@
 /pkg/sql/parser/             @cockroachdb/sql-syntax-prs
 /pkg/sql/lex/                @cockroachdb/sql-syntax-prs
 /pkg/sql/show_create*.go     @cockroachdb/sql-syntax-prs
+/pkg/sql/types/              @cockroachdb/sql-syntax-prs
 
 /pkg/sql/crdb_internal.go    @cockroachdb/sql-api-prs
 /pkg/sql/pg_catalog.go       @cockroachdb/sql-api-prs
+/pkg/sql/pgwire/             @cockroachdb/sql-api-prs
 /pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
+/pkg/sql/vtable/             @cockroachdb/sql-api-prs
+
+/pkg/sql/sessiondata/        @cockroachdb/sql-experience
+/pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
 
 /pkg/cli/                    @cockroachdb/cli-prs
 # last-rule-wins so bulk i/o takes userfile.go even though cli-prs takes pkg/cli
@@ -74,6 +80,7 @@
 /pkg/acceptance/             @cockroachdb/sql-experience
 /pkg/base/                   @cockroachdb/server-prs
 /pkg/bench/                  @cockroachdb/sql-queries
+/pkg/bench/ddl_analysis      @cockroachdb/sql-experience
 /pkg/blobs/                  @cockroachdb/bulk-prs
 /pkg/build/                  @cockroachdb/dev-inf
 /pkg/ccl/baseccl/            @cockroachdb/cli-prs
