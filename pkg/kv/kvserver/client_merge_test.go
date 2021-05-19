@@ -4968,7 +4968,7 @@ func setupClusterWithSubsumedRange(
 	errCh := make(chan error)
 	blocker := filter.BlockNextMerge()
 	go func() {
-		errCh <- mergeTxn(ctx, store, *lhsDesc)
+		errCh <- mergeWithRightNeighbor(ctx, store, *lhsDesc)
 	}()
 	defer func() {
 		// Ensure that the request doesn't stay blocked if we fail.

@@ -724,6 +724,10 @@ func (r *Replica) requestLeaseLocked(
 			return r.mu.pendingLeaseRequest.newResolvedHandle(err)
 		}
 	}
+	if pErr := r.store.TestingKnobs().PinnedLeases.rejectLeaseIfPinnedElsewhere(r); pErr != nil {
+		return r.mu.pendingLeaseRequest.newResolvedHandle(pErr)
+	}
+
 	// If we're draining, we'd rather not take any new leases (since we're also
 	// trying to move leases away elsewhere). But if we're the leader, we don't
 	// really have a choice and we take the lease - there might not be any other
@@ -1057,6 +1061,14 @@ func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{})
+}
+
+// TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
+func (r *Replica) TestingAcquireLease(ctx context.Context) (kvserverpb.LeaseStatus, error) {
+	ctx = r.AnnotateCtx(ctx)
+	ctx = logtags.AddTag(ctx, "lease-acq", nil)
+	l, pErr := r.redirectOnOrAcquireLease(ctx)
+	return l, pErr.GoError()
 }
 
 // redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
