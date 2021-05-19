@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -140,10 +141,6 @@ func desc(nid roachpb.NodeID, sid roachpb.StoreID) roachpb.ReplicaDescriptor {
 	return roachpb.ReplicaDescriptor{NodeID: nid, StoreID: sid}
 }
 
-func addr(nid roachpb.NodeID, sid roachpb.StoreID) util.UnresolvedAddr {
-	return util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:%d", nid, sid))
-}
-
 func locality(t *testing.T, locStrs []string) roachpb.Locality {
 	var locality roachpb.Locality
 	for _, l := range locStrs {
@@ -160,19 +157,18 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 	return locality
 }
 
-func nodeDesc(
-	t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string,
-) *roachpb.NodeDescriptor {
+func nodeDesc(t *testing.T, nid roachpb.NodeID, locStrs []string) *roachpb.NodeDescriptor {
 	return &roachpb.NodeDescriptor{
+		NodeID:   nid,
 		Locality: locality(t, locStrs),
-		Address:  addr(nid, sid),
+		Address:  util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:26257", nid)),
 	}
 }
 
 func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
 	return ReplicaInfo{
 		ReplicaDescriptor: desc(nid, sid),
-		NodeDesc:          nodeDesc(t, nid, sid, locStrs),
+		NodeDesc:          nodeDesc(t, nid, locStrs),
 	}
 }
 
@@ -180,60 +176,65 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
-		name       string
-		node       *roachpb.NodeDescriptor
-		latencies  map[string]time.Duration
-		slice      ReplicaSlice
-		expOrdered ReplicaSlice
+		name string
+		node *roachpb.NodeDescriptor
+		// map from node address (see nodeDesc()) to latency to that node.
+		latencies map[string]time.Duration
+		slice     ReplicaSlice
+		// expOrder is the expected order in which the replicas sort. Replicas are
+		// only identified by their node. If multiple replicas are on different
+		// stores of the same node, the node only appears once in this list (as the
+		// ordering between replicas on the same node is not deterministic).
+		expOrdered []roachpb.NodeID
 	}{
 		{
 			name: "order by locality matching",
-			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
-			slice: ReplicaSlice{
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-			},
-			expOrdered: ReplicaSlice{
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-			},
-		},
-		{
-			name: "order by locality matching, put node first",
-			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
 			slice: ReplicaSlice{
 				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
+				info(t, 3, 33, []string{"country=uk", "city=london"}),
 				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
 			},
-			expOrdered: ReplicaSlice{
-				info(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-			},
+			expOrdered: []roachpb.NodeID{1, 2, 4, 3},
 		},
 		{
 			name: "order by latency",
-			node: nodeDesc(t, 1, 1, []string{"country=us", "region=west", "city=la"}),
+			node: nodeDesc(t, 1, []string{"country=us", "region=west", "city=la"}),
 			latencies: map[string]time.Duration{
-				"2:2": time.Hour,
-				"3:3": time.Minute,
-				"4:4": time.Second,
+				"2:26257": time.Hour,
+				"3:26257": time.Minute,
+				"4:26257": time.Second,
 			},
 			slice: ReplicaSlice{
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
 				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
+				info(t, 4, 44, []string{"country=us", "region=east", "city=ny"}),
 				info(t, 3, 3, []string{"country=uk", "city=london"}),
 			},
-			expOrdered: ReplicaSlice{
-				info(t, 4, 4, []string{"country=us", "region=east", "city=ny"}),
-				info(t, 3, 3, []string{"country=uk", "city=london"}),
-				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
+			expOrdered: []roachpb.NodeID{4, 3, 2},
+		},
+		{
+			// Test that replicas on the local node sort first, regardless of factors
+			// like their latency measurement (in production they won't have any
+			// latency measurement).
+			name: "local node comes first",
+			node: nodeDesc(t, 1, nil),
+			latencies: map[string]time.Duration{
+				"1:26257": 10 * time.Hour,
+				"2:26257": time.Hour,
+				"3:26257": time.Minute,
+				"4:26257": time.Second,
 			},
+			slice: ReplicaSlice{
+				info(t, 1, 1, nil),
+				info(t, 1, 2, nil),
+				info(t, 2, 2, nil),
+				info(t, 3, 3, nil),
+				info(t, 4, 4, nil),
+			},
+			expOrdered: []roachpb.NodeID{1, 4, 3, 2},
 		},
 	}
 	for _, test := range testCases {
@@ -245,9 +246,19 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 					return lat, ok
 				}
 			}
+			// Randomize the input order, as it's not supposed to matter.
+			shuffle.Shuffle(test.slice)
 			test.slice.OptimizeReplicaOrder(test.node, latencyFn)
-			if !reflect.DeepEqual(test.slice, test.expOrdered) {
-				t.Errorf("expected order %+v; got %+v", test.expOrdered, test.slice)
+			var sortedNodes []roachpb.NodeID
+			sortedNodes = append(sortedNodes, test.slice[0].NodeID)
+			for i := 1; i < len(test.slice); i++ {
+				l := len(sortedNodes)
+				if nid := test.slice[i].NodeID; nid != sortedNodes[l-1] {
+					sortedNodes = append(sortedNodes, nid)
+				}
+			}
+			if !reflect.DeepEqual(sortedNodes, test.expOrdered) {
+				t.Errorf("expected node order %+v; got %+v", test.expOrdered, test.slice)
 			}
 		})
 	}

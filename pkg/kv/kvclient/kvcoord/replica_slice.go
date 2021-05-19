@@ -206,12 +206,21 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		shuffle.Shuffle(rs)
 		return
 	}
+
 	// Sort replicas by latency and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
-		// If there is a replica in local node, it sorts first.
-		if rs[i].NodeID == nodeDesc.NodeID {
-			return true
+		// Replicas on the same node have the same latency.
+		if rs[i].NodeID == rs[j].NodeID {
+			return false // i == j
 		}
+		// Replicas on the local node sort first.
+		if rs[i].NodeID == nodeDesc.NodeID {
+			return true // i < j
+		}
+		if rs[j].NodeID == nodeDesc.NodeID {
+			return false // j < i
+		}
+
 		if latencyFn != nil {
 			latencyI, okI := latencyFn(rs[i].addr())
 			latencyJ, okJ := latencyFn(rs[j].addr())
