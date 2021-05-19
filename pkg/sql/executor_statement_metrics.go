@@ -71,6 +71,21 @@ type phaseTimes [sessionNumPhases]time.Time
 // getServiceLatency returns the time between a query being received and the end
 // of run.
 func (p *phaseTimes) getServiceLatency() time.Duration {
+	// To have an accurate representation of how long it took to service this
+	// single query, we ignore the time between when parsing ends and planning
+	// begins. This avoids the latency being inflated in a few different cases:
+	// when there are internal transaction retries, and when multiple statements
+	// are submitted together, e.g. "SELECT 1; SELECT 2".
+	//
+	// If we're executing a portal, parsing end time will be zero, so
+	// subtracting the actual time at which the query was received will produce
+	// a negative value which doesn't make sense.
+	var queryReceivedTime time.Time
+	if p[sessionEndParse].IsZero() {
+		queryReceivedTime = p[sessionStartParse]
+	} else {
+		queryReceivedTime = p[sessionQueryReceived]
+	}
 	// Ideally, service latency would always be defined as:
 	// p[sessionQueryServiced] - p[sessionQueryReceived]. Unfortunately, this
 	// isn't always possible with the current structure of the code, as the
@@ -83,10 +98,13 @@ func (p *phaseTimes) getServiceLatency() time.Duration {
 	// phase is unset for queries that don't go through the execution engine (such
 	// as observer statements, prepare statements etc.), so simply relying on the
 	// second calculation isn't an option either.
-	if !p[sessionQueryServiced].IsZero() {
-		return p[sessionQueryServiced].Sub(p[sessionQueryReceived])
+	var queryServicedTime time.Time
+	if p[sessionQueryServiced].IsZero() {
+		queryServicedTime = p[plannerEndExecStmt]
+	} else {
+		queryServicedTime = p[sessionQueryServiced]
 	}
-	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
+	return p[sessionEndParse].Sub(queryReceivedTime) + queryServicedTime.Sub(p[plannerStartLogicalPlan])
 }
 
 // getRunLatency returns the time between a query execution starting and ending.
