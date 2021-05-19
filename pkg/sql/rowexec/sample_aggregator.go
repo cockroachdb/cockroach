@@ -143,14 +143,23 @@ func newSampleAggregator(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol], &s.memAcc, sampleCols)
+	if err := s.sr.Init(
+		int(spec.SampleSize), int(spec.MinSampleSize), input.OutputTypes()[:rankCol], &s.memAcc,
+		sampleCols,
+	); err != nil {
+		return nil, err
+	}
 	for i := range spec.InvertedSketches {
 		var sr stats.SampleReservoir
 		// The datums are converted to their inverted index bytes and
 		// sent as a single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		if err := sr.Init(
+			int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols,
+		); err != nil {
+			return nil, err
+		}
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		s.invSketch[col] = &sketchInfo{

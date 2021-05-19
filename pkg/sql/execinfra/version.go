@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 49
+const Version execinfrapb.DistSQLVersion = 50
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,10 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 48
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 50 (MinAcceptedVersion: 48)
+  - A new field, MinSampleSize, was added to both SamplerSpec and
+    SamplerAggregatorSpec to support dynamically shrinking sample sets.
 
 - Version: 49 (MinAcceptedVersion: 48)
   - A new field RemoteLookupExpr was added to JoinReaderSpec for supporting

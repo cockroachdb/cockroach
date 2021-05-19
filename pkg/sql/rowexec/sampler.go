@@ -145,7 +145,11 @@ func newSamplerProcessor(
 		// sent as single DBytes column.
 		var srCols util.FastIntSet
 		srCols.Add(0)
-		sr.Init(int(spec.SampleSize), bytesRowType, &s.memAcc, srCols)
+		if err := sr.Init(
+			int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols,
+		); err != nil {
+			return nil, err
+		}
 		col := spec.InvertedSketches[i].Columns[0]
 		s.invSr[col] = &sr
 		sketchSpec := spec.InvertedSketches[i]
@@ -159,7 +163,11 @@ func newSamplerProcessor(
 		}
 	}
 
-	s.sr.Init(int(spec.SampleSize), inTypes, &s.memAcc, sampleCols)
+	if err := s.sr.Init(
+		int(spec.SampleSize), int(spec.MinSampleSize), inTypes, &s.memAcc, sampleCols,
+	); err != nil {
+		return nil, err
+	}
 
 	outTypes := make([]*types.T, 0, len(inTypes)+7)
 
