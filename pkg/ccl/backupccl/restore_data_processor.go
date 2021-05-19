@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
@@ -46,8 +48,9 @@ type restoreDataProcessor struct {
 	// numWorkers is decide at processor start time. It controls the size of
 	// channels and the number of parallel workers sending AddSSTable requests in
 	// parallel.
-	numWorkers int
-	progCh     chan RestoreProgress
+	numWorkers            int
+	concurrentWorkerLimit *quotapool.IntPool
+	progCh                chan RestoreProgress
 	// Metas from the input are sent to the workers on this channel.
 	metaCh chan *execinfrapb.ProducerMetadata
 
@@ -63,9 +66,20 @@ const restoreDataProcName = "restoreDataProcessor"
 
 var numWorkersSetting = settings.RegisterIntSetting(
 	"kv.bulk_io_write.restore_node_concurrency",
-	"the number of workers per node processing a restore job",
+	fmt.Sprintf("the number of workers per node processing a restore job; maximum %d", maxConcurrentWorkers),
 	1,
+	func(v int64) error {
+		if v < 1 {
+			return errors.Errorf("cannot be set to a non-positive value: %d", v)
+		}
+		if v > maxConcurrentWorkers {
+			return errors.Errorf("cannot be set greater than %d", v)
+		}
+		return nil
+	},
 )
+
+const maxConcurrentWorkers = 32
 
 func newRestoreDataProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -75,16 +89,20 @@ func newRestoreDataProcessor(
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	numWorkers := numWorkersSetting.Get(&flowCtx.EvalCtx.Settings.SV)
-
 	rd := &restoreDataProcessor{
 		flowCtx: flowCtx,
 		input:   input,
 		spec:    spec,
 		output:  output,
-		progCh:  make(chan RestoreProgress, numWorkers),
+		progCh:  make(chan RestoreProgress, maxConcurrentWorkers),
 		metaCh:  make(chan *execinfrapb.ProducerMetadata, 1),
+		concurrentWorkerLimit: quotapool.NewIntPool("restore worker concurrency",
+			uint64(numWorkersSetting.Get(&flowCtx.EvalCtx.Settings.SV))),
 	}
+
+	numWorkersSetting.SetOnChange(&flowCtx.EvalCtx.Settings.SV, func() {
+		rd.concurrentWorkerLimit.UpdateCapacity(uint64(numWorkersSetting.Get(&flowCtx.EvalCtx.Settings.SV)))
+	})
 
 	var err error
 	rd.kr, err = storageccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
@@ -180,32 +198,52 @@ func inputReader(
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
-	numWorkers := numWorkersSetting.Get(&rd.flowCtx.EvalCtx.Settings.SV)
+	return ctxgroup.GroupWorkers(rd.Ctx, maxConcurrentWorkers, func(ctx context.Context, n int) error {
+		for {
+			// TODO: This would probably be more readable as a separate func.
+			done, err := func() (bool, error) {
+				alloc, err := rd.concurrentWorkerLimit.Acquire(ctx, 1)
+				if err != nil {
+					return false, err
+				}
+				defer rd.concurrentWorkerLimit.Release(alloc)
 
-	return ctxgroup.GroupWorkers(rd.Ctx, int(numWorkers), func(ctx context.Context, n int) error {
-		for entry := range entries {
-			newSpanKey, err := rewriteBackupSpanKey(rd.flowCtx.Codec(), rd.kr, entry.Span.Key)
-			if err != nil {
-				return errors.Wrap(err, "re-writing span key to import")
-			}
+				entry, ok := <-entries
+				if !ok {
+					return true, nil
+				}
 
-			summary, err := rd.processRestoreSpanEntry(entry, newSpanKey)
+				newSpanKey, err := rewriteBackupSpanKey(rd.flowCtx.Codec(), rd.kr, entry.Span.Key)
+				if err != nil {
+					return false, errors.Wrap(err, "re-writing span key to import")
+				}
+
+				summary, err := rd.processRestoreSpanEntry(entry, newSpanKey)
+				if err != nil {
+					return false, err
+				}
+
+				progDetails := RestoreProgress{}
+				progDetails.Summary = countRows(summary, rd.spec.PKIDs)
+				progDetails.ProgressIdx = entry.ProgressIdx
+				progDetails.DataSpan = entry.Span
+				select {
+				case rd.progCh <- progDetails:
+				case <-ctx.Done():
+					return false, ctx.Err()
+				}
+
+				return false, nil
+			}()
+
 			if err != nil {
 				return err
 			}
 
-			progDetails := RestoreProgress{}
-			progDetails.Summary = countRows(summary, rd.spec.PKIDs)
-			progDetails.ProgressIdx = entry.ProgressIdx
-			progDetails.DataSpan = entry.Span
-			select {
-			case rd.progCh <- progDetails:
-			case <-ctx.Done():
-				return ctx.Err()
+			if done {
+				return nil
 			}
 		}
-
-		return nil
 	})
 }
 
