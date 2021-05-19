@@ -51,6 +51,11 @@ type SampleReservoir struct {
 	ra       rowenc.EncDatumRowAlloc
 	memAcc   *mon.BoundAccount
 
+	// minNumSamples is the minimum capcity (K) needed for sampling to be
+	// meaningful. If the reservoir capacity would fall below this, SampleRow will
+	// err instead of decreasing it further.
+	minNumSamples int
+
 	// sampleCols contains the ordinals of columns that should be sampled from
 	// each row. Note that the sampled rows still contain all columns, but
 	// any columns not part of this set are given a null value.
@@ -61,9 +66,16 @@ var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
 func (sr *SampleReservoir) Init(
-	numSamples int, colTypes []*types.T, memAcc *mon.BoundAccount, sampleCols util.FastIntSet,
+	numSamples, minNumSamples int,
+	colTypes []*types.T,
+	memAcc *mon.BoundAccount,
+	sampleCols util.FastIntSet,
 ) {
+	if minNumSamples < 1 || minNumSamples > numSamples {
+		minNumSamples = numSamples
+	}
 	sr.samples = make([]SampledRow, 0, numSamples)
+	sr.minNumSamples = minNumSamples
 	sr.colTypes = colTypes
 	sr.memAcc = memAcc
 	sr.sampleCols = sampleCols
@@ -137,7 +149,7 @@ func (sr *SampleReservoir) MaybeResize(ctx context.Context, k int) bool {
 func (sr *SampleReservoir) retryMaybeResize(ctx context.Context, op func() error) error {
 	for {
 		if err := op(); err == nil || !sqlerrors.IsOutOfMemoryError(err) ||
-			len(sr.samples) <= 1 {
+			len(sr.samples) == 0 || len(sr.samples)/2 < sr.minNumSamples {
 			return err
 		}
 		// We've used too much memory. Remove half the samples and try again.
@@ -147,9 +159,9 @@ func (sr *SampleReservoir) retryMaybeResize(ctx context.Context, op func() error
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir. The
 // capacity of the reservoir (K) will shrink if it hits a memory limit. If
-// capacity goes below 1, SampleRow will return an error. If SampleRow returns
-// an error (any type of error), no additional calls to SampleRow should be made
-// as the failed samples will have introduced bias.
+// capacity goes below minNumSamples, SampleRow will return an error. If
+// SampleRow returns an error (any type of error), no additional calls to
+// SampleRow should be made as the failed samples will have introduced bias.
 func (sr *SampleReservoir) SampleRow(
 	ctx context.Context, evalCtx *tree.EvalContext, row rowenc.EncDatumRow, rank uint64,
 ) error {

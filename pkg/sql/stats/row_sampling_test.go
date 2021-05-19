@@ -30,7 +30,7 @@ import (
 func runSampleTest(t *testing.T, evalCtx *tree.EvalContext, numSamples int, ranks []int) {
 	ctx := context.Background()
 	var sr SampleReservoir
-	sr.Init(numSamples, []*types.T{types.Int}, nil /* memAcc */, util.MakeFastIntSet(0))
+	sr.Init(numSamples, 0, []*types.T{types.Int}, nil /* memAcc */, util.MakeFastIntSet(0))
 	for _, r := range ranks {
 		d := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
 		if err := sr.SampleRow(ctx, evalCtx, rowenc.EncDatumRow{d}, uint64(r)); err != nil {
