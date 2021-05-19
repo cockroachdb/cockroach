@@ -931,7 +931,14 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				}
 
 				stmtID := constructStatementIDFromStmtKey(stmtKey)
-				s, _, _ := appStats.getStatsForStmtWithKey(stmtKey, stmtID, true /* createIfNonexistent */)
+				s, _, _ := appStats.getStatsForStmtWithKey(stmtKey, stmtID, false /* createIfNonexistent */)
+
+				// If the key is not found (and we expected to find it), the table must
+				// have been cleared between now and the time we read all the keys. In
+				// that case we simply skip this key as there are no metrics to report.
+				if s == nil {
+					continue
+				}
 
 				s.mu.Lock()
 				errString := tree.DNull
