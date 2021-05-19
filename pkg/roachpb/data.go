@@ -871,7 +871,7 @@ func (v Value) PrettyPrint() string {
 }
 
 // Kind returns the kind of commit trigger as a string.
-func (ct InternalCommitTrigger) Kind() string {
+func (ct InternalCommitTrigger) Kind() redact.SafeString {
 	switch {
 	case ct.SplitTrigger != nil:
 		return "split"

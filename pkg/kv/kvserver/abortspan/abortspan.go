@@ -134,6 +134,7 @@ func (sc *AbortSpan) Put(
 	txnID uuid.UUID,
 	entry *roachpb.AbortSpanEntry,
 ) error {
+	log.VEventf(ctx, 2, "writing abort span entry for %s", txnID.Short())
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	return storage.MVCCPutProto(ctx, readWriter, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
 }

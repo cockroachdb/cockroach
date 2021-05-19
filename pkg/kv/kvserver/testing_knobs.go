@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // StoreTestingKnobs is a part of the context used to control parts of
@@ -92,6 +93,8 @@ type StoreTestingKnobs struct {
 	// called to acquire a new lease. This can be used to assert that a request
 	// triggers a lease acquisition.
 	LeaseRequestEvent func(ts hlc.Timestamp, storeID roachpb.StoreID, rangeID roachpb.RangeID) *roachpb.Error
+	// PinnedLeases can be used to prevent all but one store from acquiring leases on a given range.
+	PinnedLeases *PinnedLeasesKnob
 	// LeaseTransferBlockedOnExtensionEvent, if set, is called when
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
@@ -362,3 +365,60 @@ var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (NodeLivenessTestingKnobs) ModuleTestingKnobs() {}
+
+// PinnedLeasesKnob is a testing know for controlling what store can acquire a
+// lease for specific ranges.
+type PinnedLeasesKnob struct {
+	mu struct {
+		syncutil.Mutex
+		pinned map[roachpb.RangeID]roachpb.StoreID
+	}
+}
+
+// NewPinnedLeases creates a PinnedLeasesKnob.
+func NewPinnedLeases() *PinnedLeasesKnob {
+	p := &PinnedLeasesKnob{}
+	p.mu.pinned = make(map[roachpb.RangeID]roachpb.StoreID)
+	return p
+}
+
+// PinLease makes it so that only the specified store can take a lease for the
+// specified range. Replicas on other stores attempting to acquire a lease will
+// get NotLeaseHolderErrors. Lease transfers away from the pinned store are
+// permitted.
+func (p *PinnedLeasesKnob) PinLease(rangeID roachpb.RangeID, storeID roachpb.StoreID) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.pinned[rangeID] = storeID
+}
+
+// rejectLeaseIfPinnedElsewhere is called when r is trying to acquire a lease.
+// It returns a NotLeaseholderError if the lease is pinned on another store.
+// r.mu needs to be rlocked.
+func (p *PinnedLeasesKnob) rejectLeaseIfPinnedElsewhere(r *Replica) *roachpb.Error {
+	if p == nil {
+		return nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pinnedStore, ok := p.mu.pinned[r.RangeID]
+	if !ok || pinnedStore == r.StoreID() {
+		return nil
+	}
+
+	repDesc, err := r.getReplicaDescriptorRLocked()
+	if err != nil {
+		return roachpb.NewError(err)
+	}
+	var pinned *roachpb.ReplicaDescriptor
+	if pinnedRep, ok := r.descRLocked().GetReplicaDescriptor(pinnedStore); ok {
+		pinned = &pinnedRep
+	}
+	return roachpb.NewError(&roachpb.NotLeaseHolderError{
+		Replica:     repDesc,
+		LeaseHolder: pinned,
+		RangeID:     r.RangeID,
+		CustomMsg:   "injected: lease pinned to another store",
+	})
+}

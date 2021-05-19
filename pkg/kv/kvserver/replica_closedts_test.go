@@ -601,7 +601,7 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 			leaseAcqErrCh <- err
 			return
 		}
-		_, err = r.AcquireLease(ctx)
+		_, err = r.TestingAcquireLease(ctx)
 		leaseAcqErrCh <- err
 	}()
 	// Wait for the lease acquisition to be blocked.
