@@ -1049,6 +1049,37 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
+		{`index "sec" has column ID 2 present in: [ColumnIDs StoreColumnIDs]`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.FamilyFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"c1", "c2"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID: 1, Name: "pri", ColumnIDs: []descpb.ColumnID{1},
+					ColumnNames:      []string{"c1"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{ID: 2, Name: "sec", ColumnIDs: []descpb.ColumnID{2},
+						ColumnNames:      []string{"c2"},
+						ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						StoreColumnNames: []string{"c2"},
+						StoreColumnIDs:   []descpb.ColumnID{2},
+						Version:          descpb.StrictIndexColumnIDGuaranteesVersion,
+					},
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  3,
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
