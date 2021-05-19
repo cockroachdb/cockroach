@@ -20,7 +20,7 @@
 cockroachdb/docs:
   triage_column_id: 3971225
 cockroachdb/sql-experience:
-  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sqlproxy-prs]
+  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sqlproxy-prs, cockroachdb/sql-api-prs]
   triage_column_id: 7259065
 cockroachdb/sql-schema:
   triage_column_id: 8946818
@@ -28,7 +28,6 @@ cockroachdb/sql-queries:
   aliases: [cockroachdb/sql-optimizer, cockroachdb/sql-opt-prs]
   triage_column_id: 13549252
 cockroachdb/sql-observability:
-  aliases: [cockroachdb/sql-api-prs]
   triage_column_id: 12618343
 cockroachdb/kv:
   aliases: [cockroachdb/kv-triage]
