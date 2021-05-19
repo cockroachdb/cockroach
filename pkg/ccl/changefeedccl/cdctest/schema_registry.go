@@ -9,6 +9,7 @@
 package cdctest
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"net/http"
@@ -39,6 +40,19 @@ func MakeTestSchemaRegistry() *SchemaRegistry {
 	r.mu.subjects = make(map[string]int32)
 	r.server = httptest.NewServer(http.HandlerFunc(r.register))
 	return r
+}
+
+// MakeTestSchemaRegistryWithTLS creates and starts schema registry for tests with TLS enabled.
+func MakeTestSchemaRegistryWithTLS(certificate tls.Certificate) (*SchemaRegistry, error) {
+	r := &SchemaRegistry{}
+	r.mu.schemas = make(map[int32]string)
+	r.mu.subjects = make(map[string]int32)
+	r.server = httptest.NewUnstartedServer(http.HandlerFunc(r.register))
+	r.server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+	}
+	r.server.StartTLS()
+	return r, nil
 }
 
 // Close closes this schema registry.

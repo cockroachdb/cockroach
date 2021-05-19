@@ -2545,6 +2545,38 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
 	)
+
+	// Sanity check kafka registry tls parameters.
+	sqlDB.ExpectErr(
+		t, `WITH option confluent_schema_registry is required for param registry_ca_cert and registry_tls_enabled`,
+		`CREATE CHANGEFEED FOR foo INTO $1`,
+		`kafka://nope/?registry_tls_enabled=true`,
+	)
+	sqlDB.ExpectErr(
+		t, `WITH option confluent_schema_registry is required for param registry_ca_cert and registry_tls_enabled`,
+		`CREATE CHANGEFEED FOR foo INTO $1`,
+		`kafka://nope/?registry_ca_cert=Zm9v`,
+	)
+	sqlDB.ExpectErr(
+		t, `param registry_tls_enabled must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`kafka://nope/?registry_tls_enabled=!`, `schemareg-nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `param registry_ca_cert must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`kafka://nope/?registry_ca_cert=!`, `schemareg-nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `registry_ca_cert requires registry_tls_enabled=true`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`kafka://nope/?registry_ca_cert=Zm9v`, `schemareg-nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `failed to parse certificate data`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`kafka://nope/?registry_ca_cert=Zm9v&registry_tls_enabled=true`, `schemareg-nope`,
+	)
 }
 
 func TestChangefeedDescription(t *testing.T) {

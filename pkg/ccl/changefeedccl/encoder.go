@@ -83,12 +83,14 @@ type Encoder interface {
 	EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error)
 }
 
-func getEncoder(opts map[string]string, targets jobspb.ChangefeedTargets) (Encoder, error) {
+func getEncoder(
+	opts map[string]string, targets jobspb.ChangefeedTargets, u *sinkURL,
+) (Encoder, error) {
 	switch changefeedbase.FormatType(opts[changefeedbase.OptFormat]) {
 	case ``, changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro:
-		return newConfluentAvroEncoder(opts, targets)
+		return newConfluentAvroEncoder(opts, targets, u)
 	case changefeedbase.OptFormatNative:
 		return &nativeEncoder{}, nil
 	default:
@@ -282,6 +284,8 @@ type confluentAvroEncoder struct {
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
+
+	httpClient *httputil.Client
 }
 
 type tableIDAndVersion uint64
@@ -304,9 +308,18 @@ type confluentRegisteredEnvelopeSchema struct {
 var _ Encoder = &confluentAvroEncoder{}
 
 func newConfluentAvroEncoder(
-	opts map[string]string, targets jobspb.ChangefeedTargets,
+	opts map[string]string, targets jobspb.ChangefeedTargets, u *sinkURL,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{registryURL: opts[changefeedbase.OptConfluentSchemaRegistry]}
+
+	if u != nil {
+		err := e.setupHTTPClient(*u)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		e.httpClient = httputil.DefaultClient
+	}
 
 	e.schemaPrefix = opts[changefeedbase.OptAvroSchemaPrefix]
 	e.targets = targets
@@ -343,6 +356,41 @@ func newConfluentAvroEncoder(
 	e.valueCache = make(map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
 	return e, nil
+}
+
+// Setup the httputil.Client to use when dialing Confluent schema registry. If `registry_client_cert`
+// and `registry_client_key` are set as query params in the sinkURL, client should trust the corresponding
+// cert while dialing. Otherwise, use the DefaultConfig.
+func (e *confluentAvroEncoder) setupHTTPClient(u sinkURL) error {
+
+	var tlsEnabled bool
+	var caCert []byte
+
+	if tlsEnabledString := u.consumeParam(changefeedbase.SinkParamRegistryTLSEnabled); tlsEnabledString != "" {
+		_, err := strToBool(tlsEnabledString, &tlsEnabled)
+		if err != nil {
+			return errors.Wrapf(err, `param %s must be a bool`, changefeedbase.SinkParamRegistryTLSEnabled)
+		}
+	}
+	if caCertString := u.consumeParam(changefeedbase.SinkParamRegistryCACert); caCertString != "" {
+		err := decodeBase64FromString(caCertString, &caCert)
+		if err != nil {
+			return errors.Wrapf(err, `param %s must be base 64 encoded`, changefeedbase.SinkParamRegistryCACert)
+		}
+	}
+
+	if tlsEnabled {
+		var err error
+		e.httpClient, err = newClientFromTLSKeyPair(caCert)
+		if err != nil {
+			return err
+		}
+	} else if caCert != nil {
+		return errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamRegistryCACert, changefeedbase.SinkParamRegistryTLSEnabled)
+	} else {
+		e.httpClient = httputil.DefaultClient
+	}
+	return nil
 }
 
 // Get the raw SQL-formatted string for a table name
@@ -529,7 +577,7 @@ func (e *confluentAvroEncoder) register(
 	// actionable issues in the operator's environment that which they might be
 	// able to resolve if we made them visible in a failure instead.
 	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), 3, func() error {
-		resp, err := httputil.Post(ctx, url.String(), confluentSchemaContentType, &buf)
+		resp, err := e.httpClient.Post(ctx, url.String(), confluentSchemaContentType, &buf)
 		if err != nil {
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}

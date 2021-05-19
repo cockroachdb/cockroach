@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -156,8 +157,12 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
-	var err error
-	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.Targets); err != nil {
+	parsedSink, err := url.Parse(spec.Feed.SinkURI)
+	if err != nil {
+		return nil, err
+	}
+
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.Targets, &sinkURL{URL: parsedSink}); err != nil {
 		return nil, err
 	}
 
@@ -1000,8 +1005,12 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	var err error
-	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.Targets); err != nil {
+	parsedSink, err := url.Parse(spec.Feed.SinkURI)
+	if err != nil {
+		return nil, err
+	}
+
+	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.Targets, &sinkURL{URL: parsedSink}); err != nil {
 		return nil, err
 	}
 

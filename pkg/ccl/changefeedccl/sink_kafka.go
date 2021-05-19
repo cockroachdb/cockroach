@@ -12,9 +12,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -457,12 +455,11 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 
 	consumeBool := func(param string, dest *bool) (wasSet bool, err error) {
 		if paramVal := u.consumeParam(param); paramVal != "" {
-			b, err := strconv.ParseBool(paramVal)
+			wasSet, err := strToBool(paramVal, dest)
 			if err != nil {
 				return false, errors.Wrapf(err, "param %s must be a bool", param)
 			}
-			*dest = b
-			return true, nil
+			return wasSet, err
 		}
 		return false, nil
 	}
@@ -474,14 +471,10 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		//  `_`. Consider always doing this for the user and accepting either
 		//  variant.
 		val := u.consumeParam(param)
-		if val == `` {
-			return nil
-		}
-		decoded, err := base64.StdEncoding.DecodeString(val)
+		err := decodeBase64FromString(val, dest)
 		if err != nil {
 			return errors.Wrapf(err, `param %s must be base 64 encoded`, param)
 		}
-		*dest = decoded
 		return nil
 	}
 
@@ -546,6 +539,15 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 		}
 		if dialConfig.saslPassword != `` {
 			return nil, errors.Errorf(`%s must be enabled if a SASL password is provided`, changefeedbase.SinkParamSASLEnabled)
+		}
+	}
+
+	registryCACert := u.consumeParam(changefeedbase.SinkParamRegistryCACert)
+	registryTLSEnabled := u.consumeParam(changefeedbase.SinkParamRegistryTLSEnabled)
+	if registryCACert != `` || registryTLSEnabled != `` {
+		if len(opts[changefeedbase.OptConfluentSchemaRegistry]) == 0 {
+			return nil, errors.Errorf(`WITH option %s is required for param %s and %s`,
+				changefeedbase.OptConfluentSchemaRegistry, changefeedbase.SinkParamRegistryCACert, changefeedbase.SinkParamRegistryTLSEnabled)
 		}
 	}
 

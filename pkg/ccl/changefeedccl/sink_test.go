@@ -563,7 +563,7 @@ func TestKafkaSinkTracksMemory(t *testing.T) {
 		changefeedbase.OptEnvelope:                string(changefeedbase.OptEnvelopeWrapped),
 		changefeedbase.OptConfluentSchemaRegistry: reg.URL(),
 	}
-	encoder, err := newConfluentAvroEncoder(opts, makeChangefeedTargets("t"))
+	encoder, err := newConfluentAvroEncoder(opts, makeChangefeedTargets("t"), nil)
 	require.NoError(t, err)
 	payload, err := encoder.EncodeResolvedTimestamp(ctx, "t", hlc.Timestamp{})
 	require.NoError(t, err)
