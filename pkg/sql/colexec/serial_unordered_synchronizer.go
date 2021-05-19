@@ -106,10 +106,10 @@ func (s *SerialUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata
 	return bufferedMeta
 }
 
-// Close is part of the Closer interface.
-func (s *SerialUnorderedSynchronizer) Close(ctx context.Context) error {
+// Close is part of the colexecop.ClosableOperator interface.
+func (s *SerialUnorderedSynchronizer) Close() error {
 	for _, input := range s.inputs {
-		input.ToClose.CloseAndLogOnErr(ctx, "serial unordered synchronizer")
+		input.ToClose.CloseAndLogOnErr(s.EnsureCtx(), "serial unordered synchronizer")
 	}
 	if s.span != nil {
 		s.span.Finish()

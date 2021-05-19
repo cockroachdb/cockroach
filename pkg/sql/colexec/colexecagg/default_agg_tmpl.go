@@ -207,9 +207,9 @@ func (a *default_AGGKINDAggAlloc) newAggFunc() AggregateFunc {
 	return f
 }
 
-func (a *default_AGGKINDAggAlloc) Close(ctx context.Context) error {
+func (a *default_AGGKINDAggAlloc) Close() error {
 	for _, fn := range a.returnedFns {
-		fn.fn.Close(ctx)
+		fn.fn.Close(fn.ctx)
 	}
 	a.returnedFns = nil
 	return nil

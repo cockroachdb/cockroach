@@ -405,9 +405,9 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	return bufferedMeta
 }
 
-func (o *OrderedSynchronizer) Close(ctx context.Context) error {
+func (o *OrderedSynchronizer) Close() error {
 	for _, input := range o.inputs {
-		input.ToClose.CloseAndLogOnErr(ctx, "ordered synchronizer")
+		input.ToClose.CloseAndLogOnErr(o.EnsureCtx(), "ordered synchronizer")
 	}
 	if o.span != nil {
 		o.span.Finish()

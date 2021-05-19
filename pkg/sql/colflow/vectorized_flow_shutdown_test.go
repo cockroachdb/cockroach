@@ -60,7 +60,9 @@ type callbackCloser struct {
 	closeCb func() error
 }
 
-func (c callbackCloser) Close(_ context.Context) error {
+var _ colexecop.Closer = callbackCloser{}
+
+func (c callbackCloser) Close() error {
 	return c.closeCb()
 }
 
