@@ -21,8 +21,8 @@ def go_deps():
         name = "co_honnef_go_tools",
         build_file_proto_mode = "disable_global",
         importpath = "honnef.co/go/tools",
-        sum = "h1:W18jzjh8mfPez+AwGLxmOImucz/IFjpNlrKVnaj2YVc=",
-        version = "v0.0.1-2020.1.6",
+        sum = "h1:qTakTkI6ni6LFD5sBwwsdSO+AQqbSIxOauHTTQKZ/7o=",
+        version = "v0.1.3",
     )
     go_repository(
         name = "com_github_abourget_teamcity",
@@ -579,8 +579,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:ejPG0gvsvhvxflGd33OK/B/jqhcFZaGSoTKaQUYC9Sk=",
-        version = "v0.0.0-20210503173641-1387689d3d7c",
+        sum = "h1:jca8DfjKlAVNjS/LvpujNo0vhi6NQVJ1AIPW1pTUpq8=",
+        version = "v0.0.0-20210518170852-86efa0d0ce7b",
     )
 
     go_repository(
@@ -3283,8 +3283,8 @@ def go_deps():
         name = "com_github_rs_zerolog",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rs/zerolog",
-        sum = "h1:uPRuwkWF4J6fGsJ2R0Gn2jB1EQiav9k3S6CSdygQJXY=",
-        version = "v1.15.0",
+        sum = "h1:Q3vdXlfLNT+OftyBHsU0Y445MD+8m8axjKgf2si0QcM=",
+        version = "v1.21.0",
     )
     go_repository(
         name = "com_github_russross_blackfriday",
@@ -3859,8 +3859,8 @@ def go_deps():
         name = "com_shuralyov_dmitri_gpu_mtl",
         build_file_proto_mode = "disable_global",
         importpath = "dmitri.shuralyov.com/gpu/mtl",
-        sum = "h1:VpgP7xuJadIUuKccphEpTJnWhS2jkQyMt6Y7pJCD7fY=",
-        version = "v0.0.0-20190408044501-666a987793e9",
+        sum = "h1:+PdD6GLKejR9DizMAKT5DpSAkKswvZrurk1/eEt9+pw=",
+        version = "v0.0.0-20201218220906-28db891af037",
     )
     go_repository(
         name = "in_gopkg_alecthomas_kingpin_v2",
@@ -4277,8 +4277,8 @@ def go_deps():
         name = "org_golang_x_exp",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/exp",
-        sum = "h1:rMqLP+9XLy+LdbCXHjJHAmTfXCr93W7oruWA6Hq1Alc=",
-        version = "v0.0.0-20200513190911-00229845015e",
+        sum = "h1:VqVU3dsTLGDa5pW74b+xG1lvKltt4EZIUrFPeKOqV2s=",
+        version = "v0.0.0-20210514180818-737f94c0881e",
     )
     go_repository(
         name = "org_golang_x_image",
@@ -4298,8 +4298,8 @@ def go_deps():
         name = "org_golang_x_mobile",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/mobile",
-        sum = "h1:4+4C/Iv2U4fMZBiMCc98MG1In4gJY5YRhtpDNeDeHWs=",
-        version = "v0.0.0-20190719004257-d2bd2a29d028",
+        sum = "h1:kgfVkAEEQXXQ0qc6dH7n6y37NAYmTFmz0YRwrRjgxKw=",
+        version = "v0.0.0-20201217150744-e6ae53a27f4f",
     )
     go_repository(
         name = "org_golang_x_mod",
@@ -4418,15 +4418,15 @@ def go_deps():
         name = "org_uber_go_atomic",
         build_file_proto_mode = "disable_global",
         importpath = "go.uber.org/atomic",
-        sum = "h1:Ezj3JGmsOnG1MoRWQkPBsKLe9DwWD9QeXzTRzzldNVk=",
-        version = "v1.6.0",
+        sum = "h1:ADUqmZGgLDDfbSL9ZmPxKTybcoEYHgpYfELNoN+7hsw=",
+        version = "v1.7.0",
     )
     go_repository(
         name = "org_uber_go_multierr",
         build_file_proto_mode = "disable_global",
         importpath = "go.uber.org/multierr",
-        sum = "h1:KCa4XfM8CWFCpxXRGok+Q0SS/0XBhMDbHHGABQLvD2A=",
-        version = "v1.5.0",
+        sum = "h1:y6IPFStTAIT5Ytl7/XYmHvzXQ7S3g/IeZW9hyZ5thw4=",
+        version = "v1.6.0",
     )
     go_repository(
         name = "org_uber_go_tools",
