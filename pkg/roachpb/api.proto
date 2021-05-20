@@ -1369,7 +1369,8 @@ message ExportRequest {
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
 
-  // Return the exported SST data in the response.
+  // Return the exported SST data in the response instead of writing it to a
+  // storage destination. Cannot be true if storage is also specified.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
 
   // EnableTimeBoundIteratorOptimization, if true, enables a performance

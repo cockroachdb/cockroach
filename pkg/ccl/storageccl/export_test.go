@@ -57,11 +57,16 @@ func TestExportCmd(t *testing.T) {
 				LocalFile: roachpb.ExternalStorage_LocalFilePath{Path: "/foo"},
 			},
 			MVCCFilter:     mvccFilter,
-			ReturnSST:      true,
 			TargetFileSize: ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
 		}
 		var h roachpb.Header
 		h.TargetBytes = maxResponseSSTBytes
+		// If we're trying to test pagination, we need to request returned SSTs
+		// since only they have limits applied.
+		if maxResponseSSTBytes > 1 {
+			req.Storage = roachpb.ExternalStorage{}
+			req.ReturnSST = true
+		}
 		return kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), h, req)
 	}
 
@@ -78,19 +83,19 @@ func TestExportCmd(t *testing.T) {
 		for _, file := range res.(*roachpb.ExportResponse).Files {
 			paths = append(paths, file.Path)
 
-			sst, err := storage.NewMemSSTIterator(file.SST, false)
+			bytes := file.SST
+			if len(bytes) == 0 {
+				fileContents, err := ioutil.ReadFile(filepath.Join(dir, "foo", file.Path))
+				if err != nil {
+					t.Fatalf("%+v", err)
+				}
+				bytes = fileContents
+			}
+			sst, err := storage.NewMemSSTIterator(bytes, false)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
 			defer sst.Close()
-
-			fileContents, err := ioutil.ReadFile(filepath.Join(dir, "foo", file.Path))
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			if !bytes.Equal(fileContents, file.SST) {
-				t.Fatal("Returned SST and exported SST don't match!")
-			}
 			sst.SeekGE(storage.MVCCKey{Key: keys.MinKey})
 			for {
 				if valid, err := sst.Valid(); !valid || err != nil {
