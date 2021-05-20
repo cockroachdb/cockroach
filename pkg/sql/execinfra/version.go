@@ -39,17 +39,22 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 46
+const Version execinfrapb.DistSQLVersion = 47
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 44
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 47
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 47 (MinAcceptedVersion: 47)
+  - A new new synchronizer type (serial unordered) has been introduced
+    explicitly. Previously, this was represented as a serial ordered sync with
+    empty ordering.
 
 - Version: 46 (MinAcceptedVersion: 44)
   - A new field LookupExpr was added to JoinReaderSpec for supporting
