@@ -402,10 +402,12 @@ func (is *InputSyncSpec) summary(showTypes bool) (string, []string) {
 		}
 	}
 	switch is.Type {
-	case InputSyncSpec_UNORDERED:
+	case InputSyncSpec_PARALLEL_UNORDERED:
 		return "unordered", typs
 	case InputSyncSpec_ORDERED:
 		return "ordered", append(typs, is.Ordering.diagramString())
+	case InputSyncSpec_SERIAL_UNORDERED:
+		return "serial unordered", typs
 	default:
 		return "unknown", []string{}
 	}

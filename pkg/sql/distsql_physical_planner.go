@@ -2933,7 +2933,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	if firstNotWrapped != nil {
 		// We found a DistSQL-plannable subtree - create an input spec for it.
 		input = []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_UNORDERED,
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: p.GetResultTypes(),
 		}}
 	}
@@ -3600,7 +3600,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 					Node: nodeID,
 					Spec: execinfrapb.ProcessorSpec{
 						Input: []execinfrapb.InputSyncSpec{{
-							Type:        execinfrapb.InputSyncSpec_UNORDERED,
+							Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 							ColumnTypes: prevStageResultTypes,
 						}},
 						Core: execinfrapb.ProcessorCoreUnion{Windower: &windowerSpec},

@@ -55,7 +55,7 @@ func TestSetupFlowAfterDrain(t *testing.T) {
 			},
 			{
 				Input: []execinfrapb.InputSyncSpec{{
-					Type:    execinfrapb.InputSyncSpec_UNORDERED,
+					Type:    execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 					Streams: []execinfrapb.StreamEndpointSpec{{StreamID: 1, Type: execinfrapb.StreamEndpointSpec_REMOTE}},
 				}},
 				Core: execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
