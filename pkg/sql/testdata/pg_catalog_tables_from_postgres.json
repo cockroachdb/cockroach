@@ -1,5 +1,5 @@
 {
-  "pgVersion": "13.0",
+  "pgVersion": "13.2",
   "pgMetadata": {
     "pg_aggregate": {
       "aggcombinefn": {
