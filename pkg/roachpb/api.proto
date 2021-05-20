@@ -1932,6 +1932,7 @@ message Header {
   // - ScanRequest
   // - ReverseScanRequest
   // - DeleteRangeRequest
+  // - GetRequest
   // - RevertRangeRequest
   // - ResolveIntentRangeRequest
   //
