@@ -372,7 +372,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForAddColumn(
 	// ID and name.
 	idxID = b.nextIndexID(table)
 	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
-	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
+	newIdx.Name = tabledesc.GenerateUniqueName(
 		"new_primary_key",
 		func(name string) bool {
 			// TODO (lucy): Also check the new indexes specified in the targets.
@@ -444,7 +444,7 @@ func (b *buildContext) addOrUpdatePrimaryIndexTargetsForDropColumn(
 	// ID and name.
 	idxID = b.nextIndexID(table)
 	newIdx := protoutil.Clone(table.GetPrimaryIndex().IndexDesc()).(*descpb.IndexDescriptor)
-	newIdx.Name = tabledesc.GenerateUniqueConstraintName(
+	newIdx.Name = tabledesc.GenerateUniqueName(
 		"new_primary_key",
 		func(name string) bool {
 			// TODO (lucy): Also check the new indexes specified in the targets.

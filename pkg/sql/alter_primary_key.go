@@ -186,7 +186,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	// Make a new index that is suitable to be a primary index.
-	name := tabledesc.GenerateUniqueConstraintName(
+	name := tabledesc.GenerateUniqueName(
 		"new_primary_key",
 		nameExists,
 	)
@@ -484,7 +484,7 @@ func (p *planner) AlterPrimaryKey(
 			tabledesc.UpdateIndexPartitioning(&newIndex, newImplicitCols, newPartitioning)
 		}
 
-		newIndex.Name = tabledesc.GenerateUniqueConstraintName(basename, nameExists)
+		newIndex.Name = tabledesc.GenerateUniqueName(basename, nameExists)
 		if err := addIndexMutationWithSpecificPrimaryKey(ctx, tableDesc, &newIndex, newPrimaryIndexDesc); err != nil {
 			return err
 		}

@@ -259,7 +259,7 @@ func alterColumnTypeGeneral(
 		return err == nil
 	}
 
-	shadowColName := tabledesc.GenerateUniqueConstraintName(col.GetName(), nameExists)
+	shadowColName := tabledesc.GenerateUniqueName(col.GetName(), nameExists)
 
 	var newColComputeExpr *string
 	// oldCol still needs to have values written to it in case nodes read it from
@@ -273,7 +273,7 @@ func alterColumnTypeGeneral(
 	var inverseExpr string
 	if using != nil {
 		// Validate the provided using expr and ensure it has the correct type.
-		expr, _, err := schemaexpr.DequalifyAndValidateExpr(
+		expr, _, _, err := schemaexpr.DequalifyAndValidateExpr(
 			ctx,
 			tableDesc,
 			using,

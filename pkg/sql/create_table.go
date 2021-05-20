@@ -755,7 +755,7 @@ func ResolveUniqueWithoutIndexConstraint(
 		return err
 	}
 	if constraintName == "" {
-		constraintName = tabledesc.GenerateUniqueConstraintName(
+		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
@@ -955,7 +955,7 @@ func ResolveFK(
 	}
 	constraintName := string(d.Name)
 	if constraintName == "" {
-		constraintName = tabledesc.GenerateUniqueConstraintName(
+		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("fk_%s_ref_%s", string(d.FromCols[0]), target.Name),
 			func(p string) bool {
 				_, ok := constraintInfo[p]
@@ -1087,7 +1087,7 @@ func addIndexForFK(
 	constraintName string,
 	ts TableState,
 ) (descpb.IndexID, error) {
-	autoIndexName := tabledesc.GenerateUniqueConstraintName(
+	autoIndexName := tabledesc.GenerateUniqueName(
 		fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
 		func(name string) bool {
 			return tbl.ValidateIndexNameIsUnique(name) != nil
@@ -1888,8 +1888,9 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			// If the index is named, ensure that the name is unique.
-			// Unnamed indexes will be given a unique auto-generated name later on.
+			// If the index is named, ensure that the name is unique. Unnamed
+			// indexes will be given a unique auto-generated name later on when
+			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
@@ -1995,8 +1996,9 @@ func NewTableDesc(
 				// We will add the unique constraint below.
 				break
 			}
-			// If the index is named, ensure that the name is unique.
-			// Unnamed indexes will be given a unique auto-generated name later on.
+			// If the index is named, ensure that the name is unique. Unnamed
+			// indexes will be given a unique auto-generated name later on when
+			// AllocateIDs is called.
 			if d.Name != "" && desc.ValidateIndexNameIsUnique(d.Name.String()) != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 			}
@@ -2754,6 +2756,26 @@ func makeShardCheckConstraintDef(
 		},
 		Hidden: true,
 	}, nil
+}
+
+func makeExpressionBasedIndexVirtualColumn(
+	colName string, typ *types.T, expr tree.Expr,
+) *tree.ColumnTableDef {
+	c := &tree.ColumnTableDef{
+		Name:   tree.Name(colName),
+		Type:   typ,
+		Hidden: true,
+	}
+	c.Computed.Computed = true
+	c.Computed.Expr = expr
+	c.Computed.Virtual = true
+
+	// TODO(mgartner): If we can determine the expression will never evaluate to
+	// NULL, the optimizer might be able to better optimize queries using the
+	// expression-based index.
+	c.Nullable.Nullability = tree.Null
+
+	return c
 }
 
 // incTelemetryForNewColumn increments relevant telemetry every time a new column

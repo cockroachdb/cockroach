@@ -158,6 +158,12 @@ func (p *planner) setupFamilyAndConstraintForShard(
 func MakeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
+	// Replace expression index elements with hidden virtual computed columns.
+	// The virtual columns are added as mutation columns to tableDesc.
+	if err := replaceExpressionElemsWithVirtualCols(params, tableDesc, &n); err != nil {
+		return nil, err
+	}
+
 	// Ensure that the columns we want to index exist before trying to create the
 	// index.
 	if err := validateIndexColumnsExist(tableDesc, n.Columns); err != nil {
@@ -296,7 +302,7 @@ func MakeIndexDescriptor(
 func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
 	for _, column := range columns {
 		if column.Expr != nil {
-			return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
 		}
 		foundColumn, err := desc.FindColumnWithName(column.Column)
 		if err != nil {
@@ -309,6 +315,87 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 	return nil
 }
 
+// replaceExpressionElemsWithVirtualCols replaces each IndexElem in n with a
+// non-nil Expr with a virtual column with the same expression. The virtual
+// column is added to desc as a mutation column.
+func replaceExpressionElemsWithVirtualCols(
+	params runParams, desc *tabledesc.Mutable, n *tree.CreateIndex,
+) error {
+	tn, err := params.p.getQualifiedTableName(params.ctx, desc)
+	if err != nil {
+		return err
+	}
+
+	for i := range n.Columns {
+		elem := &n.Columns[i]
+		if elem.Expr != nil {
+			if !params.SessionData().EnableExpressionBasedIndexes {
+				return unimplemented.NewWithIssuef(9682, "only simple columns are supported as index elements")
+			}
+
+			if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.ExpressionBasedIndexes) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"version %v must be finalized to use expression-based indexes",
+					clusterversion.ExpressionBasedIndexes)
+			}
+
+			expr, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
+				params.ctx,
+				desc,
+				elem.Expr,
+				types.Any,
+				"index expression",
+				params.p.SemaCtx(),
+				tree.VolatilityImmutable,
+				tn,
+			)
+			if err != nil {
+				return err
+			}
+
+			// If a virtual column with the same expression already exists, use
+			// it instead of creating a new virtual column.
+			if col, ok := desc.FindVirtualColumnWithExpr(expr); ok {
+				elem.Column = col.ColName()
+				elem.Expr = nil
+				continue
+			}
+
+			// Otherwise, create a new virtual column and add it to the table
+			// descriptor.
+			colName := tabledesc.GenerateUniqueName("crdb_idx_expr", func(name string) bool {
+				_, err := desc.FindColumnWithName(tree.Name(name))
+				return err == nil
+			})
+			addCol := &tree.AlterTableAddColumn{
+				ColumnDef: makeExpressionBasedIndexVirtualColumn(colName, typ, elem.Expr),
+			}
+
+			// Add the virtual column to desc as a mutation column.
+			if err := params.p.addColumnImpl(
+				params,
+				&alterTableNode{
+					tableDesc: desc,
+					n: &tree.AlterTable{
+						Cmds: []tree.AlterTableCmd{addCol},
+					},
+				},
+				tn,
+				desc,
+				addCol,
+			); err != nil {
+				return err
+			}
+
+			// Set the column name and unset the expression.
+			elem.Column = tree.Name(colName)
+			elem.Expr = nil
+		}
+	}
+
+	return nil
+}
+
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because CREATE INDEX performs multiple KV operations on descriptors
 // and expects to see its own writes.
@@ -317,10 +404,10 @@ func (n *createIndexNode) ReadingOwnWrites() {}
 var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
-// setupShardedIndex updates the index descriptor with the relevant new column.
-// It also returns the column so it can be added to the table. It returns the
-// new column set for the index. This set must be used regardless of whether or
-// not there is a newly created column.
+// setupShardedIndex creates a shard column for the given index descriptor. It
+// returns the shard column, the new column list for the index, and a boolean
+// which is true if the shard column was newly created. If the shard column is
+// new, it is added to tableDesc.
 func setupShardedIndex(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,

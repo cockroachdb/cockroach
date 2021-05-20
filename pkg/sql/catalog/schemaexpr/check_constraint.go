@@ -89,7 +89,7 @@ func (b *CheckConstraintBuilder) Build(
 
 	// Verify that the expression results in a boolean and does not use
 	// invalid functions.
-	expr, colIDs, err := DequalifyAndValidateExpr(
+	expr, _, colIDs, err := DequalifyAndValidateExpr(
 		b.ctx,
 		b.desc,
 		c.Expr,
