@@ -98,14 +98,6 @@ func (si SensitiveInfo) GetScrubbedCopy() SensitiveInfo {
 	return output
 }
 
-// Add combines other into this TxnStats.
-func (s *TxnStats) Add(other TxnStats) {
-	s.TxnTimeSec.Add(other.TxnTimeSec, s.TxnCount, other.TxnCount)
-	s.TxnCount += other.TxnCount
-	s.ImplicitCount += other.ImplicitCount
-	s.CommittedCount += other.CommittedCount
-}
-
 // Add combines other into TransactionStatistics.
 func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	if other.MaxRetries > t.MaxRetries {

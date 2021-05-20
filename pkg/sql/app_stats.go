@@ -90,10 +90,9 @@ type appStats struct {
 	// reset, we never close this account.
 	acc mon.BoundAccount
 
-	st        *cluster.Settings
-	stmts     map[stmtKey]*stmtStats
-	txnCounts transactionCounts
-	txns      map[txnKey]*txnStats
+	st    *cluster.Settings
+	stmts map[stmtKey]*stmtStats
+	txns  map[txnKey]*txnStats
 }
 
 type txnStats struct {
@@ -172,14 +171,6 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.ContentionTime.Record(count, stats.ContentionTime.Seconds())
 	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
 	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
-}
-
-type transactionCounts struct {
-	mu struct {
-		syncutil.Mutex
-		// TODO(arul): Can we rename this without breaking stuff?
-		roachpb.TxnStats
-	}
 }
 
 // stmtStatsEnable determines whether to collect per-statement
@@ -575,16 +566,6 @@ func (a *appStats) Add(ctx context.Context, other *appStats) (err error) {
 		t.mu.Unlock()
 	}
 
-	// Create a copy of the other's transactions statistics.
-	other.txnCounts.mu.Lock()
-	txnStats := other.txnCounts.mu.TxnStats
-	other.txnCounts.mu.Unlock()
-
-	// Merge the transaction stats.
-	a.txnCounts.mu.Lock()
-	a.txnCounts.mu.TxnStats.Add(txnStats)
-	a.txnCounts.mu.Unlock()
-
 	return err
 }
 
@@ -593,45 +574,6 @@ func anonymizeStmt(ast tree.Statement) string {
 		return ""
 	}
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
-}
-
-func (s *transactionCounts) getStats() (
-	txnCount int64,
-	txnTimeAvg float64,
-	txnTimeVar float64,
-	committedCount int64,
-	implicitCount int64,
-) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	txnCount = s.mu.TxnCount
-	txnTimeAvg = s.mu.TxnTimeSec.Mean
-	txnTimeVar = s.mu.TxnTimeSec.GetVariance(txnCount)
-	committedCount = s.mu.CommittedCount
-	implicitCount = s.mu.ImplicitCount
-	return txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount
-}
-
-func (s *transactionCounts) recordTransactionCounts(
-	txnTimeSec float64, ev txnEvent, implicit bool,
-) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.TxnCount++
-	s.mu.TxnTimeSec.Record(s.mu.TxnCount, txnTimeSec)
-	if ev == txnCommit {
-		s.mu.CommittedCount++
-	}
-	if implicit {
-		s.mu.ImplicitCount++
-	}
-}
-
-func (a *appStats) recordTransactionCounts(txnTimeSec float64, ev txnEvent, implicit bool) {
-	if !txnStatsEnable.Get(&a.st.SV) {
-		return
-	}
-	a.txnCounts.recordTransactionCounts(txnTimeSec, ev, implicit)
 }
 
 // recordTransaction saves per-transaction statistics

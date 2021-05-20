@@ -1509,7 +1509,6 @@ func (ex *connExecutor) recordTransactionStart() (
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
-	implicit := ex.implicitTxn()
 
 	// Transaction received time is the time at which the statement that prompted
 	// the creation of this transaction was received.
@@ -1531,7 +1530,7 @@ func (ex *connExecutor) recordTransactionStart() (
 
 	onTxnFinish = func(ctx context.Context, ev txnEvent) {
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
-		err := ex.recordTransaction(ctx, ev, implicit, txnStart)
+		err := ex.recordTransaction(ctx, txnStart)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -1553,9 +1552,7 @@ func (ex *connExecutor) recordTransactionStart() (
 	return onTxnFinish, onTxnRestart
 }
 
-func (ex *connExecutor) recordTransaction(
-	ctx context.Context, ev txnEvent, implicit bool, txnStart time.Time,
-) error {
+func (ex *connExecutor) recordTransaction(ctx context.Context, txnStart time.Time) error {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
@@ -1568,9 +1565,6 @@ func (ex *connExecutor) recordTransaction(
 	return ex.statsCollector.recordTransaction(
 		ctx,
 		txnKey(ex.extraTxnState.transactionStatementsHash.Sum()),
-		txnTime.Seconds(),
-		ev,
-		implicit,
 		ex.extraTxnState.autoRetryCounter,
 		ex.extraTxnState.transactionStatementIDs,
 		txnServiceLat,

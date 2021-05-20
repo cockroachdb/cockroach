@@ -2494,9 +2494,6 @@ func (s *sqlStatsCollector) recordStatement(
 func (s *sqlStatsCollector) recordTransaction(
 	ctx context.Context,
 	key txnKey,
-	txnTimeSec float64,
-	ev txnEvent,
-	implicit bool,
 	retryCount int,
 	statementIDs []roachpb.StmtID,
 	serviceLat time.Duration,
@@ -2508,7 +2505,6 @@ func (s *sqlStatsCollector) recordTransaction(
 	rowsRead int64,
 	bytesRead int64,
 ) error {
-	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
 	return s.appStats.recordTransaction(
 		ctx, key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat,
 		numRows, collectedExecStats, execStats, rowsRead, bytesRead,

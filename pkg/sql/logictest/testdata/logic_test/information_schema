@@ -314,7 +314,6 @@ crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
 crdb_internal       node_transaction_statistics
 crdb_internal       node_transactions
-crdb_internal       node_txn_stats
 crdb_internal       partitions
 crdb_internal       predefined_comments
 crdb_internal       ranges
@@ -518,7 +517,6 @@ node_sessions
 node_statement_statistics
 node_transaction_statistics
 node_transactions
-node_txn_stats
 partitions
 predefined_comments
 ranges
@@ -741,7 +739,6 @@ system         crdb_internal       node_sessions                          SYSTEM
 system         crdb_internal       node_statement_statistics              SYSTEM VIEW  NO                  1
 system         crdb_internal       node_transaction_statistics            SYSTEM VIEW  NO                  1
 system         crdb_internal       node_transactions                      SYSTEM VIEW  NO                  1
-system         crdb_internal       node_txn_stats                         SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                             SYSTEM VIEW  NO                  1
 system         crdb_internal       predefined_comments                    SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                                 SYSTEM VIEW  NO                  1
@@ -2058,7 +2055,6 @@ NULL     public   system         crdb_internal       node_sessions              
 NULL     public   system         crdb_internal       node_statement_statistics              SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_transaction_statistics            SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NULL          YES
-NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NULL          YES
@@ -2507,7 +2503,6 @@ NULL     public   system         crdb_internal       node_sessions              
 NULL     public   system         crdb_internal       node_statement_statistics              SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_transaction_statistics            SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NULL          YES
-NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NULL          YES

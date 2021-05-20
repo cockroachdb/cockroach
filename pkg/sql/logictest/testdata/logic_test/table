@@ -571,7 +571,6 @@ node_sessions                          NULL
 node_statement_statistics              NULL
 node_transaction_statistics            NULL
 node_transactions                      NULL
-node_txn_stats                         NULL
 partitions                             NULL
 predefined_comments                    NULL
 ranges                                 NULL

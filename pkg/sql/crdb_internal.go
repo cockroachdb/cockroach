@@ -127,7 +127,6 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalTablesTableLastStatsID:           crdbInternalTablesTableLastStats,
 		catconstants.CrdbInternalTablesTableID:                    crdbInternalTablesTable,
 		catconstants.CrdbInternalTransactionStatsTableID:          crdbInternalTransactionStatisticsTable,
-		catconstants.CrdbInternalTxnStatsTableID:                  crdbInternalTxnStatsTable,
 		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
@@ -1139,61 +1138,6 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				}
 			}
 
-		}
-		return nil
-	},
-}
-
-var crdbInternalTxnStatsTable = virtualSchemaTable{
-	comment: `per-application transaction statistics (in-memory, not durable; local node only). ` +
-		`This table is wiped periodically (by default, at least every two hours)`,
-	schema: `
-CREATE TABLE crdb_internal.node_txn_stats (
-  node_id            INT NOT NULL,
-  application_name   STRING NOT NULL,
-  txn_count          INT NOT NULL,
-  txn_time_avg_sec   FLOAT NOT NULL,
-  txn_time_var_sec   FLOAT NOT NULL,
-  committed_count    INT NOT NULL,
-  implicit_count     INT NOT NULL
-)`,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireAdminRole(ctx, "access application statistics"); err != nil {
-			return err
-		}
-
-		sqlStats, err := getSQLStats(p, "crdb_internal.node_txn_stats")
-		if err != nil {
-			return err
-		}
-
-		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
-
-		// Retrieve the application names and sort them to ensure the
-		// output is deterministic.
-		var appNames []string
-		sqlStats.mu.Lock()
-		for n := range sqlStats.mu.apps {
-			appNames = append(appNames, n)
-		}
-		sqlStats.mu.Unlock()
-		sort.Strings(appNames)
-
-		for _, appName := range appNames {
-			appStats := sqlStats.getStatsForApplication(appName)
-			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txnCounts.getStats()
-			err := addRow(
-				tree.NewDInt(tree.DInt(nodeID)),
-				tree.NewDString(appName),
-				tree.NewDInt(tree.DInt(txnCount)),
-				tree.NewDFloat(tree.DFloat(txnTimeAvg)),
-				tree.NewDFloat(tree.DFloat(txnTimeVar)),
-				tree.NewDInt(tree.DInt(committedCount)),
-				tree.NewDInt(tree.DInt(implicitCount)),
-			)
-			if err != nil {
-				return err
-			}
 		}
 		return nil
 	},

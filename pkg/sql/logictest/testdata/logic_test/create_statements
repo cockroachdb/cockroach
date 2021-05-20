@@ -810,23 +810,6 @@ CREATE TABLE crdb_internal.node_transactions (
    num_retries INT8 NULL,
    num_auto_retries INT8 NULL
 )  {}  {}
-CREATE TABLE crdb_internal.node_txn_stats (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   txn_count INT8 NOT NULL,
-   txn_time_avg_sec FLOAT8 NOT NULL,
-   txn_time_var_sec FLOAT8 NOT NULL,
-   committed_count INT8 NOT NULL,
-   implicit_count INT8 NOT NULL
-)  CREATE TABLE crdb_internal.node_txn_stats (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   txn_count INT8 NOT NULL,
-   txn_time_avg_sec FLOAT8 NOT NULL,
-   txn_time_var_sec FLOAT8 NOT NULL,
-   committed_count INT8 NOT NULL,
-   implicit_count INT8 NOT NULL
-)  {}  {}
 CREATE TABLE crdb_internal.partitions (
    table_id INT8 NOT NULL,
    index_id INT8 NOT NULL,
