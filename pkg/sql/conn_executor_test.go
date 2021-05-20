@@ -885,7 +885,7 @@ func TestShowLastQueryStatistics(t *testing.T) {
 		resultColumns, err := rows.Columns()
 		require.NoError(t, err)
 
-		const expectedNumColumns = 4
+		const expectedNumColumns = 5
 		if len(resultColumns) != expectedNumColumns {
 			t.Fatalf(
 				"unexpected number of columns in result; expected %d, found %d",
@@ -898,11 +898,13 @@ func TestShowLastQueryStatistics(t *testing.T) {
 		var planLatency string
 		var execLatency string
 		var serviceLatency string
+		var postCommitJobsLatency string
 
 		rows.Next()
-		if err := rows.Scan(&parseLatency, &planLatency, &execLatency, &serviceLatency); err != nil {
-			t.Fatalf("unexpected error while reading last query statistics: %v", err)
-		}
+		err = rows.Scan(
+			&parseLatency, &planLatency, &execLatency, &serviceLatency, &postCommitJobsLatency,
+		)
+		require.NoError(t, err, "unexpected error while reading last query statistics")
 
 		parseInterval, err := tree.ParseDInterval(parseLatency)
 		require.NoError(t, err)
@@ -914,6 +916,9 @@ func TestShowLastQueryStatistics(t *testing.T) {
 		require.NoError(t, err)
 
 		serviceInterval, err := tree.ParseDInterval(serviceLatency)
+		require.NoError(t, err)
+
+		postCommitJobsInterval, err := tree.ParseDInterval(postCommitJobsLatency)
 		require.NoError(t, err)
 
 		if parseInterval.AsFloat64() <= 0 || parseInterval.AsFloat64() > 1 {
@@ -930,6 +935,10 @@ func TestShowLastQueryStatistics(t *testing.T) {
 
 		if tc.usesExecEngine && (execInterval.AsFloat64() <= 0 || execInterval.AsFloat64() > 1) {
 			t.Fatalf("unexpected execution latency: %v", execInterval.AsFloat64())
+		}
+
+		if postCommitJobsInterval.AsFloat64() < 0 || postCommitJobsInterval.AsFloat64() > 1 {
+			t.Fatalf("unexpected post commit jobs latency: %v", execInterval.AsFloat64())
 		}
 
 		if rows.Next() {
