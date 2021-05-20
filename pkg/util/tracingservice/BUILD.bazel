@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracingservice",
+    srcs = [
+        "client.go",
+        "service.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracingservice",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/migration/migrationcluster",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/tracingservice/tracingservicepb:tracingservicepb_go_proto",
+    ],
+)
+
+go_test(
+    name = "tracingservice_test",
+    srcs = [
+        "client_test.go",
+        "service_test.go",
+    ],
+    embed = [":tracingservice"],
+    deps = [
+        "//pkg/migration/nodelivenesstest",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/netutil",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/tracingservice/tracingservicepb:tracingservicepb_go_proto",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_pkg_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
