@@ -151,6 +151,14 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 				a.pred.prepareRow(a.run.out, a.run.leftRow, rrow)
 				return true, nil
 			}
+
+			// We're either out of right side rows or we broke out of the loop
+			// before consuming all right rows because we found a match for an
+			// anti or semi join. Clear the right rows to prepare them for the
+			// next left row.
+			if err := a.clearRightRows(params); err != nil {
+				return false, err
+			}
 		}
 		// We're out of right side rows. Reset the match state for next time.
 		foundAMatch := a.run.leftRowFoundAMatch
@@ -217,20 +225,23 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 	}
 }
 
+// clearRightRows clears rightRows and resets rightRowsIterator. This function
+// must be called before reusing rightRows and rightRowIterator.
+func (a *applyJoinNode) clearRightRows(params runParams) error {
+	if err := a.run.rightRows.clear(params.ctx); err != nil {
+		return err
+	}
+	a.run.rightRowsIterator.close()
+	a.run.rightRowsIterator = nil
+	return nil
+}
+
 // runRightSidePlan runs a planTop that's been generated based on the
 // re-optimized right hand side of the apply join, stashing the result in
 // a.run.rightRows, ready for retrieval. An error indicates that something went
 // wrong during execution of the right hand side of the join, and that we should
 // completely give up on the outer join.
 func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planComponents) error {
-	// Prepare rightRows state for reuse.
-	if err := a.run.rightRows.clear(params.ctx); err != nil {
-		return err
-	}
-	if a.run.rightRowsIterator != nil {
-		a.run.rightRowsIterator.close()
-		a.run.rightRowsIterator = nil
-	}
 	if err := runPlanInsidePlan(params, plan, &a.run.rightRows); err != nil {
 		return err
 	}
