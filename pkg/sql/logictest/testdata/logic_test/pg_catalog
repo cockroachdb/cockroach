@@ -1137,13 +1137,13 @@ FROM pg_catalog.pg_depend
 ORDER BY objid
 ----
 classid     objid       objsubid  refclassid  refobjid   refobjsubid  deptype
-4294967204  58          0         4294967204  55         1            n
-4294967204  58          0         4294967204  55         2            n
-4294967204  58          0         4294967204  55         3            n
-4294967204  58          0         4294967204  55         4            n
 4294967201  2143281868  0         4294967204  450499961  0            n
 4294967201  2355671820  0         4294967204  0          0            n
 4294967201  3911002394  0         4294967204  0          0            n
+4294967158  4079785839  0         4294967204  55         3            n
+4294967158  4079785839  0         4294967204  55         4            n
+4294967158  4079785839  0         4294967204  55         1            n
+4294967158  4079785839  0         4294967204  55         2            n
 4294967201  4089604113  0         4294967204  450499960  0            n
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
@@ -1157,7 +1157,7 @@ JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
 classid     refclassid  tablename      reftablename
-4294967204  4294967204  pg_class       pg_class
+4294967158  4294967204  pg_rewrite     pg_class
 4294967201  4294967204  pg_constraint  pg_class
 
 # Some entries in pg_depend are foreign key constraints that reference an index
@@ -1189,11 +1189,6 @@ JOIN pg_constraint ON objid=pg_constraint.oid AND refobjid=pg_constraint.conindi
 contype
 f
 
-# Testing table-view dependencies in pg_depend, This query will not work the same way
-# In PostgreSQL as pg_depend.objid refers to pg_rewrite.oid, then pg_rewrite ev_class
-# refers to the dependent object, but cockroach db does not implements pg_rewrite yet
-# (Issue #57417: https://github.com/cockroachdb/cockroach/issues/57417)
-
 statement ok
 CREATE TABLE source_table(a INT PRIMARY KEY, b INT, c INT);
 CREATE VIEW depend_view AS SELECT b, c FROM source_table;
@@ -1208,7 +1203,8 @@ SELECT
 	   pg_attribute.attname column_name,
 	   pg_depend.deptype
   FROM pg_depend
-  JOIN pg_class depend_class ON pg_depend.objid = depend_class.oid
+  JOIN pg_rewrite ON pg_rewrite.oid = pg_depend.objid
+  JOIN pg_class depend_class ON depend_class.oid = pg_rewrite.ev_class
   JOIN pg_class source_class ON pg_depend.refobjid = source_class.oid
   JOIN pg_class depend_cat_class ON pg_depend.classid = depend_cat_class.oid
   JOIN pg_class source_cat_class ON pg_depend.refclassid = source_cat_class.oid
@@ -1218,10 +1214,20 @@ SELECT
   ORDER BY 3, 4, 5
 ----
 depend_catalog  source_catalog  source        depend                 column_name  deptype
-pg_class        pg_class        depend_view   view_dependingon_view  b            n
-pg_class        pg_class        depend_view   view_dependingon_view  c            n
-pg_class        pg_class        source_table  depend_view            b            n
-pg_class        pg_class        source_table  depend_view            c            n
+pg_rewrite      pg_class        depend_view   view_dependingon_view  b            n
+pg_rewrite      pg_class        depend_view   view_dependingon_view  c            n
+pg_rewrite      pg_class        source_table  depend_view            b            n
+pg_rewrite      pg_class        source_table  depend_view            c            n
+
+# Testing pg_rewrite
+query OTOTTBTT colnames
+SELECT * FROM pg_rewrite WHERE ev_class IN (
+  SELECT oid FROM pg_class WHERE relname IN ('depend_view', 'view_dependingon_view')
+) ORDER BY oid
+----
+oid         rulename  ev_class  ev_type  ev_enabled  is_instead  ev_qual  ev_action
+1454665107  _RETURN   69        1        NULL        true        NULL     NULL
+3319214789  _RETURN   68        1        NULL        true        NULL     NULL
 
 ## pg_catalog.pg_enum
 statement ok
@@ -2007,7 +2013,7 @@ objoid      classoid    objsubid  description
 4294967160  4294967204  0         pg_replication_origin was created for compatibility and is currently unimplemented
 4294967161  4294967204  0         pg_replication_origin_status was created for compatibility and is currently unimplemented
 4294967159  4294967204  0         pg_replication_slots was created for compatibility and is currently unimplemented
-4294967158  4294967204  0         rewrite rules (empty - feature does not exist)
+4294967158  4294967204  0         rewrite rules (only for referencing on pg_depend for table-view dependencies)
 4294967157  4294967204  0         database roles
 4294967156  4294967204  0         pg_rules was created for compatibility and is currently unimplemented
 4294967154  4294967204  0         security labels (empty - feature does not exist)
