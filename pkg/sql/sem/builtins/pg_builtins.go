@@ -1351,14 +1351,13 @@ SELECT description
 				}
 			}
 
-			schemaPrivilegePred := fmt.Sprintf("table_catalog = '%s'", db)
 			databasePrivilegePred := fmt.Sprintf("database_name = '%s'", db)
 			return parsePrivilegeStr(args[1], pgPrivList{
 				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "crdb_internal",
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
 						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CREATE, withGrantOpt)
 				},
@@ -1366,7 +1365,7 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "crdb_internal",
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
 						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CONNECT, withGrantOpt)
 				},
@@ -1374,16 +1373,16 @@ SELECT description
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"schema_privileges", user, schemaPrivilegePred,
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
+						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CREATE, withGrantOpt)
 				},
 				"TEMP": func(withGrantOpt bool) (tree.Datum, error) {
 					if retNull {
 						return tree.DNull, nil
 					}
-					return evalPrivilegeCheck(ctx, "information_schema",
-						"schema_privileges", user, schemaPrivilegePred,
+					return evalPrivilegeCheck(ctx, `"".crdb_internal`,
+						"cluster_database_privileges", user, databasePrivilegePred,
 						privilege.CREATE, withGrantOpt)
 				},
 			})
