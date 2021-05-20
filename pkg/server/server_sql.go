@@ -80,6 +80,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracingservice"
+	"github.com/cockroachdb/cockroach/pkg/util/tracingservice/tracingservicepb"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 	"google.golang.org/grpc"
@@ -99,6 +101,7 @@ type SQLServer struct {
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *lease.Manager
 	blobService      *blobs.Service
+	tracingService   *tracingservice.Service
 	tenantConnect    kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
@@ -259,6 +262,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		return nil, errors.Wrap(err, "creating blob service")
 	}
 	blobspb.RegisterBlobServer(cfg.grpcServer, blobService)
+
+	// Create trace service for inter-node sharing of inflight trace spans.
+	tracingService := tracingservice.NewTracingService(cfg.Settings.Tracer)
+	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -730,6 +737,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalExecutor:        cfg.circularInternalExecutor,
 		leaseMgr:                leaseMgr,
 		blobService:             blobService,
+		tracingService:          tracingService,
 		tenantConnect:           cfg.tenantConnect,
 		sessionRegistry:         cfg.sessionRegistry,
 		jobRegistry:             jobRegistry,

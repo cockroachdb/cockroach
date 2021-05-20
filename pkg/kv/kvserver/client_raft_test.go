@@ -4287,7 +4287,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 	var targets []target
 	for _, s := range tc.Servers {
-		conn, err := s.NodeDialer().Dial(ctx, s.NodeID(), rpc.DefaultClass)
+		conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpc.DefaultClass)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4414,7 +4414,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
 
-	conn, err := tc.Servers[0].NodeDialer().Dial(ctx, store.Ident.NodeID, rpc.DefaultClass)
+	conn, err := tc.Servers[0].NodeDialer().(*nodedialer.Dialer).Dial(ctx, store.Ident.NodeID, rpc.DefaultClass)
 	if err != nil {
 		t.Fatal(err)
 	}

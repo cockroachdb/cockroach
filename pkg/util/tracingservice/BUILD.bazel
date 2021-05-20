@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tracingservice",
+    srcs = [
+        "client.go",
+        "nodes.go",
+        "service.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracingservice",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/quotapool",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "//pkg/util/tracingservice/tracingservicepb:tracingservicepb_go_proto",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)

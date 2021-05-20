@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1405,7 +1406,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 						}
 						for i := 0; i < rpc.NumConnectionClasses; i++ {
 							class := rpc.ConnectionClass(i)
-							if _, err := s.NodeDialer().Dial(ctx, srv.NodeID(), class); err != nil {
+							if _, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, srv.NodeID(), class); err != nil {
 								return errors.Wrapf(err, "connecting n%d->n%d (class %v)", s.NodeID(), srv.NodeID(), class)
 							}
 						}
