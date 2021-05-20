@@ -161,10 +161,19 @@ func (h *txnHeartbeater) SendLocked(
 		}
 	}
 
-	// Set the EndTxn request's TxnHeartbeating flag, if necessary.
 	if hasET {
 		et := etArg.(*roachpb.EndTxnRequest)
+
+		// Set the EndTxn request's TxnHeartbeating flag, if necessary.
 		et.TxnHeartbeating = h.mu.loopStarted
+
+		// Preemptively stop heartbeat loop in case of transaction abort
+		// to prevent contention that could happen during synchronous cleanup
+		// of a transaction. It is safe to do so, since aborted transactions
+		// always close coord sender even if send fails.
+		if !et.Commit {
+			h.cancelHeartbeatLoopLocked()
+		}
 	}
 
 	// Forward the batch through the wrapped lockedSender.

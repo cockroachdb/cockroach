@@ -415,3 +415,38 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 		require.Equal(t, roachpb.ABORTED, th.mu.finalObservedStatus)
 	})
 }
+
+// TestTxnHeartbeaterAbortStopsLoop tests that interceptor cancels heartbeats
+// early for aborted transactions while keeps it untouched for committed ones.
+func TestTxnHeartbeaterAbortStopsLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "transactionCommit", func(t *testing.T, transactionCommit bool) {
+		ctx := context.Background()
+		txn := makeTxnProto()
+		th, _, _ := makeMockTxnHeartbeater(&txn)
+		defer th.stopper.Stop(ctx)
+
+		// Kick off the heartbeat loop.
+		key := roachpb.Key("a")
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: txn.Clone()}
+		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: key}})
+
+		br, pErr := th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.True(t, th.heartbeatLoopRunningLocked(), "heartbeat is not started")
+
+		// End transaction to validate heartbeat state.
+		var ba2 roachpb.BatchRequest
+		ba2.Header = roachpb.Header{Txn: txn.Clone()}
+		ba2.Add(&roachpb.EndTxnRequest{RequestHeader: roachpb.RequestHeader{Key: key}, Commit: transactionCommit})
+
+		br, pErr = th.SendLocked(ctx, ba2)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		require.Equal(t, transactionCommit, th.heartbeatLoopRunningLocked(), "heartbeat runs for commit, stops for abort")
+	})
+}
