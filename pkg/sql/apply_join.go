@@ -151,6 +151,13 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 				a.pred.prepareRow(a.run.out, a.run.leftRow, rrow)
 				return true, nil
 			}
+
+			// We're either out of right side rows or we broke out of the loop
+			// before consuming all right rows because we found a match for an
+			// anti or semi join. Close and reset rightRowsIterator so that it's
+			// not used for subsequent calls to Next.
+			a.run.rightRowsIterator.close()
+			a.run.rightRowsIterator = nil
 		}
 		// We're out of right side rows. Reset the match state for next time.
 		foundAMatch := a.run.leftRowFoundAMatch

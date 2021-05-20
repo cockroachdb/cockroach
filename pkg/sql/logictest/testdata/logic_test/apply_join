@@ -377,3 +377,21 @@ UPDATE cpk SET extra = (
     WHERE k='k1'
 )
 WHERE ((cpk.key, cpk.value) IN (SELECT new_values.k, new_values.v FROM new_values))
+
+# Regression test for #65040. Rows fetched for the right side of the apply join
+# were not cleared for successive rows on the left, causing a panic.
+
+statement ok
+CREATE TABLE t65040 (a INT, b TIMESTAMP);
+INSERT INTO t65040 VALUES (1, '2001-01-01');
+INSERT INTO t65040 VALUES (2, '2002-02-02');
+
+statement ok
+SELECT NULL
+FROM t65040 AS t1
+WHERE t1.b IN (
+  SELECT t2.b
+  FROM t65040,
+    (VALUES (t1.a)) AS v (a)
+      JOIN t65040 AS t2 ON v.a = t2.a
+)
