@@ -359,6 +359,8 @@ ALL_TESTS = [
     "//pkg/util/timeutil/pgdate:pgdate_test",
     "//pkg/util/timeutil:timeutil_test",
     "//pkg/util/tracing:tracing_test",
+    "//pkg/util/tracingservice/tests:tests_test",
+    "//pkg/util/tracingservice/tests:tracingservicetest_test",
     "//pkg/util/treeprinter:treeprinter_test",
     "//pkg/util/uint128:uint128_test",
     "//pkg/util/ulid:ulid_test",
