@@ -686,10 +686,16 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	return used, proposeBatch(raftGroup, b.p.replicaID(), ents)
 }
 
-// assignClosedTimestampToProposalLocked assigns a closed timestamp to be carried by
-// an outgoing proposal.
+// assignClosedTimestampToProposalLocked assigns a closed timestamp to be
+// carried by an outgoing proposal, modifying p.encodedCommand. closedTSTarget
+// is the timestamp that should be closed for this range according to the
+// range's closing policy. This function will look at the particularities of
+// the range and of the proposal and decide to close a different timestamp.
 //
-// This shouldn't be called for reproposals.
+// This shouldn't be called for reproposals; we don't want to update the closed
+// timestamp they carry (we could, in principle, but we'd have to make a copy of
+// the encoded command as to not modify the copy that's already stored in the
+// local replica's raft entry cache).
 func (b *propBuf) assignClosedTimestampToProposalLocked(
 	ctx context.Context, p *ProposalData, closedTSTarget hlc.Timestamp,
 ) error {
@@ -711,9 +717,10 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 	// commute and both apply which would result in a closed timestamp regression.
 	// The command application side doesn't bother protecting against such
 	// regressions.
-	// Lease transfers behave like regular proposals. Note that transfers
-	// carry a summary of the timestamp cache, so the new leaseholder will be
-	// aware of all the reads performed by the previous leaseholder.
+	// Lease transfers behave like regular proposals - they get a closed timestamp
+	// based on closedTSTarget. Note that transfers carry a summary of the
+	// timestamp cache, so the new leaseholder will be aware of all the reads
+	// performed by the previous leaseholder.
 	if p.Request.IsLeaseRequest() {
 		// We read the lease from the ReplicatedEvalResult, not from leaseReq, because the
 		// former is more up to date, having been modified by the evaluation.
