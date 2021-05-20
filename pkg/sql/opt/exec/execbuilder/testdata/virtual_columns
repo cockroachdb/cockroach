@@ -1440,3 +1440,79 @@ vectorized: true
   estimated row count: 3 (missing stats)
   table: inv@iv_jv_idx
   spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+
+# Regression tests for #65343. Collated string locales should be normalized so
+# that indexes on collated string virtual columns are scanned for any given
+# locale format in a query.
+subtest 65343
+
+statement ok
+CREATE TABLE t65343 (
+  s STRING,
+  c STRING COLLATE en_US AS (s COLLATE en_US) VIRTUAL,
+  INDEX (c)
+)
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]
+
+query T
+EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • index join
+    │ table: t65343@primary
+    │
+    └── • scan
+          missing stats
+          table: t65343@t65343_c_idx
+          spans: [/'foo' COLLATE en_US - /'foo' COLLATE en_US]

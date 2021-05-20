@@ -51,6 +51,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/delegate",
+        "//pkg/sql/lex",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",

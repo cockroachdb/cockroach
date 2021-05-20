@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -133,7 +134,7 @@ func (b *Builder) buildScalar(
 
 	case *tree.CollateExpr:
 		in := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		out = b.factory.ConstructCollate(in, t.Locale)
+		out = b.factory.ConstructCollate(in, lex.NormalizeLocaleName(t.Locale))
 
 	case *tree.ArrayFlatten:
 		s := t.Subquery.(*subquery)
