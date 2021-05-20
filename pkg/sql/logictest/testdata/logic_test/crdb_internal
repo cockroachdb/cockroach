@@ -50,7 +50,6 @@ crdb_internal  node_sessions                table  NULL  NULL  NULL
 crdb_internal  node_statement_statistics    table  NULL  NULL  NULL
 crdb_internal  node_transaction_statistics  table  NULL  NULL  NULL
 crdb_internal  node_transactions            table  NULL  NULL  NULL
-crdb_internal  node_txn_stats               table  NULL  NULL  NULL
 crdb_internal  partitions                   table  NULL  NULL  NULL
 crdb_internal  predefined_comments          table  NULL  NULL  NULL
 crdb_internal  ranges                       view   NULL  NULL  NULL

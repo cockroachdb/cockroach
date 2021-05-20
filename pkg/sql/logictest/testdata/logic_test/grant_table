@@ -62,7 +62,6 @@ test           crdb_internal       node_sessions                          public
 test           crdb_internal       node_statement_statistics              public   SELECT
 test           crdb_internal       node_transaction_statistics            public   SELECT
 test           crdb_internal       node_transactions                      public   SELECT
-test           crdb_internal       node_txn_stats                         public   SELECT
 test           crdb_internal       partitions                             public   SELECT
 test           crdb_internal       predefined_comments                    public   SELECT
 test           crdb_internal       ranges                                 public   SELECT

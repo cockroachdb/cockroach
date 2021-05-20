@@ -439,6 +439,3 @@ CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_statement_statistics);
 
 query error crdb_internal.node_transaction_statistics cannot be used in this context
 CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
-
-query error crdb_internal.node_txn_stats cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);

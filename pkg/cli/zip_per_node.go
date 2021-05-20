@@ -75,7 +75,6 @@ var debugZipTablesPerNode = []string{
 	"crdb_internal.node_statement_statistics",
 	"crdb_internal.node_transaction_statistics",
 	"crdb_internal.node_transactions",
-	"crdb_internal.node_txn_stats",
 }
 
 // collectCPUProfiles collects CPU profiles in parallel over all nodes
