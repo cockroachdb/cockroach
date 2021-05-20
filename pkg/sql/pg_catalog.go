@@ -69,6 +69,11 @@ const (
 	indoptionNullsFirst = 0x02
 )
 
+// RewriteEvTypes could be a enumeration if rewrite rules gets implemented
+type RewriteEvTypes string
+
+const evTypeSelect RewriteEvTypes = "1"
+
 var forwardIndexOid = stringOid(indexTypeForwardIndex)
 var invertedIndexOid = stringOid(indexTypeInvertedIndex)
 
@@ -1122,6 +1127,7 @@ var (
 
 	pgConstraintsTableName = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_constraint"))
 	pgClassTableName       = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_class"))
+	pgRewriteTableName     = tree.MakeTableNameWithSchema("", tree.Name(pgCatalogName), tree.Name("pg_rewrite"))
 )
 
 // pg_depend is a fairly complex table that details many different kinds of
@@ -1146,6 +1152,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
 		}
+		pgRewriteDesc, err := vt.getVirtualTableDesc(&pgRewriteTableName)
+		if err != nil {
+			return errors.New("could not find pg_catalog.pg_rewrite")
+		}
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db catalog.DatabaseDescriptor,
@@ -1155,6 +1165,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		) error {
 			pgConstraintTableOid := tableOid(pgConstraintsDesc.GetID())
 			pgClassTableOid := tableOid(pgClassDesc.GetID())
+			pgRewriteTableOid := tableOid(pgRewriteDesc.GetID())
 			if table.IsSequence() &&
 				!table.GetSequenceOpts().SequenceOwner.Equal(descpb.TableDescriptor_SequenceOpts_SequenceOwner{}) {
 				refObjID := tableOid(table.GetSequenceOpts().SequenceOwner.OwnerTableID)
@@ -1172,18 +1183,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 			}
 
 			// In the case of table/view relationship, In PostgreSQL pg_depend.objid refers to
-			// pg_rewrite.oid, then pg_rewrite ev_class refers to the dependent object, but
-			// cockroach db does not implements pg_rewrite yet
-			//
-			// Issue #57417: https://github.com/cockroachdb/cockroach/issues/57417
+			// pg_rewrite.oid, then pg_rewrite ev_class refers to the dependent object.
+			refObjOid := tableOid(table.GetID())
 			reportViewDependency := func(dep *descpb.TableDescriptor_Reference) error {
+				objID := h.RewriteOid(table.GetID(), dep.ID)
 				for _, colID := range dep.ColumnIDs {
 					if err := addRow(
-						pgClassTableOid,                //classid
-						tableOid(dep.ID),               //objid
+						pgRewriteTableOid,              //classid
+						objID,                          //objid
 						zeroVal,                        //objsubid
 						pgClassTableOid,                //refclassid
-						tableOid(table.GetID()),        //refobjid
+						refObjOid,                      //refobjid
 						tree.NewDInt(tree.DInt(colID)), //refobjsubid
 						depTypeNormal,                  //deptype
 					); err != nil {
@@ -2059,14 +2069,39 @@ https://www.postgresql.org/docs/9.5/catalog-pg-range.html`,
 }
 
 var pgCatalogRewriteTable = virtualSchemaTable{
-	comment: `rewrite rules (empty - feature does not exist)
+	comment: `rewrite rules (only for referencing on pg_depend for table-views dependencies)
 https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html`,
 	schema: vtable.PGCatalogRewrite,
-	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Rewrite rules are not supported.
-		return nil
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		ruleName := tree.NewDString("_RETURN")
+		evType := tree.NewDString(string(evTypeSelect))
+		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
+			db catalog.DatabaseDescriptor,
+			scName string,
+			table catalog.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			if !table.IsTable() && !table.IsView() {
+				return nil
+			}
+
+			return table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+				rewriteOid := h.RewriteOid(table.GetID(), dep.ID)
+				evClass := tableOid(dep.ID)
+				return addRow(
+					rewriteOid,     // oid
+					ruleName,       // rulename
+					evClass,        // ev_class
+					evType,         // ev_type
+					tree.DNull,     // ev_enabled
+					tree.DBoolTrue, // is_instead
+					tree.DNull,     // ev_qual
+					tree.DNull,     // ev_action
+				)
+			})
+		})
 	},
-	unimplemented: true,
 }
 
 var pgCatalogRolesTable = virtualSchemaTable{
@@ -3172,6 +3207,7 @@ const (
 	collationTypeTag
 	operatorTypeTag
 	enumEntryTypeTag
+	rewriteTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -3332,6 +3368,13 @@ func (h oidHasher) EnumEntryOid(typOID *tree.DOid, physicalRep []byte) *tree.DOi
 	h.writeTypeTag(enumEntryTypeTag)
 	h.writeOID(typOID)
 	h.writeBytes(physicalRep)
+	return h.getOid()
+}
+
+func (h oidHasher) RewriteOid(source descpb.ID, depended descpb.ID) *tree.DOid {
+	h.writeTypeTag(rewriteTypeTag)
+	h.writeUInt32(uint32(source))
+	h.writeUInt32(uint32(depended))
 	return h.getOid()
 }
 
