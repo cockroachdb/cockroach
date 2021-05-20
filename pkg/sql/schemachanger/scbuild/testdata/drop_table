@@ -36,7 +36,7 @@ CREATE VIEW v1 as (select customer_id, carrier from defaultdb.shipments);
 ----
 
 build
-DROP TABLE defaultdb.shipments;
+DROP TABLE defaultdb.shipments CASCADE;
 ----
 - target:
     direction: DROP

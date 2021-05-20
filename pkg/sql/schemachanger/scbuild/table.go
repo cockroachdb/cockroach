@@ -575,10 +575,7 @@ func isTypeSupportedInVersion(v clusterversion.ClusterVersion, t *types.T) bool 
 }
 
 func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
-
-	// FIXME: Inject secondary indexes
-	// FIXME: Inject constraints?
-	// Find the view first
+	// Find the table first.
 	for _, name := range n.Names {
 		table, err := resolver.ResolveExistingTableObject(ctx, b.Res, &name,
 			tree.ObjectLookupFlagsWithRequired())
@@ -599,6 +596,11 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 			if err != nil {
 				panic(err)
 			}
+			if n.DropBehavior != tree.DropCascade {
+				return pgerror.Newf(
+					pgcode.DependentObjectsStillExist, "cannot drop table %q because view %q depends on it",
+					table.GetName(), dependentDesc.GetName())
+			}
 			err = b.AuthAccessor.CheckPrivilege(ctx, dependentDesc, privilege.DROP)
 			if err != nil {
 				panic(err)
@@ -610,9 +612,22 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 			panic(err)
 		}
 
-		// Loop through and update in bound and outbound
+		// Loop through and update inbound and outbound
 		// foreign key references.
 		for _, fk := range table.GetInboundFKs() {
+			dependentTable, err := b.Descs.GetImmutableTableByID(ctx, b.EvalCtx.Txn, fk.OriginTableID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				panic(err)
+			}
+			if n.DropBehavior != tree.DropCascade {
+				panic(pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"%q is referenced by foreign key from table %q", fk.Name, dependentTable.GetName()))
+			}
+			err = b.AuthAccessor.CheckPrivilege(ctx, dependentTable, privilege.DROP)
+			if err != nil {
+				panic(err)
+			}
 			outFkNode := &scpb.OutboundForeignKey{
 				OriginID:         fk.OriginTableID,
 				OriginColumns:    fk.OriginColumnIDs,
@@ -668,6 +683,17 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 			for seqIdx := 0; seqIdx < col.NumOwnsSequences(); seqIdx++ {
 				seqID := col.GetOwnsSequenceID(seqIdx)
 				table, err := b.Descs.GetMutableTableByID(ctx, b.EvalCtx.Txn, seqID, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc))
+				if err != nil {
+					panic(err)
+				}
+				if n.DropBehavior != tree.DropCascade {
+					panic(pgerror.Newf(
+						pgcode.DependentObjectsStillExist,
+						"cannot drop table %s because other objects depend on it",
+						table.GetName(),
+					))
+				}
+				err = b.AuthAccessor.CheckPrivilege(ctx, table, privilege.DROP)
 				if err != nil {
 					panic(err)
 				}
