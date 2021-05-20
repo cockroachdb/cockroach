@@ -26,6 +26,17 @@ import (
 	"golang.org/x/exp/rand"
 )
 
+// maybeFormatWithCity formats %[1]s with `city,` and %[2]s with `vehicle_city`
+// if we are not using a multi-region movr.
+func (g *movr) maybeFormatWithCity(fmtString string) string {
+	var posOne, posTwo string
+	if !g.multiRegion {
+		posOne = "city, "
+		posTwo = "vehicle_city, "
+	}
+	return fmt.Sprintf(fmtString, posOne, posTwo)
+}
+
 // Indexes into the slice returned by `Tables`.
 const (
 	TablesUsersIdx                    = 0
@@ -36,14 +47,16 @@ const (
 	TablesUserPromoCodesIdx           = 5
 )
 
-const movrUsersSchema = `(
+func (g *movr) movrUsersSchema() string {
+	return g.maybeFormatWithCity(`(
   id UUID NOT NULL,
   city VARCHAR NOT NULL,
   name VARCHAR NULL,
   address VARCHAR NULL,
   credit_card VARCHAR NULL,
-  PRIMARY KEY (city ASC, id ASC)
-)`
+  PRIMARY KEY (%[1]sid ASC)
+)`)
+}
 
 // Indexes into the rows in movrUsers.
 const (
@@ -51,7 +64,8 @@ const (
 	usersCityIdx = 1
 )
 
-const movrVehiclesSchema = `(
+func (g *movr) movrVehiclesSchema() string {
+	return g.maybeFormatWithCity(`(
   id UUID NOT NULL,
   city VARCHAR NOT NULL,
   type VARCHAR NULL,
@@ -60,9 +74,11 @@ const movrVehiclesSchema = `(
   status VARCHAR NULL,
   current_location VARCHAR NULL,
   ext JSONB NULL,
-  PRIMARY KEY (city ASC, id ASC),
-  INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
-)`
+  PRIMARY KEY (%[1]sid ASC),
+  INDEX vehicles_auto_index_fk_city_ref_users (%[1]sowner_id ASC)
+)`,
+	)
+}
 
 // Indexes into the rows in movrVehicles.
 const (
@@ -70,7 +86,8 @@ const (
 	vehiclesCityIdx = 1
 )
 
-const movrRidesSchema = `(
+func (g *movr) movrRidesSchema() string {
+	return g.maybeFormatWithCity(`(
   id UUID NOT NULL,
   city VARCHAR NOT NULL,
   vehicle_city VARCHAR NULL,
@@ -81,11 +98,12 @@ const movrRidesSchema = `(
   start_time TIMESTAMP NULL,
   end_time TIMESTAMP NULL,
   revenue DECIMAL(10,2) NULL,
-  PRIMARY KEY (city ASC, id ASC),
-  INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
-  INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+  PRIMARY KEY (%[1]sid ASC),
+  INDEX rides_auto_index_fk_city_ref_users (%[1]srider_id ASC),
+  INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (%[2]svehicle_id ASC),
   CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
-)`
+)`)
+}
 
 // Indexes into the rows in movrRides.
 const (
@@ -93,14 +111,17 @@ const (
 	ridesCityIdx = 1
 )
 
-const movrVehicleLocationHistoriesSchema = `(
+func (g *movr) movrVehicleLocationHistoriesSchema() string {
+	return g.maybeFormatWithCity(`(
   city VARCHAR NOT NULL,
   ride_id UUID NOT NULL,
   "timestamp" TIMESTAMP NOT NULL,
   lat FLOAT8 NULL,
   long FLOAT8 NULL,
-  PRIMARY KEY (city ASC, ride_id ASC, "timestamp" ASC)
-)`
+  PRIMARY KEY (%[1]sride_id ASC, "timestamp" ASC)
+)`)
+}
+
 const movrPromoCodesSchema = `(
   code VARCHAR NOT NULL,
   description VARCHAR NULL,
@@ -109,14 +130,17 @@ const movrPromoCodesSchema = `(
   rules JSONB NULL,
   PRIMARY KEY (code ASC)
 )`
-const movrUserPromoCodesSchema = `(
+
+func (g *movr) movrUserPromoCodesSchema() string {
+	return g.maybeFormatWithCity(`(
   city VARCHAR NOT NULL,
   user_id UUID NOT NULL,
   code VARCHAR NOT NULL,
   "timestamp" TIMESTAMP NULL,
   usage_count INT NULL,
-  PRIMARY KEY (city ASC, user_id ASC, code ASC)
-)`
+  PRIMARY KEY (%[1]suser_id ASC, code ASC)
+)`)
+}
 
 const (
 	timestampFormat = "2006-01-02 15:04:05.999999-07:00"
@@ -146,6 +170,10 @@ type movr struct {
 	numPromoCodes                     int
 	ranges                            int
 
+	multiRegion           bool
+	inferCRDBRegionColumn bool
+	survivalGoal          string
+
 	creationTime time.Time
 
 	fakerOnce sync.Once
@@ -168,6 +196,25 @@ var movrMeta = workload.Meta{
 		g.flags.IntVar(&g.users.numRows, `num-users`, 50, `Initial number of users.`)
 		g.flags.IntVar(&g.vehicles.numRows, `num-vehicles`, 15, `Initial number of vehicles.`)
 		g.flags.IntVar(&g.rides.numRows, `num-rides`, 500, `Initial number of rides.`)
+		g.flags.BoolVar(
+			&g.multiRegion,
+			`multi-region`,
+			false,
+			`Whether to use the multi-region configuration for partitions.`,
+		)
+		g.flags.BoolVar(
+			&g.inferCRDBRegionColumn,
+			`infer-crdb-region-column`,
+			true,
+			`Whether to infer crdb_region for multi-region REGIONAL BY ROW columns using the city column.
+Otherwise defaults to the gateway_region.`,
+		)
+		g.flags.StringVar(
+			&g.survivalGoal,
+			"survive",
+			"az",
+			"Survival goal for multi-region workloads. Supported goals: az, region.",
+		)
 		g.flags.IntVar(&g.histories.numRows, `num-histories`, 1000,
 			`Initial number of ride location histories.`)
 		g.flags.IntVar(&g.numPromoCodes, `num-promo-codes`, 1000, `Initial number of promo codes.`)
@@ -207,16 +254,26 @@ func (g *movr) Hooks() workload.Hooks {
 		},
 		PostLoad: func(db *gosql.DB) error {
 			fkStmts := []string{
-				`ALTER TABLE vehicles ADD FOREIGN KEY ` +
-					`(city, owner_id) REFERENCES users (city, id)`,
-				`ALTER TABLE rides ADD FOREIGN KEY ` +
-					`(city, rider_id) REFERENCES users (city, id)`,
-				`ALTER TABLE rides ADD FOREIGN KEY ` +
-					`(vehicle_city, vehicle_id) REFERENCES vehicles (city, id)`,
-				`ALTER TABLE vehicle_location_histories ADD FOREIGN KEY ` +
-					`(city, ride_id) REFERENCES rides (city, id)`,
-				`ALTER TABLE user_promo_codes ADD FOREIGN KEY ` +
-					`(city, user_id) REFERENCES users (city, id)`,
+				g.maybeFormatWithCity(
+					`ALTER TABLE vehicles ADD FOREIGN KEY
+						(%[1]sowner_id) REFERENCES users (%[1]sid)`,
+				),
+				g.maybeFormatWithCity(
+					`ALTER TABLE rides ADD FOREIGN KEY
+						(%[1]srider_id) REFERENCES users (%[1]sid)`,
+				),
+				g.maybeFormatWithCity(
+					`ALTER TABLE rides ADD FOREIGN KEY
+						(%[2]svehicle_id) REFERENCES vehicles (%[1]sid)`,
+				),
+				g.maybeFormatWithCity(
+					`ALTER TABLE vehicle_location_histories ADD FOREIGN KEY
+						(%[1]sride_id) REFERENCES rides (%[1]sid)`,
+				),
+				g.maybeFormatWithCity(
+					`ALTER TABLE user_promo_codes ADD FOREIGN KEY
+						(%[1]suser_id) REFERENCES users (%[1]sid)`,
+				),
 			}
 
 			for _, fkStmt := range fkStmts {
@@ -234,6 +291,77 @@ func (g *movr) Hooks() workload.Hooks {
 		// This partitioning step is intended for a 3 region cluster, which have the localities region=us-east1,
 		// region=us-west1, region=europe-west1.
 		Partition: func(db *gosql.DB) error {
+			if g.multiRegion {
+				var survivalGoal string
+				switch g.survivalGoal {
+				case "az":
+					survivalGoal = "ZONE"
+				case "region":
+					survivalGoal = "REGION"
+				default:
+					return errors.Errorf("unsupported survival goal: %s", g.survivalGoal)
+				}
+				q := fmt.Sprintf(
+					`
+ALTER DATABASE %[1]s SET PRIMARY REGION "us-east1";
+ALTER DATABASE %[1]s ADD REGION "us-west1";
+ALTER DATABASE %[1]s ADD REGION "europe-west1";
+ALTER DATABASE %[1]s SURVIVE %s FAILURE
+`,
+					g.Meta().Name,
+					survivalGoal,
+				)
+				if _, err := db.Exec(q); err != nil {
+					return err
+				}
+				for _, rbrTable := range []string{
+					"users",
+					"vehicles",
+					"rides",
+					"vehicle_location_histories",
+					"user_promo_codes",
+				} {
+					if g.inferCRDBRegionColumn {
+						if _, err := db.Exec(
+							fmt.Sprintf(
+								`ALTER TABLE %s ADD COLUMN crdb_region crdb_internal_region NOT NULL AS (
+								CASE
+									WHEN city IN ('new york', 'boston', 'washington dc') THEN 'us-east1'
+									WHEN city IN ('amsterdam', 'paris', 'rome') THEN 'europe-west1'
+									WHEN city IN ('seattle', 'san francisco', 'los angeles') THEN 'us-west1'
+									ELSE 'us-east1'
+							END) STORED`,
+								rbrTable,
+							),
+						); err != nil {
+							return err
+						}
+					}
+					if _, err := db.Exec(
+						fmt.Sprintf(
+							`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`,
+							rbrTable,
+						),
+					); err != nil {
+						return err
+					}
+				}
+				for _, globalTable := range []string{
+					"promo_codes",
+				} {
+					if _, err := db.Exec(
+						fmt.Sprintf(
+							`ALTER TABLE %s SET LOCALITY GLOBAL`,
+							globalTable,
+						),
+					); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			}
+
 			// Create us-west, us-east and europe-west partitions.
 			q := `
 		ALTER TABLE users PARTITION BY LIST (city) (
@@ -346,7 +474,7 @@ func (g *movr) Tables() []workload.Table {
 	tables := make([]workload.Table, 6)
 	tables[TablesUsersIdx] = workload.Table{
 		Name:   `users`,
-		Schema: movrUsersSchema,
+		Schema: g.movrUsersSchema(),
 		InitialRows: workload.Tuples(
 			g.users.numRows,
 			g.movrUsersInitialRow,
@@ -355,6 +483,9 @@ func (g *movr) Tables() []workload.Table {
 			g.ranges-1,
 			func(splitIdx int) []interface{} {
 				row := g.movrUsersInitialRow((splitIdx + 1) * (g.users.numRows / g.ranges))
+				if g.multiRegion {
+					return []interface{}{row[usersIDIdx]}
+				}
 				// The split tuples returned must be valid primary key columns.
 				return []interface{}{row[usersCityIdx], row[usersIDIdx]}
 			},
@@ -362,7 +493,7 @@ func (g *movr) Tables() []workload.Table {
 	}
 	tables[TablesVehiclesIdx] = workload.Table{
 		Name:   `vehicles`,
-		Schema: movrVehiclesSchema,
+		Schema: g.movrVehiclesSchema(),
 		InitialRows: workload.Tuples(
 			g.vehicles.numRows,
 			g.movrVehiclesInitialRow,
@@ -371,6 +502,9 @@ func (g *movr) Tables() []workload.Table {
 			g.ranges-1,
 			func(splitIdx int) []interface{} {
 				row := g.movrVehiclesInitialRow((splitIdx + 1) * (g.vehicles.numRows / g.ranges))
+				if g.multiRegion {
+					return []interface{}{row[vehiclesIDIdx]}
+				}
 				// The split tuples returned must be valid primary key columns.
 				return []interface{}{row[vehiclesCityIdx], row[vehiclesIDIdx]}
 			},
@@ -378,7 +512,7 @@ func (g *movr) Tables() []workload.Table {
 	}
 	tables[TablesRidesIdx] = workload.Table{
 		Name:   `rides`,
-		Schema: movrRidesSchema,
+		Schema: g.movrRidesSchema(),
 		InitialRows: workload.Tuples(
 			g.rides.numRows,
 			g.movrRidesInitialRow,
@@ -387,6 +521,9 @@ func (g *movr) Tables() []workload.Table {
 			g.ranges-1,
 			func(splitIdx int) []interface{} {
 				row := g.movrRidesInitialRow((splitIdx + 1) * (g.rides.numRows / g.ranges))
+				if g.multiRegion {
+					return []interface{}{row[ridesIDIdx]}
+				}
 				// The split tuples returned must be valid primary key columns.
 				return []interface{}{row[ridesCityIdx], row[ridesIDIdx]}
 			},
@@ -394,7 +531,7 @@ func (g *movr) Tables() []workload.Table {
 	}
 	tables[TablesVehicleLocationHistoriesIdx] = workload.Table{
 		Name:   `vehicle_location_histories`,
-		Schema: movrVehicleLocationHistoriesSchema,
+		Schema: g.movrVehicleLocationHistoriesSchema(),
 		InitialRows: workload.Tuples(
 			g.histories.numRows,
 			g.movrVehicleLocationHistoriesInitialRow,
@@ -410,7 +547,7 @@ func (g *movr) Tables() []workload.Table {
 	}
 	tables[TablesUserPromoCodesIdx] = workload.Table{
 		Name:   `user_promo_codes`,
-		Schema: movrUserPromoCodesSchema,
+		Schema: g.movrUserPromoCodesSchema(),
 		InitialRows: workload.Tuples(
 			0,
 			func(_ int) []interface{} { panic(`unimplemented`) },
