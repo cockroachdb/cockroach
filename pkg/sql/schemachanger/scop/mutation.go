@@ -209,6 +209,8 @@ type AddColumnFamily struct {
 	Family  descpb.ColumnFamilyDescriptor
 }
 
+// DropForeignKeyRef drops a foreign key reference with
+// support for outbound/inbound keys.
 type DropForeignKeyRef struct {
 	mutationOp
 	TableID  descpb.ID
