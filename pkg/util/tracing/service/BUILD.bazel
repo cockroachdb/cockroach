@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "service",
+    srcs = ["service.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/service",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+    ],
+)
+
+go_test(
+    name = "service_test",
+    srcs = ["service_test.go"],
+    embed = [":service"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
+        "@com_github_stretchr_testify//require",
+    ],
+)

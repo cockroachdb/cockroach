@@ -376,6 +376,14 @@ func (ts *TestServer) NodeLiveness() interface{} {
 	return nil
 }
 
+// NodeDialer returns the NodeDialer used by the TestServer.
+func (ts *TestServer) NodeDialer() interface{} {
+	if ts != nil {
+		return ts.nodeDialer
+	}
+	return nil
+}
+
 // HeartbeatNodeLiveness heartbeats the server's NodeLiveness record.
 func (ts *TestServer) HeartbeatNodeLiveness() error {
 	if ts == nil {
@@ -433,14 +441,6 @@ func (ts *TestServer) PGServer() *pgwire.Server {
 func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	if ts != nil {
 		return ts.raftTransport
-	}
-	return nil
-}
-
-// NodeDialer returns the NodeDialer used by the TestServer.
-func (ts *TestServer) NodeDialer() *nodedialer.Dialer {
-	if ts != nil {
-		return ts.nodeDialer
 	}
 	return nil
 }
