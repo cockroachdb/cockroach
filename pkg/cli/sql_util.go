@@ -200,7 +200,7 @@ func (c *sqlConn) ensureConn() error {
 // SHOW LAST QUERY STATISTICS statements. This allows the CLI client to report
 // server side execution timings instead of timing on the client.
 func (c *sqlConn) tryEnableServerExecutionTimings() {
-	_, _, _, _, err := c.getLastQueryStatistics()
+	_, _, _, _, _, err := c.getLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: cannot show server execution timings: unexpected column found\n")
 		sqlCtx.enableServerExecutionTimings = false
@@ -382,28 +382,36 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, string, bool) 
 // performs sanity checks, and returns the exec latency and service latency from
 // the sql row parsed as time.Duration.
 func (c *sqlConn) getLastQueryStatistics() (
-	parseLat, planLat, execLat, serviceLat time.Duration,
+	parseLat, planLat, execLat, serviceLat, jobsLat time.Duration,
 	err error,
 ) {
 	rows, err := c.Query("SHOW LAST QUERY STATISTICS", nil)
 	if err != nil {
-		return 0, 0, 0, 0, err
+		return 0, 0, 0, 0, 0, err
 	}
 	defer func() {
 		closeErr := rows.Close()
 		err = errors.CombineErrors(err, closeErr)
 	}()
 
-	if len(rows.Columns()) != 4 {
-		return 0, 0, 0, 0,
-			errors.New("unexpected number of columns in SHOW LAST QUERY STATISTICS")
+	// TODO(arul): In 21.1, SHOW LAST QUERY STATISTICS returned 4 columns. In 21.2,
+	// it returns 5. Depending on which server version the CLI is connected to,
+	// both are valid. We won't have to account for this mixed version state in
+	// 22.1. All this logic can be simplified in 22.1.
+	containsJobLat := false
+	if len(rows.Columns()) == 5 {
+		containsJobLat = true
+	} else if len(rows.Columns()) != 4 {
+		return 0, 0, 0, 0, 0,
+			errors.Newf("unexpected number of columns in SHOW LAST QUERY STATISTICS")
 	}
 
 	if rows.Columns()[0] != "parse_latency" ||
 		rows.Columns()[1] != "plan_latency" ||
 		rows.Columns()[2] != "exec_latency" ||
-		rows.Columns()[3] != "service_latency" {
-		return 0, 0, 0, 0,
+		rows.Columns()[3] != "service_latency" ||
+		(containsJobLat && rows.Columns()[4] != "post_commit_jobs_latency") {
+		return 0, 0, 0, 0, 0,
 			errors.New("unexpected columns in SHOW LAST QUERY STATISTICS")
 	}
 
@@ -413,24 +421,26 @@ func (c *sqlConn) getLastQueryStatistics() (
 	var planLatencyRaw string
 	var execLatencyRaw string
 	var serviceLatencyRaw string
+	var jobsLatencyRaw string
 	for {
 		row, err := iter.Next()
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return 0, 0, 0, 0, err
+			return 0, 0, 0, 0, 0, err
 		}
 
 		parseLatencyRaw = formatVal(row[0], iter.colTypes[0], false, false)
 		planLatencyRaw = formatVal(row[1], iter.colTypes[1], false, false)
 		execLatencyRaw = formatVal(row[2], iter.colTypes[2], false, false)
 		serviceLatencyRaw = formatVal(row[3], iter.colTypes[3], false, false)
+		jobsLatencyRaw = formatVal(row[4], iter.colTypes[4], false, false)
 
 		nRows++
 	}
 
 	if nRows != 1 {
-		return 0, 0, 0, 0,
+		return 0, 0, 0, 0, 0,
 			errors.Newf("unexpected number of rows in SHOW LAST QUERY STATISTICS: %d", nRows)
 	}
 
@@ -438,11 +448,13 @@ func (c *sqlConn) getLastQueryStatistics() (
 	parsedServiceLatency, _ := tree.ParseDInterval(serviceLatencyRaw)
 	parsedPlanLatency, _ := tree.ParseDInterval(planLatencyRaw)
 	parsedParseLatency, _ := tree.ParseDInterval(parseLatencyRaw)
+	parsedJobsLatency, _ := tree.ParseDInterval(jobsLatencyRaw)
 
 	return time.Duration(parsedParseLatency.Duration.Nanos()),
 		time.Duration(parsedPlanLatency.Duration.Nanos()),
 		time.Duration(parsedExecLatency.Duration.Nanos()),
 		time.Duration(parsedServiceLatency.Duration.Nanos()),
+		time.Duration(parsedJobsLatency.Duration.Nanos()),
 		nil
 }
 
@@ -1012,7 +1024,7 @@ func maybeShowTimes(
 	}
 
 	// If discrete server/network timings are available, also print them.
-	parseLat, planLat, execLat, serviceLat, err := conn.getLastQueryStatistics()
+	parseLat, planLat, execLat, serviceLat, jobsLat, err := conn.getLastQueryStatistics()
 	if err != nil {
 		fmt.Fprintf(stderr, "\nwarning: %v", err)
 		return
@@ -1020,7 +1032,7 @@ func maybeShowTimes(
 
 	fmt.Fprint(stderr, " total")
 
-	networkLat := clientSideQueryLatency - serviceLat
+	networkLat := clientSideQueryLatency - (serviceLat + jobsLat)
 	// serviceLat can be greater than clientSideQueryLatency for some extremely quick
 	// statements (eg. BEGIN). So as to not confuse the user, we attribute all of
 	// the clientSideQueryLatency to the network in such cases.
@@ -1029,8 +1041,10 @@ func maybeShowTimes(
 	}
 	otherLat := serviceLat - parseLat - planLat - execLat
 	if sqlCtx.verboseTimings {
-		fmt.Fprintf(w, " (parse %s / plan %s / exec %s / other %s / network %s)\n",
-			parseLat, planLat, execLat, otherLat, networkLat)
+		// TODO(arul): I'm preffering schema change here over something like "jobs",
+		// but I could go either way.
+		fmt.Fprintf(w, " (parse %s / plan %s / exec %s / schema change %s / other %s / network %s)\n",
+			parseLat, planLat, execLat, jobsLat, otherLat, networkLat)
 	} else {
 		// Simplified display: just show the execution/network breakdown.
 		//
@@ -1042,7 +1056,7 @@ func maybeShowTimes(
 			fmt.Fprintf(w, "%s%s %.*f%s", sep, label, precision, lat.Seconds()*multiplier, unit)
 			sep = " / "
 		}
-		reportTiming("execution", serviceLat)
+		reportTiming("execution", serviceLat+jobsLat)
 		reportTiming("network", networkLat)
 		fmt.Fprintln(w, ")")
 	}
