@@ -710,88 +710,81 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		return nil
 	}
 
-	// For lease requests, we make a distinction between lease extensions and
-	// brand new leases. Brand new leases carry a closed timestamp equal to the
-	// lease start time. Lease extensions don't get a closed timestamp. This is
-	// because they're proposed without a MLAI, and so two lease extensions might
-	// commute and both apply which would result in a closed timestamp regression.
-	// The command application side doesn't bother protecting against such
-	// regressions.
-	// Lease transfers behave like regular proposals - they get a closed timestamp
-	// based on closedTSTarget. Note that transfers carry a summary of the
-	// timestamp cache, so the new leaseholder will be aware of all the reads
-	// performed by the previous leaseholder.
+	// Lease requests don't carry closed timestamps. The reason for this differ
+	// between lease extensions and brand new leases:
+	// - A lease extension cannot carry a closed timestamp assigned in the same
+	// way as we do for regular proposal because they're proposed without a MLAI,
+	// and so two lease extensions might commute and both apply, which would
+	// result in a closed timestamp regression when the reordered extension
+	// applies. The command application side doesn't bother protecting against
+	// such regressions. Besides, the considerations for brand new leases below
+	// also apply.
+	// - For a brand new lease, one might think that the lease start time can be
+	// considered a closed timestamp(*) since, if this replica gets the lease, it
+	// will not evaluate writes at lower timestamps. Unfortunately, there's a
+	// problem: while it's true that this replica, and this range in general, will
+	// not permit writes at timestamps below this lease's start time, it might
+	// happen that the range is in the process of merging with its left neighbor.
+	// If this range has already been Subsumed as the RHS of a merge then, after
+	// merge, the joint range will allow writes to the former RHS's key space at
+	// timestamps above the RHS's freeze start (which is below the start time of
+	// this lease). Thus, if this lease were to close its start timestamp while
+	// subsumed, then it'd be possible for follower reads to be served before the
+	// merge finalizes at timestamps that would become un-closed after the merge.
+	// Since this scenario is about subsumed ranges, we could make a distinction
+	// between brand new leases for subsumed ranges versus other brand new leases,
+	// and let the former category close the lease start time. But, for
+	// simplicity, we don't close timestamps on any lease requests.
+	//
+	// As opposed to lease requests, lease transfers behave like regular
+	// proposals: they get a closed timestamp based on closedTSTarget. Note that
+	// transfers carry a summary of the timestamp cache, so the new leaseholder
+	// will be aware of all the reads performed by the previous leaseholder.
+	//
+	// (*) If we were to close the lease start time, we'd have to forward the
+	// lease start time to b.assignedClosedTimestamp. We surprisingly might have
+	// previously closed a timestamp above the lease start time - when we close
+	// timestamps in the future, then attempt to transfer our lease away (and thus
+	// proscribe it) but the transfer fails and we're now acquiring a new lease to
+	// replace the proscribed one. Also, if we ever re-introduce closed
+	// timestamps carried by lease requests, make sure to resurrect the old
+	// TestRejectedLeaseDoesntDictateClosedTimestamp and protect against that
+	// scenario.
 	if p.Request.IsLeaseRequest() {
-		// We read the lease from the ReplicatedEvalResult, not from leaseReq, because the
-		// former is more up to date, having been modified by the evaluation.
-		newLease := p.command.ReplicatedEvalResult.State.Lease
-		oldLease := p.leaseStatus.Lease
-		leaseExtension := newLease.Sequence == oldLease.Sequence
-		if leaseExtension {
-			return nil
-		}
-		// For brand new leases, we close the lease start time. Since this proposing
-		// replica is not the leaseholder, the previous target is meaningless.
-		closedTSTarget = newLease.Start.ToTimestamp()
-		// We forward closedTSTarget to b.assignedClosedTimestamp. We surprisingly
-		// might have previously closed a timestamp above the lease start time -
-		// when we close timestamps in the future, then attempt to transfer our
-		// lease away (and thus proscribe it) but the transfer fails and we're now
-		// acquiring a new lease to replace the proscribed one.
-		//
-		// TODO(andrei,nvanbenschoten): add a test with scenario:
-		// - Acquire lease @ 1
-		// - Close future timestamp @ 3
-		// - Attempt to transfer lease @ 2
-		// - Reject
-		// - Reacquire lease @ 2
-		closedTSTarget.Forward(b.assignedClosedTimestamp)
+		return nil
+	}
 
-		// Note that we're not bumping b.assignedClosedTimestamp here (we're not
-		// calling forwardClosedTimestampLocked). Bumping it to the lease start time
-		// would (surprisingly?) be illegal: just because we're proposing a lease
-		// starting at timestamp 100, doesn't mean we're sure to not be in the
-		// process of evaluating requests writing below 100. This can happen if a
-		// lease transfer has already applied while we were evaluating this lease
-		// request, and if we've already started evaluating writes under the
-		// transferred lease. Such a transfer can give us the lease starting at
-		// timestamp 50. If such a transfer applied, then our lease request that
-		// we're proposing now is sure to not apply. But if we were to bump
-		// b.assignedClosedTimestamp, the damage would be done. See
-		// TestRejectedLeaseDoesntDictateClosedTimestamp.
-	} else {
-		// Sanity check that this command is not violating the closed timestamp. It
-		// must be writing at a timestamp above assignedClosedTimestamp
-		// (assignedClosedTimestamp represents the promise that this replica made
-		// through previous commands to not evaluate requests with lower
-		// timestamps); in other words, assignedClosedTimestamp was not supposed to
-		// have been incremented while requests with lower timestamps were
-		// evaluating (instead, assignedClosedTimestamp was supposed to have bumped
-		// the write timestamp of any request the began evaluating after it was
-		// set).
-		if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.IsIntentWrite() {
-			return errors.AssertionFailedf("attempting to propose command writing below closed timestamp. "+
-				"wts: %s < assigned closed: %s; ba: %s",
-				p.Request.WriteTimestamp(), b.assignedClosedTimestamp, p.Request)
-		}
+	// Sanity check that this command is not violating the closed timestamp. It
+	// must be writing at a timestamp above assignedClosedTimestamp
+	// (assignedClosedTimestamp represents the promise that this replica made
+	// through previous commands to not evaluate requests with lower
+	// timestamps); in other words, assignedClosedTimestamp was not supposed to
+	// have been incremented while requests with lower timestamps were
+	// evaluating (instead, assignedClosedTimestamp was supposed to have bumped
+	// the write timestamp of any request the began evaluating after it was
+	// set).
+	if p.Request.WriteTimestamp().Less(b.assignedClosedTimestamp) && p.Request.IsIntentWrite() {
+		return errors.AssertionFailedf("attempting to propose command writing below closed timestamp. "+
+			"wts: %s < assigned closed: %s; ba: %s",
+			p.Request.WriteTimestamp(), b.assignedClosedTimestamp, p.Request)
+	}
 
-		lb := b.evalTracker.LowerBound(ctx)
-		if !lb.IsEmpty() {
-			// If the tracker told us that requests are currently evaluating at
-			// timestamps >= lb, then we can close up to lb.Prev(). We use FloorPrev()
-			// to get rid of the logical ticks; we try to not publish closed ts with
-			// logical ticks when there's no good reason for them.
-			closedTSTarget.Backward(lb.FloorPrev())
-		}
-		// We can't close timestamps above the current lease's expiration.
-		closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound())
+	lb := b.evalTracker.LowerBound(ctx)
+	if !lb.IsEmpty() {
+		// If the tracker told us that requests are currently evaluating at
+		// timestamps >= lb, then we can close up to lb.Prev(). We use FloorPrev()
+		// to get rid of the logical ticks; we try to not publish closed ts with
+		// logical ticks when there's no good reason for them.
+		closedTSTarget.Backward(lb.FloorPrev())
+	}
+	// We can't close timestamps above the current lease's expiration.
+	closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound())
 
-		// We're about to close closedTSTarget. The propBuf needs to remember that
-		// in order for incoming requests to be bumped above it (through
-		// TrackEvaluatingRequest).
-		if !b.forwardClosedTimestampLocked(closedTSTarget) {
-			closedTSTarget = b.assignedClosedTimestamp
-		}
+	// We're about to close closedTSTarget. The propBuf needs to remember that
+	// in order for incoming requests to be bumped above it (through
+	// TrackEvaluatingRequest).
+	if !b.forwardClosedTimestampLocked(closedTSTarget) {
+		closedTSTarget = b.assignedClosedTimestamp
 	}
 
 	// Fill in the closed ts in the proposal.
@@ -856,7 +849,7 @@ func (b *propBuf) FlushLockedWithoutProposing(ctx context.Context) {
 }
 
 // OnLeaseChangeLocked is called when a new lease is applied to this range.
-// assignedClosedTimestamp is the range's closed timestamp after the new lease was applied. The
+// closedTS is the range's closed timestamp after the new lease was applied. The
 // closed timestamp tracked by the propBuf is updated accordingly.
 func (b *propBuf) OnLeaseChangeLocked(leaseOwned bool, closedTS hlc.Timestamp) {
 	if leaseOwned {

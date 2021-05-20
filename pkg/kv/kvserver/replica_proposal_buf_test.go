@@ -818,7 +818,8 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			// timestamp to this expiration.
 			leaseExp:    expiredLeaseTimestamp,
 			rangePolicy: roachpb.LAG_BY_CLUSTER_SETTING,
-			expClosed:   now.ToTimestamp(),
+			// Lease requests don't carry closed timestamps.
+			expClosed: hlc.Timestamp{},
 			// Check that the lease proposal does not bump b.assignedClosedTimestamp.
 			// The proposer cannot make promises about the write timestamps of further
 			// requests based on the start time of a proposed lease. See comments in
@@ -838,8 +839,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			// timestamp to this expiration.
 			leaseExp:    expiredLeaseTimestamp,
 			rangePolicy: roachpb.LAG_BY_CLUSTER_SETTING,
-			// Lease extensions don't carry closed timestamps because they don't get
-			// MLAIs, and so they can be reordered.
+			// Lease extensions don't carry closed timestamps.
 			expClosed:               hlc.Timestamp{},
 			expAssignedClosedBumped: false,
 		},
