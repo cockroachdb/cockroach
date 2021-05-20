@@ -3884,7 +3884,8 @@ type ExportRequest struct {
 	Storage       ExternalStorage `protobuf:"bytes,2,opt,name=storage,proto3" json:"storage"`
 	StartTime     hlc.Timestamp   `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time"`
 	MVCCFilter    MVCCFilter      `protobuf:"varint,4,opt,name=mvcc_filter,json=mvccFilter,proto3,enum=cockroach.roachpb.MVCCFilter" json:"mvcc_filter,omitempty"`
-	// Return the exported SST data in the response.
+	// Return the exported SST data in the response instead of writing it to a
+	// storage destination. Cannot be true if storage is also specified.
 	ReturnSST bool `protobuf:"varint,5,opt,name=return_sst,json=returnSst,proto3" json:"return_sst,omitempty"`
 	// EnableTimeBoundIteratorOptimization, if true, enables a performance
 	// optimization that allows us to entirely skip over sstables in RocksDB that

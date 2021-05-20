@@ -90,16 +90,21 @@ func evalExport(
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Finish()
 
-	makeExternalStorage := !args.ReturnSST || args.Storage != roachpb.ExternalStorage{} ||
-		(args.StorageByLocalityKV != nil && len(args.StorageByLocalityKV) > 0)
-	if makeExternalStorage || log.V(1) {
+	if (!args.ReturnSST) || log.V(1) {
 		log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 	} else {
 		// Requests that don't write to export storage are expected to be small.
 		log.Eventf(ctx, "export [%s,%s)", args.Key, args.EndKey)
 	}
 
-	if makeExternalStorage {
+	if args.ReturnSST {
+		if args.Storage != (roachpb.ExternalStorage{}) {
+			return result.Result{}, errors.Errorf("requests returning the file should not specify file storage")
+		}
+		if args.Encryption != nil {
+			return result.Result{}, errors.Errorf("requests returning the file should not specify file encryption")
+		}
+	} else {
 		if _, ok := roachpb.TenantFromContext(ctx); ok {
 			if args.Storage.Provider == roachpb.ExternalStorageProvider_userfile {
 				return result.Result{}, errors.Errorf("requests to userfile on behalf of tenants must be made by the tenant's SQL process")
@@ -113,7 +118,7 @@ func evalExport(
 	// args.Storage.
 	var localityKV string
 	var exportStore cloud.ExternalStorage
-	if makeExternalStorage {
+	if !args.ReturnSST {
 		var storeConf roachpb.ExternalStorage
 		var err error
 		foundStoreByLocality := false
@@ -177,13 +182,6 @@ func evalExport(
 			break
 		}
 
-		if args.Encryption != nil {
-			data, err = EncryptFile(data, args.Encryption.Key)
-			if err != nil {
-				return result.Result{}, err
-			}
-		}
-
 		span := roachpb.Span{Key: start}
 		if resume != nil {
 			span.EndKey = resume
@@ -196,7 +194,16 @@ func evalExport(
 			LocalityKV: localityKV,
 		}
 
-		if exportStore != nil {
+		returnSST := args.ReturnSST
+		if returnSST {
+			exported.SST = data
+		} else {
+			if args.Encryption != nil {
+				data, err = EncryptFile(data, args.Encryption.Key)
+				if err != nil {
+					return result.Result{}, err
+				}
+			}
 			// TODO(dt): don't reach out into a SQL builtin here; this code lives in KV.
 			// Create a unique int differently.
 			nodeID := cArgs.EvalCtx.NodeID()
@@ -213,9 +220,7 @@ func evalExport(
 				return result.Result{}, err
 			}
 		}
-		if args.ReturnSST {
-			exported.SST = data
-		}
+
 		reply.Files = append(reply.Files, exported)
 		start = resume
 
