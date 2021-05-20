@@ -39,6 +39,7 @@ type MutableDescGetter interface {
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
 	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
 	SubmitDrainedNames(ctx context.Context, codec keys.SQLCodec, ba *kv.Batch) error
+	RemoveObjectComments(ctx context.Context, id descpb.ID) error
 }
 
 // MutationJobs encapsulates the logic to create different types
@@ -216,7 +217,7 @@ func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescript
 	if err != nil {
 		return err
 	}
-	// Queue up name for draining.
+	// Queue up names for draining.
 	parentSchemaID := tableDesc.GetParentSchemaID()
 	nameDetails := descpb.NameInfo{
 		ParentID:       tableDesc.ParentID,
