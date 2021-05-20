@@ -232,7 +232,10 @@ func createBenchmarkChangefeed(
 		SchemaFeed:       doNothingSchemaFeed{},
 	}
 
-	sf := span.MakeFrontier(spans...)
+	sf, err := span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, nil, err
+	}
 	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 	eventConsumer := newKVEventToRowConsumer(ctx, &serverCfg, sf, initialHighWater,
 		sink, encoder, details, TestingKnobs{})
@@ -258,7 +261,10 @@ func createBenchmarkChangefeed(
 	go func() {
 		defer wg.Done()
 		err := func() error {
-			sf := span.MakeFrontier(spans...)
+			sf, err := span.MakeFrontier(spans...)
+			if err != nil {
+				return err
+			}
 			for {
 				// This is basically the ChangeAggregator processor.
 				rs, err := tickFn(ctx)
@@ -268,7 +274,11 @@ func createBenchmarkChangefeed(
 				// This is basically the ChangeFrontier processor, the resolved
 				// spans are normally sent using distsql, so we're missing a bit
 				// of overhead here.
-				if sf.Forward(rs.Span, rs.Timestamp) {
+				advanced, err := sf.Forward(rs.Span, rs.Timestamp)
+				if err != nil {
+					return err
+				}
+				if advanced {
 					frontier := sf.Frontier()
 					if err := emitResolvedTimestamp(ctx, encoder, sink, frontier); err != nil {
 						return err

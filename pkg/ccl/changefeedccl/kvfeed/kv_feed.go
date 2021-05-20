@@ -383,9 +383,14 @@ func copyFromSourceToSinkUntilTableEvent(
 ) error {
 	// Maintain a local spanfrontier to tell when all the component rangefeeds
 	// being watched have reached the Scan boundary.
-	frontier := span.MakeFrontier(cfg.Spans...)
+	frontier, err := span.MakeFrontier(cfg.Spans...)
+	if err != nil {
+		return err
+	}
 	for _, span := range cfg.Spans {
-		frontier.Forward(span, cfg.Timestamp)
+		if _, err := frontier.Forward(span, cfg.Timestamp); err != nil {
+			return err
+		}
 	}
 	var (
 		scanBoundary         *errBoundaryReached
@@ -402,27 +407,29 @@ func copyFromSourceToSinkUntilTableEvent(
 			}
 			return nil
 		}
-		applyScanBoundary = func(e Event) (skipEvent, reachedBoundary bool) {
+		applyScanBoundary = func(e Event) (skipEvent, reachedBoundary bool, err error) {
 			if scanBoundary == nil {
-				return false, false
+				return false, false, nil
 			}
 			if e.Timestamp().Less(scanBoundary.Timestamp()) {
-				return false, false
+				return false, false, nil
 			}
 			switch e.Type() {
 			case KVEvent:
-				return true, false
+				return true, false, nil
 			case ResolvedEvent:
 				boundaryResolvedTimestamp := scanBoundary.Timestamp().Prev()
 				resolved := e.Resolved()
 				if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
-					return false, false
+					return false, false, nil
 				}
-				frontier.Forward(resolved.Span, boundaryResolvedTimestamp)
-				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp)
+				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
+					return false, false, err
+				}
+				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
 			default:
 				log.Fatal(ctx, "unknown event type")
-				return false, false
+				return false, false, nil
 			}
 		}
 		addEntry = func(e Event) error {
@@ -435,7 +442,9 @@ func copyFromSourceToSinkUntilTableEvent(
 				// at scanBoundary.Prev(). We may not yet know about that scanBoundary.
 				// The logic currently doesn't make this clean.
 				resolved := e.Resolved()
-				frontier.Forward(resolved.Span, resolved.Timestamp)
+				if _, err := frontier.Forward(resolved.Span, resolved.Timestamp); err != nil {
+					return err
+				}
 				return sink.AddResolved(ctx, resolved.Span, resolved.Timestamp, jobspb.ResolvedSpan_NONE)
 			default:
 				log.Fatal(ctx, "unknown event type")
@@ -451,7 +460,10 @@ func copyFromSourceToSinkUntilTableEvent(
 		if err := checkForScanBoundary(e.Timestamp()); err != nil {
 			return err
 		}
-		skipEntry, scanBoundaryReached := applyScanBoundary(e)
+		skipEntry, scanBoundaryReached, err := applyScanBoundary(e)
+		if err != nil {
+			return err
+		}
 		if scanBoundaryReached {
 			// All component rangefeeds are now at the boundary.
 			// Break out of the ctxgroup by returning the sentinel error.
