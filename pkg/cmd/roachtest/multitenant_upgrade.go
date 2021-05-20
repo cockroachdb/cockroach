@@ -100,7 +100,7 @@ func (tn *tenantNode) start(ctx context.Context, t *test, c *cluster, binary str
 	u.Host = c.ExternalIP(ctx, c.Node(tn.node))[0] + ":" + strconv.Itoa(tn.sqlPort)
 	tn.pgURL = u.String()
 
-	// The tenant is usually responsible ~right away, but it
+	// The tenant is usually responsive ~right away, but it
 	// has on occasions taken more than 3s for it to connect
 	// to the KV layer, and it won't open the SQL port until
 	// it has.
