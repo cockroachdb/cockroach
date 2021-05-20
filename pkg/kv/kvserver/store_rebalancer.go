@@ -543,6 +543,16 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		rangeDesc, zone := replWithStats.repl.DescAndZone()
 		clusterNodes := sr.rq.allocator.storePool.ClusterNodeCount()
 		numDesiredVoters := GetNeededVoters(zone.GetNumVoters(), clusterNodes)
+		numDesiredNonVoters := GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes)
+		if rs := rangeDesc.Replicas(); numDesiredVoters != len(rs.VoterDescriptors()) ||
+			numDesiredNonVoters != len(rs.NonVoterDescriptors()) {
+			// If the StoreRebalancer is allowed past this point, it may accidentally
+			// downreplicate and this can cause unavailable ranges.
+			//
+			// See: https://github.com/cockroachdb/cockroach/issues/54444#issuecomment-707706553
+			log.VEventf(ctx, 3, "range needs up/downreplication; not considering rebalance")
+			continue
+		}
 
 		rebalanceCtx := rangeRebalanceContext{
 			replWithStats:       replWithStats,
@@ -550,7 +560,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			zone:                zone,
 			clusterNodes:        clusterNodes,
 			numDesiredVoters:    numDesiredVoters,
-			numDesiredNonVoters: GetNeededNonVoters(numDesiredVoters, int(zone.GetNumNonVoters()), clusterNodes),
+			numDesiredNonVoters: numDesiredNonVoters,
 		}
 		targetVoterRepls, targetNonVoterRepls := sr.getRebalanceCandidatesBasedOnQPS(
 			ctx, rebalanceCtx, localDesc, storeMap, storeList, minQPS, maxQPS,
