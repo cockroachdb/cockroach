@@ -874,14 +874,24 @@ func TestShowLastQueryStatistics(t *testing.T) {
 
 	for _, tc := range testCases {
 		if _, err := sqlConn.Exec(tc.stmt); err != nil {
-			t.Fatalf("executing %s. failed: %v ", tc.stmt, err)
+			require.NoError(t, err, "executing %s  ", tc.stmt)
 		}
 
 		rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS")
-		if err != nil {
-			t.Fatalf("show last query statistics failed: %v", err)
-		}
+		require.NoError(t, err, "show last query statistics failed")
 		defer rows.Close()
+
+		resultColumns, err := rows.Columns()
+		require.NoError(t, err)
+
+		const expectedNumColumns = 4
+		if len(resultColumns) != expectedNumColumns {
+			t.Fatalf(
+				"unexpected number of columns in result; expected %d, found %d",
+				expectedNumColumns,
+				len(resultColumns),
+			)
+		}
 
 		var parseLatency string
 		var planLatency string
@@ -894,21 +904,16 @@ func TestShowLastQueryStatistics(t *testing.T) {
 		}
 
 		parseInterval, err := tree.ParseDInterval(parseLatency)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+
 		planInterval, err := tree.ParseDInterval(planLatency)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+
 		execInterval, err := tree.ParseDInterval(execLatency)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
+
 		serviceInterval, err := tree.ParseDInterval(serviceLatency)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		if parseInterval.AsFloat64() <= 0 || parseInterval.AsFloat64() > 1 {
 			t.Fatalf("unexpected parse latency: %v", parseInterval.AsFloat64())
