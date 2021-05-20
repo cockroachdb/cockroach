@@ -589,6 +589,10 @@ func (b *buildContext) dropTable(ctx context.Context, n *tree.DropTable) {
 			panic(errors.AssertionFailedf("Unable to resolve table %s",
 				name.FQString()))
 		}
+		// Interleaved tables not supported in new schema changer.
+		if table.IsInterleaved() {
+			panic(&notImplementedError{n: n, detail: "drop on interleaved table"})
+		}
 
 		// Drop dependent views
 		err = table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
