@@ -18,7 +18,6 @@ import (
 	// Needed for roachpb.Span.String().
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
@@ -107,24 +106,35 @@ type Frontier struct {
 	idAlloc int64
 }
 
+// makeSpan copies intervals start/end points and returns a span.
+// Whenever we store user provided span objects inside frontier
+// datastructures, we must make a copy lest the user later mutates
+// underlying start/end []byte slices in the range.
+func makeSpan(r interval.Range) (res roachpb.Span) {
+	res.Key = append(res.Key, r.Start...)
+	res.EndKey = append(res.EndKey, r.End...)
+	return
+}
+
 // MakeFrontier returns a Frontier that tracks the given set of spans.
-func MakeFrontier(spans ...roachpb.Span) *Frontier {
-	s := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
-	for _, span := range spans {
+func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
+	f := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+	for _, s := range spans {
+		span := makeSpan(s.AsRange())
 		e := &frontierEntry{
-			id:   s.idAlloc,
+			id:   f.idAlloc,
 			keys: span.AsRange(),
 			span: span,
 			ts:   hlc.Timestamp{},
 		}
-		s.idAlloc++
-		if err := s.tree.Insert(e, true /* fast */); err != nil {
-			panic(err)
+		f.idAlloc++
+		if err := f.tree.Insert(e, true /* fast */); err != nil {
+			return nil, err
 		}
-		heap.Push(&s.minHeap, e)
+		heap.Push(&f.minHeap, e)
 	}
-	s.tree.AdjustRanges()
-	return s
+	f.tree.AdjustRanges()
+	return f, nil
 }
 
 // Frontier returns the minimum timestamp being tracked.
@@ -151,100 +161,199 @@ func (f *Frontier) PeekFrontierSpan() roachpb.Span {
 // represent this timestamped span (e.g. if it overlaps with the tracked span
 // set boundary). Similarly, an entry created by a previous Forward may be
 // partially overlapped and have to be split into two entries.
-func (f *Frontier) Forward(span roachpb.Span, ts hlc.Timestamp) bool {
+func (f *Frontier) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
 	prevFrontier := f.Frontier()
-	f.insert(span, ts)
-	return prevFrontier.Less(f.Frontier())
+	if err := f.insert(span, ts); err != nil {
+		return false, err
+	}
+	return prevFrontier.Less(f.Frontier()), nil
 }
 
-func (f *Frontier) insert(span roachpb.Span, ts hlc.Timestamp) {
-	entryKeys := span.AsRange()
-	overlapping := f.tree.Get(entryKeys)
+// extendRangeToTheLeft extends the range to the left of the range, provided those
+// ranges all have specified timestamp.
+// Updates provided range with the new starting position.
+// Returns the list of frontier entries covered by the updated range; the caller
+// is expected to remove those covered ranges from the tree.
+func extendRangeToTheLeft(
+	t interval.Tree, r *interval.Range, ts hlc.Timestamp,
+) (covered []*frontierEntry) {
+	for {
+		// Get the range to the left of the range.
+		// Since we request an inclusive overlap of the range containing exactly
+		// 1 key, we expect to get two extensions if there is anything to the left:
+		// the range (r) itself, and the one to the left of r.
+		left := t.GetWithOverlapper(
+			interval.Range{Start: r.Start, End: r.Start},
+			interval.InclusiveOverlapper,
+		)
+		if len(left) == 2 && left[0].(*frontierEntry).ts.Equal(ts) {
+			e := left[0].(*frontierEntry)
+			covered = append(covered, e)
+			r.Start = e.keys.Start
+		} else {
+			return
+		}
+	}
+}
 
-	// TODO(dan): OverlapCoveringMerge is overkill, do this without it. See
-	// `tscache/treeImpl.Add` for inspiration.
-	entryCov := covering.Covering{{Start: span.Key, End: span.EndKey, Payload: ts}}
-	overlapCov := make(covering.Covering, len(overlapping))
-	for i, o := range overlapping {
-		spe := o.(*frontierEntry)
-		overlapCov[i] = covering.Range{
-			Start: spe.span.Key, End: spe.span.EndKey, Payload: spe,
+// extendRangeToTheRight extends the range to the right of the range, provided those
+// ranges all have specified timestamp.
+// Updates provided range with the new ending position.
+// Returns the list of frontier entries covered by the updated range; the caller
+// is expected to remove those covered ranges from the tree.
+func extendRangeToTheRight(
+	t interval.Tree, r *interval.Range, ts hlc.Timestamp,
+) (covered []*frontierEntry) {
+	for {
+		// Get the range to the right of the range.
+		// Since we request an exclusive overlap of the range containing exactly
+		// 1 key, we expect to get exactly 1 extensions if there is anything to the right of the span.
+		endKey := roachpb.Key(r.End)
+		rightSpan := roachpb.Span{Key: endKey, EndKey: endKey.Next()}
+		right := t.GetWithOverlapper(rightSpan.AsRange(), interval.ExclusiveOverlapper)
+		if len(right) == 1 && right[0].(*frontierEntry).ts.Equal(ts) {
+			e := right[0].(*frontierEntry)
+			covered = append(covered, e)
+			r.End = e.keys.End
+		} else {
+			return
 		}
 	}
-	merged := covering.OverlapCoveringMerge([]covering.Covering{entryCov, overlapCov})
+}
 
-	toInsert := make([]frontierEntry, 0, len(merged))
-	for _, m := range merged {
-		// Compute the newest timestamp seen for this span and note whether it's
-		// tracked. There will be either 1 or 2 payloads. If there's 2, it will
-		// be the new span and the old entry. If it's 1 it could be either a new
-		// span (which is untracked and should be ignored) or an old entry which
-		// has been clipped.
-		var mergedTs hlc.Timestamp
-		var tracked bool
-		for _, payload := range m.Payload.([]interface{}) {
-			switch p := payload.(type) {
-			case hlc.Timestamp:
-				if mergedTs.Less(p) {
-					mergedTs = p
-				}
-			case *frontierEntry:
-				tracked = true
-				if mergedTs.Less(p.ts) {
-					mergedTs = p.ts
-				}
-			}
-		}
-		// TODO(dan): Collapse span-adjacent entries with the same value for
-		// timestamp and tracked to save space.
-		if tracked {
-			toInsert = append(toInsert, frontierEntry{
-				id:   f.idAlloc,
-				keys: interval.Range{Start: m.Start, End: m.End},
-				span: roachpb.Span{Key: m.Start, EndKey: m.End},
-				ts:   mergedTs,
-			})
-			f.idAlloc++
-		}
+func (f *Frontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
+	const continueMatch = false
+
+	// Set of frontier entries to add and remove.
+	var toAdd, toRemove []*frontierEntry
+
+	// addEntry adds frontier entry to the toAdd list.
+	addEntry := func(r interval.Range, ts hlc.Timestamp) {
+		sp := makeSpan(r)
+		toAdd = append(toAdd, &frontierEntry{
+			id:   f.idAlloc,
+			span: sp,
+			keys: sp.AsRange(),
+			ts:   ts,
+		})
+		f.idAlloc++
 	}
 
-	// All the entries in `overlapping` have been replaced by updated ones in
-	// `toInsert`, so remove them all from the tree and heap.
-	needAdjust := false
-	if len(overlapping) == 1 {
-		spe := overlapping[0].(*frontierEntry)
-		if err := f.tree.Delete(spe, false /* fast */); err != nil {
-			panic(err)
+	// todoRange is the range we're adding. It gets updated as we process the range.
+	todoRange := span.AsRange()
+
+	// pendingSpan (if not empty) is the span of multiple overlap intervals
+	// we'll merge together (because all of those intervals have timestamp lower
+	// than insertTS).
+	var pendingSpan interval.Range
+
+	// consumePrefix consumes todoRange prefix ending at 'end' and moves
+	// that prefix into pendingSpan.
+	consumePrefix := func(end interval.Comparable) {
+		if pendingSpan.Start == nil {
+			pendingSpan.Start = todoRange.Start
 		}
-		heap.Remove(&f.minHeap, spe.index)
-	} else {
-		for i := range overlapping {
-			spe := overlapping[i].(*frontierEntry)
-			if err := f.tree.Delete(spe, true /* fast */); err != nil {
-				panic(err)
+		todoRange.Start = end
+		pendingSpan.End = end
+	}
+
+	extendLeft := true // can the merged span be extended to the left?
+
+	// addPending adds frontier entry for the pendingSpan if it's non-empty, and resets it.
+	addPending := func() {
+		if !pendingSpan.Start.Equal(pendingSpan.End) {
+			if extendLeft {
+				toRemove = append(toRemove, extendRangeToTheLeft(f.tree, &pendingSpan, insertTS)...)
 			}
-			heap.Remove(&f.minHeap, spe.index)
+			addEntry(pendingSpan, insertTS)
 		}
-		needAdjust = true
+
+		pendingSpan.Start = nil
+		pendingSpan.End = nil
+		extendLeft = true
 	}
-	// Then insert!
-	if len(toInsert) == 1 {
-		if err := f.tree.Insert(&toInsert[0], false /* fast */); err != nil {
-			panic(err)
+
+	// Main work: start iterating through all ranges that overlap our span.
+	f.tree.DoMatching(func(k interval.Interface) (done bool) {
+		overlap := k.(*frontierEntry)
+
+		// If overlap does not start immediately after our pendingSpan,
+		// then add and reset pending.
+		if !overlap.span.Key.Equal(roachpb.Key(pendingSpan.End)) {
+			addPending()
 		}
-		heap.Push(&f.minHeap, &toInsert[0])
-	} else {
-		for i := range toInsert {
-			if err := f.tree.Insert(&toInsert[i], true /* fast */); err != nil {
-				panic(err)
+
+		// Trim todoRange if it falls outside the span(s) tracked by this frontier.
+		// This establishes the invariant that overlap start must be at or before todoRange start.
+		if todoRange.Start.Compare(overlap.keys.Start) < 0 {
+			todoRange.Start = overlap.keys.Start
+		}
+
+		// Fast case: we already recorded higher timestamp for this overlap.
+		if insertTS.LessEq(overlap.ts) {
+			todoRange.Start = overlap.keys.End
+			return continueMatch
+		}
+
+		// At this point, we know that overlap timestamp is not ahead of the insertTS
+		// (otherwise we'd hit fast case above).
+		// We need split overlap range, so mark overlap for removal.
+		toRemove = append(toRemove, overlap)
+
+		// We need to split overlap range into multiple parts.
+		// 1. Possibly empty part before todoRange.Start
+		if overlap.keys.Start.Compare(todoRange.Start) < 0 {
+			extendLeft = false
+			addEntry(interval.Range{Start: overlap.keys.Start, End: todoRange.Start}, overlap.ts)
+		}
+
+		// 2. Middle part (with updated timestamp), and...
+		// 3. Possibly empty part after todoRange end.
+		if cmp := todoRange.End.Compare(overlap.keys.End); cmp <= 0 {
+			// Our todoRange ends before the overlap ends, so consume all of it.
+			consumePrefix(todoRange.End)
+
+			if cmp < 0 && overlap.ts != insertTS {
+				// Add the rest of the overlap.
+				addEntry(interval.Range{Start: todoRange.End, End: overlap.keys.End}, overlap.ts)
+			} else {
+				// We can consume all the way until the end of the overlap
+				// since overlap extends to the end of todoRange or it has the same timestamp as insertTS.
+				consumePrefix(overlap.keys.End)
+				// We can also attempt to merge more ranges with the same timestamp to the right
+				// of overlap.  Extending range to the right adjusts pendingSpan.End and returns the
+				// list of extended ranges, which we remove because they are subsumed by pendingSpan.
+				// Note also, that at this point, we know that this is the last overlap entry, and that
+				// we will exit DoMatching, at which point we add whatever range was accumulated
+				// in the pendingRange.
+				toRemove = append(toRemove, extendRangeToTheRight(f.tree, &pendingSpan, insertTS)...)
 			}
-			heap.Push(&f.minHeap, &toInsert[i])
+		} else {
+			// Our todoRange extends beyond overlap: consume until the end of the overlap.
+			consumePrefix(overlap.keys.End)
 		}
-		needAdjust = true
+
+		return continueMatch
+	}, span.AsRange())
+
+	// Add remaining pending range.
+	addPending()
+
+	const withRangeAdjust = false
+	for _, e := range toRemove {
+		if err := f.tree.Delete(e, withRangeAdjust); err != nil {
+			return err
+		}
+		heap.Remove(&f.minHeap, e.index)
 	}
-	if needAdjust {
-		f.tree.AdjustRanges()
+
+	for _, e := range toAdd {
+		if err := f.tree.Insert(e, withRangeAdjust); err != nil {
+			return err
+		}
+		heap.Push(&f.minHeap, e)
 	}
+	return nil
 }
 
 // Entries invokes the given callback with the current timestamp for each

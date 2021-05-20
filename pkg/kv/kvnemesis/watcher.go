@@ -55,7 +55,10 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	if w.mu.kvs, err = MakeEngine(); err != nil {
 		return nil, err
 	}
-	w.mu.frontier = span.MakeFrontier(dataSpan)
+	w.mu.frontier, err = span.MakeFrontier(dataSpan)
+	if err != nil {
+		return nil, err
+	}
 	w.mu.frontierWaiters = make(map[hlc.Timestamp][]chan error)
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.g = ctxgroup.WithContext(ctx)
@@ -187,7 +190,11 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan *roachpb.RangeF
 				}
 			case *roachpb.RangeFeedCheckpoint:
 				w.mu.Lock()
-				if w.mu.frontier.Forward(e.Span, e.ResolvedTS) {
+				frontierAdvanced, err := w.mu.frontier.Forward(e.Span, e.ResolvedTS)
+				if err != nil {
+					panic(errors.Wrapf(err, "unexpected frontier error advancing to %s@%s", e.Span, e.ResolvedTS))
+				}
+				if frontierAdvanced {
 					frontier := w.mu.frontier.Frontier()
 					log.Infof(ctx, `watcher reached frontier %s lagging by %s`,
 						frontier, timeutil.Now().Sub(frontier.GoTime()))

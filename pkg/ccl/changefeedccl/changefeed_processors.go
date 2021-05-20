@@ -204,7 +204,12 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ctx, ca.cancel = context.WithCancel(ctx)
 	ca.Ctx = ctx
 
-	spans := ca.setupSpansAndFrontier()
+	spans, err := ca.setupSpansAndFrontier()
+	if err != nil {
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
+	}
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: ca.spanFrontier, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
 
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -222,7 +227,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
 	ca.kvFeedMemMon = kvFeedMemMon
 
-	var err error
 	ca.sink, err = getSink(
 		ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
 		ca.spec.User(), kvFeedMemMon.MakeBoundAccount(), ca.spec.JobID)
@@ -438,16 +442,22 @@ func getKVFeedInitialParameters(
 // different SpanFrontier elsewhere for the entire changefeed. This object is
 // used to filter out some previously emitted rows, and by the cloudStorageSink
 // to name its output files in lexicographically monotonic fashion.
-func (ca *changeAggregator) setupSpansAndFrontier() []roachpb.Span {
-	spans := make([]roachpb.Span, 0, len(ca.spec.Watches))
+func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err error) {
+	spans = make([]roachpb.Span, 0, len(ca.spec.Watches))
 	for _, watch := range ca.spec.Watches {
 		spans = append(spans, watch.Span)
 	}
-	ca.spanFrontier = span.MakeFrontier(spans...)
-	for _, watch := range ca.spec.Watches {
-		ca.spanFrontier.Forward(watch.Span, watch.InitialResolved)
+
+	ca.spanFrontier, err = span.MakeFrontier(spans...)
+	if err != nil {
+		return nil, err
 	}
-	return spans
+	for _, watch := range ca.spec.Watches {
+		if _, err := ca.spanFrontier.Forward(watch.Span, watch.InitialResolved); err != nil {
+			return nil, err
+		}
+	}
+	return spans, nil
 }
 
 // close has two purposes: to synchronize on the completion of the helper
@@ -540,7 +550,9 @@ func (ca *changeAggregator) tick() error {
 // maybeFlush flushes sink and emits resolved timestamp if needed.
 func (ca *changeAggregator) maybeFlush(resolvedSpan *jobspb.ResolvedSpan) error {
 	if resolvedSpan != nil {
-		ca.spanFrontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
+		if _, err := ca.spanFrontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
+			return err
+		}
 		ca.spansToFlush = append(ca.spansToFlush, resolvedSpan)
 	}
 
@@ -956,12 +968,16 @@ func newChangeFrontierProcessor(
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
+	sf, err := span.MakeFrontier(spec.TrackedSpans...)
+	if err != nil {
+		return nil, err
+	}
 	cf := &changeFrontier{
 		flowCtx:       flowCtx,
 		spec:          spec,
 		memAcc:        memMonitor.MakeBoundAccount(),
 		input:         input,
-		sf:            span.MakeFrontier(spec.TrackedSpans...),
+		sf:            sf,
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
 	}
 	if err := cf.Init(
@@ -995,7 +1011,6 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	var err error
 	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.Targets); err != nil {
 		return nil, err
 	}
@@ -1259,7 +1274,10 @@ func (cf *changeFrontier) noteResolvedSpan(d rowenc.EncDatum) error {
 		cf.boundaryType = resolved.BoundaryType
 	}
 
-	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
+	frontierChanged, err := cf.sf.Forward(resolved.Span, resolved.Timestamp)
+	if err != nil {
+		return err
+	}
 	isBehind := cf.maybeLogBehindSpan(frontierChanged)
 	if frontierChanged {
 		if err := cf.handleFrontierChanged(isBehind); err != nil {
