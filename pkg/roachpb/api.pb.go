@@ -6183,6 +6183,7 @@ type Header struct {
 	// - ScanRequest
 	// - ReverseScanRequest
 	// - DeleteRangeRequest
+	// - GetRequest
 	// - RevertRangeRequest
 	// - ResolveIntentRangeRequest
 	//
