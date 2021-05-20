@@ -1336,6 +1336,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	parseLat := phaseTimes.getParsingLatency().Seconds()
 	planLat := phaseTimes.getPlanningLatency().Seconds()
 	svcLat := phaseTimes.getServiceLatency().Seconds()
+	postCommitJobsLat := phaseTimes.getPostCommitJobsLatency().Seconds()
 
 	return res.AddRow(ctx,
 		tree.Datums{
@@ -1343,6 +1344,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 			tree.NewDInterval(duration.FromFloat64(planLat), types.DefaultIntervalTypeMetadata),
 			tree.NewDInterval(duration.FromFloat64(runLat), types.DefaultIntervalTypeMetadata),
 			tree.NewDInterval(duration.FromFloat64(svcLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(postCommitJobsLat), types.DefaultIntervalTypeMetadata),
 		})
 }
 
