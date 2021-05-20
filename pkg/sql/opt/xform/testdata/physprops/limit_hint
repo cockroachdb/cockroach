@@ -562,7 +562,7 @@ project
       ├── cardinality: [0 - 0]
       ├── immutable
       ├── key: ()
-      ├── fd: ()-->(4,5,8)
+      ├── fd: ()-->(4,5,8), (8)==(5), (5)==(8)
       ├── inner-join (cross)
       │    ├── columns: "?column?":4!null t0.c0:5!null t1.c0:8!null
       │    ├── cardinality: [0 - 0]
