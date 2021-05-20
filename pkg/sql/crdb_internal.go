@@ -841,7 +841,7 @@ func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
 // sqlStats object is needed.
 func getSQLStats(p *planner, virtualTableName string) (*sqlStats, error) {
 	if p.extendedEvalCtx.sqlStatsCollector == nil || p.extendedEvalCtx.sqlStatsCollector.sqlStats == nil {
-		return nil, errors.Newf("%s cannot be used in CREATE TABLE AS", virtualTableName)
+		return nil, errors.Newf("%s cannot be used in this context", virtualTableName)
 	}
 	return p.extendedEvalCtx.sqlStatsCollector.sqlStats, nil
 }
