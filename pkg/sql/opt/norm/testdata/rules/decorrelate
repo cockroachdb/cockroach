@@ -1562,7 +1562,7 @@ select
                 ├── columns: k:2!null i:3!null x:8!null y:9!null
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(2,3,8,9)
+                ├── fd: ()-->(2,3,8,9), (8)==(2), (3)==(9), (9)==(3), (2)==(8)
                 ├── inner-join (hash)
                 │    ├── columns: k:2!null i:3!null x:8!null y:9!null
                 │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)

@@ -1073,11 +1073,10 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 
 	// Functional Dependencies
 	// -----------------------
-	// Inherit functional dependencies from input if limit is > 1, else just use
-	// single row dependencies.
-	if constLimit > 1 {
-		rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	} else {
+	// Inherit functional dependencies from input. If limit is <= 1, add a
+	// single row dependency.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	if constLimit <= 1 {
 		rel.FuncDeps.MakeMax1Row(rel.OutputCols)
 	}
 
