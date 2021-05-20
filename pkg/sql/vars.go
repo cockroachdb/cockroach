@@ -1258,6 +1258,27 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	// TODO(mgartner): remove this once expression-based indexes are fully
+	// supported.
+	`experimental_enable_expression_based_indexes`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_expression_based_indexes`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`experimental_enable_expression_based_indexes`, s)
+			if err != nil {
+				return err
+			}
+			m.SetExpressionBasedIndexes(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.EnableExpressionBasedIndexes)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(experimentalExpressionBasedIndexesMode.Get(sv))
+		},
+	},
+
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	`experimental_enable_unique_without_index_constraints`: {

@@ -101,7 +101,7 @@ func ValidateComputedColumnExpression(
 	// are no variable expressions (besides dummyColumnItems) and no impure
 	// functions. In order to safely serialize user defined types and their
 	// members, we need to serialize the typed expression here.
-	expr, _, err := DequalifyAndValidateExpr(
+	expr, _, _, err := DequalifyAndValidateExpr(
 		ctx,
 		desc,
 		d.Computed.Expr,

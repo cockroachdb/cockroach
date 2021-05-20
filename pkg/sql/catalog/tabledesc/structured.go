@@ -608,7 +608,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 		}
 		s := "unique_rowid()"
 		col := &descpb.ColumnDescriptor{
-			Name:        GenerateUniqueConstraintName("rowid", nameExists),
+			Name:        GenerateUniqueName("rowid", nameExists),
 			Type:        types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -1719,7 +1719,7 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 		return err == nil
 	}
 
-	uniqueName := GenerateUniqueConstraintName(newCol.GetName(), nameExists)
+	uniqueName := GenerateUniqueName(newCol.GetName(), nameExists)
 
 	// Remember the name of oldCol, because newCol will take it.
 	oldColName := oldCol.GetName()
@@ -2264,11 +2264,10 @@ func (desc *wrapper) TableDesc() *descpb.TableDescriptor {
 	return &desc.TableDescriptor
 }
 
-// GenerateUniqueConstraintName attempts to generate a unique constraint name
-// with the given prefix.
-// It will first try prefix by itself, then it will subsequently try
-// adding numeric digits at the end, starting from 1.
-func GenerateUniqueConstraintName(prefix string, nameExistsFunc func(name string) bool) string {
+// GenerateUniqueName attempts to generate a unique name with the given prefix.
+// It will first try prefix by itself, then it will subsequently try adding
+// numeric digits at the end, starting from 1.
+func GenerateUniqueName(prefix string, nameExistsFunc func(name string) bool) string {
 	name := prefix
 	for i := 1; nameExistsFunc(name); i++ {
 		name = fmt.Sprintf("%s_%d", prefix, i)
