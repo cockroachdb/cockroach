@@ -97,6 +97,43 @@ backgroundColor<<connected>> RosyBrown
 [Statements Page in CC] -> [CC Redux]: Merges its redux\nstate tree with app
 @enduml](http://www.plantuml.com/plantuml/png/dPD1Jzj048Nl_XKZd-0G-OuGefX3KLK9WJWr73RhiRFoUcOrEoP15V-zZ4AeQn9QzPQitypi--RjPLOdEWwnYDWgA8E4RgtG146lWQdGe16X_Ffwl8ZuX14y3ua9IS69NmT5hwCWj2nGnp4h2ZpSBEdaNftYWAGPRbs7W5itf8YdPL4avtixAg-le6RA715EFFjUsFbriwhUVrUfxwend9Rmim3uKT-zLjnXCsuVxUzyH20mnIESdu_acGYzOdDnOTeahBmQM_0n8AdL4ok-6URsemBE8B9t4PvGih6OLqolSmPTv9MBu5A2RFSgNeg9qzze_dGwXkfDaok_qopsVYUeothl1cQcorUp4wjM1n_HV41oKBNpKjsxpXcV5-FcfLajzcWMH-0TbXb1IiDnVf-CFmF1ZGHL98iMu5R5MIJ9KhfXwPUq2Rg6keQSq8SsU1VZir5lnGq8vJlcw5Qv6Xov3fj5HdaA7lU1glyIfzh8JRaTI47zQGPo7oWvSSDadJPxvNpV2O_Kr1nPPlk1QoVzjxNhmo7fL7Z7-VbAU4CsxFYJM5pCylgGCGDkGzP07OYTWkS6bvG4izqoIM01vGdyOjh3UivVpRwnFYVCuAY1BxStRz-AuhEDMxTvZFwZvJ_sEOAgtfLFLleTfSCCGVEEqPAorO4A8bW2RTl59L8p3l4N)
 
+# Version alignment with CRDB releases
+
+`cluster-ui` is dependent on the API of CRDB through a dependency on 
+`crdb-protobuf-clients`. The published version of `cluster-ui` is aligned to
+CRDB by minor versions. These minor versions are maintained on development branches,
+with the latest unreleased version of CRDB being master both in that repository
+and in the `cluster-ui` package.
+
+| CRDB Version | Cluster UI Version | Cluster UI branch |
+|--------------|--------------------|-------------------|
+| 20.2.x       | 0.1.x              | cluster-ui-20.2   |
+| 21.1.x       | 0.2.x              | cluster-ui-21.1   |
+| 21.2.x       | 0.3.x              | master            |
+
+## 21.1 Release skew
+
+During the release process of CRDB version 21.1, the versions of cluster-ui skewed
+from the above alignment. A release branch was cut for CRDB 21.1 dependent on
+`cluster-ui` version 0.2.15, while development continued on `cluster-ui` against
+the CRDB master branch and was published using the minor versions `0.2.x`. Since
+this development was against the _next_ version of CRDB (21.2), the minor version
+of cluster-ui should have been increased to `0.3.x`.
+
+To correct this error, `cluster-ui-21.1` was created from version `0.2.15` and 
+the version increased to version `0.2.43`, and on master we increased the version
+to `0.3.0` to align with `21.2` development. This is confusing, in that the ancestry
+of these versions isn't determined by the minor version.
+
+| CRDB Version | Cluster UI Version |
+|--------------|--------------------|
+| 20.2.x       | 0.1.x              |
+| 21.1.x       | 0.2.0 -> 0.2.15, 0.2.43 -> 0.2.x |
+| 21.2.x       | 0.2.16 -> 0.2.42, 0.3.0 -> 0.3.x |
+
+To account for this, `cluster-ui` versions `0.2.16` to `0.2.42` are deprecated.
+Features from these versions required for CRDB 21.1 are backported to the
+`cluster-ui-21.1` branch and published as versions after `0.2.43`.
 
 # Development Workflow with CRDB
 
