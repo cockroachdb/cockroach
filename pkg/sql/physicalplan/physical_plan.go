@@ -300,7 +300,7 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 			Node: prevProc.Node,
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{
-					Type:        execinfrapb.InputSyncSpec_UNORDERED,
+					Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 					ColumnTypes: prevStageResultTypes,
 				}},
 				Core: coreFunc(int(resultProc), prevProc),
@@ -340,23 +340,17 @@ func (p *PhysicalPlan) MergeResultStreams(
 	forceSerialization bool,
 ) {
 	proc := &p.Processors[destProcessor]
-	// We want to use unordered synchronizer if the ordering is empty and
-	// we're not being forced to serialize streams. Note that ordered
-	// synchronizers support the case of an empty ordering - they will be
-	// merging the result streams by fully consuming one stream at a time
-	// before moving on to the next one.
-	useUnorderedSync := len(ordering.Columns) == 0 && !forceSerialization
-	if len(resultRouters) == 1 {
-		// However, if we only have a single result router, then there is
-		// nothing to merge, and we unconditionally will use the unordered
-		// synchronizer since it is more efficient.
-		useUnorderedSync = true
-	}
-	if useUnorderedSync {
-		proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_UNORDERED
-	} else {
+	if len(ordering.Columns) > 0 && len(resultRouters) > 1 {
 		proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_ORDERED
 		proc.Spec.Input[destInput].Ordering = ordering
+	} else {
+		if forceSerialization && len(resultRouters) > 1 {
+			// If we're forced to serialize the streams and we have multiple
+			// result routers, we have to use a slower serial unordered sync.
+			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_SERIAL_UNORDERED
+		} else {
+			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_PARALLEL_UNORDERED
+		}
 	}
 
 	for _, resultProc := range resultRouters {
