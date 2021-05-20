@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -56,6 +57,8 @@ type SSTBatcher struct {
 	settings   *cluster.Settings
 	maxSize    func() int64
 	splitAfter func() int64
+
+	ingestionSSTBlockSize int
 
 	// allows ingestion of keys where the MVCC.Key would shadow an existing row.
 	disallowShadowing bool
@@ -100,7 +103,7 @@ type SSTBatcher struct {
 	// The rest of the fields are per-batch and are reset via Reset() before each
 	// batch is started.
 	sstWriter       storage.SSTWriter
-	sstFile         *storage.MemFile
+	sstFile         *accountedMemFile
 	batchStartKey   []byte
 	batchEndKey     []byte
 	batchEndValue   []byte
@@ -110,13 +113,30 @@ type SSTBatcher struct {
 	ms enginepb.MVCCStats
 	// rows written in the current batch.
 	rowCounter storage.RowCounter
+
+	// memMon is passed to underlying buffers to keep track of memory allocations
+	// made by the storage writers.
+	memMon *mon.BytesMonitor
+	// memAcc is a bound account that's used to track allocations made during
+	// splitting a given SST file into subfiles when an AddSSTable request runs
+	// into a range boundary.
+	memAcc *mon.BoundAccount
 }
 
 // MakeSSTBatcher makes a ready-to-use SSTBatcher.
 func MakeSSTBatcher(
-	ctx context.Context, db SSTSender, settings *cluster.Settings, flushBytes func() int64,
+	ctx context.Context,
+	db SSTSender,
+	settings *cluster.Settings,
+	flushBytes func() int64,
+	bulkMon *mon.BytesMonitor,
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{db: db, settings: settings, maxSize: flushBytes, disallowShadowing: true}
+	if bulkMon != nil {
+		b.memMon = bulkMon
+		memAcc := bulkMon.MakeBoundAccount()
+		b.memAcc = &memAcc
+	}
 	err := b.Reset(ctx)
 	return b, err
 }
@@ -195,11 +215,13 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 // Reset clears all state in the batcher and prepares it for reuse.
 func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.sstWriter.Close()
-	b.sstFile = &storage.MemFile{}
+	newMemFile := makeAccountedMemFile(ctx, b.memMon)
+	b.sstFile = &newMemFile
 	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
 	// in the cluster can support it. Until then, for backward compatibility,
 	// create SSTs in the leveldb format ("backup" ones).
 	b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
+	b.ingestionSSTBlockSize = storage.MakeIngestionWriterOpts().BlockSize
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -250,6 +272,33 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		}
 		return b.Reset(ctx)
 	}
+
+	// Predict if we're likely going to reallocate the buffer in the memfile.
+	if b.sstFile.memAcc != nil {
+		bufferLeft := int64(b.sstFile.Cap() - b.sstFile.Len())
+		predictedGrowthSize := int64(2 * b.ingestionSSTBlockSize)
+		if predictedGrowthSize > bufferLeft {
+			willExceedMemoryBudget := false
+			if err := b.sstFile.memAcc.Grow(ctx, predictedGrowthSize); err != nil {
+				// TODO: It would be nice if the budget exceeded error was marked in
+				// case memAcc starts returning another error in other cases.
+				willExceedMemoryBudget = true
+			} else {
+				// Shrink the memory buffer again so that our accounting can stay
+				// accurate when the buffer actually grows.
+				b.sstFile.memAcc.Shrink(ctx, predictedGrowthSize)
+			}
+
+			if willExceedMemoryBudget {
+				log.Warning(ctx, "bulk ingestion flushing due to memory limits")
+				if err := b.doFlush(ctx, sizeFlush, nextKey); err != nil {
+					return err
+				}
+				return b.Reset(ctx)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -283,8 +332,8 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 		// minimizes impact on other adders (e.g. causing extra SST splitting).
 		//
 		// We only do this splitting if the caller expects the sst_batcher to
-		// split and scatter the data as it ingests it (which is the case when
-		// splitAfter) is set.
+		// split and scatter the data as it ingests it, which is the case when
+		// splitAfter is set.
 		if b.flushCounts.total == 1 && b.splitAfter != nil {
 			if splitAt, err := keys.EnsureSafeSplitKey(start); err != nil {
 				log.Warningf(ctx, "%v", err)
@@ -314,7 +363,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	}
 
 	beforeSend := timeutil.Now()
-	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings, b.batchTS)
+	files, err := AddSSTable(ctx, b.db, start, end, b.sstFile.Data(), b.disallowShadowing, b.ms, b.settings, b.batchTS, b.memMon, b.memAcc)
 	if err != nil {
 		return err
 	}
@@ -359,8 +408,11 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 }
 
 // Close closes the underlying SST builder.
-func (b *SSTBatcher) Close() {
+func (b *SSTBatcher) Close(ctx context.Context) {
 	b.sstWriter.Close()
+	if b.memAcc != nil {
+		b.memAcc.Close(ctx)
+	}
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
@@ -401,9 +453,12 @@ func AddSSTable(
 	ms enginepb.MVCCStats,
 	settings *cluster.Settings,
 	batchTs hlc.Timestamp,
+	memMon *mon.BytesMonitor,
+	memAcc *mon.BoundAccount,
 ) (int, error) {
 	var files int
 	now := timeutil.Now()
+	// sstBytes is already accounted for by b.memFile.
 	iter, err := storage.NewMemSSTIterator(sstBytes, true)
 	if err != nil {
 		return 0, err
@@ -420,6 +475,7 @@ func AddSSTable(
 		stats = ms
 	}
 
+	firstWorkItem := true
 	work := []*sstSpan{{start: start, end: end, sstBytes: sstBytes, disallowShadowing: disallowShadowing, stats: stats}}
 	const maxAddSSTableRetries = 10
 	for len(work) > 0 {
@@ -457,7 +513,7 @@ func AddSSTable(
 					// should be using all of them to avoid further retries.
 					split := m.Ranges()[0].Desc.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
-					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
+					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings, memMon, memAcc)
 					if err != nil {
 						return err
 					}
@@ -486,7 +542,19 @@ func AddSSTable(
 			return files, err
 		}
 		files++
-		// explicitly deallocate SST. This will not deallocate the
+
+		if firstWorkItem {
+			// If this is the first work item, the item references the top level SST
+			// which is accounted for by the batcher's sstFile.
+			firstWorkItem = false
+		} else {
+			// If this was not the first item of work, then we are responsible for
+			// tracking it since it was created while splitting the original file.
+			if memAcc != nil {
+				memAcc.Shrink(ctx, int64(cap(item.sstBytes)))
+			}
+		}
+		// Explicitly deallocate SST. This will not deallocate the
 		// top level SST which is kept around to iterate over.
 		item.sstBytes = nil
 	}
@@ -503,8 +571,11 @@ func createSplitSSTable(
 	disallowShadowing bool,
 	iter storage.SimpleMVCCIterator,
 	settings *cluster.Settings,
+	memMon *mon.BytesMonitor,
+	memAcc *mon.BoundAccount,
 ) (*sstSpan, *sstSpan, error) {
-	sstFile := &storage.MemFile{}
+	leftFile := makeAccountedMemFile(ctx, memMon)
+	sstFile := &leftFile
 	w := storage.MakeIngestionSSTWriter(sstFile)
 	defer w.Close()
 
@@ -528,13 +599,21 @@ func createSplitSSTable(
 			if err != nil {
 				return nil, nil, err
 			}
+			// Responsibility for accounting for the memory in SSTFile now switches
+			// from the file to the batcher.
+			if memAcc != nil {
+				if err := memAcc.Grow(ctx, int64(sstFile.Cap())); err != nil {
+					return nil, nil, err
+				}
+			}
+
 			left = &sstSpan{
 				start:             first,
 				end:               last.PrefixEnd(),
 				sstBytes:          sstFile.Data(),
 				disallowShadowing: disallowShadowing,
 			}
-			*sstFile = storage.MemFile{}
+			*sstFile = makeAccountedMemFile(ctx, memMon)
 			w = storage.MakeIngestionSSTWriter(sstFile)
 			split = true
 			first = nil
@@ -556,6 +635,13 @@ func createSplitSSTable(
 	err := w.Finish()
 	if err != nil {
 		return nil, nil, err
+	}
+	// Responsibility for accounting for the memory in SSTFile now switches
+	// from the file to the batcher.
+	if memAcc != nil {
+		if err := memAcc.Grow(ctx, int64(sstFile.Cap())); err != nil {
+			return nil, nil, err
+		}
 	}
 	right = &sstSpan{
 		start:             first,

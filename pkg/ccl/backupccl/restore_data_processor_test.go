@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -388,7 +389,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx,
 				mockRestoreDataSpec)
 			require.NoError(t, err)
-			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(restoreSpanEntry)
+			maxBatchSize := func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) }
+			batcher, err := bulk.MakeSSTBatcher(ctx, flowCtx.Cfg.DB, evalCtx.Settings, maxBatchSize, nil /* memMon */)
+			require.NoError(t, err)
+			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(batcher, restoreSpanEntry)
 			require.NoError(t, err)
 
 			clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)

@@ -155,7 +155,7 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 		b.sink.flushCounts.total, b.sink.flushCounts.files,
 		b.sink.flushCounts.split, b.sink.flushCounts.sstSize,
 	)
-	b.sink.Close()
+	b.sink.Close(ctx)
 
 	if b.bulkMon != nil {
 		b.memAcc.Close(ctx)

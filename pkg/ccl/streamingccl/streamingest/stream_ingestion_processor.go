@@ -260,7 +260,7 @@ func (sip *streamIngestionProcessor) ConsumerClosed() {
 func (sip *streamIngestionProcessor) close() {
 	if sip.InternalClose() {
 		if sip.batcher != nil {
-			sip.batcher.Close()
+			sip.batcher.Close(sip.Ctx)
 		}
 		if sip.maxFlushRateTimer != nil {
 			sip.maxFlushRateTimer.Stop()

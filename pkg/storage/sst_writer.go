@@ -68,11 +68,16 @@ func MakeBackupSSTWriter(f writeCloseSyncer) SSTWriter {
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
 // format set to RocksDBv2.
 func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
+	opts := MakeIngestionWriterOpts()
+	sst := sstable.NewWriter(f, opts)
+	return SSTWriter{fw: sst, f: f}
+}
+
+func MakeIngestionWriterOpts() sstable.WriterOptions {
 	opts := DefaultPebbleOptions().MakeWriterOptions(0)
 	opts.TableFormat = sstable.TableFormatRocksDBv2
 	opts.MergerName = "nullptr"
-	sst := sstable.NewWriter(f, opts)
-	return SSTWriter{fw: sst, f: f}
+	return opts
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,

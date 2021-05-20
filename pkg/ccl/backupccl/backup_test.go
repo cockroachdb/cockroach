@@ -16,6 +16,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -71,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -8389,4 +8391,60 @@ func TestBackupWorkerFailure(t *testing.T) {
 	var actualCount int
 	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&actualCount)
 	require.Equal(t, expectedCount, actualCount)
+}
+
+// TestRestoreMemAccounting tests that RESTORE detects when its settings are set
+// such that it will overshoot its memory budget.
+func TestRestoreMemAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Normally, RESTORE uses the BulkMon but we create our own, with limited
+	// memory. The allocation size is also reduced for testing.
+	//
+	// We allocate 1 byte less than the 2*allocationSize so that the second
+	// allocation will fail. This allows RESTOREs with a small batch size, that
+	// only need 1 allocation to pass, while it will fail with a larger batch
+	// size.
+	//
+	// Pebble's SSTWriter does allocations of about ~4.5KB, so let's make the
+	// unit of allocation incrementing larger.
+	testAllocationSizeBytes := int64(5000)
+	memLimit := 2*testAllocationSizeBytes - 1
+	limitedMemMonitor := mon.NewMonitor(
+		"test-mm", mon.MemoryResource,
+		nil /* curCount */, nil, /* maxHist */
+		testAllocationSizeBytes, math.MaxInt64, /* noteworthy */
+		cluster.MakeTestingClusterSettings())
+	limitedMemMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(memLimit))
+
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				RestoreMemMonitor: limitedMemMonitor,
+			}},
+	}
+	params.ServerArgs.Knobs = knobs
+
+	const numAccounts = 0
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `CREATE TABLE data.test_data AS SELECT * FROM generate_series(0,1000)`)
+	sqlDB.Exec(t, `BACKUP data.test_data TO $1;`, LocalFoo)
+	sqlDB.Exec(t, `CREATE DATABASE restoredb;`)
+
+	// Setting a large batch size should be allowed by the monitor, but will flush
+	// more aggressively.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '100MB';`)
+	sqlDB.Exec(t, `RESTORE data.test_data FROM $1 WITH into_db='restoredb'`, LocalFoo)
+	sqlDB.Exec(t, `DROP TABLE restoredb.test_data;`)
+
+	// Reducing the batch size should ensure that RESTORE doesn't allocate more
+	// than what's permitted by the monitor.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '1KB';`)
+	sqlDB.Exec(t, `RESTORE data.test_data FROM $1 WITH into_db='restoredb'`, LocalFoo)
+	sqlDB.Exec(t, `DROP TABLE restoredb.test_data;`)
 }

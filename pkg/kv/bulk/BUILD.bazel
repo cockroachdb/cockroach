@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bulk",
     srcs = [
+        "accounted_mem_file.go",
         "buffering_adder.go",
         "bulk_metrics.go",
         "kv_buf.go",

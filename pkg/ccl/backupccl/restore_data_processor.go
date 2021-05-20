@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
@@ -60,6 +61,8 @@ type restoreDataProcessor struct {
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan RestoreProgress
+
+	knobs sql.BackupRestoreTestingKnobs
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -133,6 +136,10 @@ func newRestoreDataProcessor(
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = rd.StartInternal(ctx, restoreDataProcName)
 	rd.input.Start(ctx)
+
+	if rdKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+		rd.knobs = *rdKnobs
+	}
 
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
 	entries := make(chan execinfrapb.RestoreSpanEntry, maxConcurrentRestoreWorkers)
@@ -212,13 +219,48 @@ func inputReader(
 
 func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.RestoreSpanEntry) error {
 	return ctxgroup.GroupWorkers(rd.Ctx, maxConcurrentRestoreWorkers, func(ctx context.Context, n int) error {
+		var workerAlloc *quotapool.IntAlloc
+		var err error
+
+		var batcher *bulk.SSTBatcher
+
 		for {
 			done, err := func() (done bool, _ error) {
-				workerAlloc, err := rd.concurrentWorkerLimit.Acquire(ctx, 1)
-				if err != nil {
-					return done, err
+				var initialCapacity uint64
+				if workerAlloc == nil {
+					initialCapacity = rd.concurrentWorkerLimit.Capacity()
+					// If we do not hold a worker allocation, try and grab one.
+					workerAlloc, err = rd.concurrentWorkerLimit.Acquire(ctx, 1)
+					if err != nil {
+						return done, err
+					}
+
+					var memMonitor *mon.BytesMonitor
+					if initialCapacity > 1 {
+						// Memory monitor the SST batcher when there is some concurrnecy.
+						memMonitor = rd.flowCtx.Cfg.RestoreMemMonitor
+						if rd.knobs.RestoreMemMonitor != nil {
+							memMonitor = rd.knobs.RestoreMemMonitor
+						}
+					}
+
+					db := rd.flowCtx.Cfg.DB
+					evalCtx := rd.EvalCtx
+					maxBatchSize := func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) }
+					batcher, err = bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings, maxBatchSize, memMonitor)
+					if err != nil {
+						return done, err
+					}
 				}
-				defer rd.concurrentWorkerLimit.Release(workerAlloc)
+				defer func() {
+					// If the capacity changed, then release our lock on this worker and
+					// try to grab another worker.
+					if initialCapacity != rd.concurrentWorkerLimit.Capacity() || done {
+						batcher.Close(ctx)
+						rd.concurrentWorkerLimit.Release(workerAlloc)
+						workerAlloc = nil
+					}
+				}()
 
 				entry, ok := <-entries
 				if !ok {
@@ -226,7 +268,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.Resto
 					return done, nil
 				}
 
-				summary, err := rd.processRestoreSpanEntry(entry)
+				summary, err := rd.processRestoreSpanEntry(batcher, entry)
 				if err != nil {
 					return done, err
 				}
@@ -252,11 +294,9 @@ func (rd *restoreDataProcessor) runRestoreWorkers(entries chan execinfrapb.Resto
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	entry execinfrapb.RestoreSpanEntry,
+	batcher *bulk.SSTBatcher, entry execinfrapb.RestoreSpanEntry,
 ) (roachpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
 	ctx := rd.Ctx
-	evalCtx := rd.EvalCtx
 	var summary roachpb.BulkOpSummary
 
 	// The sstables only contain MVCC data and no intents, so using an MVCC
@@ -284,13 +324,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		defer iter.Close()
 		iters = append(iters, iter)
 	}
-
-	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
-	if err != nil {
-		return summary, err
-	}
-	defer batcher.Close()
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
 		storage.MVCCKey{Key: entry.Span.EndKey}
