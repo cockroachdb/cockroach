@@ -1042,9 +1042,14 @@ func ResolveFK(
 	}
 
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
+	targetDesc, err := tabledesc.FindFKReferencedUniqueConstraint(target, targetColIDs)
 	if err != nil {
 		return err
+	}
+
+	constraintColumnIDs := findTargetConstraintColumnIDs(targetDesc, target)
+	if constraintColumnIDs == nil {
+		constraintColumnIDs = targetColIDs
 	}
 
 	var validity descpb.ConstraintValidity
@@ -1059,7 +1064,7 @@ func ResolveFK(
 	ref := descpb.ForeignKeyConstraint{
 		OriginTableID:       tbl.ID,
 		OriginColumnIDs:     originColumnIDs,
-		ReferencedColumnIDs: targetColIDs,
+		ReferencedColumnIDs: constraintColumnIDs,
 		ReferencedTableID:   target.ID,
 		Name:                constraintName,
 		Validity:            validity,
@@ -1076,6 +1081,28 @@ func ResolveFK(
 	}
 
 	return nil
+}
+
+// findTargetConstraintColumnIDs returns columnIDs as they are defined on the target table.
+// It is important to use them as defined on that table, so we use them in the order they are defined.
+// Otherwise, references created with columns defined out of order will fail foreign key checks.
+func findTargetConstraintColumnIDs(targetUniqueConstraint descpb.UniqueConstraint, target *tabledesc.Mutable) []ColumnID {
+	if targetUniqueConstraint == nil || target == nil {
+		return nil
+	}
+
+	constraints, err := target.GetConstraintInfo()
+	if err != nil {
+		return nil
+	}
+	constraint, ok := constraints[targetDesc.GetName()]
+	if !ok {
+		return nil
+	}
+	if constraint.Index == nil || constraint.Index.ColumnIDs == nil {
+		return nil
+	}
+	return constraint.Index.ColumnIDs
 }
 
 // Adds an index to a table descriptor (that is in the process of being created)
