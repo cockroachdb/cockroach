@@ -1338,6 +1338,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	// Since the last query has already finished, it is safe to retrieve its
 	// total service latency.
 	svcLat := phaseTimes.getServiceLatencyTotal().Seconds()
+	postCommitJobsLat := phaseTimes.getPostCommitJobsLatency().Seconds()
 
 	return res.AddRow(ctx,
 		tree.Datums{
@@ -1345,6 +1346,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 			tree.NewDInterval(duration.FromFloat64(planLat), types.DefaultIntervalTypeMetadata),
 			tree.NewDInterval(duration.FromFloat64(runLat), types.DefaultIntervalTypeMetadata),
 			tree.NewDInterval(duration.FromFloat64(svcLat), types.DefaultIntervalTypeMetadata),
+			tree.NewDInterval(duration.FromFloat64(postCommitJobsLat), types.DefaultIntervalTypeMetadata),
 		})
 }
 

@@ -210,6 +210,7 @@ var ShowLastQueryStatisticsColumns = ResultColumns{
 	{Name: "plan_latency", Typ: types.Interval},
 	{Name: "exec_latency", Typ: types.Interval},
 	{Name: "service_latency", Typ: types.Interval},
+	{Name: "post_commit_jobs_latency", Typ: types.Interval},
 }
 
 // ShowFingerprintsColumns are the result columns of a
