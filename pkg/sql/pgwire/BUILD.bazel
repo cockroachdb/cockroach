@@ -17,6 +17,8 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
         "//pkg/security",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -80,6 +82,8 @@ go_test(
     embed = [":pgwire"],
     deps = [
         "//pkg/base",
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -87,6 +91,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/colconv",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/hba",
         "//pkg/sql/pgwire/pgcode",
