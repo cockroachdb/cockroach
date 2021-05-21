@@ -752,7 +752,7 @@ func (p *planner) getTableAndIndex(
 	catalog.init(p)
 	catalog.reset()
 
-	idx, _, err := cat.ResolveTableIndex(
+	idx, qualifiedName, err := cat.ResolveTableIndex(
 		ctx, &catalog, cat.Flags{AvoidDescriptorCaches: true}, tableWithIndex,
 	)
 	if err != nil {
@@ -762,6 +762,12 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
+
+	// Resolve the object name for logging if
+	// its missing.
+	if tableWithIndex.Table.ObjectName == "" {
+		tableWithIndex.Table = tree.MakeTableNameFromPrefix(qualifiedName.ObjectNamePrefix, qualifiedName.ObjectName)
+	}
 	return tabledesc.NewBuilder(optIdx.tab.desc.TableDesc()).BuildExistingMutableTable(), optIdx.desc, nil
 }
 
