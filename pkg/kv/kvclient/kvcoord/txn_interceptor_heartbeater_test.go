@@ -417,6 +417,98 @@ func TestTxnHeartbeaterAsyncAbort(t *testing.T) {
 	})
 }
 
+// TestTxnHeartbeaterAsyncAbortWaitsForInFlight tests that the txnHeartbeater
+// will wait for an in-flight request to complete before sending the
+// EndTxn rollback request.
+func TestTxnHeartbeaterAsyncAbortWaitsForInFlight(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	txn := makeTxnProto()
+	th, mockSender, mockGatekeeper := makeMockTxnHeartbeater(&txn)
+	defer th.stopper.Stop(ctx)
+
+	// Mock the heartbeat request, which should wait for an in-flight put via
+	// putReady then return an aborted txn and signal hbAborted.
+	putReady := make(chan struct{})
+	hbAborted := make(chan struct{})
+	mockGatekeeper.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		<-putReady
+		defer close(hbAborted)
+
+		require.Len(t, ba.Requests, 1)
+		require.IsType(t, &roachpb.HeartbeatTxnRequest{}, ba.Requests[0].GetInner())
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		br.Txn.Status = roachpb.ABORTED
+		return br, nil
+	})
+
+	putResume := make(chan struct{})
+	rollbackSent := make(chan struct{})
+	mockSender.ChainMockSend(
+		// Mock a Put, which signals putReady and then waits for putResume
+		// before returning a response.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			th.mu.Unlock() // without txnLockGatekeeper, we must unlock manually
+			defer th.mu.Lock()
+			close(putReady)
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+
+			<-putResume
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		},
+		// Mock an EndTxn, which signals rollbackSent.
+		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			defer close(rollbackSent)
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+			etReq := ba.Requests[0].GetInner().(*roachpb.EndTxnRequest)
+			require.Equal(t, &txn, ba.Txn)
+			require.False(t, etReq.Commit)
+			require.True(t, etReq.Poison)
+			require.True(t, etReq.TxnHeartbeating)
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.ABORTED
+			return br, nil
+		},
+	)
+
+	// Spawn a goroutine to send the Put.
+	require.NoError(t, th.stopper.RunAsyncTask(ctx, "put", func(ctx context.Context) {
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: txn.Clone()}
+		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a")}})
+
+		th.mu.Lock() // without TxnCoordSender, we must lock manually
+		defer th.mu.Unlock()
+		br, pErr := th.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	}))
+
+	<-putReady  // wait for put
+	<-hbAborted // wait for heartbeat abort
+	select {
+	case <-rollbackSent: // we don't expect a rollback yet
+		require.Fail(t, "received unexpected EndTxn")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(putResume) // make put return
+	<-rollbackSent   // we now expect the rollback
+
+	// The heartbeat loop should eventually close.
+	waitForHeartbeatLoopToStop(t, &th)
+}
+
 func heartbeaterRunning(th *txnHeartbeater) bool {
 	th.mu.Lock()
 	defer th.mu.Unlock()
