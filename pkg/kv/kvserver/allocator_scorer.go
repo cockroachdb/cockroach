@@ -414,11 +414,15 @@ func rankedCandidateListForAllocation(
 	existingReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isNodeValidForRoutineReplicaTransfer func(context.Context, roachpb.NodeID) bool,
+	allowMultipleReplsPerNode bool,
 	options scorerOptions,
 ) candidateList {
 	var candidates candidateList
 	for _, s := range candidateStores.stores {
-		if nodeHasReplica(s.Node.NodeID, existingReplicas) {
+		if storeHasReplica(s.StoreID, roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()) {
+			continue
+		}
+		if !allowMultipleReplsPerNode && nodeHasReplica(s.Node.NodeID, existingReplicas) {
 			continue
 		}
 		if !isNodeValidForRoutineReplicaTransfer(ctx, s.Node.NodeID) {

@@ -675,19 +675,33 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 
 	for _, tc := range testCases {
 		{
-			result, _, err := a.AllocateVoter(context.Background(), zonepb.EmptyCompleteZoneConfig(), tc.existing, nil)
+			result, _, err := a.AllocateVoter(
+				context.Background(), zonepb.EmptyCompleteZoneConfig(), tc.existing, nil,
+			)
 			if e, a := tc.expectTargetAllocate, result != nil; e != a {
-				t.Errorf("AllocateVoter(%v) got target %v, err %v; expectTarget=%v",
-					tc.existing, result, err, tc.expectTargetAllocate)
+				t.Errorf(
+					"AllocateVoter(%v) got target %v, err %v; expectTarget=%v",
+					tc.existing, result, err, tc.expectTargetAllocate,
+				)
 			}
 		}
 
 		{
 			var rangeUsageInfo RangeUsageInfo
-			target, _, details, ok := a.RebalanceVoter(context.Background(), zonepb.EmptyCompleteZoneConfig(), nil, tc.existing, nil, rangeUsageInfo, storeFilterThrottled)
+			target, _, details, ok := a.RebalanceVoter(
+				context.Background(),
+				zonepb.EmptyCompleteZoneConfig(),
+				nil,
+				tc.existing,
+				nil,
+				rangeUsageInfo,
+				storeFilterThrottled,
+			)
 			if e, a := tc.expectTargetRebalance, ok; e != a {
-				t.Errorf("RebalanceVoter(%v) got target %v, details %v; expectTarget=%v",
-					tc.existing, target, details, tc.expectTargetRebalance)
+				t.Errorf(
+					"RebalanceVoter(%v) got target %v, details %v; expectTarget=%v",
+					tc.existing, target, details, tc.expectTargetRebalance,
+				)
 			}
 		}
 	}
@@ -2668,13 +2682,16 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("%d/allocate", testIdx), func(t *testing.T) {
-			candidates := rankedCandidateListForAllocation(context.Background(),
+			candidates := rankedCandidateListForAllocation(
+				context.Background(),
 				sl,
 				allocationConstraintsChecker,
 				existingRepls,
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isNodeReadyForRoutineReplicaTransfer,
-				a.scorerOptions())
+				false,
+				a.scorerOptions(),
+			)
 
 			if !expectedStoreIDsMatch(tc.expected, candidates) {
 				t.Errorf("expected rankedCandidateListForAllocation(%v) = %v, but got %v",
@@ -3009,13 +3026,16 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			zone.Constraints)
 		checkFn := voterConstraintsCheckerForAllocation(analyzed, constraint.EmptyAnalyzedConstraints)
 
-		candidates := rankedCandidateListForAllocation(context.Background(),
+		candidates := rankedCandidateListForAllocation(
+			context.Background(),
 			sl,
 			checkFn,
 			existingRepls,
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.NodeID) bool { return true },
-			a.scorerOptions())
+			false,
+			a.scorerOptions(),
+		)
 		best := candidates.best()
 		match := true
 		if len(tc.expected) != len(best) {

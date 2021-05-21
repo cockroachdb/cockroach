@@ -730,7 +730,9 @@ func (a *Allocator) allocateTarget(
 		existingVoters,
 		existingNonVoters,
 		a.scorerOptions(),
-		targetType)
+		false, /* allowMultipleReplsPerNode */
+		targetType,
+	)
 	if target != nil {
 		return target, details, nil
 	}
@@ -780,6 +782,7 @@ func (a *Allocator) allocateTargetFromList(
 	zone *zonepb.ZoneConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
+	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
 ) (*roachpb.StoreDescriptor, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
@@ -815,7 +818,9 @@ func (a *Allocator) allocateTargetFromList(
 		existingReplicaSet,
 		a.storePool.getLocalitiesByStore(existingReplicaSet),
 		a.storePool.isNodeReadyForRoutineReplicaTransfer,
-		options)
+		allowMultipleReplsPerNode,
+		options,
+	)
 
 	log.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {

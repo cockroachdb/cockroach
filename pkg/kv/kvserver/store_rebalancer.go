@@ -786,6 +786,7 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 			partialVoterTargets,
 			partialNonVoterTargets,
 			options,
+			true, /* allowMultipleReplsPerNode */
 			targetType,
 		)
 		if target == nil {

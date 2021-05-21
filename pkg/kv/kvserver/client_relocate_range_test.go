@@ -94,7 +94,9 @@ func requireLeaseAt(
 	// it's returned here, so don't use FindRangeLeaseHolder which fails when
 	// that happens.
 	testutils.SucceedsSoon(t, func() error {
-		lease, _, err := tc.FindRangeLease(desc, &target)
+		// NB: Specifying a `hint` here does not play well with multi-store
+		// TestServers. See TODO inside `TestServer.GetRangeLease()`.
+		lease, _, err := tc.FindRangeLease(desc, nil /* hint */)
 		if err != nil {
 			return err
 		}
@@ -521,4 +523,75 @@ func setupReplicaRemovalTest(
 	}
 
 	return tc, key, evalDuringReplicaRemoval
+}
+
+// TestAdminRelocateRangeLaterallyAmongStores tests that `AdminRelocateRange` is
+// able to relocate ranges laterally (i.e. between stores on the same node).
+func TestAdminRelocateRangeLaterallyAmongStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Set up a test cluster with each node having 2 stores.
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{InMemory: true},
+				{InMemory: true},
+			},
+		},
+		ReplicationMode: base.ReplicationManual,
+	}
+	tc := testcluster.StartTestCluster(t, 5, args)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := keys.MustAddr(tc.ScratchRange(t))
+	// Place replicas for the scratch range on stores 1, 3, 5 (i.e. the first
+	// store on each of the nodes). Note that the test cluster will start off with
+	// (n1,s1) already having a replica.
+	scratchDesc := tc.LookupRangeOrFatal(t, scratchKey.AsRawKey())
+	_, found := scratchDesc.GetReplicaDescriptor(1)
+	require.True(t, found)
+	tc.AddVotersOrFatal(t, scratchKey.AsRawKey(), []roachpb.ReplicationTarget{
+		{NodeID: 2, StoreID: 3},
+		{NodeID: 3, StoreID: 5},
+	}...)
+	// Now, ask `AdminRelocateRange()` to move some of these replicas laterally.
+	relocateAndCheck(
+		t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 2},
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, nil, /* nonVoterTargets */
+	)
+	// Ensure that this sort of lateral relocation works even across non-voters
+	// and voters.
+	relocateAndCheck(
+		t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 1},
+		},
+	)
+	relocateAndCheck(
+		t, tc, scratchKey, []roachpb.ReplicationTarget{
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 2},
+		},
+	)
+	// Ensure that, in case a caller of `AdminRelocateRange` tries to place 2
+	// replicas on the same node, a safeguard inside `AdminChangeReplicas()`
+	// rejects the operation.
+	err := tc.Servers[0].DB().AdminRelocateRange(
+		ctx, scratchKey.AsRawKey(), []roachpb.ReplicationTarget{
+			{NodeID: 1, StoreID: 1},
+			{NodeID: 1, StoreID: 2},
+			{NodeID: 2, StoreID: 4},
+			{NodeID: 3, StoreID: 5},
+		}, nil, /* nonVoterTargets */
+	)
+	require.Regexp(t, "node 1 already has a replica", err)
 }
