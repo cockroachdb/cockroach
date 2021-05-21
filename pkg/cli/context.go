@@ -49,6 +49,7 @@ func initCLIDefaults() {
 	setQuitContextDefaults()
 	setNodeContextDefaults()
 	setSqlfmtContextDefaults()
+	setConvContextDefaults()
 	setDemoContextDefaults()
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
@@ -550,6 +551,17 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.noSimplify = !cfg.Simplify
 	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
 	sqlfmtCtx.execStmts = nil
+}
+
+var convertCtx struct {
+	url string
+}
+
+// setConvContextDefaults set the default values in convertCtx.  This
+// function is called by initCLIDefaults() and thus re-called in every
+// test that exercises command-line parsing.
+func setConvContextDefaults() {
+	convertCtx.url = ""
 }
 
 // demoCtx captures the command-line parameters of the `demo` command.
