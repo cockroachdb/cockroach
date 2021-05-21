@@ -823,11 +823,10 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 			if err := n.storeCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return sql.InsertEventRecord(ctx, n.sqlExec,
 					txn,
-					int32(n.Descriptor.NodeID),
-					int32(n.Descriptor.NodeID),
-					true, /* skipExternalLog - we already call log.StructuredEvent above */
+					int32(n.Descriptor.NodeID), /* reporting ID: the node where the event is logged */
+					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* LogEventDestination: we already call log.StructuredEvent above */
+					int32(n.Descriptor.NodeID),                        /* target ID: the node that is joining (ourselves) */
 					event,
-					false, /* onlyLog */
 				)
 			}); err != nil {
 				log.Warningf(ctx, "%s: unable to log event %v: %v", n, event, err)
