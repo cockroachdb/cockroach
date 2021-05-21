@@ -23,20 +23,26 @@ import (
 func registerImportNodeShutdown(r *testRegistry) {
 	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
 		startImport := func(c *cluster) (jobID string, err error) {
-			importStmt := `
-				IMPORT TABLE partsupp
-				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/partcupp.sql'
+			// partsupp is 11.2 GiB.
+			tableName := "partsupp"
+			if local {
+				// part is 2.264 GiB.
+				tableName = "part"
+			}
+			importStmt := fmt.Sprintf(`
+				IMPORT TABLE %[1]s
+				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/%[1]s.sql'
 				CSV DATA (
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.1',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.2',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.3',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.4',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.5',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.6',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.7',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.8'
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.3',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.4',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.5',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.6',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.7',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8'
 				) WITH  delimiter='|', detached
-			`
+			`, tableName)
 			gatewayDB := c.Conn(ctx, gatewayNode)
 			defer gatewayDB.Close()
 
