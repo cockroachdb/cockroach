@@ -35,6 +35,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
 # gazelle:resolve proto prometheus/client_model/metrics.proto @com_github_prometheus_client_model//:client_proto
 # gazelle:resolve proto go prometheus/client_model/metrics.proto @com_github_prometheus_client_model//go
+# gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
