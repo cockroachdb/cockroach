@@ -845,9 +845,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	rightProps := rightExpr.Relational()
 	filters := join.Child(2).(*memo.FiltersExpr)
 
-	if len(memo.WithUses(rightExpr)) != 0 {
-		return execPlan{}, fmt.Errorf("references to WITH expressions from correlated subqueries are unsupported")
-	}
+	// We will pre-populate the withExprs of the right-hand side execbuilder.
+	withExprs := make([]builtWithExpr, len(b.withExprs))
+	copy(withExprs, b.withExprs)
 
 	leftPlan, err := b.buildRelational(leftExpr)
 	if err != nil {
@@ -892,6 +892,19 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				if leftOrd, ok := leftBoundColMap.Get(int(t.Col)); ok {
 					return f.ConstructConstVal(leftRow[leftOrd], t.Typ)
 				}
+
+			case *memo.WithScanExpr:
+				// Allow referring to "outer" With expressions. The bound expressions
+				// are not part of this Memo but they are used only for their relational
+				// properties, which should be valid.
+				for i := range withExprs {
+					if withExprs[i].id == t.With {
+						memoExpr := b.mem.Metadata().WithBinding(t.With)
+						f.Metadata().AddWithBinding(t.With, memoExpr)
+						break
+					}
+				}
+				// Fall through.
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
 		}
@@ -904,6 +917,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 
 		eb := New(ef, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
 		eb.disableTelemetry = true
+		eb.withExprs = withExprs
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
