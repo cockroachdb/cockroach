@@ -187,7 +187,6 @@ func TestRollbackSyncRangedIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "timing-sensitive test")
-	skip.UnderBazelWithIssue(t, 65407, "times out due to high concurrency")
 
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
