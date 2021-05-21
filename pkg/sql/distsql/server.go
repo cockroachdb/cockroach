@@ -187,7 +187,8 @@ func (ds *ServerImpl) setupFlow(
 	parentSpan *tracing.Span,
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
-	syncFlowConsumer execinfra.RowReceiver,
+	rowSyncFlowConsumer execinfra.RowReceiver,
+	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
@@ -314,7 +315,10 @@ func (ds *ServerImpl) setupFlow(
 	// itself when the vectorize mode needs to be changed because we would need
 	// to restore the original value which can have data races under stress.
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
-	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs, isVectorized)
+	f := newFlow(
+		flowCtx, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
+		localState.LocalProcs, isVectorized,
+	)
 	opt := flowinfra.FuseNormally
 	if localState.IsLocal {
 		// If there's no remote flows, fuse everything. This is needed in order for
@@ -435,11 +439,12 @@ func (ds *ServerImpl) newFlowContext(
 func newFlow(
 	flowCtx execinfra.FlowCtx,
 	flowReg *flowinfra.FlowRegistry,
-	syncFlowConsumer execinfra.RowReceiver,
+	rowSyncFlowConsumer execinfra.RowReceiver,
+	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, syncFlowConsumer, localProcessors)
+	base := flowinfra.NewFlowBase(flowCtx, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
@@ -481,10 +486,11 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	parentMonitor *mon.BytesMonitor,
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
+	batchOutput execinfra.BatchReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	ctx, f, opChains, err := ds.setupFlow(
-		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, batchOutput, localState,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -502,7 +508,10 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, _, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
+	ctx, f, _, err := ds.setupFlow(
+		ctx, parentSpan, ds.memMonitor, req, nil, /* rowSyncFlowConsumer */
+		nil /* batchSyncFlowConsumer */, LocalState{},
+	)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

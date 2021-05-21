@@ -232,6 +232,11 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 	})
 }
 
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SupportsAddBatch() bool {
+	return true
+}
+
 // DisableBuffering is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) DisableBuffering() {
 	r.assertNotReleased()
@@ -438,6 +443,12 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		return err
 	}
 	return nil
+}
+
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+// TODO(yuzefovich): implement limiting behavior for AddBatch.
+func (r *limitedCommandResult) SupportsAddBatch() bool {
+	return false
 }
 
 // moreResultsNeeded is a restricted connection handler that waits for more

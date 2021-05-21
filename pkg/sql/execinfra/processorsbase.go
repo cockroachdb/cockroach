@@ -580,19 +580,29 @@ func (pb *ProcessorBaseNoHelper) DrainHelper() *execinfrapb.ProducerMetadata {
 		if meta != nil {
 			// Swallow ReadWithinUncertaintyIntervalErrors. See comments on
 			// StateDraining.
-			if err := meta.Err; err != nil {
-				// We only look for UnhandledRetryableErrors. Local reads (which would
-				// be transformed by the Root TxnCoordSender into
-				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
-				if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
-					if _, uncertain := ure.PErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); uncertain {
-						continue
-					}
-				}
+			if ShouldSwallowReadWithinUncertaintyIntervalError(meta) {
+				continue
 			}
 			return meta
 		}
 	}
+}
+
+// ShouldSwallowReadWithinUncertaintyIntervalError examines meta and returns
+// true if it should be swallowed and not propagated further. It is the case if
+// meta contains roachpb.ReadWithinUncertaintyIntervalError.
+func ShouldSwallowReadWithinUncertaintyIntervalError(meta *execinfrapb.ProducerMetadata) bool {
+	if err := meta.Err; err != nil {
+		// We only look for UnhandledRetryableErrors. Local reads (which would
+		// be transformed by the Root TxnCoordSender into
+		// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
+		if ure := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &ure) {
+			if _, uncertain := ure.PErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); uncertain {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // popTrailingMeta peels off one piece of trailing metadata or advances to

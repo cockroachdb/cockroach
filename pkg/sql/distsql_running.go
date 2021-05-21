@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -215,7 +216,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
-	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
+	var batchReceiver execinfra.BatchReceiver
+	if recv.batchWriter != nil {
+		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
+		// former has the corresponding writer set.
+		batchReceiver = recv
+	}
+	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, batchReceiver, localState)
 }
 
 // Run executes a physical plan. The plan should have been finalized using
@@ -381,8 +388,9 @@ func (dsp *DistSQLPlanner) Run(
 	}
 }
 
-// DistSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
-// This is where the DistSQL execution meets the SQL Session - the RowContainer
+// DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that
+// writes results to a rowResultWriter and batchResultWriter, respectively. This
+// is where the DistSQL execution meets the SQL Session - the result writer
 // comes from a client Session.
 //
 // DistSQLReceiver also update the RangeDescriptorCache in response to DistSQL
@@ -390,8 +398,11 @@ func (dsp *DistSQLPlanner) Run(
 type DistSQLReceiver struct {
 	ctx context.Context
 
-	// resultWriter is the interface which we send results to.
+	// These two interfaces refer to the same object, but batchWriter might be
+	// unset (resultWriter is always set). These are used to send the results
+	// to.
 	resultWriter rowResultWriter
+	batchWriter  batchResultWriter
 
 	stmtType tree.StatementReturnType
 
@@ -468,6 +479,12 @@ type rowResultWriter interface {
 	Err() error
 }
 
+// batchResultWriter is a subset of CommandResult to be used with the
+// DistSQLReceiver when the consumer can operate on columnar batches directly.
+type batchResultWriter interface {
+	AddBatch(context.Context, coldata.Batch) error
+}
+
 // MetadataResultWriter is used to stream metadata rather than row results in a
 // DistSQL flow.
 type MetadataResultWriter interface {
@@ -503,6 +520,7 @@ type errOnlyResultWriter struct {
 }
 
 var _ rowResultWriter = &errOnlyResultWriter{}
+var _ batchResultWriter = &errOnlyResultWriter{}
 
 func (w *errOnlyResultWriter) SetError(err error) {
 	w.err = err
@@ -514,11 +532,17 @@ func (w *errOnlyResultWriter) Err() error {
 func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	panic("AddRow not supported by errOnlyResultWriter")
 }
+
+func (w *errOnlyResultWriter) AddBatch(ctx context.Context, batch coldata.Batch) error {
+	panic("AddBatch not supported by errOnlyResultWriter")
+}
+
 func (w *errOnlyResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
 var _ execinfra.RowReceiver = &DistSQLReceiver{}
+var _ execinfra.BatchReceiver = &DistSQLReceiver{}
 
 var receiverSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -554,10 +578,19 @@ func MakeDistSQLReceiver(
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
+	// Check whether the result writer supports pushing batches into it directly
+	// without having to materialize them.
+	var batchWriter batchResultWriter
+	if commandResult, ok := resultWriter.(RestrictedCommandResult); ok {
+		if commandResult.SupportsAddBatch() {
+			batchWriter = commandResult
+		}
+	}
 	*r = DistSQLReceiver{
 		ctx:                consumeCtx,
 		cleanup:            cleanup,
 		resultWriter:       resultWriter,
+		batchWriter:        batchWriter,
 		rangeCache:         rangeCache,
 		txn:                txn,
 		clockUpdater:       clockUpdater,
@@ -785,6 +818,45 @@ func (r *DistSQLReceiver) Push(
 	return r.status
 }
 
+// PushBatch is part of the execinfra.BatchReceiver interface.
+func (r *DistSQLReceiver) PushBatch(
+	batch coldata.Batch, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if meta != nil {
+		return r.pushMeta(meta)
+	}
+	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
+		r.SetError(r.ctx.Err())
+	}
+	if r.status != execinfra.NeedMoreRows {
+		return r.status
+	}
+
+	if r.stmtType != tree.Rows {
+		// We only need the row count. planNodeToRowSource is set up to handle
+		// ensuring that the last stage in the pipeline will return a single-column
+		// row with the row count in it, so just grab that and exit.
+		r.resultWriter.IncrementRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
+		return r.status
+	}
+
+	if r.discardRows {
+		// Discard rows.
+		return r.status
+	}
+
+	if r.existsMode {
+		// Exists mode is only used by the subqueries which currently don't
+		// supports pushing batches.
+		panic("unsupported exists mode for PushBatch")
+	}
+	r.tracing.TraceExecBatchResult(r.ctx, batch)
+	if commErr := r.batchWriter.AddBatch(r.ctx, batch); commErr != nil {
+		r.handleCommErr(commErr)
+	}
+	return r.status
+}
+
 var (
 	// ErrLimitedResultNotSupported is an error produced by pgwire
 	// indicating an unsupported feature of row count limits was attempted.
@@ -909,6 +981,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	rows.init(typs, evalCtx, "subquery" /* opName */)
 	defer rows.close(ctx)
 
+	// TODO(yuzefovich): consider implementing batch receiving result writer.
 	subqueryRowReceiver := NewRowResultWriter(&rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true

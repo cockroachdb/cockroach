@@ -225,11 +225,11 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	var wg sync.WaitGroup
 	vfc := newVectorizedFlowCreator(
 		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, false, &wg, &execinfra.RowChannel{},
-		nil /* nodeDialer */, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
+		nil /* batchSyncFlowConsumer */, nil /* nodeDialer */, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
 		nil /* fdSemaphore */, descs.DistSQLTypeResolver{},
 	)
 
-	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, nil /* localProcessors */, flowinfra.FuseNormally)
+	_, _, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, nil /* localProcessors */, flowinfra.FuseNormally)
 	defer vfc.cleanup(ctx)
 	require.NoError(t, err)
 

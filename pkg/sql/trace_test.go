@@ -241,7 +241,7 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"exec stmt",
 				"flow",
-				"materializer",
+				"batch flow coordinator",
 				"colbatchscan",
 				"consuming rows",
 				"txn coordinator send",
@@ -579,6 +579,7 @@ func TestKVTraceDistSQL(t *testing.T) {
 // running remotely are collected.
 func TestTraceDistSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	countStmt := "SELECT count(1) FROM test.a"
