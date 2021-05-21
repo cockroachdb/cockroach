@@ -175,3 +175,36 @@ else
     done
     if test -n "$informed"; then echo >&2; fi
 fi
+
+# lint to check documentation on why this commit was made.
+# Can be a reference to an epic, a reference to an issue
+# or via free-form text describing why the change was necessary.
+
+ISSUE="[Cc]lose [Cc]loses [Cc]losed [Ff]ix [Ff]ixes [Ff]ixed [Rr]esolve [Rr]esolves [Rr]esolved"
+REPIC="[A-Z][A-Z]+-[0-9][0-9]*"
+
+isdocs=`$grep -E '^Docs: ' "$1"`
+isepic1=`$grep -cE "([Ee]pic)\s$REPIC" "$1"`
+
+if [[ ! -z "$isdocs" || $isepic1 -ne 0 ]]; then
+    true
+else
+    FAILED="yes"
+    for status in $ISSUE; do
+        isissue1=$($grep -cE "($status)\s#[0-9]*" "$1")
+        # only checking valid github usernames, repo and org name characters
+        # more info: https://stackoverflow.com/questions/59081778/rules-for-special-characters-in-github-repository-name
+        isissue2=$($grep -cE "($status)\s[A-Za-z0-9_.-]*[//][A-Za-z0-9_.-]*#[0-9]*" "$1")
+        isepic2=$($grep -cE "($status)\s$REPIC" "$1")
+
+        if [[ $isissue1 -ne 0 || $isissue2 -ne 0 || $isepic2  -ne 0 ]]; then
+            FAILED="no"
+            break
+        fi
+    done
+    if [ "$FAILED" == "yes" ]; then
+        warn "Warning: Documentation missing: Please add correct documentation on why this commit was done."
+    fi
+fi
+
+
