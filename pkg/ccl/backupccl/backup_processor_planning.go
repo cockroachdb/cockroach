@@ -138,8 +138,8 @@ func distBackup(
 	evalCtx := execCtx.ExtendedEvalContext()
 	var noTxn *kv.Txn
 
+	defer close(progCh)
 	if len(backupSpecs) == 0 {
-		close(progCh)
 		return nil
 	}
 
@@ -183,7 +183,6 @@ func distBackup(
 	)
 	defer recv.Release()
 
-	defer close(progCh)
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
 	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()

@@ -108,9 +108,6 @@ func (jpl *ChunkProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{
 			if err := jpl.chunkFinished(ctx); err != nil {
 				return err
 			}
-			if jpl.completedChunks == jpl.expectedChunks {
-				return jpl.batcher.Done(ctx)
-			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -148,20 +145,6 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 		p.reported = p.completed
 		p.lastReported = timeutil.Now()
 	}
-	p.Unlock()
-
-	if shouldReport {
-		return p.Report(ctx, completed)
-	}
-	return nil
-}
-
-// Done allows the batcher to report any meaningful unreported progress, without
-// worrying about update frequency now that it is done.
-func (p *ProgressUpdateBatcher) Done(ctx context.Context) error {
-	p.Lock()
-	completed := p.completed
-	shouldReport := completed-p.reported > progressFractionThreshold
 	p.Unlock()
 
 	if shouldReport {
