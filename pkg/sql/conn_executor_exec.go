@@ -1335,7 +1335,9 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	runLat := phaseTimes.getRunLatency().Seconds()
 	parseLat := phaseTimes.getParsingLatency().Seconds()
 	planLat := phaseTimes.getPlanningLatency().Seconds()
-	svcLat := phaseTimes.getServiceLatency().Seconds()
+	// Since the last query has already finished, it is safe to retrieve its
+	// total service latency.
+	svcLat := phaseTimes.getServiceLatencyTotal().Seconds()
 
 	return res.AddRow(ctx,
 		tree.Datums{

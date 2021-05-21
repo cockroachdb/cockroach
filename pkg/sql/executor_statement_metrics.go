@@ -68,25 +68,36 @@ const (
 // copy behavior.
 type phaseTimes [sessionNumPhases]time.Time
 
-// getServiceLatency returns the time between a query being received and the end
-// of run.
-func (p *phaseTimes) getServiceLatency() time.Duration {
-	// Ideally, service latency would always be defined as:
-	// p[sessionQueryServiced] - p[sessionQueryReceived]. Unfortunately, this
-	// isn't always possible with the current structure of the code, as the
-	// service latency calculation is required when recording metrics for
-	// a statement that hits the execution engine. At this point,
-	// `sessionQueryServiced` is unset, because that happens in execCmd. To
-	// prevent negative values for the case mentioned above, we have this second
-	// possible way of calculating the service latency by relying on the
-	// plannerEndExecStmt phase. It's worth noting that the plannerEndExecStmt
-	// phase is unset for queries that don't go through the execution engine (such
-	// as observer statements, prepare statements etc.), so simply relying on the
-	// second calculation isn't an option either.
-	if !p[sessionQueryServiced].IsZero() {
-		return p[sessionQueryServiced].Sub(p[sessionQueryReceived])
+// getServiceLatencyNoOverhead returns the latency of serving a query excluding
+// miscellaneous sources of the overhead (e.g. internal retries). This method is
+// safe to call if sessionQueryServiced phase hasn't been set yet.
+func (p *phaseTimes) getServiceLatencyNoOverhead() time.Duration {
+	// To have an accurate representation of how long it took to service this
+	// single query, we ignore the time between when parsing ends and planning
+	// begins. This avoids the latency being inflated in a few different cases:
+	// when there are internal transaction retries, and when multiple statements
+	// are submitted together, e.g. "SELECT 1; SELECT 2".
+	//
+	// If we're executing a portal, both parsing start and end times will be
+	// zero, so subtracting the actual time at which the query was received will
+	// produce a negative value which doesn't make sense. Therefore, we "fake"
+	// the received time to be the parsing start time.
+	var queryReceivedTime time.Time
+	if p[sessionEndParse].IsZero() {
+		queryReceivedTime = p[sessionStartParse]
+	} else {
+		queryReceivedTime = p[sessionQueryReceived]
 	}
-	return p[plannerEndExecStmt].Sub(p[sessionQueryReceived])
+	parseLatency := p[sessionEndParse].Sub(queryReceivedTime)
+	planAndExecuteLatency := p[plannerEndExecStmt].Sub(p[plannerStartLogicalPlan])
+	return parseLatency + planAndExecuteLatency
+}
+
+// getServiceLatencyTotal returns the total latency of serving a query including
+// any overhead like internal retries.
+// NOTE: sessionQueryServiced phase must have been set.
+func (p *phaseTimes) getServiceLatencyTotal() time.Duration {
+	return p[sessionQueryServiced].Sub(p[sessionQueryReceived])
 }
 
 // getRunLatency returns the time between a query execution starting and ending.
@@ -191,7 +202,8 @@ func (ex *connExecutor) recordStatementSummary(
 	runLat := runLatRaw.Seconds()
 	parseLat := phaseTimes.getParsingLatency().Seconds()
 	planLat := phaseTimes.getPlanningLatency().Seconds()
-	svcLatRaw := phaseTimes.getServiceLatency()
+	// We want to exclude any overhead to reduce possible confusion.
+	svcLatRaw := phaseTimes.getServiceLatencyNoOverhead()
 	svcLat := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.
