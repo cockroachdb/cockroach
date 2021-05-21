@@ -175,3 +175,58 @@ else
     done
     if test -n "$informed"; then echo >&2; fi
 fi
+
+# Lint for the existence of an issue reference, an epic reference or a Docs section
+# describing why the change is being made.
+# TODO: add the correct link for documentation
+# https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/2009039063/DRAFT+Jira+Epic+Ref+GitHub+Issue+Ref+Docs+Note
+
+# All the test cases for the below regex logic is located in `githooks/commit-msg-regex`
+
+ISSUE="[Cc]lose [Cc]loses [Cc]losed [Ff]ix [Ff]ixes [Ff]ixed [Rr]esolve [Rr]esolves [Rr]esolved"
+
+isdocs=`$grep -cE '^[Dd]ocs note:\s' "$1"`
+isepic=`$grep -cE "^[Ee]pic:?\s+[A-Z][A-Z]+-[0-9]+(\s.*)?$" "$1"`
+iskeyphrase1=`$grep -cE "^([Ss]ee also|[Ii]nforms):?\s+#[0-9]+([,\s].*)?$" "$1"`
+iskeyphrase2=`$grep -cE "^([Ss]ee also|[Ii]nforms):?\s+[A-Za-z0-9_.-]+[/][A-Za-z0-9_.-]+#[0-9]+([,\s].*)?$" "$1"`
+
+if [[ $(($isdocs + $isepic + $iskeyphrase1 + $iskeyphrase2)) -eq 0 ]]; then
+    FAILED="yes"
+    for status in $ISSUE; do
+        isissue1=$($grep -cE "^($status):?\s+#[0-9]+([\s,].*)?$" "$1")
+        # Only check for valid github usernames, repo and org name characters
+        # https://stackoverflow.com/questions/59081778/rules-for-special-characters-in-github-repository-name
+        isissue2=$($grep -cE "^($status):?\s+[A-Za-z0-9_.-]+[/][A-Za-z0-9_.-]+#[[0-9]+([\s,].*)?$" "$1")
+        if [[ $isissue1 -ne 0 || $isissue2 -ne 0 ]]; then
+            FAILED="no"
+            break
+        fi
+    done
+    if [ "$FAILED" == "yes" ]; then
+        warn "Missing one of: issue reference, epic reference, Docs note"
+        echo "Try one of these:" >&2
+        echo >&2
+        echo "  Fixes #12345" >&2
+        echo "  Epic CRDB-12345" >&2
+        echo "  See also: #62585" >&2
+        echo "  Docs note: This change is being made because ..." >&2
+        echo >&2
+    fi
+fi
+
+# Check for unchanged template docs note from githooks/prepare-commit-msg and
+# alert the user if it is present in the message.
+
+if $grep -qcE '^[Dd]ocs note:\s<why>' "$1" ; then
+    warn "Warning: malformed Docs note: <why>"
+    echo "Try:" >&2
+    echo  >&2
+    echo "  Docs note: This change is being made because ...">&2
+    echo >&2
+    echo "Or one of these:" >&2
+    echo >&2
+    echo "  Epic CRDB-123" >&2
+    echo "  Fixes #123" >&2
+    echo "  See also: #123" >&2
+    echo >&2
+fi
