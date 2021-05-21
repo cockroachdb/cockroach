@@ -139,8 +139,9 @@ type TxnCoordSender struct {
 	// additional heap allocations necessary.
 	interceptorStack []txnInterceptor
 	interceptorAlloc struct {
-		arr [6]txnInterceptor
+		arr [7]txnInterceptor
 		txnHeartbeater
+		txnFinalizeBarrier
 		txnSeqNumAllocator
 		txnPipeliner
 		txnSpanRefresher
@@ -247,6 +248,12 @@ func newRootTxnCoordSender(
 	// correct order.
 	tcs.interceptorAlloc.arr = [...]txnInterceptor{
 		&tcs.interceptorAlloc.txnHeartbeater,
+		// The EndTxn barrier must be below the txnHeartbeater, to enforce the
+		// barrier for async transaction cleanups. It must be above
+		// txnPipeliner, such that it can record all lock spans from write
+		// responses and attach them to the EndTxn. It should also be above the
+		// sequence number allocator as it could want to affect ordering.
+		&tcs.interceptorAlloc.txnFinalizeBarrier,
 		// Various interceptors below rely on sequence number allocation,
 		// so the sequence number allocator is near the top of the stack.
 		&tcs.interceptorAlloc.txnSeqNumAllocator,
@@ -285,6 +292,9 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 	if ds, ok := tcf.wrapped.(*DistSender); ok {
 		riGen.ds = ds
 	}
+	tc.interceptorAlloc.txnFinalizeBarrier = txnFinalizeBarrier{}
+	tc.interceptorAlloc.txnFinalizeBarrier.mu.Locker = &tc.mu.Mutex
+
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
 		st:                     tcf.st,
 		riGen:                  riGen,

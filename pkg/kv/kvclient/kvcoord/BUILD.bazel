@@ -21,6 +21,7 @@ go_library(
         "txn_coord_sender_factory.go",
         "txn_coord_sender_savepoints.go",
         "txn_interceptor_committer.go",
+        "txn_interceptor_finalize_barrier.go",
         "txn_interceptor_heartbeater.go",
         "txn_interceptor_metric_recorder.go",
         "txn_interceptor_pipeliner.go",
