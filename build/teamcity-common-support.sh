@@ -29,3 +29,7 @@ push_to_git() {
   # $@ passes all arguments to this function to the command
   GIT_SSH_COMMAND="ssh -i .cockroach-teamcity-key" git push "$@"
 }
+
+git_wrapped() {
+  GIT_SSH_COMMAND="ssh -i .cockroach-teamcity-key" git "$@"
+}

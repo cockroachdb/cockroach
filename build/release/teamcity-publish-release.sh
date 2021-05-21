@@ -58,6 +58,14 @@ gcr_hostname="us.gcr.io"
 tc_end_block "Variable Setup"
 
 
+tc_start_block "Check remote tag"
+if git_wrapped ls-remote --exit-code --tags . "${build_name}"; then
+  echo "Tag ${build_name} already exist"
+  exit 1
+fi
+tc_end_block "Check remote tag"
+
+
 tc_start_block "Tag the release"
 git tag "${build_name}"
 tc_end_block "Tag the release"
