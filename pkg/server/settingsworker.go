@@ -44,7 +44,7 @@ func processSystemConfigKVs(
 		}
 		settingsKVs = append(settingsKVs, kv)
 
-		if err := u.Set(k, v, t); err != nil {
+		if err := u.Set(ctx, k, v, t); err != nil {
 			log.Warningf(ctx, "setting %q to %q failed: %+v", k, v, err)
 		}
 		return nil
@@ -56,7 +56,7 @@ this likely indicates the settings table structure or encoding has been altered;
 skipping settings updates`)
 		}
 	}
-	u.ResetRemaining()
+	u.ResetRemaining(ctx)
 	return errors.Wrap(storeCachedSettingsKVs(ctx, eng, settingsKVs), "while storing settings kvs")
 }
 

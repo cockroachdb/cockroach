@@ -105,7 +105,7 @@ func (stats *Reporter) reportInterval() (time.Duration, <-chan struct{}) {
 
 // Start the periodic calls to Update().
 func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
-	ReporterInterval.SetOnChange(&stats.settings.SV, func() {
+	ReporterInterval.SetOnChange(&stats.settings.SV, func(ctx context.Context) {
 		stats.frequencyMu.Lock()
 		defer stats.frequencyMu.Unlock()
 		// Signal the current waiter (if any), and prepare the channel for future

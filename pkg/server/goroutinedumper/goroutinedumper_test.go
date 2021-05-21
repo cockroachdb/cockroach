@@ -159,7 +159,7 @@ func TestHeuristic(t *testing.T) {
 			ctx := context.Background()
 			for _, v := range c.vals {
 				currentTime = baseTime.Add(v.secs * time.Second)
-				numGoroutinesThreshold.Override(&st.SV, v.threshold)
+				numGoroutinesThreshold.Override(ctx, &st.SV, v.threshold)
 				gd.MaybeDump(ctx, st, v.goroutines)
 			}
 			assert.Equal(t, c.expectedDumps, dumps)

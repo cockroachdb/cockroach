@@ -98,7 +98,7 @@ func TestEnsureSQLStatsAreFlushedForTelemetry(t *testing.T) {
 	params.Settings = cluster.MakeClusterSettings()
 	// Set the SQL stat refresh rate very low so that SQL stats are continuously
 	// flushed into the telemetry reporting stats pool.
-	sql.SQLStatReset.Override(&params.Settings.SV, 10*time.Millisecond)
+	sql.SQLStatReset.Override(ctx, &params.Settings.SV, 10*time.Millisecond)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 

@@ -4472,8 +4472,9 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	enableLoadBasedLeaseRebalancing.Override(&st.SV, true)
+	enableLoadBasedLeaseRebalancing.Override(ctx, &st.SV, true)
 
 	remoteStore := roachpb.StoreDescriptor{
 		Node: roachpb.NodeDescriptor{
@@ -6602,7 +6603,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
-	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
+	TimeUntilStoreDead.Override(ctx, &st.SV, TestTimeUntilStoreDeadOff)
 
 	const generations = 100
 	const nodes = 20
@@ -6722,6 +6723,7 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
@@ -6738,7 +6740,7 @@ func Example_rebalancing() {
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
-	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
+	TimeUntilStoreDead.Override(ctx, &st.SV, TestTimeUntilStoreDeadOff)
 
 	const generations = 100
 	const nodes = 20
@@ -6807,9 +6809,9 @@ func Example_rebalancing() {
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
 			var rangeUsageInfo RangeUsageInfo
-			target, _, details, ok := alloc.RebalanceVoter(context.Background(), zonepb.EmptyCompleteZoneConfig(), nil, []roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, nil, rangeUsageInfo, storeFilterThrottled)
+			target, _, details, ok := alloc.RebalanceVoter(ctx, zonepb.EmptyCompleteZoneConfig(), nil, []roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, nil, rangeUsageInfo, storeFilterThrottled)
 			if ok {
-				log.Infof(context.Background(), "rebalancing to %v; details: %s", target, details)
+				log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}

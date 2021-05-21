@@ -421,9 +421,10 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 func TestPebbleDiskSlowEmit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	settings := cluster.MakeTestingClusterSettings()
-	MaxSyncDurationFatalOnExceeded.Override(&settings.SV, false)
+	MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
 	p := newPebbleInMem(
 		context.Background(),
 		roachpb.Attributes{},

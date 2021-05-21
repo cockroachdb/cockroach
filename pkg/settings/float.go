@@ -11,6 +11,7 @@
 package settings
 
 import (
+	"context"
 	"math"
 
 	"github.com/cockroachdb/errors"
@@ -63,8 +64,8 @@ var _ = (*FloatSetting).Default
 // the default value.
 //
 // For testing usage only.
-func (f *FloatSetting) Override(sv *Values, v float64) {
-	if err := f.set(sv, v); err != nil {
+func (f *FloatSetting) Override(ctx context.Context, sv *Values, v float64) {
+	if err := f.set(ctx, sv, v); err != nil {
 		panic(err)
 	}
 	sv.setDefaultOverrideInt64(f.slotIdx, int64(math.Float64bits(v)))
@@ -80,24 +81,24 @@ func (f *FloatSetting) Validate(v float64) error {
 	return nil
 }
 
-func (f *FloatSetting) set(sv *Values, v float64) error {
+func (f *FloatSetting) set(ctx context.Context, sv *Values, v float64) error {
 	if err := f.Validate(v); err != nil {
 		return err
 	}
-	sv.setInt64(f.slotIdx, int64(math.Float64bits(v)))
+	sv.setInt64(ctx, f.slotIdx, int64(math.Float64bits(v)))
 	return nil
 }
 
-func (f *FloatSetting) setToDefault(sv *Values) {
+func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	ok, val, _ := sv.getDefaultOverride(f.slotIdx)
 	if ok {
 		// As per the semantics of override, these values don't go through
 		// validation.
-		_ = f.set(sv, math.Float64frombits(uint64((val))))
+		_ = f.set(ctx, sv, math.Float64frombits(uint64((val))))
 		return
 	}
-	if err := f.set(sv, f.defaultValue); err != nil {
+	if err := f.set(ctx, sv, f.defaultValue); err != nil {
 		panic(err)
 	}
 }

@@ -22,7 +22,6 @@ import (
 )
 
 func TestTrace(t *testing.T) {
-
 	for _, tc := range []struct {
 		name  string
 		init  func(context.Context) (context.Context, *tracing.Span)
@@ -55,8 +54,8 @@ func TestTrace(t *testing.T) {
 			init: func(ctx context.Context) (context.Context, *tracing.Span) {
 				tr := tracing.NewTracer()
 				st := cluster.MakeTestingClusterSettings()
-				tracing.ZipkinCollector.Override(&st.SV, "127.0.0.1:9000000")
-				tr.Configure(&st.SV)
+				tracing.ZipkinCollector.Override(ctx, &st.SV, "127.0.0.1:9000000")
+				tr.Configure(ctx, &st.SV)
 				return tr.StartSpanCtx(context.Background(), "foo")
 			},
 			check: func(t *testing.T, ctx context.Context, sp *tracing.Span) {

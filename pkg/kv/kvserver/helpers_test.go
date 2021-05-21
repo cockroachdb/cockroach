@@ -219,7 +219,7 @@ func (s *Store) RequestClosedTimestamp(nodeID roachpb.NodeID, rangeID roachpb.Ra
 }
 
 func NewTestStorePool(cfg StoreConfig) *StorePool {
-	TimeUntilStoreDead.Override(&cfg.Settings.SV, TestTimeUntilStoreDeadOff)
+	TimeUntilStoreDead.Override(context.Background(), &cfg.Settings.SV, TestTimeUntilStoreDeadOff)
 	return NewStorePool(
 		cfg.AmbientCtx,
 		cfg.Settings,

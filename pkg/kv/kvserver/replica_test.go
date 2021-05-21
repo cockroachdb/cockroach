@@ -9251,6 +9251,7 @@ func TestCommandTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -9258,7 +9259,7 @@ func TestCommandTooLarge(t *testing.T) {
 
 	st := tc.store.cfg.Settings
 	st.Manual.Store(true)
-	MaxCommandSize.Override(&st.SV, 1024)
+	MaxCommandSize.Override(ctx, &st.SV, 1024)
 
 	args := putArgs(roachpb.Key("k"),
 		[]byte(strings.Repeat("a", int(MaxCommandSize.Get(&st.SV)))))
@@ -10693,7 +10694,7 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	// Disable txn liveness pushes. See below for why.
 	st := tc.store.cfg.Settings
 	st.Manual.Store(true)
-	concurrency.LockTableLivenessPushDelay.Override(&st.SV, 24*time.Hour)
+	concurrency.LockTableLivenessPushDelay.Override(ctx, &st.SV, 24*time.Hour)
 
 	// Write a value to a key A.
 	key := roachpb.Key("a")
@@ -12570,7 +12571,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 	cfg.RaftMaxCommittedSizePerReady = 1
 	// Set up tracing.
 	tracer := tracing.NewTracer()
-	tracer.Configure(&cfg.Settings.SV)
+	tracer.Configure(ctx, &cfg.Settings.SV)
 	cfg.AmbientCtx.Tracer = tracer
 
 	// Below we set txnID to the value of the transaction we're going to force to
@@ -12709,7 +12710,7 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	cfg := TestStoreConfig(hlc.NewClock(hlc.UnixNano, time.Nanosecond))
 	// Set up tracing.
 	tracer := tracing.NewTracer()
-	tracer.Configure(&cfg.Settings.SV)
+	tracer.Configure(ctx, &cfg.Settings.SV)
 	tracer.AlwaysTrace()
 	cfg.AmbientCtx.Tracer = tracer
 	tc.StartWithStoreConfig(t, stopper, cfg)

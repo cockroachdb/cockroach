@@ -291,7 +291,7 @@ func MakeServer(
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV,
-		func() {
+		func(ctx context.Context) {
 			loadLocalAuthConfigUponRemoteSettingChange(
 				ambientCtx.AnnotateCtx(context.Background()), server, st)
 		})
