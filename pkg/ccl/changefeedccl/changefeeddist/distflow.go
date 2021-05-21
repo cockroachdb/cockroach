@@ -136,7 +136,7 @@ func StartDistChangefeed(
 	return resultRows.Err()
 }
 
-// changefeedResultWriter implements the `rowexec.resultWriter` that sends
+// changefeedResultWriter implements the `sql.rowResultWriter` that sends
 // the received rows back over the given channel.
 type changefeedResultWriter struct {
 	rowsCh       chan<- tree.Datums

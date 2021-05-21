@@ -155,11 +155,6 @@ func (rb *RowBuffer) ProducerDone() {
 	rb.Mu.producerClosed = true
 }
 
-// Types is part of the RowReceiver interface.
-func (rb *RowBuffer) Types() []*types.T {
-	return rb.types
-}
-
 // OutputTypes is part of the RowSource interface.
 func (rb *RowBuffer) OutputTypes() []*types.T {
 	if rb.types == nil {

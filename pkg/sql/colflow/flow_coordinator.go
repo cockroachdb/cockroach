@@ -36,10 +36,8 @@ type FlowCoordinator struct {
 	row  rowenc.EncDatumRow
 	meta *execinfrapb.ProducerMetadata
 
-	// cancelFlow will return a function to cancel the context of the flow. It
-	// is a function in order to be lazily evaluated, since the context
-	// cancellation function is only available after the flow is Start()'ed.
-	cancelFlow func() context.CancelFunc
+	// cancelFlow cancels the context of the flow.
+	cancelFlow context.CancelFunc
 }
 
 var flowCoordinatorPool = sync.Pool{
@@ -57,7 +55,7 @@ func NewFlowCoordinator(
 	processorID int32,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
-	cancelFlow func() context.CancelFunc,
+	cancelFlow context.CancelFunc,
 ) *FlowCoordinator {
 	f := flowCoordinatorPool.Get().(*FlowCoordinator)
 	f.input = input
@@ -155,7 +153,7 @@ func (f *FlowCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 func (f *FlowCoordinator) close() {
 	if f.InternalClose() {
-		f.cancelFlow()()
+		f.cancelFlow()
 	}
 }
 
