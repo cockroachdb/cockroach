@@ -1109,6 +1109,7 @@ Available Commands:
   userfile          upload, list and delete user scoped files
   import            import a db or table from a local PGDUMP or MYSQLDUMP file
   demo              open a demo sql shell
+  convert-url       convert a SQL connection string for use with various client drivers
   gen               generate auxiliary files
   version           output version information
   debug             debugging commands
