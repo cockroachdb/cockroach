@@ -1,0 +1,5 @@
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg"  x="0px" y="0px" viewBox="0 0 24 24" xml:space="preserve" width="24" height="24">
+  <g class="nc-icon-wrapper" fill="#5f6c87">
+    <polyline data-color="color-2" fill="none" stroke="#5f6c87" stroke-width="2" stroke-linecap="round" stroke-miterlimit="10" points=" 8,5 8,1 16,1 16,5 " stroke-linejoin="round"/> <polyline fill="none" stroke="#5f6c87" stroke-width="2" stroke-linecap="round" stroke-miterlimit="10" points="9,15 1,15 1,5 23,5 23,15 15,15 " stroke-linejoin="round"></polyline> <polyline fill="none" stroke="#5f6c87" stroke-width="2" stroke-linecap="round" stroke-miterlimit="10" points="22,18 22,23 2,23 2,18 " stroke-linejoin="round"></polyline> <rect data-color="color-2" x="9" y="13" fill="none" stroke="#5f6c87" stroke-width="2" stroke-linecap="round" stroke-miterlimit="10" width="6" height="4" stroke-linejoin="round"/>
+  </g>
+</svg>
