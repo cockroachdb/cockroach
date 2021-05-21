@@ -834,17 +834,17 @@ func (c *cluster) detectDeadlocks() {
 }
 
 func (c *cluster) enableTxnPushes() {
-	concurrency.LockTableLivenessPushDelay.Override(&c.st.SV, 0*time.Millisecond)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(&c.st.SV, 0*time.Millisecond)
+	concurrency.LockTableLivenessPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, 0*time.Millisecond)
 }
 
 func (c *cluster) disableTxnPushes() {
-	concurrency.LockTableLivenessPushDelay.Override(&c.st.SV, time.Hour)
-	concurrency.LockTableDeadlockDetectionPushDelay.Override(&c.st.SV, time.Hour)
+	concurrency.LockTableLivenessPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
+	concurrency.LockTableDeadlockDetectionPushDelay.Override(context.Background(), &c.st.SV, time.Hour)
 }
 
 func (c *cluster) setDiscoveredLocksThresholdToConsultFinalizedTxnCache(n int) {
-	concurrency.DiscoveredLocksThresholdToConsultFinalizedTxnCache.Override(&c.st.SV, int64(n))
+	concurrency.DiscoveredLocksThresholdToConsultFinalizedTxnCache.Override(context.Background(), &c.st.SV, int64(n))
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests

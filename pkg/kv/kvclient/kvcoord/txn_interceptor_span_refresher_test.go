@@ -859,7 +859,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	keyD, keyE := roachpb.Key("d"), roachpb.Key("e")
 
 	// Set MaxTxnRefreshSpansBytes limit to 3 bytes.
-	MaxTxnRefreshSpansBytes.Override(&tsr.st.SV, 3)
+	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3)
 
 	// Send a batch below the limit.
 	var ba roachpb.BatchRequest
@@ -1084,7 +1084,7 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 
 	// Set MaxTxnRefreshSpansBytes limit to 3 bytes.
-	MaxTxnRefreshSpansBytes.Override(&tsr.st.SV, 3)
+	MaxTxnRefreshSpansBytes.Override(ctx, &tsr.st.SV, 3)
 
 	// Send a batch below the limit.
 	var ba roachpb.BatchRequest

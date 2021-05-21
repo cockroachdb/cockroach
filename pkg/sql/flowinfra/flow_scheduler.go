@@ -77,7 +77,7 @@ func NewFlowScheduler(
 	}
 	fs.mu.queue = list.New()
 	fs.atomics.maxRunningFlows = int32(settingMaxRunningFlows.Get(&settings.SV))
-	settingMaxRunningFlows.SetOnChange(&settings.SV, func() {
+	settingMaxRunningFlows.SetOnChange(&settings.SV, func(ctx context.Context) {
 		atomic.StoreInt32(&fs.atomics.maxRunningFlows, int32(settingMaxRunningFlows.Get(&settings.SV)))
 	})
 	return fs

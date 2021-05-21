@@ -47,7 +47,7 @@ func TestProberDoesReads(t *testing.T) {
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{})
 		defer cleanup()
 
-		kvprober.ReadInterval.Override(&s.ClusterSettings().SV, 5*time.Millisecond)
+		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
@@ -61,8 +61,8 @@ func TestProberDoesReads(t *testing.T) {
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{})
 		defer cleanup()
 
-		kvprober.ReadEnabled.Override(&s.ClusterSettings().SV, true)
-		kvprober.ReadInterval.Override(&s.ClusterSettings().SV, 5*time.Millisecond)
+		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
@@ -92,8 +92,8 @@ func TestProberDoesReads(t *testing.T) {
 		})
 		defer cleanup()
 
-		kvprober.ReadEnabled.Override(&s.ClusterSettings().SV, true)
-		kvprober.ReadInterval.Override(&s.ClusterSettings().SV, 5*time.Millisecond)
+		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
@@ -139,8 +139,8 @@ func TestProberDoesReads(t *testing.T) {
 		dbIsAvailable = false
 		mu.Unlock()
 
-		kvprober.ReadEnabled.Override(&s.ClusterSettings().SV, true)
-		kvprober.ReadInterval.Override(&s.ClusterSettings().SV, 5*time.Millisecond)
+		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
 		// Probe exactly ten times so we can make assertions below.
 		for i := 0; i < 10; i++ {
@@ -220,7 +220,7 @@ func initTestProber(
 	})
 
 	// Given small test cluster, this better exercises the planning logic.
-	kvprober.NumStepsToPlanAtOnce.Override(&s.ClusterSettings().SV, 10)
+	kvprober.NumStepsToPlanAtOnce.Override(context.Background(), &s.ClusterSettings().SV, 10)
 	// Want these tests to run as fast as possible; see planner_test.go for a
 	// unit test of the rate limiting.
 	p.SetPlanningRateLimit(0)

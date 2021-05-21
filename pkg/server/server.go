@@ -898,7 +898,7 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) error {
 	forwardJumpCheckEnabled := make(chan bool, 1)
 	s.stopper.AddCloser(stop.CloserFn(func() { close(forwardJumpCheckEnabled) }))
 
-	forwardClockJumpCheckEnabled.SetOnChange(&s.st.SV, func() {
+	forwardClockJumpCheckEnabled.SetOnChange(&s.st.SV, func(context.Context) {
 		forwardJumpCheckEnabled <- forwardClockJumpCheckEnabled.Get(&s.st.SV)
 	})
 
@@ -1062,7 +1062,7 @@ func (s *Server) startPersistingHLCUpperBound(
 	tickerFn func(d time.Duration) *time.Ticker,
 ) error {
 	persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
-	persistHLCUpperBoundInterval.SetOnChange(&s.st.SV, func() {
+	persistHLCUpperBoundInterval.SetOnChange(&s.st.SV, func(context.Context) {
 		persistHLCUpperBoundIntervalCh <- persistHLCUpperBoundInterval.Get(&s.st.SV)
 	})
 
@@ -1654,7 +1654,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	var graphiteOnce sync.Once
-	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
+	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
 			graphiteOnce.Do(func() {
 				s.node.startGraphiteStatsExporter(s.st)

@@ -181,8 +181,8 @@ func NewTracer() *Tracer {
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
 // it updated if they change).
-func (t *Tracer) Configure(sv *settings.Values) {
-	reconfigure := func() {
+func (t *Tracer) Configure(ctx context.Context, sv *settings.Values) {
+	reconfigure := func(ctx context.Context) {
 		if lsToken := lightstepToken.Get(sv); lsToken != "" {
 			t.setShadowTracer(createLightStepTracer(lsToken))
 		} else if zipkinAddr := ZipkinCollector.Get(sv); zipkinAddr != "" {
@@ -199,7 +199,7 @@ func (t *Tracer) Configure(sv *settings.Values) {
 		atomic.StoreInt32(&t._useNetTrace, nt)
 	}
 
-	reconfigure()
+	reconfigure(ctx)
 
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	lightstepToken.SetOnChange(sv, reconfigure)

@@ -163,7 +163,7 @@ func (d *datadrivenTestState) addServer(
 			return errors.New("unable to parse tempCleanupFrequency during server creation")
 		}
 		settings := cluster.MakeTestingClusterSettings()
-		sql.TempObjectCleanupInterval.Override(&settings.SV, duration)
+		sql.TempObjectCleanupInterval.Override(context.Background(), &settings.SV, duration)
 		params.ServerArgs.Settings = settings
 	}
 

@@ -4091,8 +4091,8 @@ func TestMergeQueue(t *testing.T) {
 	zoneConfig.RangeMinBytes = &rangeMinBytes
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV
-	kvserverbase.MergeQueueEnabled.Override(sv, true)
-	kvserver.MergeQueueInterval.Override(sv, 0) // process greedily
+	kvserverbase.MergeQueueEnabled.Override(ctx, sv, true)
+	kvserver.MergeQueueInterval.Override(ctx, sv, 0) // process greedily
 
 	tc := testcluster.StartTestCluster(t, 2,
 		base.TestClusterArgs{
@@ -4114,7 +4114,7 @@ func TestMergeQueue(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, 0)
 	// The cluster with manual replication disables the merge queue,
 	// so we need to re-enable.
-	kvserverbase.MergeQueueEnabled.Override(sv, true)
+	kvserverbase.MergeQueueEnabled.Override(ctx, sv, true)
 	store.SetMergeQueueActive(true)
 
 	split := func(t *testing.T, key roachpb.Key, expirationTime hlc.Timestamp) {
@@ -4174,7 +4174,7 @@ func TestMergeQueue(t *testing.T) {
 		// Disable load-based splitting, so that the absence of sufficient QPS
 		// measurements do not prevent ranges from merging. Certain subtests
 		// re-enable the functionality.
-		kvserver.SplitByLoadEnabled.Override(sv, false)
+		kvserver.SplitByLoadEnabled.Override(ctx, sv, false)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 		split(t, rhsStartKey.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
 	}
@@ -4270,13 +4270,13 @@ func TestMergeQueue(t *testing.T) {
 			// measurement from both sides to be sufficiently stable and reliable,
 			// meaning that it was a maximum measurement over some extended period of
 			// time.
-			kvserver.SplitByLoadEnabled.Override(sv, true)
-			kvserver.SplitByLoadQPSThreshold.Override(sv, splitByLoadQPS)
+			kvserver.SplitByLoadEnabled.Override(ctx, sv, true)
+			kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadQPS)
 
 			// Drop the load-based splitting merge delay setting, which also dictates
 			// the duration that a leaseholder must measure QPS before considering its
 			// measurements to be reliable enough to base range merging decisions on.
-			kvserverbase.SplitByLoadMergeDelay.Override(sv, splitByLoadMergeDelay)
+			kvserverbase.SplitByLoadMergeDelay.Override(ctx, sv, splitByLoadMergeDelay)
 
 			// Reset both range's load-based splitters, so that QPS measurements do
 			// not leak over between subtests. Then, bump the manual clock so that

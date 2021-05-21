@@ -131,7 +131,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		enabledSeparated := rand.Intn(2) == 0
 		log.Infof(context.Background(),
 			"test Config is randomly setting enabledSeparated: %t", enabledSeparated)
-		storage.SeparatedIntentsEnabled.Override(&st.SV, enabledSeparated)
+		storage.SeparatedIntentsEnabled.Override(context.Background(), &st.SV, enabledSeparated)
 	}
 	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
@@ -266,7 +266,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	// For test servers, leave interleaved tables enabled by default. We'll remove
 	// this when we remove interleaved tables altogether.
-	sql.InterleavedTablesEnabled.Override(&cfg.Settings.SV, true)
+	sql.InterleavedTablesEnabled.Override(context.Background(), &cfg.Settings.SV, true)
 
 	return cfg
 }

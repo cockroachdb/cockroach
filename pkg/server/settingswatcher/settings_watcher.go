@@ -111,12 +111,12 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 			} else {
 				log.Infof(ctx, "set cluster version to: %v", v)
 			}
-		} else if err := u.Set(k, val, valType); err != nil {
+		} else if err := u.Set(ctx, k, val, valType); err != nil {
 			log.Warningf(ctx, "failed to set setting %s to %s: %v",
 				log.Safe(k), val, err)
 		}
 	}, rangefeed.WithInitialScan(func(ctx context.Context) {
-		u.ResetRemaining()
+		u.ResetRemaining(ctx)
 		close(initialScanDone)
 	}), rangefeed.WithOnInitialScanError(func(
 		ctx context.Context, err error,

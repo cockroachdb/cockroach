@@ -169,7 +169,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	defer tc.stopper.Stop(ctx)
 
 	// Start with parallel commits disabled. Should NOT attach in-flight writes.
-	parallelCommitsEnabled.Override(&tc.st.SV, false)
+	parallelCommitsEnabled.Override(ctx, &tc.st.SV, false)
 
 	txn := makeTxnProto()
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
@@ -211,7 +211,7 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	require.NotNil(t, br)
 
 	// Enable parallel commits and send the same batch. Should attach in-flight writes.
-	parallelCommitsEnabled.Override(&tc.st.SV, true)
+	parallelCommitsEnabled.Override(ctx, &tc.st.SV, true)
 
 	ba.Requests = nil
 	etArgsCopy = etArgs
