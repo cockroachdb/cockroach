@@ -25,7 +25,7 @@ configure_git_ssh_key() {
   ssh-keyscan github.com > "$HOME/.ssh/known_hosts"
 }
 
-push_to_git() {
+git_wrapped() {
   # $@ passes all arguments to this function to the command
-  GIT_SSH_COMMAND="ssh -i .cockroach-teamcity-key" git push "$@"
+  GIT_SSH_COMMAND="ssh -i .cockroach-teamcity-key" git "$@"
 }
