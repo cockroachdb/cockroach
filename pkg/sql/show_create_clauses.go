@@ -107,7 +107,7 @@ func ShowCreateView(
 	}
 	f.WriteString(") AS ")
 
-	// Convert sequences referenced by ID in the view back to their names.
+	// Deserialize user-defined types in the view query.
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, desc)
 	if err != nil {
 		log.Warningf(ctx,
@@ -115,7 +115,7 @@ func ShowCreateView(
 			desc.GetName(), desc.GetID(), err)
 		f.WriteString(desc.GetViewQuery())
 	} else {
-		// Deserialize user-defined types in the view query.
+		// Convert sequences referenced by ID in the view back to their names.
 		sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(
 			ctx, semaCtx, typeReplacedViewQuery)
 		if err != nil {

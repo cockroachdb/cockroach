@@ -20,7 +20,7 @@ statement ok
 CREATE TABLE foo (i SERIAL PRIMARY KEY)
 
 statement ok
-ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT nextval($test_seq_id::regclass)
+ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT nextval($test_seq_id)
 
 statement ok
 ALTER TABLE foo ADD COLUMN k SERIAL
@@ -106,7 +106,7 @@ CREATE SEQUENCE s2
 statement ok
 CREATE TABLE bar (
   i SERIAL PRIMARY KEY,
-  j INT NOT NULL DEFAULT currval($s1_id::regclass),
+  j INT NOT NULL DEFAULT currval($s1_id),
   k INT NOT NULL DEFAULT nextval('s2'),
   FAMILY (i, j, k))
 
@@ -169,7 +169,7 @@ CREATE SEQUENCE other_db.s2
 
 statement ok
 CREATE TABLE other_db.t (
-  i INT NOT NULL DEFAULT nextval($s_id::regclass),
+  i INT NOT NULL DEFAULT nextval($s_id),
   j INT NOT NULL DEFAULT currval('other_db.public.s2'),
   FAMILY (i, j))
 
@@ -227,7 +227,7 @@ CREATE SCHEMA test_schema
 statement ok
 CREATE TABLE tb (
   i SERIAL PRIMARY KEY,
-  j INT NOT NULL DEFAULT nextval($sc_s1_id::regclass),
+  j INT NOT NULL DEFAULT nextval($sc_s1_id),
   k INT NOT NULL DEFAULT currval('test.public.sc_s2'),
   FAMILY (i, j, k))
 
@@ -288,7 +288,7 @@ CREATE SEQUENCE s4
 statement ok
 CREATE TABLE foo (
   i SERIAL PRIMARY KEY,
-  j INT NOT NULL DEFAULT nextval($s3_id::regclass),
+  j INT NOT NULL DEFAULT nextval($s3_id),
   k INT NOT NULL DEFAULT currval('test.test_schema.s4'),
   FAMILY (i, j, k))
 
@@ -424,7 +424,7 @@ v2  CREATE VIEW public.v2 (currval) AS SELECT currval FROM (SELECT currval('publ
 
 # Union containing sequences.
 statement ok
-CREATE VIEW v3 AS SELECT nextval($view_seq_id::regclass), i FROM t3 UNION SELECT nextval('view_seq'), i FROM t4
+CREATE VIEW v3 AS SELECT nextval($view_seq_id), i FROM t3 UNION SELECT nextval('view_seq'), i FROM t4
 
 query TT
 SHOW CREATE VIEW v3
@@ -432,7 +432,7 @@ SHOW CREATE VIEW v3
 v3  CREATE VIEW public.v3 (nextval, i) AS SELECT nextval('public.view_seq'::REGCLASS), i FROM test.public.t3 UNION SELECT nextval('public.view_seq'::REGCLASS), i FROM test.public.t4
 
 statement ok
-CREATE VIEW v4 AS SELECT t3.i, nextval('view_seq') FROM t3 INNER JOIN (SELECT j, currval($view_seq_id::regclass) FROM t4) as t5 ON t3.i = t5.j
+CREATE VIEW v4 AS SELECT t3.i, nextval('view_seq') FROM t3 INNER JOIN (SELECT j, currval($view_seq_id) FROM t4) as t5 ON t3.i = t5.j
 
 # Join containing sequences.
 query TT
@@ -454,7 +454,7 @@ statement ok
 CREATE view v6 AS SELECT nextval('view_seq') AS i
 
 statement ok
-CREATE OR REPLACE VIEW v6 AS SELECT currval($view_seq_id::regclass) AS i
+CREATE OR REPLACE VIEW v6 AS SELECT currval($view_seq_id) AS i
 
 query TT
 SHOW CREATE VIEW v6
@@ -472,7 +472,7 @@ v7  CREATE VIEW public.v7 (i, nextval) AS (SELECT i, (SELECT nextval('public.vie
 
 # Sequence in the WHERE clause.
 statement ok
-CREATE VIEW v8 AS SELECT i FROM t3 WHERE i = nextval($view_seq_id::regclass)
+CREATE VIEW v8 AS SELECT i FROM t3 WHERE i = nextval($view_seq_id)
 
 query TT
 SHOW CREATE VIEW v8

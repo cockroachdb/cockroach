@@ -486,3 +486,15 @@ query O
 SELECT (-1)::REGCLASS
 ----
 4294967295
+
+# Test that we can cast a constant directly to regclass.
+statement ok
+CREATE TABLE regression_62205(a INT PRIMARY KEY)
+
+let $regression_62205_oid
+SELECT 'regression_62205'::regclass::oid
+
+query O
+SELECT $regression_62205_oid::regclass
+----
+regression_62205
