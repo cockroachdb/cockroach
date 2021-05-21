@@ -238,6 +238,7 @@ func backup(
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	g.GoCtx(func(ctx context.Context) error {
+		defer close(requestFinishedCh)
 		// When a processor is done exporting a span, it will send a progress update
 		// to progCh.
 		for progress := range progCh {
