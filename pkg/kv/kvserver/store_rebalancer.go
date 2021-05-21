@@ -786,6 +786,10 @@ func (sr *StoreRebalancer) pickRemainingRepls(
 			partialVoterTargets,
 			partialNonVoterTargets,
 			options,
+			// The store rebalancer should never need to perform lateral relocations,
+			// so we ask the allocator to disregard all the nodes that exist in
+			// `partial{Non}VoterTargets`.
+			false, /* allowMultipleReplsPerNode */
 			targetType,
 		)
 		if target == nil {
