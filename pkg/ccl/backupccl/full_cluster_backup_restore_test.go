@@ -854,6 +854,10 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	dbBackupLoc := "nodelocal://0/my_db_backup"
 	clusterBackupLoc := "nodelocal://0/my_cluster_backup"
 
+	// the small test-case will get entirely buffered/merged by small-file merging
+	// and not report any progress in the meantime unless it is disabled.
+	srcDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_size = '0'`)
+
 	// Take a backup that we'll use to create an OFFLINE descriptor.
 	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)
 	srcDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, dbBackupLoc)
