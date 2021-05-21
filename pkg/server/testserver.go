@@ -1301,7 +1301,7 @@ func (ts *TestServer) GetRangeLease(
 	resp := leaseResp.(*roachpb.LeaseInfoResponse)
 	if queryPolicy == QueryLocalNodeOnly && resp.EvaluatedBy != ts.GetFirstStoreID() {
 		// TODO(andrei): Figure out how to deal with nodes with multiple stores.
-		// This API API should permit addressing the query to a particular store.
+		// This API should permit addressing the query to a particular store.
 		return LeaseInfo{}, hlc.ClockTimestamp{}, errors.Errorf(
 			"request not evaluated locally; evaluated by s%d instead of local s%d",
 			resp.EvaluatedBy, ts.GetFirstStoreID())
