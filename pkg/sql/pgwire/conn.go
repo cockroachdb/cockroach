@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1251,6 +1252,50 @@ func (c *conn) bufferRow(
 	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(errors.AssertionFailedf("unexpected err from buffer: %s", err))
+	}
+}
+
+// bufferBatch serializes a batch and adds all the rows from it to the buffer.
+// It is a noop for zero-length batch.
+//
+// formatCodes describes the desired encoding for each column. It can be nil, in
+// which case all columns are encoded using the text encoding. Otherwise, it
+// needs to contain an entry for every column.
+func (c *conn) bufferBatch(
+	ctx context.Context,
+	batch coldata.Batch,
+	formatCodes []pgwirebase.FormatCode,
+	conv sessiondatapb.DataConversionConfig,
+	sessionLoc *time.Location,
+) {
+	sel := batch.Selection()
+	n := batch.Length()
+	vecs := batch.ColVecs()
+	width := int16(len(vecs))
+	for i := 0; i < n; i++ {
+		rowIdx := i
+		if sel != nil {
+			rowIdx = sel[rowIdx]
+		}
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
+		c.msgBuilder.putInt16(width)
+		for colIdx, col := range vecs {
+			fmtCode := pgwirebase.FormatText
+			if formatCodes != nil {
+				fmtCode = formatCodes[colIdx]
+			}
+			switch fmtCode {
+			case pgwirebase.FormatText:
+				c.msgBuilder.writeTextColumnarElement(ctx, col, rowIdx, conv, sessionLoc)
+			case pgwirebase.FormatBinary:
+				c.msgBuilder.writeBinaryColumnarElement(ctx, col, rowIdx, sessionLoc)
+			default:
+				c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
+			}
+		}
+		if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
+			panic(fmt.Sprintf("unexpected err from buffer: %s", err))
+		}
 	}
 }
 
