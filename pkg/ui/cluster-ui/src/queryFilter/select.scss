@@ -1,0 +1,108 @@
+@import "../core/index.module";
+
+.Select.is-focused {
+  &:not(.is-open) {
+    .Select-control {
+      box-shadow: none;
+      border: none;
+    }
+  }
+}
+
+.Select.is-focused {
+  &:not(.is-open) {
+    .Select-control {
+      box-shadow: none;
+      border: none;
+    }
+  }
+}
+
+.Select-value, .Select-placeholder {
+  line-height: inherit !important;
+  height: auto !important;
+  position: relative !important;
+  white-space: nowrap !important;
+  max-width: 250px !important;
+  padding: 0 0 0 3px !important;
+}
+
+.Select-control {
+  line-height: inherit !important;
+  height: auto !important;
+  border-width: 0 !important;
+  background-color: transparent !important;
+  width: auto !important;
+
+  &:hover {
+    box-shadow: none;
+  }
+}
+
+.Select-input {
+  line-height: inherit !important;
+  height: auto !important;
+  position: absolute !important;
+  top: 0 !important;
+}
+
+.Select-input > input {
+  padding: 0 !important;
+}
+
+.Select-menu-outer {
+  width: auto !important;
+  border: none !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  max-height: 200px;
+  font-family: $font-family--base;
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+  border-radius: 4px !important;
+  padding: 0 0;
+}
+
+.Select-menu, .Select-menu-outer {
+  max-height: 350px;
+}
+
+.Select-value-label {
+  display: block !important;
+  cursor: pointer;
+}
+
+.Select-arrow {
+  border-top-color: #242a35 !important;
+}
+
+.Select {
+  display: block;
+  width: 100%;
+}
+
+.dropdown--side-arrows {
+  .Select {
+    padding: 12px 24px !important;
+  }
+
+  .Select-arrow-zone {
+    display: none;
+  }
+}
+
+Select {
+  display: flex;
+  justify-content: space-between;
+}
+
+.Select-value-label {
+  margin-right: 10px;
+  font-family: $font-family--base font-weight 600 font-size 14px;
+  line-height: 24px;
+  color: $colors--neutral-7 text-transform initial;
+
+  &__sufix {
+    color: $colors--secondary-text;
+  }
+}

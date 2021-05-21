@@ -1,5 +1,7 @@
 import classNames from "classnames/bind";
 import styles from "./filter.module.scss";
+import "react-select/dist/react-select.css";
+import "./select.scss";
 
 const cx = classNames.bind(styles);
 
