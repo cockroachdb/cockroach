@@ -172,13 +172,6 @@ func evalExport(
 			break
 		}
 
-		if args.Encryption != nil {
-			data, err = EncryptFile(data, args.Encryption.Key)
-			if err != nil {
-				return result.Result{}, err
-			}
-		}
-
 		span := roachpb.Span{Key: start}
 		if resume != nil {
 			span.EndKey = resume
@@ -191,7 +184,21 @@ func evalExport(
 			LocalityKV: localityKV,
 		}
 
-		if exportStore != nil {
+		returnSST := args.ReturnSST
+		if args.ReturnSstBelowSize > 0 && len(data) < int(args.ReturnSstBelowSize) {
+			returnSST = true
+		}
+
+		if returnSST {
+			exported.SST = data
+		} else {
+			if args.Encryption != nil {
+				data, err = EncryptFile(data, args.Encryption.Key)
+				if err != nil {
+					return result.Result{}, err
+				}
+			}
+
 			exported.Path = GenerateUniqueSSTName(base.SQLInstanceID(cArgs.EvalCtx.NodeID()))
 			if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxUploadRetries, func() error {
 				// We blindly retry any error here because we expect the caller to have
@@ -204,9 +211,6 @@ func evalExport(
 			}); err != nil {
 				return result.Result{}, err
 			}
-		}
-		if args.ReturnSST {
-			exported.SST = data
 		}
 		reply.Files = append(reply.Files, exported)
 		start = resume

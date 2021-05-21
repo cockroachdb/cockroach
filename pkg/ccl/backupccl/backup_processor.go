@@ -72,6 +72,13 @@ var (
 			"external storage instead of writing them directly from the storage layer",
 		false,
 	)
+	smallFileSize = settings.RegisterByteSizeSetting(
+		"bulkio.backup.merge_file_size",
+		"size under which backup files will be forwarded to another node to be merged with other smaller files "+
+			"(and implies files will be buffered in-memory until this size before being written to backup storage)",
+		16<<20,
+		settings.NonNegativeInt,
+	)
 )
 
 const backupProcessorName = "backupDataProcessor"
@@ -239,8 +246,6 @@ func runBackupProcessor(
 				case <-ctxDone:
 					return ctx.Err()
 				case span := <-todo:
-					// TODO(pbardea): It would be nice if we could avoid producing many small
-					//  SSTs. See #44480.
 					header := roachpb.Header{Timestamp: span.end}
 					req := &roachpb.ExportRequest{
 						RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
@@ -249,6 +254,7 @@ func runBackupProcessor(
 						EnableTimeBoundIteratorOptimization: useTBI.Get(&clusterSettings.SV),
 						MVCCFilter:                          spec.MVCCFilter,
 						TargetFileSize:                      targetFileSize,
+						ReturnSstBelowSize:                  smallFileSize.Get(&clusterSettings.SV),
 					}
 					if writeSSTsInProcessor {
 						req.ReturnSST = true

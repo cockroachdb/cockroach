@@ -1464,6 +1464,7 @@ func checkInProgressBackupRestore(
 	defer cleanup()
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_size = '0'`)
 
 	var totalExpectedBackupRequests int
 	// mergedRangeQuery calculates the number of spans we expect PartitionSpans to
