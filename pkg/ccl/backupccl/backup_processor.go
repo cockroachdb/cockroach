@@ -228,12 +228,6 @@ func runBackupProcessor(
 		}
 	}
 
-	// spanIdxToProgress is a mapping from the unique identifier of the span being
-	// processed, to the progress recorded for that span.
-	// We wish to aggregate the progress for a particular span until it is
-	// complete i.e all resumeSpans have been processed, before we report it to
-	// the coordinator. This is required to keep progress logging accurate.
-	spanIdxToProgressDetails := make(map[int]BackupManifest_Progress)
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
 
@@ -355,15 +349,8 @@ func runBackupProcessor(
 					}
 				}
 
-				// Check if we have a partial progress object for the current spanIdx.
-				// If we do that means that the current span is a resumeSpan of the
-				// original span, and we must update the existing progress object.
 				progDetails := BackupManifest_Progress{}
 				progDetails.RevStartTime = res.StartTime
-				if partialProg, ok := spanIdxToProgressDetails[span.spanIdx]; ok {
-					progDetails = partialProg
-				}
-
 				files := make([]BackupManifest_File, 0)
 				for _, file := range res.Files {
 					if len(file.SST) > 0 {
@@ -391,24 +378,20 @@ func runBackupProcessor(
 				}
 
 				progDetails.Files = append(progDetails.Files, files...)
+				if res.ResumeSpan != nil {
+					progDetails.Partial = true
+				}
 
-				// The entire span has been processed so we can report the progress.
-				if res.ResumeSpan == nil {
-					var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-					details, err := gogotypes.MarshalAny(&progDetails)
-					if err != nil {
-						return err
-					}
-					prog.ProgressDetails = *details
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case progCh <- prog:
-					}
-				} else {
-					// Update the partial progress as we still have a resumeSpan to
-					// process.
-					spanIdxToProgressDetails[span.spanIdx] = progDetails
+				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+				details, err := gogotypes.MarshalAny(&progDetails)
+				if err != nil {
+					return err
+				}
+				prog.ProgressDetails = *details
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case progCh <- prog:
 				}
 
 				if req.ReturnSST && res.ResumeSpan != nil {
