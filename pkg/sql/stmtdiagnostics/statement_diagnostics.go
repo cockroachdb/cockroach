@@ -333,7 +333,6 @@ func (r *Registry) InsertStatementDiagnostics(
 	requestID RequestID,
 	stmtFingerprint string,
 	stmt string,
-	traceJSON tree.Datum,
 	bundle []byte,
 	collectionErr error,
 ) (CollectedInstanceID, error) {
