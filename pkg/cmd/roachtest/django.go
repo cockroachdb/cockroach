@@ -20,7 +20,7 @@ var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
 var djangoSupportedTag = "cockroach-3.2.x"
-var djangoCockroachDBSupportedTag = "3.2"
+var djangoCockroachDBSupportedTag = "3.2.1"
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(

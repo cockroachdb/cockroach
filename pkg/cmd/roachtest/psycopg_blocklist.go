@@ -37,7 +37,8 @@ var psycopgBlockList21_2 = blocklist{
 var psycopgBlockList21_1 = blocklist{
 	"tests.test_async_keyword.CancelTests.test_async_cancel": "41335",
 	// The following two items can be removed once there is a new psycopg2 release.
-	"tests.test_module.ExceptionsTestCase.test_9_6_diagnostics": "58035",
+	"tests.test_connection.TestEncryptPassword.test_encrypt_server": "42519",
+	"tests.test_module.ExceptionsTestCase.test_9_6_diagnostics":     "58035",
 }
 
 var psycopgBlockList20_2 = blocklist{
