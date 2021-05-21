@@ -438,7 +438,7 @@ func (m *Outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Start starts the outbox.
 func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
-	if m.Types() == nil {
+	if m.OutputTypes() == nil {
 		panic("outbox not initialized")
 	}
 	if wg != nil {

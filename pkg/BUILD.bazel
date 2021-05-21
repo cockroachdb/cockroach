@@ -170,6 +170,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/typedesc:typedesc_test",
     "//pkg/sql/catalog:catalog_test",
     "//pkg/sql/colcontainer:colcontainer_test",
+    "//pkg/sql/colconv:colconv_test",
     "//pkg/sql/colencoding:colencoding_test",
     "//pkg/sql/colexec/colbuilder:colbuilder_test",
     "//pkg/sql/colexec/colexecagg:colexecagg_test",

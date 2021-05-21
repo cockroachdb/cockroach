@@ -170,11 +170,6 @@ func (r *rowDisposer) Push(
 // ProducerDone is part of the execinfra.RowReceiver interface.
 func (r *rowDisposer) ProducerDone() {}
 
-// Types is part of the execinfra.RowReceiver interface.
-func (r *rowDisposer) Types() []*types.T {
-	return nil
-}
-
 func (r *rowDisposer) ResetNumRowsDisposed() {
 	r.numRowsDisposed = 0
 }
