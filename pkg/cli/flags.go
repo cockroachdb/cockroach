@@ -635,6 +635,13 @@ func init() {
 		stringSliceFlag(f, &cliCtx.certPrincipalMap, cliflags.CertPrincipalMap)
 	}
 
+	// convert-url is not really a client command. It just recognizes (some)
+	// client flags.
+	{
+		f := convertURLCmd.PersistentFlags()
+		stringFlag(f, &convertCtx.url, cliflags.URL)
+	}
+
 	// Auth commands.
 	{
 		f := loginCmd.Flags()
@@ -769,6 +776,7 @@ func init() {
 		}
 		f := cmd.PersistentFlags()
 		varFlag(f, urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
+
 		varFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		boolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
 	}

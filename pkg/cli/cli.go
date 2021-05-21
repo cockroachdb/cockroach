@@ -280,6 +280,7 @@ func init() {
 		// Miscellaneous commands.
 		// TODO(pmattis): stats
 		demoCmd,
+		convertURLCmd,
 		genCmd,
 		versionCmd,
 		DebugCmd,
