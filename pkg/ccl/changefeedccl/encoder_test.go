@@ -10,8 +10,12 @@ package changefeedccl
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
@@ -27,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -311,6 +316,164 @@ func TestAvroEncoder(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func NewCACertBase64Encoded() (*tls.Certificate, string, error) {
+	keyLength := 2048
+
+	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA private key")
+	}
+
+	CACert, _, err := cdctest.GenerateCACert(CAKey)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA cert gen")
+	}
+
+	CAKeyPEM, err := cdctest.PemEncodePrivateKey(CAKey)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "pem encode CA key")
+	}
+
+	CACertPEM, err := cdctest.PemEncodeCert(CACert)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "pem encode CA cert")
+	}
+
+	cert, err := tls.X509KeyPair([]byte(CACertPEM), []byte(CAKeyPEM))
+	if err != nil {
+		return nil, "", errors.Wrap(err, "CA cert parse from PEM")
+	}
+
+	var CACertBase64 string
+	cdctest.EncodeBase64ToString([]byte(CACertPEM), &CACertBase64)
+
+	return &cert, CACertBase64, nil
+}
+
+func TestAvroEncoderWithTLS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	row := rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString(`bar`)},
+	}
+	ts := hlc.Timestamp{WallTime: 1, Logical: 2}
+
+	opts := map[string]string{
+		changefeedbase.OptFormat:   "experimental_avro",
+		changefeedbase.OptEnvelope: "key_only",
+	}
+	expected := struct {
+		insert   string
+		delete   string
+		resolved string
+	}{
+		insert:   `{"a":{"long":1}}->`,
+		delete:   `{"a":{"long":1}}->`,
+		resolved: `{"resolved":{"string":"1.0000000002"}}`,
+	}
+
+	t.Run("format=experimental_avro,envelope=key_only", func(t *testing.T) {
+		cert, certBase64, err := NewCACertBase64Encoded()
+		require.NoError(t, err)
+
+		var rowStringFn func([]byte, []byte) string
+		var resolvedStringFn func([]byte) string
+		reg, err := cdctest.MakeTestSchemaRegistryWithTLS(cert)
+		require.NoError(t, err)
+		defer reg.Close()
+
+		params := url.Values{}
+		params.Add("ca_cert", certBase64)
+		regURL, err := url.Parse(reg.URL())
+		require.NoError(t, err)
+		regURL.RawQuery = params.Encode()
+		opts[changefeedbase.OptConfluentSchemaRegistry] = regURL.String()
+
+		rowStringFn = func(k, v []byte) string {
+			key, value := avroToJSON(t, reg, k), avroToJSON(t, reg, v)
+			return fmt.Sprintf(`%s->%s`, key, value)
+		}
+		resolvedStringFn = func(r []byte) string {
+			return string(avroToJSON(t, reg, r))
+		}
+
+		target := jobspb.ChangefeedTarget{
+			StatementTimeName: tableDesc.GetName(),
+		}
+		targets := jobspb.ChangefeedTargets{}
+		targets[tableDesc.GetID()] = target
+
+		e, err := getEncoder(opts, targets)
+		require.NoError(t, err)
+
+		rowInsert := encodeRow{
+			datums:        row,
+			updated:       ts,
+			tableDesc:     tableDesc,
+			prevDatums:    nil,
+			prevTableDesc: tableDesc,
+		}
+		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
+		require.NoError(t, err)
+		keyInsert = append([]byte(nil), keyInsert...)
+		valueInsert, err := e.EncodeValue(context.Background(), rowInsert)
+		require.NoError(t, err)
+		require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
+
+		rowDelete := encodeRow{
+			datums:        row,
+			deleted:       true,
+			prevDatums:    row,
+			updated:       ts,
+			tableDesc:     tableDesc,
+			prevTableDesc: tableDesc,
+		}
+		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
+		require.NoError(t, err)
+		keyDelete = append([]byte(nil), keyDelete...)
+		valueDelete, err := e.EncodeValue(context.Background(), rowDelete)
+		require.NoError(t, err)
+		require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
+
+		resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
+		require.NoError(t, err)
+		require.Equal(t, expected.resolved, resolvedStringFn(resolved))
+
+		noCertReg, err := cdctest.MakeTestSchemaRegistryWithTLS(nil)
+		require.NoError(t, err)
+		defer noCertReg.Close()
+		opts[changefeedbase.OptConfluentSchemaRegistry] = noCertReg.URL()
+
+		tlsEncoderNoCert, err := getEncoder(opts, targets)
+		require.NoError(t, err)
+
+		_, err = tlsEncoderNoCert.EncodeKey(context.Background(), rowInsert)
+		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: contacting confluent schema registry: "+
+			"Post \"%s/subjects/foo-key/versions\": x509: certificate signed by unknown authority",
+			opts[changefeedbase.OptConfluentSchemaRegistry]))
+
+		wrongCert, _, err := NewCACertBase64Encoded()
+		require.NoError(t, err)
+
+		wrongCertReg, err := cdctest.MakeTestSchemaRegistryWithTLS(wrongCert)
+		require.NoError(t, err)
+		defer wrongCertReg.Close()
+		opts[changefeedbase.OptConfluentSchemaRegistry] = wrongCertReg.URL()
+
+		wrongTLSEncoder, err := getEncoder(opts, targets)
+		require.NoError(t, err)
+
+		_, err = wrongTLSEncoder.EncodeKey(context.Background(), rowInsert)
+		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: contacting confluent schema registry: "+
+			"Post \"%s/subjects/foo-key/versions\": x509: certificate signed by unknown authority",
+			opts[changefeedbase.OptConfluentSchemaRegistry]))
+	})
 }
 
 func TestAvroArray(t *testing.T) {

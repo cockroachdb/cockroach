@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -282,6 +283,8 @@ type confluentAvroEncoder struct {
 	keyCache      map[tableIDAndVersion]confluentRegisteredKeySchema
 	valueCache    map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
+
+	httpClient *httputil.Client
 }
 
 type tableIDAndVersion uint64
@@ -308,6 +311,10 @@ func newConfluentAvroEncoder(
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{registryURL: opts[changefeedbase.OptConfluentSchemaRegistry]}
 
+	err := e.setupHTTPClient()
+	if err != nil {
+		return nil, err
+	}
 	e.schemaPrefix = opts[changefeedbase.OptAvroSchemaPrefix]
 	e.targets = targets
 
@@ -343,6 +350,40 @@ func newConfluentAvroEncoder(
 	e.valueCache = make(map[tableIDAndVersionPair]confluentRegisteredEnvelopeSchema)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
 	return e, nil
+}
+
+// Setup the httputil.Client to use when dialing Confluent schema registry. If `registry_client_cert`
+// and `registry_client_key` are set as query params in the sinkURL, client should trust the corresponding
+// cert while dialing. Otherwise, use the DefaultConfig.
+func (e *confluentAvroEncoder) setupHTTPClient() error {
+	regURL, err := url.Parse(e.registryURL)
+	if err != nil {
+		return errors.Errorf("failed parsing registry url:%s due to error:%v", e.registryURL, err)
+	}
+	params := regURL.Query()
+
+	var caCert []byte
+
+	if caCertString := params.Get(changefeedbase.RegistryParamCACert); caCertString != "" {
+		err := decodeBase64FromString(caCertString, &caCert)
+		if err != nil {
+			return errors.Wrapf(err, `param %s must be base 64 encoded`, changefeedbase.RegistryParamCACert)
+		}
+	}
+
+	if caCert != nil {
+		var err error
+		e.httpClient, err = newClientFromTLSKeyPair(caCert)
+		if strings.HasPrefix(e.registryURL, "http://") {
+			log.Warningf(context.Background(), "attempting to use CA cert for schema registry:%s with HTTP scheme", e.registryURL)
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		e.httpClient = httputil.DefaultClient
+	}
+	return nil
 }
 
 // Get the raw SQL-formatted string for a table name
@@ -529,7 +570,7 @@ func (e *confluentAvroEncoder) register(
 	// actionable issues in the operator's environment that which they might be
 	// able to resolve if we made them visible in a failure instead.
 	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), 3, func() error {
-		resp, err := httputil.Post(ctx, url.String(), confluentSchemaContentType, &buf)
+		resp, err := e.httpClient.Post(ctx, url.String(), confluentSchemaContentType, &buf)
 		if err != nil {
 			return errors.Wrap(err, "contacting confluent schema registry")
 		}

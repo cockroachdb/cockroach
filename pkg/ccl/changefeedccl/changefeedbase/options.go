@@ -105,6 +105,8 @@ const (
 	SinkParamSASLUser         = `sasl_user`
 	SinkParamSASLPassword     = `sasl_password`
 	SinkParamSASLMechanism    = `sasl_mechanism`
+
+	RegistryParamCACert = `ca_cert`
 )
 
 // ChangefeedOptionExpectValues is used to parse changefeed options using
