@@ -175,3 +175,40 @@ else
     done
     if test -n "$informed"; then echo >&2; fi
 fi
+
+# Lint for the existence of an issue reference, an epic reference or a Docs section
+# describing why the change is being made.
+# https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/2009039063/DRAFT+Jira+Epic+Ref+GitHub+Issue+Ref+Docs+Note
+
+ISSUE="[Cc]lose [Cc]loses [Cc]losed [Ff]ix [Ff]ixes [Ff]ixed [Rr]esolve [Rr]esolves [Rr]esolved"
+EPIC_ID_PATTERN="[A-Z][A-Z]+-[0-9][0-9]*$"
+
+
+isdocs=`$grep -cE '^Docs: ' "$1"`
+isepic=`$grep -cE "(^[Ee]pic):\s$EPIC_ID_PATTERN" "$1"`
+iskeyphrase=`$grep -cE "^([Ss]ee also|[Ii]nforms):\s#[0-9]*$" "$1"`
+
+if [[ $(($isdocs + $isepic + $iskeyphrase)) -eq 0 ]]; then
+    FAILED="yes"
+    for status in $ISSUE; do
+        isissue1=$($grep -cE "^($status)\s#[0-9]*$" "$1")
+        # Only check for valid github usernames, repo and org name characters
+        # https://stackoverflow.com/questions/59081778/rules-for-special-characters-in-github-repository-name
+        isissue2=$($grep -cE "^($status)\s[A-Za-z0-9_.-]*[/][A-Za-z0-9_.-]*#[0-9]*$" "$1")
+
+        if [[ $isissue1 -ne 0 || $isissue2 -ne 0 ]]; then
+            FAILED="no"
+            break
+        fi
+    done
+    if [ "$FAILED" == "yes" ]; then
+        warn "Missing one of: issue reference, epic reference, keyphrase reference or Docs:_ section"
+        echo "Try one of these: 'Release justification: This commit is safe for this release because..." >&2
+        echo >&2
+        echo "  fixes #12345" >&2
+        echo "  epic CRDB-12345" >&2
+        echo "  See also: #62585" >&2
+        echo "  Docs: This change is being made because ..." >&2
+        echo >&2
+    fi
+fi
