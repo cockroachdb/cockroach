@@ -6,6 +6,7 @@ go_library(
         "nemeses.go",
         "schema_registry.go",
         "testfeed.go",
+        "tls_util.go",
         "validator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest",
