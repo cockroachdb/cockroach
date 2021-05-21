@@ -750,6 +750,16 @@ func (t txnList) Less(i, j int) bool {
 	return t[i] < t[j]
 }
 
+// getSQLStats retrieves a sqlStats object from the planner or returns an error
+// if not available. virtualTableName specifies the virtual table for which this
+// sqlStats object is needed.
+func getSQLStats(p *planner, virtualTableName string) (*sqlStats, error) {
+	if p.extendedEvalCtx.sqlStatsCollector == nil || p.extendedEvalCtx.sqlStatsCollector.sqlStats == nil {
+		return nil, errors.Newf("%s cannot be used in this context", virtualTableName)
+	}
+	return p.extendedEvalCtx.sqlStatsCollector.sqlStats, nil
+}
+
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -792,10 +802,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
 		}
 
-		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
-		if sqlStats == nil {
-			return errors.AssertionFailedf(
-				"cannot access sql statistics from this context")
+		sqlStats, err := getSQLStats(p, "crdb_internal.node_statement_statistics")
+		if err != nil {
+			return err
 		}
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
@@ -918,10 +927,9 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s does not have %s privilege", p.User(), roleoption.VIEWACTIVITY)
 		}
-		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
-		if sqlStats == nil {
-			return errors.AssertionFailedf(
-				"cannot access sql statistics from this context")
+		sqlStats, err := getSQLStats(p, "crdb_internal.node_transaction_statistics")
+		if err != nil {
+			return err
 		}
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
@@ -1017,10 +1025,9 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		sqlStats := p.extendedEvalCtx.sqlStatsCollector.sqlStats
-		if sqlStats == nil {
-			return errors.AssertionFailedf(
-				"cannot access sql statistics from this context")
+		sqlStats, err := getSQLStats(p, "crdb_internal.node_txn_stats")
+		if err != nil {
+			return err
 		}
 
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
