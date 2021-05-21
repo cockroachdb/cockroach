@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgurl",
+    srcs = [
+        "generate.go",
+        "parse.go",
+        "pgurl.go",
+        "validate.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/pgurl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/netutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "pgurl_test",
+    srcs = ["pgurl_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":pgurl"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
