@@ -66,6 +66,10 @@ message BackupManifest {
   message Progress {
     repeated File files = 1 [(gogoproto.nullable) = false];
     util.hlc.Timestamp rev_start_time = 2 [(gogoproto.nullable) = false];
+    // Partial indicates the progress made in Files represets only part of an 
+    // assigned span but did not complete exporting it. This is used to decide
+    // not to update % of spans completed.
+    bool partial = 3;
   }
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];

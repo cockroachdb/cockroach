@@ -253,9 +253,11 @@ func backup(
 				backupManifest.Files = append(backupManifest.Files, file)
 				backupManifest.EntryCounts.add(file.EntryCounts)
 			}
+			if !progDetails.Partial {
+				// Signal that an ExportRequest finished a span to update job's progress.
+				requestFinishedCh <- struct{}{}
+			}
 
-			// Signal that an ExportRequest finished to update job progress.
-			requestFinishedCh <- struct{}{}
 			if timeutil.Since(lastCheckpoint) > BackupCheckpointInterval {
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
