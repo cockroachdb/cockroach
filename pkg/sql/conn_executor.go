@@ -324,28 +324,6 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 }
 
 func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
-	var statsMetrics StatsMetrics
-	if !internal {
-		statsMetrics = StatsMetrics{
-			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(
-				getMetricMeta(MetaSQLStatsMemMaxBytes, internal),
-				cfg.HistogramWindowInterval,
-				log10int64times1000,
-				3, /* sigFigs */
-			),
-			SQLStatsMemoryCurBytesCount: metric.NewGauge(
-				getMetricMeta(MetaSQLStatsMemCurBytes, internal)),
-			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(
-				getMetricMeta(MetaReportedSQLStatsMemMaxBytes, internal),
-				cfg.HistogramWindowInterval,
-				log10int64times1000,
-				3, /* sigFigs */
-			),
-			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(
-				getMetricMeta(MetaReportedSQLStatsMemCurBytes, internal)),
-			DiscardedStatsCount: metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
-		}
-	}
 	return Metrics{
 		EngineMetrics: EngineMetrics{
 			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
@@ -371,7 +349,25 @@ func makeMetrics(cfg *ExecutorConfig, internal bool) Metrics {
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
-		StatsMetrics:              statsMetrics,
+		StatsMetrics: StatsMetrics{
+			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(
+				getMetricMeta(MetaSQLStatsMemMaxBytes, internal),
+				cfg.HistogramWindowInterval,
+				log10int64times1000,
+				3, /* sigFigs */
+			),
+			SQLStatsMemoryCurBytesCount: metric.NewGauge(
+				getMetricMeta(MetaSQLStatsMemCurBytes, internal)),
+			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(
+				getMetricMeta(MetaReportedSQLStatsMemMaxBytes, internal),
+				cfg.HistogramWindowInterval,
+				log10int64times1000,
+				3, /* sigFigs */
+			),
+			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(
+				getMetricMeta(MetaReportedSQLStatsMemCurBytes, internal)),
+			DiscardedStatsCount: metric.NewCounter(getMetricMeta(MetaDiscardedSQLStats, internal)),
+		},
 	}
 }
 
