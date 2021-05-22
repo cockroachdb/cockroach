@@ -1714,6 +1714,26 @@ var charts = []sectionDescription{
 				Title:   "Number of fingerprint statistics being discarded",
 				Metrics: []string{"sql.stats.discarded.current"},
 			},
+			{
+				Title:   "Memory usage for internal fingerprint storage",
+				Metrics: []string{"sql.stats.mem.max.internal"},
+			},
+			{
+				Title:   "Current memory usage for internal fingerprint storage",
+				Metrics: []string{"sql.stats.mem.current.internal"},
+			},
+			{
+				Title:   "Memory usage for internal reported fingerprint storage",
+				Metrics: []string{"sql.stats.reported.mem.max.internal"},
+			},
+			{
+				Title:   "Current memory usage for internal reported fingerprint storage",
+				Metrics: []string{"sql.stats.reported.mem.current.internal"},
+			},
+			{
+				Title:   "Number of internal fingerprint statistics being discarded",
+				Metrics: []string{"sql.stats.discarded.current.internal"},
+			},
 		},
 	},
 	{
