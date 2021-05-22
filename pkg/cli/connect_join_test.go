@@ -100,7 +100,7 @@ func TestNodeJoinBadToken(t *testing.T) {
 		require.NotEmpty(t, token)
 	}
 	// Rewrite token to something else entirely.
-	token = "Zm9vYmFyYmF6"
+	token = "0Zm9vYmFyYmF6"
 
 	oldCfg := *baseCfg
 	defer func() {
