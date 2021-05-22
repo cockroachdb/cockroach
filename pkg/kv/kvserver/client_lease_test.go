@@ -485,7 +485,7 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	sv := &settings.SV
 	// set min lease transfer high, so we know it does affect the lease movement.
-	kvserver.MinLeaseTransferInterval.Override(sv, 24*time.Hour)
+	kvserver.MinLeaseTransferInterval.Override(ctx, sv, 24*time.Hour)
 	// Place all the leases in us-west.
 	zcfg := zonepb.DefaultZoneConfig()
 	zcfg.LeasePreferences = []zonepb.LeasePreference{

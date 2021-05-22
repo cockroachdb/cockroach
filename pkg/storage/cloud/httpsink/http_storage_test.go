@@ -52,6 +52,7 @@ func TestPutHttp(t *testing.T) {
 
 	const badHeadResponse = "bad-head-response"
 	user := security.RootUserName()
+	ctx := context.Background()
 
 	makeServer := func() (*url.URL, func() int, func()) {
 		var files int
@@ -89,17 +90,13 @@ func TestPutHttp(t *testing.T) {
 		}))
 
 		u := testSettings.MakeUpdater()
-		if err := u.Set(
-			"cloudstorage.http.custom_ca",
-			string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
-			"s",
-		); err != nil {
+		if err := u.Set(ctx, "cloudstorage.http.custom_ca", string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})), "s"); err != nil {
 			t.Fatal(err)
 		}
 
 		cleanup := func() {
 			srv.Close()
-			if err := u.Set("cloudstorage.http.custom_ca", "", "s"); err != nil {
+			if err := u.Set(ctx, "cloudstorage.http.custom_ca", "", "s"); err != nil {
 				t.Fatal(err)
 			}
 		}

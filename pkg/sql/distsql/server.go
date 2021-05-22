@@ -87,7 +87,7 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 
-	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func() {
+	colexec.HashAggregationDiskSpillingEnabled.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		if !colexec.HashAggregationDiskSpillingEnabled.Get(&cfg.Settings.SV) {
 			telemetry.Inc(sqltelemetry.HashAggregationDiskSpillingDisabled)
 		}

@@ -379,7 +379,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds.clusterID = &cfg.RPCContext.ClusterID
 	ds.asyncSenderSem = quotapool.NewIntPool("DistSender async concurrency",
 		uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
-	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func() {
+	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
 	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))

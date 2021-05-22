@@ -154,6 +154,7 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 // TestChangePollInterval ensures that changing the polling interval takes effect.
 func TestChangePollInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	// We'll inject a request filter to detect scans due to the polling.
 	tableStart := keys.SystemSQLCodec.TablePrefix(keys.StatementDiagnosticsRequestsTableID)
@@ -190,7 +191,7 @@ func TestChangePollInterval(t *testing.T) {
 
 	// Set an extremely long initial polling interval to not hit flakes due to
 	// server startup taking more than 10s.
-	stmtdiagnostics.PollingInterval.Override(&settings.SV, time.Hour)
+	stmtdiagnostics.PollingInterval.Override(ctx, &settings.SV, time.Hour)
 	args := base.TestServerArgs{
 		Settings: settings,
 		Knobs: base.TestingKnobs{
@@ -211,7 +212,6 @@ func TestChangePollInterval(t *testing.T) {
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, args)
-	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	require.Equal(t, 1, waitForScans(1))

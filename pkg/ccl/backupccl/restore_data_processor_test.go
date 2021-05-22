@@ -48,6 +48,7 @@ import (
 
 func TestMaxImportBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	testCases := []struct {
 		importBatchSize int64
@@ -61,8 +62,8 @@ func TestMaxImportBatchSize(t *testing.T) {
 	}
 	for i, testCase := range testCases {
 		st := cluster.MakeTestingClusterSettings()
-		storageccl.ImportBatchSize.Override(&st.SV, testCase.importBatchSize)
-		kvserver.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
+		storageccl.ImportBatchSize.Override(ctx, &st.SV, testCase.importBatchSize)
+		kvserver.MaxCommandSize.Override(ctx, &st.SV, testCase.maxCommandSize)
 		if e, a := storageccl.MaxImportBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
@@ -163,6 +164,7 @@ func clientKVsToEngineKVs(kvs []kv.KeyValue) []storage.MVCCKeyValue {
 
 func TestImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	t.Run("batch=default", func(t *testing.T) {
 		runTestImport(t, func(_ *cluster.Settings) {})
 	})
@@ -170,7 +172,7 @@ func TestImport(t *testing.T) {
 		// The test normally doesn't trigger the batching behavior, so lower
 		// the threshold to force it.
 		init := func(st *cluster.Settings) {
-			storageccl.ImportBatchSize.Override(&st.SV, 1)
+			storageccl.ImportBatchSize.Override(ctx, &st.SV, 1)
 		}
 		runTestImport(t, init)
 	})

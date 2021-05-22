@@ -143,7 +143,7 @@ func (c *Cache) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 func (c *Cache) periodicallyRefreshProtectedtsCache(ctx context.Context) {
 	settingChanged := make(chan struct{}, 1)
-	protectedts.PollInterval.SetOnChange(&c.settings.SV, func() {
+	protectedts.PollInterval.SetOnChange(&c.settings.SV, func(ctx context.Context) {
 		select {
 		case settingChanged <- struct{}{}:
 		default:

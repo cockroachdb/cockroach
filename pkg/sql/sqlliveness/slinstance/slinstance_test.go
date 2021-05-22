@@ -40,8 +40,8 @@ func TestSQLInstance(t *testing.T) {
 		clusterversion.TestingBinaryVersion,
 		clusterversion.TestingBinaryMinSupportedVersion,
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(&settings.SV, 2*time.Microsecond)
-	slinstance.DefaultHeartBeat.Override(&settings.SV, time.Microsecond)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 2*time.Microsecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Microsecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings)

@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -205,7 +206,7 @@ Output the list of cluster settings known to this binary.
 
 		// Fill a Values struct with the defaults.
 		s := cluster.MakeTestingClusterSettings()
-		settings.NewUpdater(&s.SV).ResetRemaining()
+		settings.NewUpdater(&s.SV).ResetRemaining(context.Background())
 
 		var rows [][]string
 		for _, name := range settings.Keys() {

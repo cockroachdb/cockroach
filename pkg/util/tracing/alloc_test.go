@@ -29,7 +29,7 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 
 	tr := NewTracer()
 	sv := settings.Values{}
-	tr.Configure(&sv)
+	tr.Configure(ctx, &sv)
 
 	staticLogTags := logtags.Buffer{}
 	staticLogTags.Add("foo", "bar")
@@ -71,9 +71,10 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 
 // BenchmarkSpan_GetRecording microbenchmarks GetRecording.
 func BenchmarkSpan_GetRecording(b *testing.B) {
+	ctx := context.Background()
 	var sv settings.Values
 	tr := NewTracer()
-	tr.Configure(&sv)
+	tr.Configure(ctx, &sv)
 
 	sp := tr.StartSpan("foo", WithForceRealSpan())
 

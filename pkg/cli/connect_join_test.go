@@ -38,7 +38,7 @@ func TestNodeJoin(t *testing.T) {
 	defer cancel()
 
 	settings := cluster.MakeTestingClusterSettings()
-	sql.FeatureTLSAutoJoinEnabled.Override(&settings.SV, true)
+	sql.FeatureTLSAutoJoinEnabled.Override(ctx, &settings.SV, true)
 	s, sqldb, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})
@@ -86,7 +86,7 @@ func TestNodeJoinBadToken(t *testing.T) {
 	defer cancel()
 
 	settings := cluster.MakeTestingClusterSettings()
-	sql.FeatureTLSAutoJoinEnabled.Override(&settings.SV, true)
+	sql.FeatureTLSAutoJoinEnabled.Override(ctx, &settings.SV, true)
 	s, sqldb, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 	})

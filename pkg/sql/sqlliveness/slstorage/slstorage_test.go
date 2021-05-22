@@ -102,7 +102,7 @@ func TestStorage(t *testing.T) {
 	t.Run("delete-update", func(t *testing.T) {
 		clock, timeSource, settings, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
-		slstorage.GCJitter.Override(&settings.SV, 0)
+		slstorage.GCJitter.Override(ctx, &settings.SV, 0)
 		storage.Start(ctx)
 		metrics := storage.Metrics()
 
@@ -320,7 +320,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	slstorage.CacheSize.Override(&settings.SV, 10)
+	slstorage.CacheSize.Override(ctx, &settings.SV, 10)
 	storage := slstorage.NewTestingStorage(stopper, clock, kvDB, ie, settings,
 		dbName, timeSource.NewTimer)
 	storage.Start(ctx)

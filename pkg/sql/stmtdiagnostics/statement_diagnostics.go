@@ -136,7 +136,7 @@ func (r *Registry) poll(ctx context.Context) {
 			lastPoll = timeutil.Now()
 		}
 	)
-	pollingInterval.SetOnChange(&r.st.SV, func() {
+	pollingInterval.SetOnChange(&r.st.SV, func(ctx context.Context) {
 		select {
 		case pollIntervalChanged <- struct{}{}:
 		default:

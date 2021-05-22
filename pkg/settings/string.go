@@ -10,7 +10,11 @@
 
 package settings
 
-import "github.com/cockroachdb/errors"
+import (
+	"context"
+
+	"github.com/cockroachdb/errors"
+)
 
 // StringSetting is the interface of a setting variable that will be
 // updated automatically when the corresponding cluster-wide setting
@@ -71,22 +75,22 @@ func (s *StringSetting) Validate(sv *Values, v string) error {
 
 // Override sets the setting to the given value, assuming
 // it passes validation.
-func (s *StringSetting) Override(sv *Values, v string) {
-	_ = s.set(sv, v)
+func (s *StringSetting) Override(ctx context.Context, sv *Values, v string) {
+	_ = s.set(ctx, sv, v)
 }
 
-func (s *StringSetting) set(sv *Values, v string) error {
+func (s *StringSetting) set(ctx context.Context, sv *Values, v string) error {
 	if err := s.Validate(sv, v); err != nil {
 		return err
 	}
 	if s.Get(sv) != v {
-		sv.setGeneric(s.slotIdx, v)
+		sv.setGeneric(ctx, s.slotIdx, v)
 	}
 	return nil
 }
 
-func (s *StringSetting) setToDefault(sv *Values) {
-	if err := s.set(sv, s.defaultValue); err != nil {
+func (s *StringSetting) setToDefault(ctx context.Context, sv *Values) {
+	if err := s.set(ctx, sv, s.defaultValue); err != nil {
 		panic(err)
 	}
 }

@@ -732,7 +732,7 @@ UPDATE system.jobs
 	if err := stopper.RunAsyncTask(context.Background(), "jobs/gc", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		settingChanged := make(chan struct{}, 1)
-		gcSetting.SetOnChange(&r.settings.SV, func() {
+		gcSetting.SetOnChange(&r.settings.SV, func(ctx context.Context) {
 			select {
 			case settingChanged <- struct{}{}:
 			default:
