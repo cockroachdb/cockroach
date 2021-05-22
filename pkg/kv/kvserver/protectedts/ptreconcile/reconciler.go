@@ -103,7 +103,7 @@ func (r *Reconciler) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 	reconcileIntervalChanged := make(chan struct{}, 1)
-	ReconcileInterval.SetOnChange(&r.settings.SV, func() {
+	ReconcileInterval.SetOnChange(&r.settings.SV, func(ctx context.Context) {
 		select {
 		case reconcileIntervalChanged <- struct{}{}:
 		default:

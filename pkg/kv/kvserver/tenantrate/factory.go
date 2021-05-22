@@ -11,6 +11,8 @@
 package tenantrate
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -56,7 +58,7 @@ func NewLimiterFactory(st *cluster.Settings, knobs *TestingKnobs) *LimiterFactor
 		tenantMetrics: rl.metrics.tenantMetrics(roachpb.SystemTenantID),
 	}
 	for _, setting := range configSettings {
-		setting.SetOnChange(&st.SV, func() {
+		setting.SetOnChange(&st.SV, func(ctx context.Context) {
 			config := ConfigFromSettings(st)
 			rl.UpdateConfig(config)
 		})

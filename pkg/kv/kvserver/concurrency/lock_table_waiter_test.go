@@ -101,8 +101,8 @@ var lockTableWaiterTestClock = hlc.Timestamp{WallTime: 12}
 func setupLockTableWaiterTest() (*lockTableWaiterImpl, *mockIntentResolver, *mockLockTableGuard) {
 	ir := &mockIntentResolver{}
 	st := cluster.MakeTestingClusterSettings()
-	LockTableLivenessPushDelay.Override(&st.SV, 0)
-	LockTableDeadlockDetectionPushDelay.Override(&st.SV, 0)
+	LockTableLivenessPushDelay.Override(context.Background(), &st.SV, 0)
+	LockTableDeadlockDetectionPushDelay.Override(context.Background(), &st.SV, 0)
 	manual := hlc.NewManualClock(lockTableWaiterTestClock.WallTime)
 	guard := &mockLockTableGuard{
 		signal: make(chan struct{}, 1),

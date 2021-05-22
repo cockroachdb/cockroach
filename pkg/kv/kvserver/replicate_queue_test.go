@@ -56,6 +56,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	const numNodes = 5
 
+	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
@@ -70,7 +71,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		kvserver.LoadBasedRebalancingMode.Override(&st.SV, int64(kvserver.LBRebalancingOff))
+		kvserver.LoadBasedRebalancingMode.Override(ctx, &st.SV, int64(kvserver.LBRebalancingOff))
 	}
 
 	const newRanges = 10
@@ -131,7 +132,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 			if c < minReplicas {
 				err := errors.Errorf(
 					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
-				log.Infof(context.Background(), "%v", err)
+				log.Infof(ctx, "%v", err)
 				return err
 			}
 		}

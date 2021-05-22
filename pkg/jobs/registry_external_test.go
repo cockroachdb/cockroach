@@ -96,11 +96,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Disable leniency for instant expiration
-	jobs.LeniencySetting.Override(&s.ClusterSettings().SV, 0)
+	jobs.LeniencySetting.Override(ctx, &s.ClusterSettings().SV, 0)
 	const cancelInterval = time.Duration(math.MaxInt64)
 	const adoptInterval = time.Microsecond
-	slinstance.DefaultTTL.Override(&s.ClusterSettings().SV, 2*adoptInterval)
-	slinstance.DefaultHeartBeat.Override(&s.ClusterSettings().SV, adoptInterval)
+	slinstance.DefaultTTL.Override(ctx, &s.ClusterSettings().SV, 2*adoptInterval)
+	slinstance.DefaultHeartBeat.Override(ctx, &s.ClusterSettings().SV, adoptInterval)
 
 	db := s.DB()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

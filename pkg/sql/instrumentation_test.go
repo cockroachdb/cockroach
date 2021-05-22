@@ -53,7 +53,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		if enable {
 			v = 1
 		}
-		collectTxnStatsSampleRate.Override(&st.SV, v)
+		collectTxnStatsSampleRate.Override(ctx, &st.SV, v)
 	}
 
 	type queryer interface {

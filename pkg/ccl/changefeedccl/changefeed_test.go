@@ -3186,6 +3186,7 @@ func TestChangefeedTelemetry(t *testing.T) {
 func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	// memLimitTest returns a test runner which starts numFeeds changefeeds,
 	// and verifies that memory limits are honored.
@@ -3230,7 +3231,7 @@ func TestChangefeedMemBufferCapacityErrorRetryable(t *testing.T) {
 			// Each changefeed gets enough memory to work by itself, but not enough
 			// to have all the changefeeds succeed.
 			changefeedbase.PerChangefeedMemLimit.Override(
-				&ff.Server().ClusterSettings().SV, 2*mon.DefaultPoolAllocationSize)
+				ctx, &ff.Server().ClusterSettings().SV, 2*mon.DefaultPoolAllocationSize)
 
 			// beforeEmitRowCh is used to block feeds from processing messages.
 			// This channel is closed below to speed up test termination.

@@ -36,7 +36,7 @@ func TestRangeReport(t *testing.T) {
 	// This test uses the cluster as a recipient for a report saved from outside
 	// the cluster. We disable the cluster's own production of reports so that it
 	// doesn't interfere with the test.
-	ReporterInterval.Override(&st.SV, 0)
+	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	con := s.InternalExecutor().(sqlutil.InternalExecutor)
 	defer s.Stopper().Stop(ctx)

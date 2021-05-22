@@ -2428,7 +2428,7 @@ func TestPutsInStagingTxn(t *testing.T) {
 	// DistSender are send serially and the transaction is updated from one to
 	// another. See below.
 	settings := cluster.MakeTestingClusterSettings()
-	senderConcurrencyLimit.Override(&settings.SV, 0)
+	senderConcurrencyLimit.Override(ctx, &settings.SV, 0)
 
 	s, _, db := serverutils.StartServer(t,
 		base.TestServerArgs{

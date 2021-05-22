@@ -51,7 +51,7 @@ func TestCacheBasic(t *testing.T) {
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very short.
-	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Microsecond)
+	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Microsecond)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
@@ -120,7 +120,7 @@ func TestRefresh(t *testing.T) {
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
-	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
+	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
@@ -227,7 +227,7 @@ func TestStart(t *testing.T) {
 		p := ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor))
 		// Set the poll interval to be very long.
-		protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
+		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 		c := ptcache.New(ptcache.Config{
 			Settings: s.ClusterSettings(),
 			DB:       s.DB(),
@@ -260,7 +260,7 @@ func TestQueryRecord(t *testing.T) {
 	p := ptstorage.WithDatabase(ptstorage.New(s.ClusterSettings(),
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 	// Set the poll interval to be very long.
-	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
+	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
 		DB:       s.DB(),
@@ -318,7 +318,7 @@ func TestIterate(t *testing.T) {
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
-	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
+	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
@@ -383,7 +383,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 		s.InternalExecutor().(sqlutil.InternalExecutor)), s.DB())
 
 	// Set the poll interval to be very long.
-	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 500*time.Hour)
+	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
@@ -400,7 +400,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	_, asOf := c.QueryRecord(ctx, uuid.UUID{})
 	require.Equal(t, asOf, ts)
 	// Set the polling interval back to something very short.
-	protectedts.PollInterval.Override(&s.ClusterSettings().SV, 100*time.Microsecond)
+	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 100*time.Microsecond)
 	// Ensure that the state is updated again soon.
 	waitForAsOfAfter(t, c, ts)
 }
