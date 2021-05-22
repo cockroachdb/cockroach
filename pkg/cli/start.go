@@ -650,6 +650,7 @@ If problems persist, please see %s.`
 				return err
 			}
 			buf.Printf("sql:\t%s\n", pgURL.ToPQ())
+			buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())
 
 			buf.Printf("RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {
