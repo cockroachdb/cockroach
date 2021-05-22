@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -802,7 +803,7 @@ type NodeInfo struct {
 	ClusterID func() uuid.UUID
 	NodeID    *base.SQLIDContainer
 	AdminURL  func() *url.URL
-	PGURL     func(*url.Userinfo) (*url.URL, error)
+	PGURL     func(*url.Userinfo) (*pgurl.URL, error)
 }
 
 // nodeStatusGenerator is a limited portion of the status.MetricsRecorder

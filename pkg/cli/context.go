@@ -12,14 +12,15 @@ package cli
 
 import (
 	"context"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -156,14 +157,11 @@ type cliContext struct {
 
 	// for CLI commands that use the SQL interface, these parameters
 	// determine how to connect to the server.
-	sqlConnURL, sqlConnUser, sqlConnDBName string
+	sqlConnUser, sqlConnDBName string
 
-	// The client password to use. This can be set via the --url flag.
-	sqlConnPasswd string
-
-	// extraConnURLOptions contains any additional query URL options
+	// sqlConnURL contains any additional query URL options
 	// specified in --url that do not have discrete equivalents.
-	extraConnURLOptions url.Values
+	sqlConnURL *pgurl.URL
 
 	// allowUnencryptedClientPassword enables the CLI commands to use
 	// password authentication over non-TLS TCP connections. This is
@@ -218,11 +216,9 @@ func setCliContextDefaults() {
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.certPrincipalMap = nil
-	cliCtx.sqlConnURL = ""
-	cliCtx.sqlConnUser = ""
-	cliCtx.sqlConnPasswd = ""
+	cliCtx.sqlConnURL = nil
+	cliCtx.sqlConnUser = security.RootUser
 	cliCtx.sqlConnDBName = ""
-	cliCtx.extraConnURLOptions = nil
 	cliCtx.allowUnencryptedClientPassword = false
 	cliCtx.logConfigInput = settableString{s: ""}
 	cliCtx.logConfig = logconfig.Config{}
