@@ -1116,21 +1116,22 @@ func (c *transientCluster) sockForServer(nodeID roachpb.NodeID) unixSocketDetail
 	if !c.useSockets {
 		return unixSocketDetails{}
 	}
+	port := strconv.Itoa(c.sqlFirstPort + int(nodeID) - 1)
 	return unixSocketDetails{
-		socketDir:  c.demoDir,
-		portNumber: c.sqlFirstPort + int(nodeID) - 1,
-		username:   c.adminUser,
-		password:   c.adminPassword,
-		database:   c.defaultDB,
+		socketDir: c.demoDir,
+		port:      port,
+		u: pgurl.New().
+			WithNet(pgurl.NetUnix(c.demoDir, port)).
+			WithUsername(c.adminUser.Normalized()).
+			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
+			WithDatabase(c.defaultDB),
 	}
 }
 
 type unixSocketDetails struct {
-	socketDir  string
-	portNumber int
-	username   security.SQLUsername
-	password   string
-	database   string
+	socketDir string
+	port      string
+	u         *pgurl.URL
 }
 
 func (s unixSocketDetails) exists() bool {
@@ -1142,25 +1143,11 @@ func (s unixSocketDetails) filename() string {
 		// No socket configured.
 		return ""
 	}
-	return filepath.Join(s.socketDir, fmt.Sprintf(".s.PGSQL.%d", s.portNumber))
+	return filepath.Join(s.socketDir, ".s.PGSQL."+s.port)
 }
 
 func (s unixSocketDetails) String() string {
-	options := url.Values{}
-	options.Add("host", s.socketDir)
-	options.Add("port", strconv.Itoa(s.portNumber))
-	options.Add("user", s.username.Normalized())
-	options.Add("password", s.password)
-
-	// Node: in the generated unix socket URL, a password is always
-	// included even in insecure mode This is OK because in insecure
-	// mode the password is not checked on the server.
-	sqlURL := url.URL{
-		Scheme:   "postgresql",
-		Path:     s.database,
-		RawQuery: options.Encode(),
-	}
-	return sqlURL.String()
+	return s.u.ToPQ().String()
 }
 
 func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
