@@ -58,3 +58,37 @@ func TestGenerateJoinToken(t *testing.T) {
 	require.NotEmpty(t, token)
 	require.True(t, token.VerifySignature(cm.CACert().FileContents))
 }
+
+func TestJoinTokenVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cm, err := NewCertificateManager(EmbeddedCertsDir, CommandTLSSettings{})
+	require.NoError(t, err)
+
+	token, err := GenerateJoinToken(cm)
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+	require.True(t, token.VerifySignature(cm.CACert().FileContents))
+
+	t.Run("supported", func(t *testing.T) {
+		// No error when (un)marshaling with supported version.
+		b, err := token.MarshalText()
+		require.NoError(t, err)
+		token1 := new(JoinToken)
+		err = token1.UnmarshalText(b)
+		require.NoError(t, err)
+	})
+
+	t.Run("unsupported_unmarshal", func(t *testing.T) {
+		b, err := token.MarshalText()
+		require.NoError(t, err)
+		// Set first byte to unsupported version.
+		b[0] = 'x'
+		// Expect unmarshal to fail with token version error.
+		var j2 JoinToken
+		err = j2.UnmarshalText(b)
+		require.Error(t, err)
+		require.EqualValues(t, err, errInvalidJoinToken)
+	})
+}
