@@ -197,7 +197,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 			component string
 			url       *url.URL
 		}{
-			{"DB", dbURL}, {"UI", node.AdminURL()},
+			{"DB", dbURL.ToPQ()}, {"UI", node.AdminURL()},
 		} {
 			var user string
 			if item.url.User != nil {
