@@ -132,7 +132,7 @@ send "$argv sql\r"
 eexpect "ERROR"
 eexpect "setting --url from COCKROACH_URL"
 eexpect "invalid argument"
-eexpect "URL scheme must be"
+eexpect "unrecognized URL scheme"
 eexpect ":/# "
 end_test
 

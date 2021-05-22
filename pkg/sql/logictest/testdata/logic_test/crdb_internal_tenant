@@ -339,12 +339,12 @@ query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
 node_id  component  field   value
-0        DB         URL     postgresql://root@127.0.0.1:<port>?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+0        DB         URL     postgresql://root@127.0.0.1:<port>/defaultdb?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
 0        DB         Scheme  postgresql
 0        DB         User    root
 0        DB         Host    127.0.0.1
 0        DB         Port    <port>
-0        DB         URI     /?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+0        DB         URI     /defaultdb?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
 0        UI         URL     https://127.0.0.1:<port>
 0        UI         Scheme  https
 0        UI         User    ·

@@ -31,12 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -316,7 +319,7 @@ func (c *transientCluster) start(
 		}
 
 		// Prepare the URL for use by the SQL shell.
-		c.connURL, err = c.getNetworkURLForServer(0, gen, true /* includeAppName */)
+		c.connURL, err = c.getNetworkURLForServer(ctx, 0, gen, true /* includeAppName */)
 		if err != nil {
 			return err
 		}
@@ -883,33 +886,34 @@ func generateCerts(certsDir string) (err error) {
 }
 
 func (c *transientCluster) getNetworkURLForServer(
-	serverIdx int, gen workload.Generator, includeAppName bool,
+	ctx context.Context, serverIdx int, gen workload.Generator, includeAppName bool,
 ) (string, error) {
-	options := url.Values{}
+	u := pgurl.New()
 	if includeAppName {
-		options.Add("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo")
+		if err := u.SetOption("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo"); err != nil {
+			return nil, err
+		}
 	}
-	sqlURL := url.URL{
-		Scheme: "postgres",
-		Host:   c.servers[serverIdx].ServingSQLAddr(),
-	}
+	host, port, _ := netutil.SplitHostPort(c.servers[serverIdx].ServingSQLAddr(), "")
+	u.
+		WithNet(pgurl.NetTCP(host, port)).
+		WithDatabase(catalogkeys.DefaultDatabaseName)
 	if gen != nil {
-		// The generator wants a particular database name to be
-		// pre-filled.
-		sqlURL.Path = gen.Meta().Name
+		u.WithDatabase(gen.Meta().Name)
 	}
 	// For a demo cluster we don't use client TLS certs and instead use
 	// password-based authentication with the password pre-filled in the
 	// URL.
 	if demoCtx.insecure {
-		sqlURL.User = url.User(security.RootUser)
-		options.Add("sslmode", "disable")
+		u.WithInsecure()
 	} else {
-		sqlURL.User = url.UserPassword(c.adminUser.Normalized(), c.adminPassword)
-		options.Add("sslmode", "require")
+		u.
+			WithUsername(c.adminUser.Normalized()).
+			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
+			WithTransport(pgurl.TransportTLS(pgurl.TLSRequire, ""))
 	}
-	sqlURL.RawQuery = options.Encode()
-	return sqlURL.String(), nil
+	pqURL := u.ToPQ()
+	return pqURL.String(), nil
 }
 
 func (c *transientCluster) setupWorkload(
@@ -964,7 +968,7 @@ func (c *transientCluster) setupWorkload(
 		if demoCtx.runWorkload {
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURL, err := c.getNetworkURLForServer(i, gen, true /* includeAppName */)
+				sqlURL, err := c.getNetworkURLForServer(ctx, i, gen, true /* includeAppName */)
 				if err != nil {
 					return err
 				}
@@ -1180,7 +1184,7 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 		}
 		fmt.Fprintln(w, "  (webui)   ", serverURL)
 		// Print network URL if defined.
-		netURL, err := c.getNetworkURLForServer(i, nil, false /*includeAppName*/)
+		netURL, err := c.getNetworkURLForServer(context.Background(), i, nil, false /*includeAppName*/)
 		if err != nil {
 			fmt.Fprintln(stderr, errors.Wrap(err, "retrieving network URL"))
 		} else {

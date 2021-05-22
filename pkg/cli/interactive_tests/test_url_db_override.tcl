@@ -15,7 +15,7 @@ start_test "Check that the SSL settings come from flags is URL does not set them
 set ::env(COCKROACH_INSECURE) "false"
 
 spawn $argv sql --url "postgresql://test@localhost:26257" -e "select 1"
-eexpect "no certificates found"
+eexpect "cannot load certificates"
 eexpect eof
 
 spawn $argv sql --url "postgresql://test@localhost:26257" --insecure -e "select 1"
@@ -69,6 +69,14 @@ eexpect eof
 
 end_test
 
+start_test "Check that the host flag overrides the host if URL is already set."
+spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --host nonexistent.invalid -e "select 1"
+eexpect "cannot dial server"
+eexpect eof
+end_test
+
+set ::env(COCKROACH_INSECURE) "false"
+
 start_test "Check that the user flag  override the user if URL is already set."
 spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=disable" -e "select length(@1) as l, @1 as u from \[show session_user\]" --format=csv
 eexpect "l,u"
@@ -81,10 +89,5 @@ eexpect "4,test"
 eexpect eof
 end_test
 
-start_test "Check that the host flag overrides the host if URL is already set."
-spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --host nonexistent.invalid -e "select 1"
-eexpect "cannot dial server"
-eexpect eof
-end_test
 
 stop_server $argv

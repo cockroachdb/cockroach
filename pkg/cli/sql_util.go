@@ -696,45 +696,20 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 		return nil, err
 	}
 
-	if defaultMode == useSystemDb && baseURL.Path == "" {
+	if defaultMode == useSystemDb {
 		// Override the target database. This is because the current
 		// database can influence the output of CLI commands, and in the
 		// case where the database is missing it will default server-wise to
 		// `defaultdb` which may not exist.
-		baseURL.Path = "system"
+		baseURL.WithDefaultDatabase("system")
 	}
 
 	// If there is no user in the URL already, fill in the default user.
-	if baseURL.User.Username() == "" {
-		baseURL.User = url.User(security.RootUser)
-	}
-
-	options, err := url.ParseQuery(baseURL.RawQuery)
-	if err != nil {
-		return nil, err
-	}
-
-	// tcpConn is true iff the connection is going over the network.
-	tcpConn := baseURL.Host != ""
-
-	// If there is no TLS mode yet, conjure one based on defaults.
-	if options.Get("sslmode") == "" {
-		if cliCtx.Insecure {
-			options.Set("sslmode", "disable")
-		} else if tcpConn {
-			options.Set("sslmode", "verify-full")
-		}
-		// (We don't use TLS over unix socket conns.)
-	}
-
-	// Prevent explicit TLS request in insecure mode.
-	if cliCtx.Insecure && options.Get("sslmode") != "disable" {
-		return nil, errors.Errorf("cannot use TLS connections in insecure mode")
-	}
+	baseURL.WithDefaultUsername(security.RootUser)
 
 	// How we're going to authenticate.
-	_, pwdSet := baseURL.User.Password()
-	if pwdSet {
+	usePw, pwdSet, _ := baseURL.GetAuthnPassword()
+	if usePw {
 		// There's a password already configured.
 
 		// In insecure mode, we don't want the user to get the mistaken
@@ -746,8 +721,8 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 
 	// Load the application name. It's not a command-line flag, so
 	// anything already in the URL should take priority.
-	if options.Get("application_name") == "" && appName != "" {
-		options.Set("application_name", catconstants.ReportableAppNamePrefix+appName)
+	if prevAppName := baseURL.GetOption("application_name"); prevAppName == "" && appName != "" {
+		_ = baseURL.SetOption("application_name", catconstants.ReportableAppNamePrefix+appName)
 	}
 
 	// Set a connection timeout if none is provided already. This
@@ -755,12 +730,11 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 	// network issue, the client will not be left to hang forever.
 	//
 	// This is a lib/pq feature.
-	if options.Get("connect_timeout") == "" {
-		options.Set("connect_timeout", sqlConnTimeout)
+	if baseURL.GetOption("connect_timeout") == "" {
+		_ = baseURL.SetOption("connect_timeout", sqlConnTimeout)
 	}
 
-	baseURL.RawQuery = options.Encode()
-	sqlURL := baseURL.String()
+	sqlURL := baseURL.ToPQ().String()
 
 	if log.V(2) {
 		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
@@ -768,7 +742,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 
 	conn := makeSQLConn(sqlURL)
 
-	conn.passwordMissing = !pwdSet
+	conn.passwordMissing = !usePw || !pwdSet
 
 	return conn, nil
 }
