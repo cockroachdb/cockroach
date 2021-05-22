@@ -328,10 +328,11 @@ func (c *transientCluster) start(
 		}
 
 		// Prepare the URL for use by the SQL shell.
-		c.connURL, err = c.getNetworkURLForServer(ctx, 0, true /* includeAppName */)
+		purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */)
 		if err != nil {
 			return err
 		}
+		c.connURL = purl.ToPQ().String()
 
 		// Start up the update check loop.
 		// We don't do this in (*server.Server).Start() because we don't want this
@@ -896,7 +897,7 @@ func generateCerts(certsDir string) (err error) {
 
 func (c *transientCluster) getNetworkURLForServer(
 	ctx context.Context, serverIdx int, includeAppName bool,
-) (string, error) {
+) (*pgurl.URL, error) {
 	u := pgurl.New()
 	if includeAppName {
 		if err := u.SetOption("application_name", catconstants.ReportableAppNamePrefix+"cockroach demo"); err != nil {
@@ -919,8 +920,7 @@ func (c *transientCluster) getNetworkURLForServer(
 			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
 			WithTransport(pgurl.TransportTLS(pgurl.TLSRequire, ""))
 	}
-	pqURL := u.ToPQ()
-	return pqURL.String(), nil
+	return u, nil
 }
 
 func (c *transientCluster) setupWorkload(
@@ -979,7 +979,7 @@ func (c *transientCluster) setupWorkload(
 				if err != nil {
 					return err
 				}
-				sqlURLs = append(sqlURLs, sqlURL)
+				sqlURLs = append(sqlURLs, sqlURL.ToPQ().String())
 			}
 			if err := c.runWorkload(ctx, gen, sqlURLs); err != nil {
 				return errors.Wrapf(err, "starting background workload")
@@ -1199,7 +1199,8 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 		if err != nil {
 			fmt.Fprintln(stderr, errors.Wrap(err, "retrieving network URL"))
 		} else {
-			fmt.Fprintln(w, "  (sql)     ", netURL)
+			fmt.Fprintln(w, "  (sql)     ", netURL.ToPQ())
+			fmt.Fprintln(w, "  (sql/jdbc)", netURL.ToJDBC())
 		}
 		// Print unix socket if defined.
 		if c.useSockets {
