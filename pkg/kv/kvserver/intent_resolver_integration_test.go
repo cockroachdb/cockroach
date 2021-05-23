@@ -401,6 +401,12 @@ func TestReliableIntentCleanup(t *testing.T) {
 		testTxnExecute := func(t *testing.T, spec testTxnSpec, txn *kv.Txn) (roachpb.Key, error) {
 			txnKey := genKey(spec.singleRange)
 
+			if spec.finalize == "cancelAsync" && spec.abort != "" {
+				// This would require coordinating the abort, cancel, and put
+				// goroutines. Doesn't seem worth the added complexity.
+				require.Fail(t, "Can't combine finalize=cancelAsync and abort")
+			}
+
 			// If requested, spin off txn aborter goroutines, returning errors
 			// (if any) via abortErrC.
 			//
@@ -461,6 +467,33 @@ func TestReliableIntentCleanup(t *testing.T) {
 				require.Fail(t, "invalid abort type", "abort=%v", spec.abort)
 			}
 
+			// If requested, cancel the context while the put is in flight and
+			// roll back the txn with the cancelled context (which is what the
+			// SQL session would do). This is different from finalize=cancel in
+			// that it's a regression test for EndTxn elision:
+			// https://github.com/cockroachdb/cockroach/issues/65587
+			cancelAsyncErrC := make(chan error, 1)
+			if spec.finalize == "cancelAsync" {
+				readyC := blockPut(t, txnKey)
+				require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "cancel", func(ctx context.Context) {
+					unblockC := <-readyC
+					defer close(unblockC)
+					defer close(cancelAsyncErrC)
+
+					// Roll back with a new, cancelled context and wait to
+					// unblock Put. This is to provoke EndTxn elision by making
+					// sure the txn abort executes before the Put request. We
+					// don't cancel the main context, since that would cause the
+					// Put to error immediately, racing with the txn abort.
+					rollbackCtx, rollbackCancel := context.WithCancel(ctx)
+					rollbackCancel()
+					if err := txn.Rollback(rollbackCtx); err != nil && !errors.Is(err, context.Canceled) {
+						cancelAsyncErrC <- err
+					}
+					time.Sleep(100 * time.Millisecond)
+				}))
+			}
+
 			// Write numKeys KV pairs in batches of batchSize as a single txn.
 			const batchSize = 10000
 			batch := txn.NewBatch()
@@ -475,6 +508,11 @@ func TestReliableIntentCleanup(t *testing.T) {
 						return nil, err
 					}
 					batch = txn.NewBatch()
+					// If we did an async cancel, submitting another Put violates
+					// the txn protocol (i.e. the client has already gone away).
+					if spec.finalize == "cancelAsync" {
+						break
+					}
 				}
 			}
 
@@ -497,6 +535,10 @@ func TestReliableIntentCleanup(t *testing.T) {
 				rollbackCtx, cancel := context.WithCancel(ctx)
 				cancel()
 				if err := txn.Rollback(rollbackCtx); err != nil && !errors.Is(err, context.Canceled) {
+					return nil, err
+				}
+			case "cancelAsync":
+				if err := <-cancelAsyncErrC; err != nil {
 					return nil, err
 				}
 			default:
@@ -577,9 +619,14 @@ func TestReliableIntentCleanup(t *testing.T) {
 						})
 						return
 					}
-					finalize := []interface{}{"commit", "rollback", "cancel"}
+					finalize := []interface{}{"commit", "rollback", "cancel", "cancelAsync"}
 					testutils.RunValues(t, "finalize", finalize, func(t *testing.T, finalize interface{}) {
 						abort := []interface{}{"no", "push", "heartbeat"}
+						if finalize == "cancelAsync" {
+							// Async cancel can't currently run together with an
+							// abort, since we'd have to coordinate the tasks.
+							abort = []interface{}{"no"}
+						}
 						testutils.RunValues(t, "abort", abort, func(t *testing.T, abort interface{}) {
 							if abort.(string) == "no" {
 								abort = "" // "no" just makes the test output better

@@ -112,6 +112,13 @@ type TxnCoordSender struct {
 		// (a retryable TransactionAbortedError in case of the async abort).
 		closed bool
 
+		// sentLocking is set once this transaction has sent a locking request. It
+		// is used to elide EndTxn requests via finalizeNonLockingTxnLocked. We
+		// can't rely on txnPipeliner for this, since it doesn't track locks until
+		// after responses have been received, and an EndTxn(commit=false) could
+		// arrive before that happens.
+		sentLocking bool
+
 		// txn is the Transaction proto attached to all the requests and updated on
 		// all the responses.
 		txn roachpb.Transaction
@@ -485,7 +492,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
+	if ba.IsSingleEndTxnRequest() && !tc.mu.sentLocking {
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 
@@ -514,6 +521,10 @@ func (tc *TxnCoordSender) Send(
 	lastIndex := len(ba.Requests) - 1
 	if lastIndex < 0 {
 		return nil, nil
+	}
+
+	if !tc.mu.sentLocking && ba.IsLocking() {
+		tc.mu.sentLocking = true
 	}
 
 	// Clone the Txn's Proto so that future modifications can be made without
