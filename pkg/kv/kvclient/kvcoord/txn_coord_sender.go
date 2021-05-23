@@ -310,6 +310,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		wrapped:                 tc.wrapped,
 		mu:                      &tc.mu.Mutex,
 		allowConcurrentRequests: typ == kv.LeafTxn,
+		knobs:                   &tcf.testingKnobs,
 	}
 	tc.interceptorAlloc.txnSeqNumAllocator.writeSeq = txn.Sequence
 }

@@ -392,6 +392,9 @@ func (f SenderFunc) Send(
 	return f(ctx, ba)
 }
 
+// WrappedSenderFactoryFunc is a factory function that wraps a sender in another sender.
+type WrappedSenderFactoryFunc func(Sender) Sender
+
 // NonTransactionalFactoryFunc is a TxnSenderFactory that cannot, in
 // fact, create any transactional senders, only non-transactional
 // ones.

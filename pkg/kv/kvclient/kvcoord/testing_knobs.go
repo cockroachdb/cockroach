@@ -10,7 +10,10 @@
 
 package kvcoord
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+)
 
 // ClientTestingKnobs contains testing options that dictate the behavior
 // of the key-value client.
@@ -37,6 +40,12 @@ type ClientTestingKnobs struct {
 	// If set, the DistSender will try the replicas in the order they appear in
 	// the descriptor, instead of trying to reorder them by latency.
 	DontReorderReplicas bool
+
+	// TxnRequestInterceptorFactory, if set, is a function that generates a
+	// Sender that will intercept txn requests at the bottom of the
+	// TxnCoordSender interceptor stack. It can use the given sender to pass the
+	// requests on through the default sender (e.g. the DistSender).
+	TxnRequestInterceptorFactory kv.WrappedSenderFactoryFunc
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

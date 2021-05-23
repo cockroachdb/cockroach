@@ -41,6 +41,7 @@ type lockedSender interface {
 type txnLockGatekeeper struct {
 	wrapped kv.Sender
 	mu      sync.Locker // shared with TxnCoordSender
+	knobs   *ClientTestingKnobs
 
 	// If set, concurrent requests are allowed. If not set, concurrent requests
 	// result in an assertion error. Only leaf transactions are supposed allow
@@ -83,5 +84,9 @@ func (gs *txnLockGatekeeper) SendLocked(
 	// lock again.
 	gs.mu.Unlock()
 	defer gs.mu.Lock()
-	return gs.wrapped.Send(ctx, ba)
+	sender := gs.wrapped
+	if intercept := gs.knobs.TxnRequestInterceptorFactory; intercept != nil {
+		sender = intercept(sender)
+	}
+	return sender.Send(ctx, ba)
 }
