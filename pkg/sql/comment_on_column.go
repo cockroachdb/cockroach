@@ -69,7 +69,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 			keys.ColumnCommentType,
 			n.tableDesc.GetID(),
-			col.GetID(),
+			col.GetPGAttributeNum(),
 			*n.n.Comment)
 		if err != nil {
 			return err
@@ -83,7 +83,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 			keys.ColumnCommentType,
 			n.tableDesc.GetID(),
-			col.GetID())
+			col.GetPGAttributeNum())
 		if err != nil {
 			return err
 		}
