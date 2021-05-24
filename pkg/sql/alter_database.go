@@ -576,6 +576,13 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// ROW table is homed in that region. The type schema changer is responsible
 		// for all the requisite validation.
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+				return pgerror.Newf(
+					pgcode.UndefinedObject,
+					"region %q has not been added to the database",
+					n.n.Region,
+				)
+			}
 			return err
 		}
 	}
