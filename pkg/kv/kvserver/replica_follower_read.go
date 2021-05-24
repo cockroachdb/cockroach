@@ -62,7 +62,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 ) bool {
 	var lErr *roachpb.NotLeaseHolderError
 	eligible := errors.As(err, &lErr) &&
-		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
+		lErr.LeaseHolder != nil && lErr.Lease != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
 		BatchCanBeEvaluatedOnFollower(*ba) &&
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV)
 
