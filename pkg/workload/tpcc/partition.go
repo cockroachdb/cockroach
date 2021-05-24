@@ -116,6 +116,47 @@ type zoneConfig struct {
 	strategy partitionStrategy
 }
 
+type survivalGoal int
+
+const (
+	survivalGoalZone survivalGoal = iota
+	survivalGoalRegion
+)
+
+// Part of pflag's Value interface.
+func (s survivalGoal) String() string {
+	switch s {
+	case survivalGoalZone:
+		return "zone"
+	case survivalGoalRegion:
+		return "region"
+	}
+	panic("unexpected")
+}
+
+// Part of pflag's Value interface.
+func (s *survivalGoal) Set(value string) error {
+	switch value {
+	case "zone":
+		*s = survivalGoalZone
+	case "region":
+		*s = survivalGoalRegion
+	default:
+		return errors.Errorf("unknown survival goal %q", value)
+	}
+	return nil
+}
+
+// Part of pflag's Value interface.
+func (s survivalGoal) Type() string {
+	return "survival_goal"
+}
+
+type multiRegionConfig struct {
+	regions      []string
+	survivalGoal survivalGoal
+}
+
 // partitioner encapsulates all logic related to partitioning discrete numbers
 // of warehouses into disjoint sets of roughly equal sizes. Partitions are then
 // evenly assigned "active" warehouses, which allows for an even split of live
