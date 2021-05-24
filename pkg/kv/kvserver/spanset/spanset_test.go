@@ -49,6 +49,54 @@ func TestSpanSetGetSpansScope(t *testing.T) {
 	}
 }
 
+func TestSpanSetCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ss := new(SpanSet)
+	ss.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("abc")}, hlc.Timestamp{WallTime: 123, Logical: 7})
+	ss.AddNonMVCC(SpanReadWrite, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
+
+	c := ss.Copy()
+	require.Equal(t, ss, c)
+
+	// modifying element in ss should not modify copy
+	ss.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")})
+	require.NotEqual(t, ss, c)
+}
+
+func TestSpanSetIterate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spA := roachpb.Span{Key: roachpb.Key("a")}
+	spRO := roachpb.Span{Key: roachpb.Key("r"), EndKey: roachpb.Key("o")}
+	spRW := roachpb.Span{Key: roachpb.Key("r"), EndKey: roachpb.Key("w")}
+	spLocal := roachpb.Span{Key: keys.RangeLastGCKey(1)}
+
+	ss := new(SpanSet)
+	ss.AddNonMVCC(SpanReadOnly, spLocal)
+	ss.AddNonMVCC(SpanReadOnly, spRO)
+	ss.AddNonMVCC(SpanReadOnly, spA)
+	ss.AddNonMVCC(SpanReadWrite, spRW)
+
+	type item struct {
+		sa   SpanAccess
+		ss   SpanScope
+		span Span
+	}
+	expect := []item{
+		{sa: SpanReadOnly, ss: SpanGlobal, span: Span{Span: spRO}},
+		{sa: SpanReadOnly, ss: SpanGlobal, span: Span{Span: spA}},
+		{sa: SpanReadOnly, ss: SpanLocal, span: Span{Span: spLocal}},
+		{sa: SpanReadWrite, ss: SpanGlobal, span: Span{Span: spRW}},
+	}
+	items := []item{}
+	ss.Iterate(func(sa SpanAccess, ss SpanScope, span Span) {
+		items = append(items, item{sa: sa, ss: ss, span: span})
+	})
+
+	require.Equal(t, expect, items)
+}
+
 func TestSpanSetMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
