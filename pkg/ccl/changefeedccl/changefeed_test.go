@@ -2550,6 +2550,18 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `cannot specify both initial_scan and no_initial_scan`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH no_initial_scan, initial_scan`, `kafka://nope`,
 	)
+
+	// Sanity check schema registry tls parameters.
+	sqlDB.ExpectErr(
+		t, `param ca_cert must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`kafka://nope`, `https://schemareg-nope/?ca_cert=!`,
+	)
+	sqlDB.ExpectErr(
+		t, `failed to parse certificate data`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`kafka://nope`, `https://schemareg-nope/?ca_cert=Zm9v`,
+	)
 }
 
 func TestChangefeedDescription(t *testing.T) {
