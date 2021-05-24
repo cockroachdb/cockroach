@@ -1180,8 +1180,6 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 		}
 	}
 	ri.RangeMaxBytes = r.mu.conf.RangeMaxBytes
-	if desc := ri.ReplicaState.Desc; desc != nil {
-	}
 	if r.mu.tenantID != (roachpb.TenantID{}) {
 		ri.TenantID = r.mu.tenantID.ToUint64()
 	}

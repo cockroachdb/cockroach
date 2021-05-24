@@ -246,10 +246,17 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	return r.raftLastIndexLocked()
 }
 
+// LastAssignedLeaseIndexRLocked returns the last assigned lease index.
 func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
+}
+
+// LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
+// b.mu to be held in read mode.
+func (b *propBuf) LastAssignedLeaseIndexRLocked() uint64 {
+	return b.assignedLAI
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
