@@ -36,7 +36,7 @@ const (
 	// which is suspected to be removed should be considered for garbage
 	// collection. See replicaIsSuspect() for details on what makes a replica
 	// suspect.
-	ReplicaGCQueueSuspectCheckInterval = 5 * time.Second
+	ReplicaGCQueueSuspectCheckInterval = 3 * time.Second
 )
 
 // Priorities for the replica GC queue.
@@ -173,7 +173,10 @@ func replicaIsSuspect(repl *Replica) bool {
 
 	// If the replica is a follower, check that the leader is in our range
 	// descriptor and that we're still in touch with it. This handles e.g. a
-	// non-voting replica which has lost its leader.
+	// non-voting replica which has lost its leader. It also attempts to handle
+	// a quiesced follower which was partitioned away from the Raft group during
+	// its own removal from the range -- this case is vulnerable to race
+	// conditions, but if it fails it will be GCed within 12 hours anyway.
 	case raft.StateFollower:
 		leadDesc, ok := repl.Desc().GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
 		if !ok || !livenessMap[leadDesc.NodeID].IsLive {
@@ -188,20 +191,6 @@ func replicaIsSuspect(repl *Replica) bool {
 			return livenessMap[d.NodeID].IsLive
 		}) {
 			return true
-		}
-	}
-
-	// If the replica is quiesced, consider it suspect if any of the other
-	// voters are unavailable. This tries to detect cases where a quiesced
-	// replica does not notice that it's been removed from the range and then
-	// triggers an underreplicated alert when the range membership changes again
-	// later. In other cases where a quiesced replica fails to notice that it's
-	// been removed it will be GCed during the next periodic check (every 12 hours).
-	if repl.IsQuiescent() {
-		for _, rd := range repl.Desc().Replicas().VoterDescriptors() {
-			if !livenessMap[rd.NodeID].IsLive {
-				return true
-			}
 		}
 	}
 
