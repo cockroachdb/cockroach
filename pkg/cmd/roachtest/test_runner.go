@@ -1109,14 +1109,10 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		var clusterName, clusterAdminUIAddr string
 		if w.Cluster() != nil {
 			clusterName = w.Cluster().name
-			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(
-				req.Context(),
-				w.Cluster().Node(1),
-			)
-			if err != nil {
-				w.Cluster().t.Fatal(err)
+			adminUIAddrs, err := w.Cluster().ExternalAdminUIAddr(req.Context(), w.Cluster().Node(1))
+			if err == nil {
+				clusterAdminUIAddr = adminUIAddrs[0]
 			}
-			clusterAdminUIAddr = adminUIAddrs[0]
 		}
 		t := w.Test()
 		testStatus := "N/A"
