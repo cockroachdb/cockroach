@@ -11,10 +11,18 @@
 package log
 
 import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"io"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
@@ -447,3 +455,185 @@ func (buf *buffer) maybeMultiLine(
 var startRedactionMarker = string(redact.StartMarker())
 var endRedactionMarker = string(redact.EndMarker())
 var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && endRedactionMarker[0] >= utf8.RuneSelf
+
+var entryREV2 = regexp.MustCompile(
+	`(?m)^` +
+		/* Severity                 */ `([` + severityChar + `])` +
+		/* Date and time            */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
+		/* Goroutine ID             */ `(?:(\d+) )` +
+		/* Go standard library flag */ `(\(gostd\) )?` +
+		/* Channel                  */ `(?:(\d+)@)?` +
+		/* File                     */ `([^:]+):` +
+		/* Line                     */ `(?:(\d+) )` +
+		/* Redactable flag          */ `((?:` + redactableIndicator + `)?) ` +
+		/* Context tags             */ `(?:\[((?:[^]]|\][^ ])+)\] )` +
+		/* Counter                  */ `((?:\d+)?) ` +
+		/* Continuation marker      */ `([ =!+|])` +
+		/* Message                  */ `(.*)$`,
+)
+
+type entryDecoderV2 struct {
+	reader          *bufio.Reader
+	nextLine        []byte        // nextLine stores already read data from the reader to be considered as the first line.
+	sensitiveEditor redactEditor
+}
+
+// Decode decodes the next log entry into the provided protobuf message.
+func (d *entryDecoderV2) Decode(entry *logpb.Entry) error {
+	for {
+		if d.nextLine == nil {
+			var err error
+			if d.nextLine, err = d.reader.ReadBytes('\n'); err != nil {
+				return err
+			}
+		}
+
+		m := entryREV2.FindSubmatch(d.nextLine)
+		if m == nil {
+			var err error
+			if d.nextLine, err = d.reader.ReadBytes('\n'); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := d.initEntryFromFirstLine(entry, m); err != nil {
+			return err
+		}
+
+		msg := string(trimFinalNewLines(m[12]))
+
+		// Process the message.
+		// While the entry has additional lines, collect the full message.
+		var entryMsg bytes.Buffer
+
+		fmt.Fprint(&entryMsg, msg)
+
+	linesLoop:
+		for {
+			nextLine, err := d.reader.ReadBytes('\n')
+
+			if err != nil {
+				if err == io.EOF {
+					d.nextLine = nextLine
+					break linesLoop
+				}
+				return err
+			}
+
+			// Match the next line in the log data.
+			m = entryREV2.FindSubmatch(nextLine)
+			if m == nil {
+				d.nextLine = nextLine
+				break linesLoop
+			}
+
+			// Determine whether this line is a continuation of the entry and append the message accordingly.
+			msg := string(trimFinalNewLines(m[12]))
+			switch cont := string(m[11]); cont {
+			case "+":
+				fmt.Fprintf(&entryMsg, "\n%s", msg)
+			case "|":
+				fmt.Fprint(&entryMsg, msg)
+				if entry.StructuredEnd != 0 {
+					entry.StructuredEnd = uint32(len(entryMsg.String()))
+				}
+			case "!":
+				if entry.StackTraceStart == 0 {
+					entry.StackTraceStart = uint32(len(entryMsg.String())) + 1
+					fmt.Fprintf(&entryMsg, "\nstack trace:\n%s", msg)
+				} else {
+					fmt.Fprintf(&entryMsg, "\n%s", msg)
+				}
+			default:
+				d.nextLine = nextLine
+				break linesLoop
+			}
+		}
+
+		r := redactablePackage{
+			msg:        trimFinalNewLines(entryMsg.Bytes()),
+			redactable: entry.Redactable,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Message = string(r.msg)
+		entry.Redactable = r.redactable
+
+		return nil
+	}
+}
+
+func(d *entryDecoderV2) initEntryFromFirstLine(entry * logpb.Entry, m [][]byte) error {
+	// Erase all the fields, to be sure.
+	*entry = logpb.Entry{}
+
+	// Process the severity.
+	entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
+
+	// Process the timestamp.
+	t, err := time.Parse(MessageTimeFormat, string(m[2]))
+	if err != nil {
+		return err
+	}
+	entry.Time = t.UnixNano()
+
+	// Process the goroutine ID.
+	goroutine, err := strconv.Atoi(string(m[3]))
+	if err != nil {
+		return err
+	}
+	entry.Goroutine = int64(goroutine)
+
+	// Process the channel.
+	if len(string(m[5])) != 0 {
+		ch, err := strconv.Atoi(string(m[5]))
+		if err != nil {
+			return err
+		}
+		entry.Channel = Channel(ch)
+	}
+
+	// Process the file.
+	entry.File = string(m[6])
+
+	// Process the line.
+	line, err := strconv.Atoi(string(m[7]))
+	if err != nil {
+		return err
+	}
+	entry.Line = int64(line)
+
+	// Process the redactable marker.
+	entry.Redactable = len(m[8]) != 0
+
+	// Process the context tags.
+	if string(m[9]) != "-" {
+		r := redactablePackage {
+			msg:        m[9],
+			redactable: entry.Redactable,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Tags = string(r.msg)
+	} else {
+		entry.Tags = "-"
+	}
+
+	// Process the counter.
+	if len(m[10]) != 0 {
+		counter, err := strconv.Atoi(string(m[10]))
+		if err != nil {
+			return err
+		}
+		entry.Counter = uint64(counter)
+	}
+
+	// Check if the entry is structured by processing the continuation mark.
+	msg := string(trimFinalNewLines(m[12]))
+	if string(m[11]) == "=" {
+		entry.StructuredStart = 0
+		entry.StructuredEnd = uint32(len(msg))
+	}
+
+	return nil
+
+}
