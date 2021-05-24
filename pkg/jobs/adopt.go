@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -47,6 +48,11 @@ const (
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return errors.WithAssertionFailure(err)
+		}
 		numRows, err := r.ex.Exec(
 			ctx, "claim-jobs", txn, `
    UPDATE system.jobs
@@ -283,6 +289,11 @@ func (r *Registry) runJob(
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return errors.WithAssertionFailure(err)
+		}
 		// Note that we have to buffer all rows first - before processing each
 		// job - because we have to make sure that the query executes without an
 		// error (otherwise, the system.jobs table might diverge from the jobs
