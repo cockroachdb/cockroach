@@ -978,7 +978,7 @@ func (c *CustomFuncs) constructJoinWithConstants(
 	constRows := make(memo.ScalarListExpr, len(vals))
 	for i := range constRows {
 		constRows[i] = c.e.f.ConstructTuple(
-			memo.ScalarListExpr{c.e.f.ConstructConst(vals[i], typ)},
+			memo.ScalarListExpr{c.e.f.ConstructConstVal(vals[i], typ)},
 			tupleType,
 		)
 	}

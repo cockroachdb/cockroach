@@ -292,6 +292,12 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Value == tree.DNull {
 			panic(errors.AssertionFailedf("NULL values should always use NullExpr, not ConstExpr"))
 		}
+		if t.Value == tree.DBoolTrue {
+			panic(errors.AssertionFailedf("true values should always use TrueSingleton, not ConstExpr"))
+		}
+		if t.Value == tree.DBoolFalse {
+			panic(errors.AssertionFailedf("false values should always use FalseSingleton, not ConstExpr"))
+		}
 
 	default:
 		if opt.IsJoinOp(e) {
