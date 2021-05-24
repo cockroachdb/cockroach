@@ -14,15 +14,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/kr/pretty"
 )
 
 func TestFormatCrdbV2(t *testing.T) {
@@ -177,4 +180,35 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 
 		return out
 	})
+}
+
+func TestCrdbV2Decode(t *testing.T) {
+	datadriven.RunTest(t, "testdata/parse",
+		func(t *testing.T, td *datadriven.TestData) string {
+			switch td.Cmd {
+			case "log":
+				var out strings.Builder
+
+				d, err := NewEntryDecoderWithFormat(strings.NewReader(td.Input), WithMarkedSensitiveData, "crdb-v2")
+				if err != nil {
+					td.Fatalf(t, "error while constructing decoder: %v", err)
+				}
+
+				for {
+					var e logpb.Entry
+					if err := d.Decode(&e); err != nil {
+						if err == io.EOF {
+							break
+						}
+						td.Fatalf(t, "error while decoding: %v", err)
+					}
+					fmt.Fprintf(&out, "%# v\n", pretty.Formatter(e))
+				}
+				return out.String()
+			default:
+				t.Fatalf("unknown directive: %q", td.Cmd)
+			}
+			// unreachable
+			return ""
+		})
 }
