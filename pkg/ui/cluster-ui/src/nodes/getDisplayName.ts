@@ -3,8 +3,7 @@ import { NoConnection } from "./noConnection";
 
 type INodeStatus = cockroach.server.status.statuspb.INodeStatus;
 
-const LivenessStatus =
-  cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
+const LivenessStatus = cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
 
 function isNoConnection(
   node: INodeStatus | NoConnection,

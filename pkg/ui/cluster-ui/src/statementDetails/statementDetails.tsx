@@ -100,11 +100,9 @@ export type NodesSummary = {
   nodeSums: NodeSummaryStats;
   nodeDisplayNameByID: Dictionary<string>;
   livenessStatusByNodeID: Dictionary<
-    cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+    cockroach.kv.kvserver.storagepb.NodeLivenessStatus
   >;
-  livenessByNodeID: Dictionary<
-    cockroach.kv.kvserver.liveness.livenesspb.ILiveness
-  >;
+  livenessByNodeID: Dictionary<cockroach.kv.kvserver.storagepb.ILiveness>;
   storeIDsByNodeID: Dictionary<string[]>;
 };
 
@@ -815,27 +813,7 @@ export class StatementDetails extends React.Component<
                   bar: genericBarChart(stats.bytes_read, stats.count, Bytes),
                   format: Bytes,
                 },
-                {
-                  name: "Network Bytes Sent",
-                  value: stats.bytes_sent_over_network,
-                  bar: genericBarChart(
-                    stats.bytes_sent_over_network,
-                    stats.count,
-                    Bytes,
-                  ),
-                  format: Bytes,
-                },
-              ].filter(function(r) {
-                if (
-                  r.name === "Network Bytes Sent" &&
-                  r.value &&
-                  r.value.mean === 0
-                ) {
-                  // Omit if empty.
-                  return false;
-                }
-                return r.value;
-              })}
+              ].filter(r => r.value)}
             />
           </SummaryCard>
           <SummaryCard>
