@@ -140,7 +140,7 @@ func (r *Replica) executeWriteBatch(
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
-	ch, abandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
+	ch, abandon, pErr := r.evalAndPropose(ctx, ba, g, st, localUncertaintyLimit, tok.Move(ctx))
 	if pErr != nil {
 		r.readOnlyCmdMu.RUnlock()
 		if cErr, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
@@ -148,12 +148,6 @@ func (r *Replica) executeWriteBatch(
 			defer r.raftMu.Unlock()
 			// This exits with a fatal error, but returns in tests.
 			return nil, g, r.setCorruptRaftMuLocked(ctx, cErr)
-		}
-		if maxLeaseIndex != 0 {
-			log.Fatalf(
-				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
-				maxLeaseIndex, ba, pErr,
-			)
 		}
 		return nil, g, pErr
 	}

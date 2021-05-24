@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -208,20 +207,20 @@ type proposalCreator struct {
 	lease kvserverpb.LeaseStatus
 }
 
-func (pc proposalCreator) newPutProposal(ts hlc.Timestamp) (*ProposalData, []byte) {
+func (pc proposalCreator) newPutProposal(ts hlc.Timestamp) *ProposalData {
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.PutRequest{})
 	ba.Timestamp = ts
 	return pc.newProposal(ba)
 }
 
-func (pc proposalCreator) newLeaseProposal(lease roachpb.Lease) (*ProposalData, []byte) {
+func (pc proposalCreator) newLeaseProposal(lease roachpb.Lease) *ProposalData {
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: lease})
 	return pc.newProposal(ba)
 }
 
-func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) (*ProposalData, []byte) {
+func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) *ProposalData {
 	var lease *roachpb.Lease
 	r, ok := ba.GetArg(roachpb.RequestLease)
 	if ok {
@@ -238,7 +237,8 @@ func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) (*ProposalData, [
 		Request:     &ba,
 		leaseStatus: pc.lease,
 	}
-	return p, pc.encodeProposal(p)
+	p.encodedCommand = pc.encodeProposal(p)
+	return p
 }
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
@@ -261,7 +261,10 @@ func TestProposalBuffer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	var p testProposer
+	r := &testProposerRaft{}
+	p := testProposer{
+		raftGroup: r,
+	}
 	var b propBuf
 	var pc proposalCreator
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -269,78 +272,49 @@ func TestProposalBuffer(t *testing.T) {
 
 	// Insert propBufArrayMinSize proposals. The buffer should not be flushed.
 	num := propBufArrayMinSize
+	leaseReqIdx := 3
 	for i := 0; i < num; i++ {
-		leaseReq := i == 3
+		leaseReq := i == leaseReqIdx
 		var pd *ProposalData
-		var data []byte
 		if leaseReq {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd = pc.newLeaseProposal(roachpb.Lease{})
 		} else {
-			pd, data = pc.newPutProposal(hlc.Timestamp{})
+			pd = pc.newPutProposal(hlc.Timestamp{})
 		}
 		_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		mlai, err := b.Insert(ctx, pd, data, tok)
-		require.Nil(t, err)
-		if leaseReq {
-			expMlai := uint64(i)
-			require.Equal(t, uint64(0), mlai)
-			require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
-			require.Equal(t, expMlai, b.LastAssignedLeaseIndexRLocked())
-		} else {
-			expMlai := uint64(i + 1)
-			require.Equal(t, expMlai, mlai)
-			require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
-			require.Equal(t, expMlai, b.LastAssignedLeaseIndexRLocked())
-		}
-		require.Equal(t, i+1, b.Len())
+		require.NoError(t, b.Insert(ctx, pd, tok))
+		require.Equal(t, i+1, b.AllocatedIdx())
 		require.Equal(t, 1, p.enqueued)
 		require.Equal(t, 0, p.registered)
 	}
 	require.Equal(t, num, b.evalTracker.Count())
+	require.Empty(t, r.consumeProposals())
 
-	// Insert another proposal. This causes the buffer to flush. Doing so
-	// results in a lease applied index being skipped, which is harmless.
-	// Remember that the lease request above did not receive a lease index.
-	pd, data := pc.newPutProposal(hlc.Timestamp{})
+	// Insert another proposal. This causes the buffer to flush.
+	pd := pc.newPutProposal(hlc.Timestamp{})
 	_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	mlai, err := b.Insert(ctx, pd, data, tok)
+	err := b.Insert(ctx, pd, tok)
 	require.Nil(t, err)
-	expMlai := uint64(num + 1)
-	require.Equal(t, expMlai, mlai)
-	require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
-	require.Equal(t, expMlai, b.LastAssignedLeaseIndexRLocked())
-	require.Equal(t, 1, b.Len())
+	require.Equal(t, 1, b.AllocatedIdx())
 	require.Equal(t, 2, p.enqueued)
 	require.Equal(t, num, p.registered)
-	require.Equal(t, uint64(num), b.liBase)
+	// We've flushed num requests, out of which one is a lease request (so that
+	// one did not increment the MLAI).
+	require.Equal(t, uint64(num)-1, b.assignedLAI)
 	require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
 	require.Equal(t, 1, b.evalTracker.Count())
+	proposals := r.consumeProposals()
+	require.Len(t, proposals, propBufArrayMinSize)
+	var lai uint64
+	for i, p := range proposals {
+		if i != leaseReqIdx {
+			lai++
+		}
+		require.Equal(t, lai, p.MaxLeaseIndex)
+	}
 
-	// Increase the proposer's applied lease index and flush. The buffer's
-	// lease index offset should jump up.
-	p.lai = 10
-	require.Nil(t, b.flushLocked(ctx))
-	require.Equal(t, 0, b.Len())
-	require.Equal(t, 2, p.enqueued)
-	require.Equal(t, num+1, p.registered)
-	require.Equal(t, p.lai, b.liBase)
-
-	// Insert one more proposal. The lease applied index should adjust to
-	// the increase accordingly.
-	_, tok = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-	mlai, err = b.Insert(ctx, pd, data, tok)
-	require.Nil(t, err)
-	expMlai = p.lai + 1
-	require.Equal(t, expMlai, mlai)
-	require.Equal(t, expMlai, pd.command.MaxLeaseIndex)
-	require.Equal(t, expMlai, b.LastAssignedLeaseIndexRLocked())
-	require.Equal(t, 1, b.Len())
-	require.Equal(t, 3, p.enqueued)
-	require.Equal(t, num+1, p.registered)
-
-	// Flush the buffer repeatedly until its array shrinks. We've already
-	// flushed once above, so start iterating at 1.
-	for i := 1; i < propBufArrayShrinkDelay; i++ {
+	// Flush the buffer repeatedly until its array shrinks.
+	for i := 0; i < propBufArrayShrinkDelay; i++ {
 		require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
 		require.Nil(t, b.flushLocked(ctx))
 	}
@@ -354,13 +328,15 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	var p testProposer
+	r := &testProposerRaft{}
+	p := testProposer{
+		raftGroup: r,
+	}
 	var b propBuf
 	var pc proposalCreator
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
-	mlais := make(map[uint64]struct{})
 	dsErr := errors.New("destroyed")
 
 	// Run 20 concurrent producers.
@@ -369,22 +345,15 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	for i := 0; i < concurrency; i++ {
 		g.Go(func() error {
 			for {
-				pd, data := pc.newPutProposal(hlc.Timestamp{})
+				pd := pc.newPutProposal(hlc.Timestamp{})
 				_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-				mlai, err := b.Insert(ctx, pd, data, tok)
+				err := b.Insert(ctx, pd, tok)
 				if err != nil {
 					if errors.Is(err, dsErr) {
 						return nil
 					}
 					return errors.Wrap(err, "Insert")
 				}
-				p.Lock()
-				if _, ok := mlais[mlai]; ok {
-					p.Unlock()
-					return errors.New("max lease index collision")
-				}
-				mlais[mlai] = struct{}{}
-				p.Unlock()
 			}
 		})
 	}
@@ -417,7 +386,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	p.Unlock()
 
 	require.Nil(t, g.Wait())
-	t.Logf("%d successful proposals before destroy", len(mlais))
+	t.Logf("%d successful proposals before destroy", len(r.consumeProposals()))
 }
 
 // TestProposalBufferRegistersAllOnProposalError tests that all proposals in the
@@ -439,12 +408,12 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	num := propBufArrayMinSize
 	toks := make([]TrackedRequestToken, num)
 	for i := 0; i < num; i++ {
-		pd, data := pc.newPutProposal(hlc.Timestamp{})
+		pd := pc.newPutProposal(hlc.Timestamp{})
 		_, toks[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		_, err := b.Insert(ctx, pd, data, toks[i])
+		err := b.Insert(ctx, pd, toks[i])
 		require.Nil(t, err)
 	}
-	require.Equal(t, num, b.Len())
+	require.Equal(t, num, b.AllocatedIdx())
 
 	propNum := 0
 	propErr := errors.New("failed proposal")
@@ -460,99 +429,6 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	require.Equal(t, propErr, err)
 	require.Equal(t, num, p.registered)
 	require.Zero(t, b.evalTracker.Count())
-}
-
-// TestProposalBufferRegistrationWithInsertionErrors tests that if during
-// proposal insertion we reserve array indexes but are unable to actually insert
-// them due to errors, we simply ignore said indexes when flushing proposals.
-func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	var p testProposer
-	var b propBuf
-	var pc proposalCreator
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
-
-	num := propBufArrayMinSize / 2
-	toks1 := make([]TrackedRequestToken, num)
-	for i := 0; i < num; i++ {
-		var pd *ProposalData
-		var data []byte
-		if i%2 == 0 {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
-		} else {
-			pd, data = pc.newPutProposal(hlc.Timestamp{})
-		}
-		_, toks1[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		_, err := b.Insert(ctx, pd, data, toks1[i])
-		require.Nil(t, err)
-	}
-
-	var insertErr = errors.New("failed insertion")
-	b.testing.leaseIndexFilter = func(*ProposalData) (indexOverride uint64, err error) {
-		return 0, insertErr
-	}
-
-	toks2 := make([]TrackedRequestToken, num)
-	for i := 0; i < num; i++ {
-		var pd *ProposalData
-		var data []byte
-		if i%2 == 0 {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
-		} else {
-			pd, data = pc.newPutProposal(hlc.Timestamp{})
-		}
-		_, toks2[i] = b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-		_, err := b.Insert(ctx, pd, data, toks2[i])
-		require.Equal(t, insertErr, err)
-	}
-	require.Equal(t, 2*num, b.Len())
-
-	require.Nil(t, b.flushLocked(ctx))
-
-	require.Equal(t, 0, b.Len())
-	require.Equal(t, num, p.registered)
-	require.Zero(t, b.evalTracker.Count())
-}
-
-// TestPropBufCnt tests the basic behavior of the counter maintained by the
-// proposal buffer.
-func TestPropBufCnt(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	var count propBufCnt
-	const numReqs = 10
-
-	reqLeaseInc := makePropBufCntReq(true)
-	reqLeaseNoInc := makePropBufCntReq(false)
-
-	for i := 0; i < numReqs; i++ {
-		count.update(reqLeaseInc)
-	}
-
-	res := count.read()
-	assert.Equal(t, numReqs, res.arrayLen())
-	assert.Equal(t, numReqs-1, res.arrayIndex())
-	assert.Equal(t, uint64(numReqs), res.leaseIndexOffset())
-
-	for i := 0; i < numReqs; i++ {
-		count.update(reqLeaseNoInc)
-	}
-
-	res = count.read()
-	assert.Equal(t, 2*numReqs, res.arrayLen())
-	assert.Equal(t, (2*numReqs)-1, res.arrayIndex())
-	assert.Equal(t, uint64(numReqs), res.leaseIndexOffset())
-
-	count.clear()
-	res = count.read()
-	assert.Equal(t, 0, res.arrayLen())
-	assert.Equal(t, -1, res.arrayIndex())
-	assert.Equal(t, uint64(0), res.leaseIndexOffset())
 }
 
 // Test that the proposal buffer rejects lease acquisition proposals from
@@ -677,9 +553,9 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
-			pd, data := pc.newLeaseProposal(roachpb.Lease{})
+			pd := pc.newLeaseProposal(roachpb.Lease{})
 			_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-			_, err := b.Insert(ctx, pd, data, tok.Move(ctx))
+			err := b.Insert(ctx, pd, tok.Move(ctx))
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
 			if tc.expRejection {
@@ -832,7 +708,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			// Check that the lease proposal does not bump b.assignedClosedTimestamp.
 			// The proposer cannot make promises about the write timestamps of further
 			// requests based on the start time of a proposed lease. See comments in
-			// propBuf.assignClosedTimestampToProposalLocked().
+			// propBuf.assignClosedTimestampAndLAIToProposalLocked().
 			expAssignedClosedBumped: false,
 		},
 		{
@@ -899,12 +775,11 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			b.forwardClosedTimestampLocked(tc.prevClosedTimestamp)
 
 			var pd *ProposalData
-			var data []byte
 			switch tc.reqType {
 			case regularWrite:
-				pd, data = pc.newPutProposal(now.ToTimestamp())
+				pd = pc.newPutProposal(now.ToTimestamp())
 			case newLease:
-				pd, data = pc.newLeaseProposal(tc.lease)
+				pd = pc.newLeaseProposal(tc.lease)
 			case leaseTransfer:
 				var ba roachpb.BatchRequest
 				ba.Add(&roachpb.TransferLeaseRequest{
@@ -914,11 +789,11 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 					},
 					PrevLease: pc.lease.Lease,
 				})
-				pd, data = pc.newProposal(ba)
+				pd = pc.newProposal(ba)
 			default:
 				t.Fatalf("unknown req type %d", tc.reqType)
 			}
-			_, err := b.Insert(ctx, pd, data, TrackedRequestToken{})
+			err := b.Insert(ctx, pd, TrackedRequestToken{})
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
 			checkClosedTS(t, r, tc.expClosed)

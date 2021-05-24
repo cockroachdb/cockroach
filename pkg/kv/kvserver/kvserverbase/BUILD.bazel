@@ -16,6 +16,7 @@ go_library(
         "//pkg/roachpb:with-mocks",
         "//pkg/settings",
         "//pkg/util/hlc",
+        "//pkg/util/quotapool",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
