@@ -309,7 +309,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 		},
 		{
 			// We can't close all the way up to the lease expiration. See
-			// propBuf.assignClosedTimestampToProposalLocked.
+			// propBuf.assignClosedTimestampAndLAIToProposalLocked.
 			name: "close lease expiration",
 			computeTarget: func(r *kvserver.Replica) (target hlc.Timestamp, exp bool) {
 				ls := r.LeaseStatusAt(context.Background(), r.Clock().NowAsClockTimestamp())

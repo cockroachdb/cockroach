@@ -229,11 +229,11 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 	// Some tests check for this log message in the trace.
 	log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
 
-	maxLeaseIndex, pErr := r.propose(ctx, p, tok.Move(ctx))
+	pErr := r.propose(ctx, p, tok.Move(ctx))
 	if pErr != nil {
 		return pErr
 	}
-	log.VEventf(ctx, 2, "reproposed command %x at maxLeaseIndex=%d", cmd.idKey, maxLeaseIndex)
+	log.VEventf(ctx, 2, "reproposed command %x", cmd.idKey)
 	return nil
 }
 

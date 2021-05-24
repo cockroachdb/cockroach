@@ -73,7 +73,7 @@ func makeIDKey() kvserverbase.CmdIDKey {
 //   the command's context from its Raft proposal. The client is then free to
 //   terminate execution, although it is given no guarantee that the proposal
 //   won't still go on to commit and apply at some later time.
-// - the MaxLeaseIndex of the resulting proposal, if any.
+// - the proposal's ID.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
@@ -83,7 +83,7 @@ func (r *Replica) evalAndPropose(
 	st kvserverpb.LeaseStatus,
 	lul hlc.Timestamp,
 	tok TrackedRequestToken,
-) (chan proposalResult, func(), int64, *roachpb.Error) {
+) (chan proposalResult, func(), kvserverbase.CmdIDKey, *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, st, lul, g.LatchSpans(), g.LockSpans())
@@ -93,9 +93,9 @@ func (r *Replica) evalAndPropose(
 	// proagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, nil, 0, pErr
+		return nil, nil, "", pErr
 	} else if _, ok := pErr.GetDetail().(*roachpb.ReplicaCorruptionError); ok {
-		return nil, nil, 0, pErr
+		return nil, nil, "", pErr
 	}
 
 	// Attach the endCmds to the proposal and assume responsibility for
@@ -124,7 +124,7 @@ func (r *Replica) evalAndPropose(
 			EndTxns:            endTxns,
 		}
 		proposal.finishApplication(ctx, pr)
-		return proposalCh, func() {}, 0, nil
+		return proposalCh, func() {}, "", nil
 	}
 
 	// If the request requested that Raft consensus be performed asynchronously,
@@ -135,7 +135,7 @@ func (r *Replica) evalAndPropose(
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
 			// command succeeds.
-			return nil, nil, 0, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+			return nil, nil, "", roachpb.NewErrorf("cannot perform consensus asynchronously for "+
 				"proposal with EndTxnIntents=%v; %v", ets, ba)
 		}
 
@@ -176,14 +176,14 @@ func (r *Replica) evalAndPropose(
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
 	if maxSize := uint64(MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
-		return nil, nil, 0, roachpb.NewError(errors.Errorf(
+		return nil, nil, "", roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, quotaSize)
 	if err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
+		return nil, nil, "", roachpb.NewError(err)
 	}
 	// Make sure we clean up the proposal if we fail to insert it into the
 	// proposal buffer successfully. This ensures that we always release any
@@ -196,19 +196,20 @@ func (r *Replica) evalAndPropose(
 
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := kvserverbase.ProposalFilterArgs{
-			Ctx:   ctx,
-			Cmd:   *proposal.command,
-			CmdID: idKey,
-			Req:   *ba,
+			Ctx:        ctx,
+			Cmd:        *proposal.command,
+			QuotaAlloc: proposal.quotaAlloc,
+			CmdID:      idKey,
+			Req:        *ba,
 		}
 		if pErr = filter(filterArgs); pErr != nil {
-			return nil, nil, 0, pErr
+			return nil, nil, "", pErr
 		}
 	}
 
-	maxLeaseIndex, pErr := r.propose(ctx, proposal, tok.Move(ctx))
+	pErr = r.propose(ctx, proposal, tok.Move(ctx))
 	if pErr != nil {
-		return nil, nil, 0, pErr
+		return nil, nil, "", pErr
 	}
 	// Abandoning a proposal unbinds its context so that the proposal's client
 	// is free to terminate execution. However, it does nothing to try to
@@ -230,23 +231,21 @@ func (r *Replica) evalAndPropose(
 		// We'd need to make sure the span is finished eventually.
 		proposal.ctx = r.AnnotateCtx(context.TODO())
 	}
-	return proposalCh, abandon, maxLeaseIndex, nil
+	return proposalCh, abandon, idKey, nil
 }
 
-// propose encodes a command, starts tracking it, and proposes it to raft. The
-// method is also responsible for assigning the command its maximum lease index.
+// propose encodes a command, starts tracking it, and proposes it to Raft.
 //
 // The method hands ownership of the command over to the Raft machinery. After
 // the method returns, all access to the command must be performed while holding
-// Replica.mu and Replica.raftMu. If a non-nil error is returned the
-// MaxLeaseIndex is not updated.
+// Replica.mu and Replica.raftMu.
 //
 // propose takes ownership of the supplied token; the caller should tok.Move()
 // it into this method. It will be used to untrack the request once it comes out
 // of the proposal buffer.
 func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
-) (index int64, pErr *roachpb.Error) {
+) (pErr *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 
 	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
@@ -296,7 +295,7 @@ func (r *Replica) propose(
 				err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
 					errMarkInvalidReplicationChange)
 				log.Errorf(p.ctx, "%v", err)
-				return 0, roachpb.NewError(err)
+				return roachpb.NewError(err)
 			}
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
@@ -305,7 +304,7 @@ func (r *Replica) propose(
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return 0, roachpb.NewErrorf("cannot sideload empty SSTable")
+			return roachpb.NewErrorf("cannot sideload empty SSTable")
 		}
 	} else if log.V(4) {
 		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
@@ -319,9 +318,7 @@ func (r *Replica) propose(
 	cmdLen := p.command.Size()
 	// Allocate the data slice with enough capacity to eventually hold the two
 	// "footers" that are filled later.
-	needed := preLen + cmdLen +
-		kvserverpb.MaxMaxLeaseFooterSize() +
-		kvserverpb.MaxClosedTimestampFooterSize()
+	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
@@ -330,8 +327,9 @@ func (r *Replica) propose(
 	// Encode body of command.
 	data = data[:preLen+cmdLen]
 	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
-		return 0, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
+	p.encodedCommand = data
 
 	// Too verbose even for verbose logging, so manually enable if you want to
 	// debug proposal sizes.
@@ -362,15 +360,15 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
-	maxLeaseIndex, err := r.mu.proposalBuf.Insert(ctx, p, data, tok.Move(ctx))
+	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
 	if err != nil {
-		return 0, roachpb.NewError(err)
+		return roachpb.NewError(err)
 	}
-	return int64(maxLeaseIndex), nil
+	return nil
 }
 
 func (r *Replica) numPendingProposalsRLocked() int {
-	return len(r.mu.proposals) + r.mu.proposalBuf.Len()
+	return len(r.mu.proposals) + r.mu.proposalBuf.AllocatedIdx()
 }
 
 // hasPendingProposalsRLocked is part of the quiescer interface.

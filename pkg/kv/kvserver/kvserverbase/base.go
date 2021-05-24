@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -68,10 +69,11 @@ type FilterArgs struct {
 
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
 type ProposalFilterArgs struct {
-	Ctx   context.Context
-	Cmd   kvserverpb.RaftCommand
-	CmdID CmdIDKey
-	Req   roachpb.BatchRequest
+	Ctx        context.Context
+	Cmd        kvserverpb.RaftCommand
+	QuotaAlloc *quotapool.IntAlloc
+	CmdID      CmdIDKey
+	Req        roachpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
