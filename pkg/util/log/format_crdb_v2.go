@@ -11,10 +11,16 @@
 package log
 
 import (
+	"bufio"
+	"io"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
@@ -447,3 +453,185 @@ func (buf *buffer) maybeMultiLine(
 var startRedactionMarker = string(redact.StartMarker())
 var endRedactionMarker = string(redact.EndMarker())
 var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && endRedactionMarker[0] >= utf8.RuneSelf
+
+// We don't include a capture group for the log message here, just for the
+// preamble, because a capture group that handles multiline messages is very
+// slow when running on the large buffers passed to EntryDecoder.split.
+var entryREV2 = regexp.MustCompile(
+	`(?m)^` +
+		/* Severity									*/ `([IWEF])` +
+		/* Date and time    				*/ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
+		/* Goroutine ID     				*/ `(?:(\d+) )` +
+		/* Go standard library flag	*/ `(\(gostd\) )?` +
+		/* Channel          				*/ `(\d+@)?` +
+		/* File             				*/ `([^:]+):` +
+		/* Line             				*/ `(?:(\d+) )` +
+		/* Redactable flag  				*/ `((?:` + redactableIndicator + `)?) ` +
+		/* Context tags     				*/ `(?:\[((?:[^]]|\][^ ])+)\] )` +
+		/* Counter          				*/ `((?:\d+)?) ` +
+	  /* Continuation marker			*/ `([ =!+|])` +
+	  /* Message                  */ `(.*)$`,
+)
+
+// EntryDecoderV2 reads successive encoded log entries from the input
+// buffer. Each entry is preceded by a single big-ending uint32
+// describing the next entry's length.
+type EntryDecoderV2 struct {
+	re                 *regexp.Regexp
+	data               []byte
+	sensitiveEditor    redactEditor
+	truncatedLastEntry bool
+}
+
+// NewEntryDecoderV2 creates a new instance of EntryDecoder.
+func NewEntryDecoderV2(data []byte, editMode EditSensitiveData) *EntryDecoderV2 {
+	d := &EntryDecoderV2{
+		re:              entryREV2,
+		data:            data,
+		sensitiveEditor: getEditor(editMode),
+	}
+	return d
+}
+
+// DecodeV2 decodes the next log entry into the provided protobuf message.
+func (d *EntryDecoderV2) DecodeV2(entry *logpb.Entry) error {
+	m := d.re.FindSubmatch(d.data)
+	if m == nil {
+		return io.EOF
+	}
+
+	// Erase all the fields, to be sure.
+	*entry = logpb.Entry{}
+
+	// Process the severity.
+	entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
+
+	// Process the timestamp.
+	t, err := time.Parse(MessageTimeFormat, string(m[2]))
+	if err != nil {
+		return err
+	}
+	entry.Time = t.UnixNano()
+
+	// Process the goroutine ID.
+	goroutine, err := strconv.Atoi(string(m[3]))
+	if err != nil {
+		return err
+	}
+	entry.Goroutine = int64(goroutine)
+
+	// Process the channel.
+	if len(string(m[5])) != 0 {
+		ch, err  := strconv.Atoi(string(m[5])[:len(string(m[5]))-1])
+		if err != nil {
+			return err
+		}
+		entry.Channel = Channel(ch)
+	}
+
+	// Process the file.
+	entry.File = string(m[6])
+
+	// Process the line.
+	line, err := strconv.Atoi(string(m[7]))
+	if err != nil {
+		return err
+	}
+	entry.Line = int64(line)
+
+	// Process the redactable marker.
+	entry.Redactable = len(m[8]) != 0
+
+	// Process the context tags.
+	entry.Tags = string(m[9])
+
+	// Process the counter.
+	if len(m[10]) != 0 {
+		counter, err := strconv.Atoi(string(m[10]))
+		if err != nil {
+			return err
+		}
+		entry.Counter = uint64(counter)
+	}
+
+	// Process the log message.
+	// While the entry has additional lines, collect the full message.
+	entry.Message = string(trimFinalNewLines(m[12]))
+
+	hasMoreLines := true
+	hasStackTrace := false
+	for hasMoreLines {
+		// Remove the top line from the log data.
+		d.data = d.data[len(m[0]):]
+
+		// Match the next line in the log data.
+		m = d.re.FindSubmatch(d.data)
+		if m == nil {
+			break
+		}
+
+		// Determine whether this line is a continuation of the entry and append the message accordingly.
+		cont := string(m[11])
+		msg := string(m[12])
+		switch cont {
+		case "+":
+			entry.Message += "\n" + msg
+		case "|":
+			entry.Message += msg
+		case "!":
+			entry.Message += "\n(stack trace: " + msg
+			hasStackTrace = true
+		default:
+			hasMoreLines = false
+		}
+	}
+
+	if hasStackTrace {
+		entry.Message += ")"
+	}
+	return nil
+}
+
+func (d *EntryDecoderV2) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if d.truncatedLastEntry {
+		i := d.re.FindIndex(data)
+		if i == nil {
+			// If there's no entry that starts in this chunk, advance past it, since
+			// we've truncated the entry it was originally part of.
+			return len(data), nil, nil
+		}
+		d.truncatedLastEntry = false
+		if i[0] > 0 {
+			// If an entry starts anywhere other than the first index, advance to it
+			// to maintain the invariant that entries start at the beginning of data.
+			// This isn't necessary, but simplifies the code below.
+			return i[0], nil, nil
+		}
+		// If i[0] == 0, then a new entry starts at the beginning of data, so fall
+		// through to the normal logic.
+	}
+	// From this point on, we assume we're currently positioned at a log entry.
+	// We want to find the next one so we start our search at data[1].
+	i := d.re.FindIndex(data[1:])
+	if i == nil {
+		if atEOF {
+			return len(data), data, nil
+		}
+		if len(data) >= bufio.MaxScanTokenSize {
+			// If there's no room left in the buffer, return the current truncated
+			// entry.
+			d.truncatedLastEntry = true
+			return len(data), data, nil
+		}
+		// If there is still room to read more, ask for more before deciding whether
+		// to truncate the entry.
+		return 0, nil, nil
+	}
+	// i[0] is the start of the next log entry, but we need to adjust the value
+	// to account for using data[1:] above.
+	i[0]++
+	return i[0], data[:i[0]], nil
+}

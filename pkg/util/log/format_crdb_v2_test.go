@@ -14,15 +14,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/kr/pretty"
 )
 
 func TestFormatCrdbV2(t *testing.T) {
@@ -177,4 +180,28 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 
 		return out
 	})
+}
+
+func TestEntryDecoderV2(t *testing.T) {
+	datadriven.RunTest(t, "testdata/parse",
+		func(t *testing.T, td *datadriven.TestData) string {
+			switch td.Cmd {
+			case "log":
+				var out strings.Builder
+				d := NewEntryDecoderV2([]byte(td.Input), WithMarkedSensitiveData)
+				for {
+					var e logpb.Entry
+					if err := d.DecodeV2(&e); err != nil {
+						if err == io.EOF {
+							break
+						}
+						return fmt.Sprintf("error: %v\n", err)
+					}
+					fmt.Fprintf(&out, fmt.Sprintf("%# v \n", pretty.Formatter(e)))
+				}
+				return out.String()
+			default:
+				return fmt.Sprintf("unknown directive: %s", td.Cmd)
+			}
+		})
 }
