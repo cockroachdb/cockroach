@@ -11,10 +11,14 @@
 package log
 
 import (
+	"io"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
@@ -447,3 +451,90 @@ func (buf *buffer) maybeMultiLine(
 var startRedactionMarker = string(redact.StartMarker())
 var endRedactionMarker = string(redact.EndMarker())
 var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && endRedactionMarker[0] >= utf8.RuneSelf
+
+// DecodeV2 decodes the next log entry into the provided protobuf message.
+func (d *EntryDecoder) DecodeV2(entry *logpb.Entry) error {
+	for {
+		if !d.scanner.Scan() {
+			if err := d.scanner.Err(); err != nil {
+				return err
+			}
+			return io.EOF
+		}
+		b := d.scanner.Bytes()
+		m := d.re.FindSubmatch(b)
+		if m == nil {
+			continue
+		}
+
+		// Erase all the fields, to be sure.
+		*entry = logpb.Entry{}
+
+		// Process the severity.
+		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
+
+		// Process the timestamp.
+		t, err := time.Parse(MessageTimeFormat, string(m[2]))
+		if err != nil {
+			return err
+		}
+		entry.Time = t.UnixNano()
+
+		// Process the goroutine ID.
+		if len(m[3]) > 0 {
+			goroutine, err := strconv.Atoi(string(m[3]))
+			if err != nil {
+				return err
+			}
+			entry.Goroutine = int64(goroutine)
+		}
+
+		// Process the channel/file/line details.
+		entry.File = string(m[4])
+		// Ignore the `(gostd)` prefix when present
+		if entry.File[:7] == "(gostd)" {
+			entry.File = entry.File[8:]
+		}
+		if idx := strings.IndexByte(entry.File, '@'); idx != -1 {
+			ch, err := strconv.Atoi(entry.File[:idx])
+			if err != nil {
+				return err
+			}
+			entry.Channel = Channel(ch)
+			entry.File = entry.File[idx+1:]
+		}
+
+		line, err := strconv.Atoi(string(m[5]))
+		if err != nil {
+			return err
+		}
+		entry.Line = int64(line)
+
+		// Process the context tags.
+		redactable := len(m[6]) != 0
+		r := redactablePackage{
+			msg:        m[7],
+			redactable: redactable,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Tags = string(r.msg)
+
+		// Process the entry counter.
+		msg := b[len(m[0]):]
+		i := 0
+		for ; i < len(msg) && msg[i] >= '0' && msg[i] <= '9'; i++ {
+			entry.Counter = entry.Counter*10 + uint64(msg[i]-'0')
+		}
+		msg = msg[i+1:]
+
+		// Process the remainder of the log message.
+		r = redactablePackage{
+			msg:        trimFinalNewLines(msg),
+			redactable: redactable,
+		}
+		r = d.sensitiveEditor(r)
+		entry.Message = string(r.msg)
+		entry.Redactable = r.redactable
+		return nil
+	}
+}

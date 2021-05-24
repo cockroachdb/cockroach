@@ -14,15 +14,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
+	"github.com/olekukonko/tablewriter"
 )
 
 func TestFormatCrdbV2(t *testing.T) {
@@ -177,4 +180,50 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 
 		return out
 	})
+}
+
+func TestEntryDecoderV2(t *testing.T) {
+	datadriven.RunTest(t, "testdata/parse",
+		func(t *testing.T, td *datadriven.TestData) string {
+			switch td.Cmd {
+			case "line":
+				var e logpb.Entry
+				fmt.Println("Here")
+				fmt.Println(e.File == "")
+				err := NewEntryDecoder(strings.NewReader(td.Input), 1).DecodeV2(&e)
+				if err != nil {
+					return fmt.Sprintf("error: %v\n", err)
+				}
+				var sb strings.Builder
+				sb.WriteString("# Original configuration:\n")
+				sb.WriteString("# " + td.Input + "\n")
+				sb.WriteString("#\n# Interpreted configuration:\n")
+
+				table := tablewriter.NewWriter(&sb)
+				table.SetAutoWrapText(false)
+				table.SetReflowDuringAutoWrap(false)
+				table.SetAlignment(tablewriter.ALIGN_LEFT)
+				table.SetBorder(false)
+				table.SetNoWhiteSpace(true)
+				table.SetTrimWhiteSpaceAtEOL(true)
+				table.SetTablePadding(" ")
+
+				row := []string{"# SEVERITY", "TIME", "GOROUTINE", "FILE", "LINE", "MESSAGE", "TAGS", "COUNTER", "CHANNEL"}
+				table.Append(row)
+				row[0] = e.Severity.String()
+				row[1] = strconv.FormatInt(e.Time, 10)
+				row[2] = strconv.FormatInt(e.Goroutine, 10)
+				row[3] = e.File
+				row[4] = strconv.FormatInt(e.Line, 10)
+				row[5] = e.Message
+				row[6] = e.Tags
+				row[7] = strconv.FormatUint(e.Counter, 10)
+				row[8] = e.Channel.String()
+				table.Append(row)
+				table.Render()
+				return sb.String()
+			default:
+				return fmt.Sprintf("unknown directive: %s", td.Cmd)
+			}
+		})
 }

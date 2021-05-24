@@ -1,0 +1,39 @@
+subtest single_line_unstructured
+
+line
+I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+----
+# Original configuration:
+# I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+#
+# Interpreted configuration:
+# SEVERITY TIME                GOROUTINE FILE           LINE MESSAGE                     TAGS COUNTER CHANNEL
+INFO       1610833757073282000 14        server/node.go 464   started with engine type 2 -    23      DEV
+
+line
+I210116 21:49:17.073282 14 (gostd) server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+----
+# Original configuration:
+# I210116 21:49:17.073282 14 (gostd) server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+#
+# Interpreted configuration:
+# SEVERITY TIME                GOROUTINE FILE           LINE MESSAGE                     TAGS COUNTER CHANNEL
+INFO       1610833757073282000 14        server/node.go 464   started with engine type 2 -    23      DEV
+
+subtest end
+
+subtest single_line_structured
+
+line
+I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+----
+# Original configuration:
+# I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [-] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
+#
+# Interpreted configuration:
+# SEVERITY TIME                GOROUTINE FILE                  LINE MESSAGE                                                       TAGS COUNTER CHANNEL
+INFO       1610833757080713000 14        util/log/event_log.go 32   ={"Timestamp":1610833757080706620,"EventType":"node_restart"} -    32      OPS
+
+subtest end
+
+

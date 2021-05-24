@@ -527,6 +527,62 @@ func (s *fileLogStream) peek() (logpb.Entry, bool) {
 	}
 	return s.e, s.err == nil
 }
+func (s *fileLogStream) peekV2() (logpb.Entry, bool) {
+	for !s.read && s.err == nil {
+		justOpened := false
+		if s.d == nil {
+			if !s.open() {
+				return logpb.Entry{}, false
+			}
+			justOpened = true
+		}
+		var e logpb.Entry
+		moreLines := true
+		for ; moreLines ; {
+			var subE logpb.Entry
+			if s.err = s.d.DecodeV2(&subE); s.err != nil {
+				s.close()
+				s.e = logpb.Entry{}
+				break
+			}
+			if e.File == "" {
+				e = subE
+			} else if e.Counter == subE.Counter {
+				if string(subE.Message[0]) == "|" {
+					e.Message += subE.Message[1:]
+				}
+				if string(subE.Message[0]) == "+" {
+					e.Message += "\n" + subE.Message[1:]
+				}
+			} else {
+				moreLines = false
+			}
+		}
+		if s.err != nil {
+			break
+		}
+		// Upon re-opening the file, we'll read s.e again.
+		if justOpened && e == s.e {
+			continue
+		}
+		s.e = e
+		if s.e.Time < s.prevTime {
+			s.e.Time = s.prevTime
+		} else {
+			s.prevTime = s.e.Time
+		}
+		afterTo := !s.to.IsZero() && s.e.Time > s.to.UnixNano()
+		if afterTo {
+			s.close()
+			s.e = logpb.Entry{}
+			s.err = io.EOF
+		} else {
+			beforeFrom := !s.from.IsZero() && s.e.Time < s.from.UnixNano()
+			s.read = !beforeFrom
+		}
+	}
+	return s.e, s.err == nil
+}
 
 func (s *fileLogStream) pop() (e logpb.Entry, ok bool) {
 	if e, ok = s.peek(); !ok {
