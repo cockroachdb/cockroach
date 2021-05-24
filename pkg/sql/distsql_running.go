@@ -576,8 +576,8 @@ func (r *DistSQLReceiver) Release() {
 	receiverSyncPool.Put(r)
 }
 
-// clone clones the receiver for running subqueries. Not all fields are cloned,
-// only those required for running subqueries.
+// clone clones the receiver for running sub- and post-queries. Not all fields
+// are cloned. The receiver should be released when no longer needed.
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	ret := receiverSyncPool.Get().(*DistSQLReceiver)
 	*ret = DistSQLReceiver{
@@ -898,6 +898,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
+	defer subqueryRecv.Release()
 	var typs []*types.T
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.existsMode = true
@@ -1206,6 +1207,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	dsp.FinalizePlan(postqueryPlanCtx, postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
+	defer postqueryRecv.Release()
 	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
 	// but it may not be the case when we support cascades through the optimizer.
 	postqueryRecv.resultWriter = &errOnlyResultWriter{}
