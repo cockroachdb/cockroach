@@ -25,6 +25,7 @@ export const JobStatusCell: React.FC<JobStatusCellProps> = ({
   lineWidth,
   compact = false,
 }) => {
+  if (!job) return null;
   if (job.highwater_timestamp) {
     return (
       <HighwaterTimestamp

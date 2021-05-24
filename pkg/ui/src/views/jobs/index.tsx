@@ -33,6 +33,7 @@ import { trackFilter } from "src/util/analytics";
 import JobType = cockroach.sql.jobs.jobspb.Type;
 import JobsRequest = cockroach.server.serverpb.JobsRequest;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
+import { isEqual } from "lodash";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting",
@@ -111,8 +112,29 @@ export class JobsTable extends React.Component<JobsTableProps> {
     this.refresh();
   }
 
-  componentDidUpdate() {
-    this.refresh(this.props);
+  shouldComponentUpdate(nextProps: JobsTableProps) {
+    const { sort, status, show, type, jobs } = this.props;
+    if (
+      isEqual(sort, nextProps.sort) &&
+      isEqual(status, nextProps.status) &&
+      isEqual(show, nextProps.show) &&
+      isEqual(type, nextProps.type) &&
+      isEqual(jobs, nextProps.jobs)
+    ) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  componentDidUpdate(prevProps: JobsTableProps) {
+    if (
+      prevProps.status !== this.props.status ||
+      prevProps.type !== this.props.type ||
+      prevProps.show !== this.props.show
+    ) {
+      this.refresh(this.props);
+    }
   }
 
   onStatusSelected = (selected: DropdownOption) => {
