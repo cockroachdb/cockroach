@@ -109,3 +109,32 @@ type intItem int
 func (i intItem) Less(o btree.Item) bool {
 	return i < o.(intItem)
 }
+
+// TestEnumPlaceholderWithAsOfSystemTime is a regression test for an edge case
+// with bind where we would not properly deal with leases involving types. At
+// the time of writing this test, we still don't deal with such leases properly
+// but we did fix any really dangerous hazards.
+func TestEnumPlaceholderWithAsOfSystemTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db.Exec(t, "CREATE TYPE typ AS ENUM ('a', 'b')")
+	db.Exec(t, "CREATE TABLE tab (k INT PRIMARY KEY, v typ)")
+	db.Exec(t, "INSERT INTO tab VALUES ($1, $2)", 1, "a")
+	var afterInsert string
+	db.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&afterInsert)
+	db.Exec(t, "ALTER TYPE typ ADD VALUE 'c'")
+	db.Exec(t, "INSERT INTO tab VALUES ($1, $2)", 2, "c")
+	// Before the commit which introduced this test, the below statement would
+	// crash the server.
+	q := fmt.Sprintf("SELECT k FROM tab AS OF SYSTEM TIME %s WHERE v = $1", afterInsert)
+	db.Exec(t, q, "a")
+	db.Exec(t, "ALTER TYPE typ RENAME VALUE 'a' TO 'd'")
+	db.Exec(t, "ALTER TYPE typ RENAME VALUE 'b' TO 'a'")
+	got := db.QueryStr(t, q, "a")
+	require.Equal(t, [][]string{{"1"}}, got)
+}
