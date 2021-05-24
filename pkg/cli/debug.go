@@ -1266,7 +1266,7 @@ func removeDeadReplicas(
 	return batch, nil
 }
 
-var debugMergeLogsCommand = &cobra.Command{
+var debugMergeLogsCmd = &cobra.Command{
 	Use:   "merge-logs <log file globs>",
 	Short: "merge multiple log files from different machines into a single stream",
 	Long: `
@@ -1294,6 +1294,7 @@ var debugMergeLogsOpts = struct {
 	prefix         string
 	keepRedactable bool
 	redactInput    bool
+	format         string
 }{
 	program:        nil, // match everything
 	file:           regexp.MustCompile(log.FilePattern),
@@ -1307,7 +1308,7 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	inputEditMode := log.SelectEditMode(o.redactInput, o.keepRedactable)
 
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, o.file, o.program, o.from, o.to, inputEditMode)
+		args, o.file, o.program, o.from, o.to, inputEditMode, o.format)
 	if err != nil {
 		return err
 	}
@@ -1341,7 +1342,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,
 	debugZipCmd,
-	debugMergeLogsCommand,
+	debugMergeLogsCmd,
 	debugListFilesCmd,
 	debugResetQuorumCmd,
 )
@@ -1439,7 +1440,7 @@ func init() {
 	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
 		"list of dead store IDs")
 
-	f = debugMergeLogsCommand.Flags()
+	f = debugMergeLogsCmd.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
 		"time before which messages should be filtered")
 	// TODO(knz): the "to" should be named "until" - it's a time boundary, not a space boundary.
@@ -1458,6 +1459,8 @@ func init() {
 		"keep the output log file redactable")
 	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
 		"redact the input files to remove sensitive information")
+	f.StringVar(&debugMergeLogsOpts.format, "format", "",
+		"log format of the input files")
 
 	f = debugDecodeProtoCmd.Flags()
 	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",

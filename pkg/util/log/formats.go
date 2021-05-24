@@ -19,6 +19,19 @@ type logFormatter interface {
 	formatEntry(entry logEntry) *buffer
 }
 
+var formatParsers = map[string]string{
+	"crdb-v1":             "v1",
+	"crdb-v1-count":       "v1",
+	"crdb-v1-tty":         "v1",
+	"crdb-v1-tty-count":   "v1",
+	"crdb-v2":             "v2",
+	"crdb-v2-tty":         "v2",
+	"json":                "json",
+	"json-compact":        "json",
+	"json-fluent":         "json",
+	"json-fluent-compact": "json",
+}
+
 var formatters = func() map[string]logFormatter {
 	m := make(map[string]logFormatter)
 	r := func(f logFormatter) {
