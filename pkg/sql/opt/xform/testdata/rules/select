@@ -357,7 +357,7 @@ project
  │    └── fd: (1)-->(5)
  └── projections
       ├── 0 [as=i:2]
-      └── NULL [as=s:4]
+      └── CAST(NULL AS STRING) [as=s:4]
 
 # Do not project constant columns in a partial index predicate when an index
 # join must be performed to fetch other columns.
@@ -402,7 +402,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2,5)
       │    └── projections
-      │         └── NULL [as=s:4]
+      │         └── CAST(NULL AS STRING) [as=s:4]
       └── filters
            └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
 
@@ -1830,7 +1830,7 @@ project
  │    └── fd: ()-->(5)
  └── projections
       ├── 0 [as=i:2]
-      └── NULL [as=s:4]
+      └── CAST(NULL AS STRING) [as=s:4]
 
 # Do not project constant columns in a partial index predicate when an index
 # join must be performed to fetch other columns.
@@ -1877,7 +1877,7 @@ project
       │    │    ├── key: (1)
       │    │    └── fd: ()-->(5), (1)-->(2)
       │    └── projections
-      │         └── NULL [as=s:4]
+      │         └── CAST(NULL AS STRING) [as=s:4]
       └── filters
            └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
 
