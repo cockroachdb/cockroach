@@ -413,6 +413,14 @@ func (ex *connExecutor) execBind(
 		}
 	}
 
+	// This is a huge kludge to deal with the fact that we're resolving types
+	// a totally unleased descriptor. This ends up being almost okay because
+	// the execution is going to re-acquire leases on these types. Regardless,
+	// holding this lease is worse than not holding it.
+	if ex.getTransactionState() == NoTxnStateStr {
+		ex.planner.Descriptors().ReleaseAll(ctx)
+	}
+
 	// Create the new PreparedPortal.
 	if err := ex.addPortal(ctx, portalName, ps, qargs, columnFormatCodes); err != nil {
 		return retErr(err)
