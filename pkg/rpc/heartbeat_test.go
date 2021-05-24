@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -271,6 +273,49 @@ func TestNodeIDCompare(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTenantVersionCheck verifies that the Ping version check allows
+// secondary tenant connections to use a trailing version from what is
+// active where the system tenant may not.
+func TestTenantVersionCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual := hlc.NewManualClock(5)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initialize */)
+	heartbeat := &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
+		settings:           st,
+	}
+
+	request := &PingRequest{
+		Ping:          "testPing",
+		ServerVersion: st.Version.BinaryMinSupportedVersion(),
+	}
+	const failedRE = `version compatibility check failed on ping request:` +
+		` cluster requires at least version .*, but peer has version .*`
+	// Ensure that the ping fails with an older version and an unadorned context.
+	t.Run("too old, no tenant", func(t *testing.T) {
+		_, err := heartbeat.Ping(context.Background(), request)
+		require.Regexp(t, failedRE, err)
+	})
+	// Ensure the same behavior when a tenant ID exists but is for the system tenant.
+	t.Run("too old, system tenant", func(t *testing.T) {
+		tenantCtx := roachpb.NewContextForTenant(context.Background(), roachpb.SystemTenantID)
+		_, err := heartbeat.Ping(tenantCtx, request)
+		require.Regexp(t, failedRE, err)
+	})
+	// Ensure that the same ping succeeds with a secondary tenant context.
+	t.Run("old, secondary tenant", func(t *testing.T) {
+		tenantCtx := roachpb.NewContextForTenant(context.Background(), roachpb.MakeTenantID(2))
+		_, err := heartbeat.Ping(tenantCtx, request)
+		require.NoError(t, err)
+	})
 }
 
 // HeartbeatStreamService is like HeartbeatService, but it implements the

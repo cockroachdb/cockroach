@@ -724,7 +724,10 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
-	st := cluster.MakeTestingClusterSettings()
+	st := params.Settings
+	if st == nil {
+		st = cluster.MakeTestingClusterSettings()
+	}
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
 	if params.MemoryPoolSize != 0 {
