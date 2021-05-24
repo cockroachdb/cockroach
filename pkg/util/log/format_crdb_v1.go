@@ -25,14 +25,6 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
-// FormatLegacyEntry writes the legacy log entry to the specified writer.
-func FormatLegacyEntry(e logpb.Entry, w io.Writer) error {
-	buf := formatLogEntryInternalV1(e, false /* isHeader */, true /* showCounter */, nil)
-	defer putBuffer(buf)
-	_, err := w.Write(buf.Bytes())
-	return err
-}
-
 // formatCrdbV1 is the pre-v21.1 canonical log format, without a
 // counter column.
 type formatCrdbV1 struct{}
@@ -219,8 +211,6 @@ func (formatCrdbV1TTYWithCounter) doc() string {
 	return "Same textual format as `" + formatCrdbV1WithCounter{}.formatterName() + "`." + ttyFormatDoc
 }
 
-const severityChar = "IWEF"
-
 // formatEntryInternalV1 renders a log entry.
 // Log lines are colorized depending on severity.
 // It uses a newly allocated *buffer. The caller is responsible
@@ -348,9 +338,9 @@ func formatLogEntryInternalV1(
 // We don't include a capture group for the log message here, just for the
 // preamble, because a capture group that handles multiline messages is very
 // slow when running on the large buffers passed to EntryDecoder.split.
-var entryRE = regexp.MustCompile(
+var entryREV1 = regexp.MustCompile(
 	`(?m)^` +
-		/* Severity         */ `([IWEF])` +
+		/* Severity         */ `([` + severityChar + `])` +
 		/* Date and time    */ `(\d{6} \d{2}:\d{2}:\d{2}.\d{6}) ` +
 		/* Goroutine ID     */ `(?:(\d+) )?` +
 		/* Channel/File/Line*/ `([^:]+):(\d+) ` +
@@ -358,33 +348,14 @@ var entryRE = regexp.MustCompile(
 		/* Context tags     */ `(?:\[((?:[^]]|\][^ ])+)\] )?`,
 )
 
-// EntryDecoder reads successive encoded log entries from the input
-// buffer. Each entry is preceded by a single big-ending uint32
-// describing the next entry's length.
-type EntryDecoder struct {
-	re                 *regexp.Regexp
+type entryDecoderV1 struct {
 	scanner            *bufio.Scanner
 	sensitiveEditor    redactEditor
 	truncatedLastEntry bool
 }
 
-// NewEntryDecoder creates a new instance of EntryDecoder.
-func NewEntryDecoder(in io.Reader, editMode EditSensitiveData) *EntryDecoder {
-	d := &EntryDecoder{
-		re:              entryRE,
-		scanner:         bufio.NewScanner(in),
-		sensitiveEditor: getEditor(editMode),
-	}
-	d.scanner.Split(d.split)
-	return d
-}
-
-// MessageTimeFormat is the format of the timestamp in log message headers as
-// used in time.Parse and time.Format.
-const MessageTimeFormat = "060102 15:04:05.999999"
-
 // Decode decodes the next log entry into the provided protobuf message.
-func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
+func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 	for {
 		if !d.scanner.Scan() {
 			if err := d.scanner.Err(); err != nil {
@@ -393,7 +364,7 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 			return io.EOF
 		}
 		b := d.scanner.Bytes()
-		m := d.re.FindSubmatch(b)
+		m := entryREV1.FindSubmatch(b)
 		if m == nil {
 			continue
 		}
@@ -494,23 +465,13 @@ func (d *EntryDecoder) Decode(entry *logpb.Entry) error {
 	}
 }
 
-func trimFinalNewLines(s []byte) []byte {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == '\n' {
-			s = s[:i]
-		} else {
-			break
-		}
-	}
-	return s
-}
-
-func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
+// split function for the crdb-v1 entry decoder scanner.
+func (d *entryDecoderV1) split(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
 	}
 	if d.truncatedLastEntry {
-		i := d.re.FindIndex(data)
+		i := entryREV1.FindIndex(data)
 		if i == nil {
 			// If there's no entry that starts in this chunk, advance past it, since
 			// we've truncated the entry it was originally part of.
@@ -528,7 +489,7 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 	}
 	// From this point on, we assume we're currently positioned at a log entry.
 	// We want to find the next one so we start our search at data[1].
-	i := d.re.FindIndex(data[1:])
+	i := entryREV1.FindIndex(data[1:])
 	if i == nil {
 		if atEOF {
 			return len(data), data, nil
@@ -547,4 +508,15 @@ func (d *EntryDecoder) split(data []byte, atEOF bool) (advance int, token []byte
 	// to account for using data[1:] above.
 	i[0]++
 	return i[0], data[:i[0]], nil
+}
+
+func trimFinalNewLines(s []byte) []byte {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == '\n' {
+			s = s[:i]
+		} else {
+			break
+		}
+	}
+	return s
 }
