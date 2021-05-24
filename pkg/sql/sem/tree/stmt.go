@@ -1245,6 +1245,15 @@ func (*ShowJobs) StatementType() StatementType { return TypeDML }
 func (*ShowJobs) StatementTag() string { return "SHOW JOBS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowChangefeedJobs) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowChangefeedJobs) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowChangefeedJobs) StatementTag() string { return "SHOW CHANGEFEED JOBS" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowRoleGrants) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1642,6 +1651,7 @@ func (n *ShowHistogram) String() string                  { return AsString(n) }
 func (n *ShowSchedules) String() string                  { return AsString(n) }
 func (n *ShowIndexes) String() string                    { return AsString(n) }
 func (n *ShowJobs) String() string                       { return AsString(n) }
+func (n *ShowChangefeedJobs) String() string             { return AsString(n) }
 func (n *ShowLastQueryStatistics) String() string        { return AsString(n) }
 func (n *ShowPartitions) String() string                 { return AsString(n) }
 func (n *ShowQueries) String() string                    { return AsString(n) }
