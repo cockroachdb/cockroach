@@ -1043,6 +1043,9 @@ WHERE "eventType" = 'alter_database_drop_region'
 ----
 1  {"DatabaseName": "drop_region_db", "EventType": "alter_database_drop_region", "RegionName": "\"us-east-1\"", "Statement": "ALTER DATABASE drop_region_db DROP REGION \"us-east-1\"", "Tag": "ALTER DATABASE DROP REGION", "User": "root"}
 
+statement error pgcode 42704 region "non-existent-region" has not been added to the database
+ALTER DATABASE drop_region_db DROP REGION "non-existent-region"
+
 query TTBT colnames
 SHOW REGIONS FROM DATABASE drop_region_db
 ----
